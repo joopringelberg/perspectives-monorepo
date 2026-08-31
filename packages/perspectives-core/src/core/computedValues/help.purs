@@ -10,33 +10,152 @@ import Prelude
 
 import Control.Monad.Error.Class (class MonadThrow, throwError, try)
 import Control.Monad.Trans.Class (lift)
-import Data.Array (catMaybes, concat, head, null, nub)
+import Data.Array (catMaybes, concat, elem, head, mapWithIndex, null, nub)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
 import Data.Traversable (traverse)
-import Data.Tuple (Tuple)
+import Data.Tuple (Tuple(..))
 import Effect.Aff (error)
 import Effect.Class (liftEffect)
 import Effect.Exception (Error)
 import Foreign (unsafeToForeign)
 import Foreign.Object as Object
+import Perspectives.ApiTypes (PropertySerialization(..), RolSerialization(..))
 import Perspectives.Assignment.Update (saveFile)
-import Perspectives.Conversation (ConversationSource, augmentConversationSource, cacheConversationArtifact, compileConversationSources, generateConversations, readConversationSources, resolveConversationSource, storeConversationArtifactInRepository, storeConversationArtifactLocally)
+import Perspectives.ContextAndRole (rol_context)
+import Perspectives.Conversation (ConversationSource, augmentConversationSource, cacheConversationArtifact, compileConversationSources, generateConversations, initializeConversationSource, readConversationSources, resolveConversationSource, storeConversationArtifactInRepository, storeConversationArtifactLocally)
 import Perspectives.Conversations.Parser (parseConversation)
 import Perspectives.Conversations.Renderer (conversationBodyToYaml, renderConversationFromContextYaml)
-import Perspectives.CoreTypes (type (~~>), MonadPerspectives, MonadPerspectivesTransaction, mkLibEffect2, mkLibEffect5, mkLibFunc4, mkLibFunc5, (##=), (##>))
+import Perspectives.CoreTypes (type (~~>), MonadPerspectives, MonadPerspectivesTransaction, mkLibEffect1, mkLibEffect2, mkLibEffect5, mkLibFunc4, mkLibFunc5, (##=), (##>))
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
+import Perspectives.DomeinCache (retrieveDomeinFile)
+import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.Error.Boundaries (handleExternalFunctionError, handleExternalStatementError)
 import Perspectives.External.HiddenFunctionCache (HiddenFunctionDescription)
+import Perspectives.Identifiers (modelUriVersion)
 import Perspectives.InstanceRepresentation (PerspectContext(..))
+import Perspectives.Instances.Builders (createAndAddRoleInstance)
 import Perspectives.Instances.ObjectGetters (allRoleBinders, binding, context, externalRole, getEnumeratedRoleInstances)
-import Perspectives.ModelDependencies (conversationSourceYaml, conversationSources, versionedModelURI)
-import Perspectives.Persistent (getPerspectContext)
+import Perspectives.ModelDependencies (conversationSourceContextType, conversationSourceDocumentKind, conversationSourceDocumentName, conversationSourceYaml, conversationSources, versionedModelURI)
+import Perspectives.Persistent (getPerspectContext, getPerspectRol)
 import Perspectives.Query.UnsafeCompiler (getPropertyValues)
-import Perspectives.Representation.InstanceIdentifiers (RoleInstance, Value(..))
+import Perspectives.Representation.Class.Role (displayNameOfRoleType, perspectivesOfRoleType)
+import Perspectives.Representation.Context (Context(..))
+import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance, Value(..))
+import Perspectives.Representation.Perspective (Perspective(..))
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
-import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..))
+import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType, roletype2string)
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Stable)
+import Perspectives.Sidecar.ToReadable (toReadable)
+
+type InitialContextDescriptor =
+  { contextType :: String
+  , displayName :: String
+  , audienceRoles :: Array String
+  , perspectives :: Array InitialPerspectiveDescriptor
+  }
+
+type InitialPerspectiveDescriptor =
+  { index :: Int
+  , id :: String
+  , audienceRole :: String
+  , targetRoles :: Array String
+  , targetDisplayName :: String
+  }
+
+initializeConversations
+  :: Array String
+  -> RoleInstance
+  -> MonadPerspectivesTransaction Unit
+initializeConversations modelUris manifestExternal =
+  try initialize >>= handleExternalStatementError "model://perspectives.domains#HelpLib$InitializeConversations"
+  where
+  initialize :: MonadPerspectivesTransaction Unit
+  initialize = do
+    versionedModelUri <- require "a versioned stable model URI" modelUris
+    version <- case modelUriVersion versionedModelUri of
+      Nothing -> throwError $ error "InitializeConversations requires a versioned stable model URI."
+      Just value -> pure value
+    DomeinFile { namespace, contexts } <- lift $ retrieveDomeinFile (ModelUri versionedModelUri :: ModelUri Stable)
+    manifest <- lift $ getPerspectRol manifestExternal
+    let manifestContext = rol_context manifest
+    sourceRoles <- lift $ (manifestContext ##= getEnumeratedRoleInstances (EnumeratedRoleType conversationSources))
+    existingContextTypes <- lift $ catMaybes <$> traverse sourceContextType sourceRoles
+    let readableVersionedModelUri = unwrap namespace <> "@" <> version
+    descriptors <- lift $ traverse contextDescriptor (Object.values contexts)
+    createdRoles <- catMaybes <$> traverse
+      (createMissingSource manifestContext readableVersionedModelUri existingContextTypes)
+      descriptors
+    let allSourceRoles = sourceRoles <> createdRoles
+    sourceDocuments <- lift $ readConversationSources $ map unwrap allSourceRoles
+    artifact <- lift $ compileConversationSources sourceDocuments versionedModelUri
+    lift $ storeConversationArtifactInRepository versionedModelUri artifact
+    lift $ storeConversationArtifactLocally versionedModelUri artifact
+    lift $ cacheConversationArtifact versionedModelUri artifact
+
+  sourceContextType :: RoleInstance -> MonadPerspectives (Maybe String)
+  sourceContextType sourceRole = (sourceRole ##> getPropertyValues (ENP $ EnumeratedPropertyType conversationSourceContextType)) >>= case _ of
+    Nothing -> pure Nothing
+    Just (Value contextType) -> pure $ Just contextType
+
+  contextDescriptor :: Context -> MonadPerspectives InitialContextDescriptor
+  contextDescriptor (Context { readableName, displayName, gebruikerRol }) = do
+    readableAudienceRoles <- traverse toReadable gebruikerRol
+    perspectiveGroups <- traverse perspectiveDescriptors gebruikerRol
+    pure
+      { contextType: unwrap readableName
+      , displayName
+      , audienceRoles: map roletype2string readableAudienceRoles
+      , perspectives: concat perspectiveGroups
+      }
+
+  perspectiveDescriptors :: RoleType -> MonadPerspectives (Array InitialPerspectiveDescriptor)
+  perspectiveDescriptors audienceRole = do
+    readableAudienceRole <- toReadable audienceRole
+    perspectives <- perspectivesOfRoleType audienceRole
+    catMaybes <$> traverse (perspectiveDescriptor readableAudienceRole) (mapWithIndex Tuple perspectives)
+
+  perspectiveDescriptor :: RoleType -> Tuple Int Perspective -> MonadPerspectives (Maybe InitialPerspectiveDescriptor)
+  perspectiveDescriptor readableAudienceRole (Tuple index (Perspective { id, roleTypes })) = case head roleTypes of
+    Nothing -> pure Nothing
+    Just targetRole -> do
+      readableTargets <- traverse toReadable roleTypes
+      targetDisplayName <- displayNameOfRoleType targetRole
+      pure $ Just
+        { index
+        , id
+        , audienceRole: roletype2string readableAudienceRole
+        , targetRoles: map roletype2string readableTargets
+        , targetDisplayName
+        }
+
+  createMissingSource
+    :: ContextInstance
+    -> String
+    -> Array String
+    -> InitialContextDescriptor
+    -> MonadPerspectivesTransaction (Maybe RoleInstance)
+  createMissingSource manifestContext readableVersionedModelUri existingContextTypes descriptor
+    | descriptor.contextType `elem` existingContextTypes = pure Nothing
+    | otherwise = do
+        yaml <- liftEffect $ initializeConversationSource readableVersionedModelUri descriptor
+        let contextType = descriptor.contextType
+        let
+          properties = PropertySerialization $ Object.fromFoldable
+            [ Tuple conversationSourceDocumentName [ contextType ]
+            , Tuple conversationSourceDocumentKind [ "Context" ]
+            , Tuple conversationSourceContextType [ contextType ]
+            ]
+        created <- createAndAddRoleInstance
+          (EnumeratedRoleType conversationSources)
+          (unwrap manifestContext)
+          (RolSerialization { id: Nothing, properties, binding: Nothing })
+        sourceRole <- case created of
+          Nothing -> throwError $ error $ "Could not create conversation source for '" <> contextType <> "'."
+          Just role -> pure role
+        void $ saveFile sourceRole (EnumeratedPropertyType conversationSourceYaml) (unsafeToForeign yaml) "text/yaml" (Just contextType)
+        pure $ Just sourceRole
 
 toConversationText
   :: Array String
@@ -134,7 +253,7 @@ mergeConversationYaml_ persist contextTypes audienceRoleTypes targetRoleTypes pe
   let augmentedSources = map (replaceSource augmented) project.sources
   artifact <- lift $ compileConversationSources augmentedSources project.versionedModelUri
   when persist do
-    void $ saveFile augmented.roleInstance (EnumeratedPropertyType conversationSourceYaml) (unsafeToForeign augmented.yaml) "text/yaml"
+    void $ saveFile augmented.roleInstance (EnumeratedPropertyType conversationSourceYaml) (unsafeToForeign augmented.yaml) "text/yaml" Nothing
     lift $ storeConversationArtifactInRepository project.versionedModelUri artifact
   lift $ storeConversationArtifactLocally project.versionedModelUri artifact
   lift $ cacheConversationArtifact project.versionedModelUri artifact
@@ -179,7 +298,8 @@ getAuthoringProject branchExternal = do
 
 externalFunctions :: Array (Tuple String HiddenFunctionDescription)
 externalFunctions =
-  [ mkLibEffect2 "model://perspectives.domains#HelpLib$GenerateConversations" True generateConversations
+  [ mkLibEffect1 "model://perspectives.domains#HelpLib$InitializeConversations" True initializeConversations
+  , mkLibEffect2 "model://perspectives.domains#HelpLib$GenerateConversations" True generateConversations
   , mkLibFunc4 "model://perspectives.domains#HelpLib$ToConversationText" True toConversationText
   , mkLibFunc5 "model://perspectives.domains#HelpLib$ToConversationYaml" True toConversationYaml
   , mkLibEffect5 "model://perspectives.domains#HelpLib$MergeConversationYamlLocally" True mergeConversationYamlLocally

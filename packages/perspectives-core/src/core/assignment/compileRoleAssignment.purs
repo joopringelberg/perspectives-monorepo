@@ -292,12 +292,12 @@ compileAssignmentFromRole (MQD _ (QF.CreateFileF mimeType qualifiedProperty) arg
         dbLoc <- lift $ databaseLocation $ unwrap roleInstance
         { documentName } <- lift $ resourceIdentifier2DocLocator (unwrap roleInstance)
         setProperty roles qualifiedProperty Nothing [ Value $ writePerspectivesFile { fileName, mimeType, propertyType: qualifiedProperty, database: dbLoc, roleFileName: documentName } ]
-        void $ saveFile roleInstance qualifiedProperty (unsafeToForeign content) mimeType
+        void $ saveFile roleInstance qualifiedProperty (unsafeToForeign content) mimeType Nothing
       Just roleInstance, Nothing, Just (Value fileName) -> do
         dbLoc <- lift $ databaseLocation $ unwrap roleInstance
         { documentName } <- lift $ resourceIdentifier2DocLocator (unwrap roleInstance)
         setProperty roles qualifiedProperty Nothing [ Value $ writePerspectivesFile { fileName, mimeType, propertyType: qualifiedProperty, database: dbLoc, roleFileName: documentName } ]
-        void $ saveFile roleInstance qualifiedProperty (unsafeToForeign "") mimeType
+        void $ saveFile roleInstance qualifiedProperty (unsafeToForeign "") mimeType Nothing
       Nothing, _, Just (Value fileName) -> throwError (error $ "No role instance found to attach the file '" <> fileName <> "' to.")
       _, _, _ -> throwError (error $ "some of the arguments to create file are missing.")
 

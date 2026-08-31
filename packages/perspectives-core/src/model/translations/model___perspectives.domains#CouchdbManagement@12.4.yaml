@@ -5,6 +5,11 @@ model://perspectives.domains#xyfxpg3lzq:
       translations:
         nl: Repository en database beheer
         en: Repository and database management
+      indexedName:
+        name: model://perspectives.domains#xyfxpg3lzq$v5y2or3xjm$kvc7g1j5o8
+        translations:
+          nl: Mijn Couchdb App
+          en: My Couchdb App
       users:
         Manager:
           translations:

@@ -77,6 +77,9 @@ theSystem = "model://perspectives.domains#tiodn6tcyc$gu4otpfq9c"
 sysUser :: String
 sysUser = "model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$auftu9ldl2"
 
+backupAutomatically :: String
+backupAutomatically = "model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$auftu9ldl2$ut7iyjcrnq"
+
 idProperty :: String
 idProperty = "model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$auftu9ldl2$hjk0vdu7pc"
 
@@ -260,22 +263,22 @@ versionedModelURI :: String
 versionedModelURI = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$External$hp8fq71nqg"
 
 conversationSources :: String
-conversationSources = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$nr8rh14r4j"
+conversationSources = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$gstdhav9bc"
 
 conversationSourceDocumentName :: String
-conversationSourceDocumentName = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$nr8rh14r4j$jzuoymbzvc"
+conversationSourceDocumentName = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$gstdhav9bc$f7lhxrisqv"
 
 conversationSourceDocumentKind :: String
-conversationSourceDocumentKind = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$nr8rh14r4j$dsulxp03ps"
+conversationSourceDocumentKind = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$gstdhav9bc$s49jllbgwo"
 
 conversationSourceContextType :: String
-conversationSourceContextType = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$nr8rh14r4j$bg8cueuf2x"
+conversationSourceContextType = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$gstdhav9bc$t9oe0xjjbc"
 
 conversationSourceYaml :: String
-conversationSourceYaml = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$nr8rh14r4j$zj56qnle62"
+conversationSourceYaml = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$ConversationSources$ConversationYaml"
 
 conversationSourceLastYamlChangeDT :: String
-conversationSourceLastYamlChangeDT = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$nr8rh14r4j$xmtvviq6vn"
+conversationSourceLastYamlChangeDT = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$gstdhav9bc$k399teudmc"
 
 modelURIReadable :: String
 modelURIReadable = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$External$b8y8q4gqqz"

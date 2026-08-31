@@ -4,6 +4,44 @@ const CONTEXT_SCHEMA = "perspectives-context-conversations/v1";
 const LIBRARY_SCHEMA = "perspectives-conversation-library/v1";
 const RUNTIME_SCHEMA = "perspectives-help/v1";
 
+export const initializeConversationSourceImpl = (model, context) => {
+  const contextConversation = "context";
+  const conversations = {
+    [contextConversation]: {
+      conversation: [{ statement: `There is no further help on ${context.displayName}` }],
+    },
+  };
+  const perspectiveBindings = [];
+
+  for (const perspective of context.perspectives) {
+    const conversation = `perspective-${perspective.index}`;
+    conversations[conversation] = {
+      conversation: [{ statement: `There is no further help on ${perspective.targetDisplayName}` }],
+    };
+    for (const targetRole of perspective.targetRoles) {
+      perspectiveBindings.push({
+        audiences: [perspective.audienceRole],
+        targetRole,
+        perspectiveId: perspective.id,
+        conversation,
+      });
+    }
+  }
+
+  return dump({
+    schema: CONTEXT_SCHEMA,
+    model,
+    context: context.contextType,
+    bindings: {
+      context: context.audienceRoles.length === 0
+        ? []
+        : [{ audiences: context.audienceRoles, conversation: contextConversation }],
+      perspectives: perspectiveBindings,
+    },
+    conversations,
+  }, { lineWidth: -1, noRefs: true, noCompatMode: true });
+};
+
 const splitVersionedModelUri = (uri) => {
   const separator = uri.indexOf("@");
   return separator < 0

@@ -51,7 +51,8 @@ import Effect.Aff.AVar (tryRead)
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
 import Effect.Exception (error)
-import Foreign.Object (empty, fromFoldable, singleton)
+import Foreign.Object (empty, fromFoldable, insert, singleton)
+import IDBKeyVal (idbDel, idbSet)
 import JS.Iterable (toArray)
 import LRUCache (rvalues)
 import Partial.Unsafe (unsafePartial)
@@ -69,7 +70,7 @@ import Perspectives.DomeinCache (AttachmentFiles, addAttachments, fetchTranslati
 import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, addDownStreamAutomaticEffect, addDownStreamNotification, removeDownStreamAutomaticEffect, removeDownStreamNotification)
 import Perspectives.Error.Boundaries (handleDomeinFileError, handleExternalFunctionError, handleExternalStatementError)
 import Perspectives.External.HiddenFunctionCache (HiddenFunctionDescription)
-import Perspectives.Identifiers (Namespace, getFirstMatch, isModelUri, modelUri2ManifestUrl, modelUri2ModelUrl, modelUriVersion, unversionedModelUri)
+import Perspectives.Identifiers (Namespace, getFirstMatch, isModelUri, modelUri2ManifestUrl, modelUri2ModelUrl, modelUriVersion, unversionedModelUri, url2Authority)
 import Perspectives.Instances.Builders (constructContext, createAndAddRoleInstance, createAndAddRoleInstance_)
 import Perspectives.Instances.CreateContext (constructEmptyContext)
 import Perspectives.Instances.Me (computeMe_)
@@ -77,14 +78,14 @@ import Perspectives.InvertedQuery.Storable (StoredQueries, clearInvertedQueriesD
 import Perspectives.Logging (debugInstall, errorInstall, infoInstall, traceInstall)
 import Perspectives.ModelDependencies as DEP
 import Perspectives.Names (getMySystem, getUserIdentifier)
-import Perspectives.Persistence.API (DesignDocument(..), Keys(..), MonadPouchdb, addDocument_, deleteDatabase, getAttachment, getDocument, recoverFromRecoveryPoint, refreshRecoveryPoint, splitRepositoryFileUrl, tryGetDocument_, withDatabase)
+import Perspectives.Persistence.API (DesignDocument(..), Keys(..), MonadPouchdb, addDocument_, createDatabase, deleteDatabase, getAttachment, getDocument, recoverFromRecoveryPoint, refreshRecoveryPoint, replicateDatabase, splitRepositoryFileUrl, tryGetDocument_, withDatabase)
 import Perspectives.Persistence.API (deleteDocument, documentsInDatabase, excludeDocs) as Persistence
 import Perspectives.Persistence.Authentication (addCredentials) as Authentication
 import Perspectives.Persistence.CouchdbFunctions (addRoleToUser, concatenatePathSegments, removeRoleFromUser, user2couchdbuser)
 import Perspectives.Persistence.CouchdbFunctions as CDB
 import Perspectives.Persistence.DeltaStore (storeDeltaFromSignedDelta)
-import Perspectives.Persistence.State (getSystemIdentifier)
-import Perspectives.Persistence.Types (UserName, Password)
+import Perspectives.Persistence.State (getSystemIdentifier, getCouchdbBaseURL, getCouchdbCredentials)
+import Perspectives.Persistence.Types (Credential(..), UserName, Password)
 import Perspectives.Persistent (entitiesDatabaseName, forceSaveDomeinFile, getDomeinFile, getPerspectRol, saveEntiteit, saveEntiteit_, saveMarkedResources, tryGetPerspectContext, tryGetPerspectEntiteit)
 import Perspectives.Persistent.FromViews (getSafeViewOnDatabase)
 import Perspectives.PerspectivesState (clearQueryCache, contextCache, conversationCacheDelete, getCurrentLanguage, getPerspectivesUser, isInstalledModel, lookupModelUri, modelsDatabaseName, removeTranslationTable, roleCache, setModelUri)
@@ -102,7 +103,7 @@ import Perspectives.Sidecar.ToStable (toStable)
 import Perspectives.Sync.HandleTransaction (executeTransaction)
 import Perspectives.Sync.Transaction (Transaction(..), UninterpretedTransactionForPeer(..))
 import Prelude (Unit, bind, const, discard, eq, flip, pure, show, unit, void, ($), (<$>), (<<<), (<>), (==), (>>=), (*>))
-import Simple.JSON (read_)
+import Simple.JSON (read_, write)
 import Unsafe.Coerce (unsafeCoerce)
 
 -- TEMPORARY HACK FOR SYS:THEWORLD AS CONTEXT TYPE
@@ -1008,6 +1009,85 @@ recoverFromRecoveryPoint_ databaseNames _ =
     )
     >>= handleExternalStatementError "model://perspectives.domains#Couchdb$RecoverFromRecoveryPoint"
 
+-- | Moves all user data from local IndexedDB databases to a remote CouchDB server.
+-- | Arguments: an array with the CouchDB base URL, an array with the admin user name,
+-- | an array with the admin password.
+-- | After a successful migration the state is updated so that subsequent database access goes
+-- | to the remote server, and the URL and credentials are persisted in the key-value store so
+-- | that the next startup of the PDR connects to the remote server.
+-- | The key-value store (IndexedDB) itself – which holds the private cryptographic key – is
+-- | never migrated; it always stays local.
+moveDataToRemote :: Array String -> Array String -> Array String -> RoleInstance -> MonadPerspectivesTransaction Unit
+moveDataToRemote urls userNames passwords _ =
+  try
+    ( case head urls, head userNames, head passwords of
+        Just url, Just userName, Just password -> lift do
+          saveMarkedResources
+          systemId <- getSystemIdentifier
+          authority <- case url2Authority url of
+            Just value -> pure value
+            Nothing -> throwError (error $ "MoveDataToRemote: invalid CouchDB URL " <> url)
+          let credential = Credential userName password
+          modify \s -> s { couchdbCredentials = insert authority credential (insert url credential s.couchdbCredentials) }
+          let remoteEntities = url <> systemId <> "_entities"
+          let remotePost = url <> systemId <> "_post"
+          let remoteModels = url <> systemId <> "_models"
+          let remoteInvertedQueries = url <> systemId <> "_invertedqueries"
+          let deltastore = url <> systemId <> "_deltastore"
+          let resourceversions = url <> systemId <> "_resourceversions"
+          createDatabase remoteEntities
+          createDatabase remotePost
+          createDatabase remoteModels
+          createDatabase remoteInvertedQueries
+          createDatabase deltastore
+          replicateDatabase (systemId <> "_entities") remoteEntities
+          replicateDatabase (systemId <> "_post") remotePost
+          replicateDatabase (systemId <> "_models") remoteModels
+          replicateDatabase (systemId <> "_invertedqueries") remoteInvertedQueries
+          replicateDatabase (systemId <> "_deltastore") deltastore
+          replicateDatabase (systemId <> "_resourceversions") resourceversions
+          modify \s -> s { couchdbUrl = Just url, databases = empty }
+          liftAff $ idbSet "couchdbUrl" (write url)
+          liftAff $ idbSet "userName" (write userName)
+          liftAff $ idbSet "password" (write password)
+        _, _, _ -> pure unit
+    )
+    >>= handleExternalStatementError "model://perspectives.domains#Couchdb$MoveDataToRemote"
+
+-- | Moves all user data from a remote CouchDB server back to local IndexedDB databases.
+-- | The remote CouchDB URL and credentials are read from the current runtime state.
+-- | After a successful migration the state is updated so that subsequent database access goes
+-- | to local IndexedDB, and the URL and credentials are removed from the key-value store so
+-- | that the next startup of the PDR uses local storage.
+-- | The key-value store (IndexedDB) itself – which holds the private cryptographic key – is
+-- | always local and is not affected.
+moveDataToLocal :: RoleInstance -> MonadPerspectivesTransaction Unit
+moveDataToLocal _ =
+  try
+    ( lift do
+        mUrl <- getCouchdbBaseURL
+        case mUrl of
+          Nothing -> pure unit
+          Just url -> do
+            saveMarkedResources
+            systemId <- getSystemIdentifier
+            mcred <- getCouchdbCredentials
+            case mcred of
+              Nothing -> pure unit
+              Just (Credential userName password) -> do
+                replicateDatabase (url <> systemId <> "_entities") (systemId <> "_entities")
+                replicateDatabase (url <> systemId <> "_post") (systemId <> "_post")
+                replicateDatabase (url <> systemId <> "_models") (systemId <> "_models")
+                replicateDatabase (url <> systemId <> "_invertedqueries") (systemId <> "_invertedqueries")
+                replicateDatabase (url <> systemId <> "_deltastore") (systemId <> "_deltastore")
+                replicateDatabase (url <> systemId <> "_resourceversions") (systemId <> "_resourceversions")
+                modify \s -> s { couchdbUrl = Nothing, databases = empty }
+                liftAff $ idbDel "couchdbUrl"
+                liftAff $ idbDel "userName"
+                liftAff $ idbDel "password"
+    )
+    >>= handleExternalStatementError "model://perspectives.domains#Couchdb$MoveDataToLocal"
+
 -- | An Array of External functions. Each External function is inserted into the ExternalFunctionCache and can be retrieved
 -- | with `Perspectives.External.HiddenFunctionCache.lookupHiddenFunction`.
 externalFunctions :: Array (Tuple String HiddenFunctionDescription)
@@ -1048,5 +1128,7 @@ externalFunctions =
   -- This requires no access to Couchdb.
   , Tuple "model://perspectives.domains#Couchdb$AddCredentials" { func: unsafeCoerce addCredentials, nArgs: 3, isFunctional: True, isEffect: true }
   , Tuple "model://perspectives.domains#Couchdb$ClearAndFillInvertedQueriesDatabase" { func: unsafeCoerce clearAndFillInvertedQueriesDatabase, nArgs: 0, isFunctional: True, isEffect: true }
+  , mkLibEffect3 "model://perspectives.domains#Couchdb$MoveDataToRemote" True moveDataToRemote
+  , Tuple "model://perspectives.domains#Couchdb$MoveDataToLocal" { func: unsafeCoerce moveDataToLocal, nArgs: 0, isFunctional: True, isEffect: true }
 
   ]

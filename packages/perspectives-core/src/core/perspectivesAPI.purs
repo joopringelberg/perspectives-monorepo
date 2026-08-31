@@ -867,7 +867,7 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
           Right { roleFileName, propertyType, mimeType } -> do
             newVal <- runMonadPerspectivesTransaction authoringRole
               ( do
-                  result <- saveFile (RoleInstance roleFileName) propertyType contextDescription mimeType
+                  result <- saveFile (RoleInstance roleFileName) propertyType contextDescription mimeType Nothing
                   setProperty [ RoleInstance roleFileName ] propertyType Nothing [ Value result ]
                   pure result
               )
