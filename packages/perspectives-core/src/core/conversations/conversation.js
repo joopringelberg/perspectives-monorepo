@@ -282,6 +282,23 @@ export const resolveConversationSourceImpl = (json, documentNames, contextType, 
   };
 };
 
+export const resolveConversationLabelImpl = (store, contextType, perspectiveId) => {
+  if (perspectiveId === "") return null;
+  const contextBindings = store.bindings?.[contextType];
+  if (!contextBindings) return null;
+  const labels = new Set();
+  for (const audienceBindings of Object.values(contextBindings.perspectives ?? {})) {
+    for (const [key, conversationId] of Object.entries(audienceBindings ?? {})) {
+      if (key.endsWith(`#${perspectiveId}`) && typeof conversationId === "string") {
+        const separator = conversationId.indexOf("#");
+        labels.add(separator < 0 ? conversationId : conversationId.slice(separator + 1));
+      }
+    }
+  }
+  if (labels.size !== 1) return null;
+  return [...labels][0];
+};
+
 export const augmentConversationSourceImpl = (sourceYaml, conversationId, conversationYaml) => {
   const source = assertObject(load(sourceYaml), "source", "document");
   const replacement = assertObject(load(conversationYaml), "replacement", "conversation body");

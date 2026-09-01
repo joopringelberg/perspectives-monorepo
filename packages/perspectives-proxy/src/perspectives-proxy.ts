@@ -32,6 +32,7 @@ import type {
   RoleTypeReceiver,
   PerspectivesReceiver,
   ConversationReceiver,
+  ConversationBranchReceiver,
   ScreenReceiver,
   TableFormReceiver,
   PropertyType,
@@ -879,6 +880,22 @@ export class PerspectivesProxy
     );
   }
 
+  getConversationBranch(contextType: ContextType, perspectiveId: string, receiveValues: ConversationBranchReceiver, errorHandler?: errorHandler)
+  {
+    return this.send(
+      { request: "GetConversationBranch"
+      , subject: contextType
+      , predicate: perspectiveId
+      , onlyOnce: true
+      },
+      function (branchStrings)
+      {
+        return receiveValues(branchStrings.map(JSON.parse));
+      },
+      errorHandler
+    );
+  }
+
   // { request: "GetScreen", subject: UserRoleType, predicate: ContextType, object: ContextInstance }
   getScreen(userRoleType : UserRoleType, contextInstance : ContextInstanceT, contextType : ContextType, receiveValues : ScreenReceiver, fireAndForget : SubscriptionType = false, errorHandler? : errorHandler)
   {
@@ -1565,6 +1582,24 @@ export class PerspectivesProxy
       {
         return proxy.send(
           {request: "SetProperty", subject: rolID, predicate: propertyName, object: value, authoringRole: myroletype, onlyOnce: true}
+          , resolver
+          , rejecter
+        );
+      });
+  }
+
+  saveConversationBranch(branchExternal: RoleInstanceT, contextTypePropertyType: PropertyType, conversationIdentifierPropertyType: PropertyType, conversationTextPropertyType: PropertyType, myRoleType: UserRoleType): Promise<[]>
+  {
+    const proxy = this;
+    return new Promise(function (resolver, rejecter)
+      {
+        return proxy.send(
+          { request: "SaveConversationBranch"
+          , subject: branchExternal
+          , contextDescription: { contextTypePropertyType, conversationIdentifierPropertyType, conversationTextPropertyType }
+          , authoringRole: myRoleType
+          , onlyOnce: true
+          }
           , resolver
           , rejecter
         );

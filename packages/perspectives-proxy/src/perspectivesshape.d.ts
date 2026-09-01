@@ -19,6 +19,7 @@ export type WiderContextReceiver = (widerContexts: WiderContext[]) => void;
 export type ScreenReceiver = (screen: ScreenDefinition[]) => void;
 export type TableFormReceiver = (tableForm: TableFormDef[]) => void;
 export type ConversationReceiver = (conversation: ConversationBody[]) => void;
+export type ConversationBranchReceiver = (branch: ConversationBranch[]) => void;
 export type PropertyType = string & { readonly brand: unique symbol };
 export type ContextType = string & { readonly brand: unique symbol };
 export type RoleKind = "RoleInContext" | "ContextRole" | "ExternalRole" | "UserRole" | "Public" | "PublicProxy"
@@ -37,6 +38,16 @@ export type ConversationElement =
 
 export type ConversationBody = {
   conversation: ConversationElement[];
+};
+
+export type ConversationBranch = {
+  branchExternal: RoleInstanceT;
+  branchContext: ContextInstanceT;
+  authoringRoleType: UserRoleType;
+  conversationText: string;
+  conversationTextPropertyType: PropertyType;
+  contextTypePropertyType: PropertyType;
+  conversationIdentifierPropertyType: PropertyType;
 };
 
 export type ContextActions = Record<ModeledActionName, TranslatedActionName>;

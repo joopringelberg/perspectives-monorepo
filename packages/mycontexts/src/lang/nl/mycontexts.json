@@ -180,4 +180,8 @@
   , "help_invalid": "Dit gesprek kan niet worden weergegeven."
   , "help_complete": "Einde van het gesprek"
   , "help_answers": "Mogelijke antwoorden"
+  , "help_edit": "Helpgesprek bewerken"
+  , "help_edit_title": "Gesprekseditor"
+  , "help_edit_cancel": "Annuleren"
+  , "help_edit_save": "Opslaan"
 }

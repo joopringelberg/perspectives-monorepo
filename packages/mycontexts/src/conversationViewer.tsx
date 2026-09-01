@@ -20,6 +20,8 @@ interface ConversationViewerProps {
   content: HelpViewerContent;
   initialPosition: Point;
   requestId: number;
+  canEdit: boolean;
+  onEdit: () => void;
   onClose: () => void;
 }
 
@@ -53,7 +55,7 @@ export function positionNearTarget(anchorRect: DOMRect): Point {
   });
 }
 
-const ConversationViewer: React.FC<ConversationViewerProps> = ({ target, content, initialPosition, requestId, onClose }) => {
+const ConversationViewer: React.FC<ConversationViewerProps> = ({ target, content, initialPosition, requestId, canEdit, onEdit, onClose }) => {
   const viewerRef = useRef<HTMLDivElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const historyRef = useRef<HTMLDivElement>(null);
@@ -136,6 +138,11 @@ const ConversationViewer: React.FC<ConversationViewerProps> = ({ target, content
         <span id="conversation-viewer-description" className="visually-hidden">
           {i18next.t('help_move_instructions', { ns: 'mycontexts' })}
         </span>
+        {canEdit ? (
+          <button type="button" className="btn btn-sm conversation-viewer-edit" onClick={onEdit} aria-label={i18next.t('help_edit', { ns: 'mycontexts' })}>
+            <i className="bi bi-pencil-square" aria-hidden="true" />
+          </button>
+        ) : null}
         <button type="button" className="btn btn-sm conversation-viewer-close" onClick={onClose} aria-label={i18next.t('help_close', { ns: 'mycontexts' })}>
           <i className="bi bi-x-lg" aria-hidden="true" />
         </button>

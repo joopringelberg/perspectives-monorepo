@@ -67,6 +67,7 @@ data RequestType
   | GetPerspective
   | GetPerspectiveForUser
   | GetHelpConversation
+  | GetConversationBranch
   | GetScreen
   | GetTableForm
   | GetContextActions
@@ -101,6 +102,7 @@ data RequestType
   | FillWithRequiredType
   | RemoveBinding
   | SetProperty
+  | SaveConversationBranch
   | DeleteProperty
 
   | Action
@@ -167,6 +169,7 @@ instance decodeRequestType :: ReadForeign RequestType where
     "GetPerspective" -> GetPerspective
     "GetPerspectiveForUser" -> GetPerspectiveForUser
     "GetHelpConversation" -> GetHelpConversation
+    "GetConversationBranch" -> GetConversationBranch
     "GetScreen" -> GetScreen
     "GetTableForm" -> GetTableForm
     "GetContextActions" -> GetContextActions
@@ -195,6 +198,7 @@ instance decodeRequestType :: ReadForeign RequestType where
     "CheckBinding" -> CheckBinding
     "GetMostGeneralAllowedBindingType" -> GetMostGeneralAllowedBindingType
     "SetProperty" -> SetProperty
+    "SaveConversationBranch" -> SaveConversationBranch
     "DeleteProperty" -> DeleteProperty
     "Action" -> Action
     "ContextAction" -> ContextAction

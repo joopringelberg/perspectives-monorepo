@@ -10,7 +10,7 @@ declare global {
 import './styles/www.css';
 import './styles/accessibility.css'
 import {addRoleToClipboard, externalRoleType, i18next, FileDropZone, sendTransactionToProxy} from 'perspectives-react';
-import { ContextInstanceT, ContextType, CONTINUOUS, FIREANDFORGET, PDRproxy, RoleInstanceT, RoleType, ScreenDefinition, SharedWorkerChannelPromise, Unsubscriber, RoleOnClipboard, PropertySerialization, ValueT, Perspective, InspectableContext, InspectableRole, Warning } from 'perspectives-proxy';
+import { ContextInstanceT, ContextType, CONTINUOUS, FIREANDFORGET, PDRproxy, RoleInstanceT, RoleType, ScreenDefinition, SharedWorkerChannelPromise, Unsubscriber, RoleOnClipboard, PropertySerialization, ValueT, Perspective, InspectableContext, InspectableRole, Warning, ConversationBranch } from 'perspectives-proxy';
 import {AppContext, deconstructContext, deconstructLocalName, EndUserNotifier, externalRole, initUserMessaging, ModelDependencies, PerspectivesComponent, PSContext, UserMessagingPromise, UserMessagingMessage, ChoiceMessage, UserChoice, InspectableContextView, InspectableRoleInstanceView} from 'perspectives-react';
 import { constructPouchdbUser, getInstallationData } from './installationData';
 import { Me } from './me';
@@ -30,6 +30,7 @@ import { changeLanguage } from './i18next';
 import { About } from './about';
 import FlippingTitle from './flippingTitle';
 import ConversationViewer, { positionNearTarget, type HelpViewerContent } from './conversationViewer';
+import ConversationEditor from './conversationEditor';
 import { HelpModeContext, type HelpActivation, type HelpTarget } from './helpTypes';
 
 const mycontextStartPage = __STARTPAGE__ as RoleInstanceT; 
@@ -76,6 +77,10 @@ interface WWWComponentState {
     content: HelpViewerContent;
     initialPosition: { left: number; top: number };
     requestId: number;
+    branch?: ConversationBranch;
+    editorOpen: boolean;
+    editorSaving: boolean;
+    editorError?: string;
   };
 }
 
@@ -327,6 +332,10 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
         content: { status: 'loading' },
         initialPosition: positionNearTarget(activation.anchorRect),
         requestId,
+        branch: undefined,
+        editorOpen: false,
+        editorSaving: false,
+        editorError: undefined,
       },
     });
 
@@ -353,6 +362,25 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
         ? { helpViewer: { ...state.helpViewer, content: { status: 'error' } } }
         : null);
     });
+
+    if (activation.target.kind === 'role' && activation.target.perspectiveId) {
+      PDRproxy.then(pproxy => pproxy.getConversationBranch(
+        activation.target.contextType,
+        activation.target.perspectiveId,
+        branches => {
+          if (requestId !== this.helpRequestId) return;
+          this.setState(state => state.helpViewer?.requestId === requestId
+            ? { helpViewer: { ...state.helpViewer, branch: branches[0], editorError: undefined } }
+            : null);
+        },
+        () => {
+          if (requestId !== this.helpRequestId) return;
+          this.setState(state => state.helpViewer?.requestId === requestId
+            ? { helpViewer: { ...state.helpViewer, branch: undefined } }
+            : null);
+        }
+      )).catch(() => undefined);
+    }
   };
 
   closeHelpViewer = () => {
@@ -371,6 +399,51 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
       return;
     }
     this.setState({ helpModeActive: true });
+  };
+
+  openConversationEditor = () => {
+    this.setState(state => state.helpViewer?.branch
+      ? { helpViewer: { ...state.helpViewer, editorOpen: true, editorError: undefined } }
+      : null);
+  };
+
+  closeConversationEditor = () => {
+    this.setState(state => state.helpViewer
+      ? { helpViewer: { ...state.helpViewer, editorOpen: false, editorSaving: false, editorError: undefined } }
+      : null);
+  };
+
+  saveConversationEditor = (conversationText: string) => {
+    const helpViewer = this.state.helpViewer;
+    if (!helpViewer?.branch) return;
+    const branch = helpViewer.branch;
+    this.setState(state => state.helpViewer
+      ? { helpViewer: { ...state.helpViewer, editorSaving: true, editorError: undefined } }
+      : null);
+
+    PDRproxy.then(pproxy =>
+      pproxy
+        .setProperty(branch.branchExternal, branch.conversationTextPropertyType, conversationText as ValueT, branch.authoringRoleType)
+        .then(() =>
+          pproxy.saveConversationBranch(
+            branch.branchExternal,
+            branch.contextTypePropertyType,
+            branch.conversationIdentifierPropertyType,
+            branch.conversationTextPropertyType,
+            branch.authoringRoleType
+          )
+        )
+    )
+      .then(() => {
+        this.setState(state => state.helpViewer
+          ? { helpViewer: { ...state.helpViewer, editorOpen: false, editorSaving: false, editorError: undefined, branch: { ...state.helpViewer.branch!, conversationText } } }
+          : null);
+      })
+      .catch(error => {
+        this.setState(state => state.helpViewer
+          ? { helpViewer: { ...state.helpViewer, editorSaving: false, editorError: error?.toString?.() ?? String(error) } }
+          : null);
+      });
   };
 
   // Inspector helpers
@@ -1321,7 +1394,8 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
   // Add to WWWComponent class
   handleKeyboardNavigation = (e: KeyboardEvent) => {    
     if (e.key === 'Escape' && this.state.helpViewer) {
-      this.closeHelpViewer();
+      if (this.state.helpViewer.editorOpen) this.closeConversationEditor();
+      else this.closeHelpViewer();
       e.preventDefault();
       return;
     }
@@ -1429,7 +1503,18 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
                 content={this.state.helpViewer.content}
                 initialPosition={this.state.helpViewer.initialPosition}
                 requestId={this.state.helpViewer.requestId}
+                canEdit={this.state.helpViewer.content.status === 'open' && !!this.state.helpViewer.branch}
+                onEdit={this.openConversationEditor}
                 onClose={this.closeHelpViewer}
+              />
+            ) : null}
+            {this.state.helpViewer?.editorOpen && this.state.helpViewer.branch ? (
+              <ConversationEditor
+                branch={this.state.helpViewer.branch}
+                saving={this.state.helpViewer.editorSaving}
+                error={this.state.helpViewer.editorError}
+                onCancel={this.closeConversationEditor}
+                onSave={this.saveConversationEditor}
               />
             ) : null}
             <div className="keyboard-nav-instructions" id="keyboard-instructions">
