@@ -2,6 +2,7 @@ domain model://joopringelberg.nl#HelpProject@1.0
   use sys for model://perspectives.domains#System
   use mm for model://joopringelberg.nl#HelpProject
   use cm for model://perspectives.domains#CouchdbManagement
+  use helplib for model://perspectives.domains#HelpLib
 
   -------------------------------------------------------------------------------
   ---- SETTING UP
@@ -56,6 +57,9 @@ domain model://joopringelberg.nl#HelpProject@1.0
   ---- A help project is dedicated to a version of a model.
   -------------------------------------------------------------------------------
   case HelpProject
+    external
+      property ModelUri = context >> Model >> cm:VersionedModelManifest$External$ModelURI
+
     user Author filledBy (sys:TheWorld$PerspectivesUsers)
       perspective on ConversationBranches
         only (CreateAndFill, Remove)
@@ -69,7 +73,7 @@ domain model://joopringelberg.nl#HelpProject@1.0
       perspective on ConversationBranches
         only (CreateAndFill, Remove)
       perspective on ContextYamls
-        props (DocumentName, DocumentKind, ContextType, cm:VersionedModelManifest$ConversationSources$ContextYaml) verbs (Consult)
+        props (DocumentName, DocumentKind, ContextType, cm:VersionedModelManifest$ConversationSources$ConversationYaml) verbs (Consult)
 
     thing ContextYamls = Model >> binding >> context >> cm:VersionedModelManifest$ConversationSources
 
@@ -96,29 +100,40 @@ domain model://joopringelberg.nl#HelpProject@1.0
   -------------------------------------------------------------------------------
   case ConversationBranch
     external
-      property ConversationIdentifier (String)
+      property ConversationLabel (String)
       -- The surface conversation text.
       property ConversationText (String)
       -- The string value of the ContextType of the context in which the conversation appears.
       -- It will be filled from the GUI the end user applies to edit a single conversation.
       property ContextType (String)
+      property AudienceRoleType (String)
+      property TargetRoleType (String)
+      property PerspectiveId (String)
       property State (String)
        enumeration = ("Draft", "PullRequest", "Merged", "Rejected")
     
+      -- As soon as the GUI has filled the identifying information, we can render the conversation text.
+      -- This is a once-only operation, because the identifying information is stable and does not change.
+      state ReadyToRenderText = (exists ContextType) and (exists AudienceRoleType) and (exists TargetRoleType) and (exists PerspectiveId)
+        on entry
+          do for Author
+            ConversationText = callExternal helplib:ToConversationText( ContextType, AudienceRoleType, TargetRoleType, PerspectiveId) returns String
+          
     state Draft = extern >> State == "Draft"
     state PullRequest = extern >> State == "PullRequest"
     state Merged = extern >> State == "Merged"
     state Rejected = extern >> State == "Rejected"
 
-      state DraftUpdated = exists ConversationText
-        on entry
-          do for CoAuthor
-            callExternal ToConversationYaml( ConversationText, ContextType) >> ConversationYaml
-
     user Author filledBy (sys:TheWorld$PerspectivesUsers)
       in context state PullRequest
         perspective on extern
           props (ConversationText) verbs (Consult, SetPropertyValue)
+      -- Every time the user edits the conversation text, we render it to yaml and merge it into the context.
+      action MergeLocally
+        letA
+          yaml <- callExternal helplib:ToConversationYaml( extern >> ConversationText ) returns String
+        in 
+          callEffect helplib:MergeConversationYamlLocally( extern >> ContextType, extern >> AudienceRoleType, extern >> TargetRoleType, extern >> PerspectiveId, yaml )
 
     user CoAuthor filledBy (sys:TheWorld$PerspectivesUsers)
       in context state Draft
