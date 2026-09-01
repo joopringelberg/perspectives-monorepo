@@ -62,7 +62,16 @@ From the analysed modules, Perspectives currently depends on these capabilities:
   - anonymous or URL-based read access,
   - credentialed write access for selected users/roles.
 
-### 7) CouchDB-specific (can be replaced by equivalent mechanisms)
+### 7) Claim data vs media distribution (new requirement)
+
+- Claim data is distributed through the normal transaction channel (RabbitMQ).
+- Media files referenced by claim data are **not** distributed via RabbitMQ and must be retrieved from a separate media backend.
+- This requires asymmetric media permissions:
+  - sender/publisher must have read + write rights,
+  - receiver/consumer should have read-only rights.
+- Claim payloads therefore need stable media references (object key/URL) and backend-enforced access control independent from transaction delivery.
+
+### 8) CouchDB-specific (can be replaced by equivalent mechanisms)
 
 - `_design/*` views.
 - `_security`, `_users`, `_replicator` administrative endpoints.
@@ -83,6 +92,7 @@ These are implementation-specific forms, not conceptual requirements.
 - **Cloud economics and EU hosting**: Supabase offers EU regions and does not force a “many CouchDB databases per customer” model.
 - **Attachments/files**: keep metadata in Postgres and file payloads in Supabase Storage (S3-compatible object storage).
 - **Shared/public data**: implement with Postgres row-level security and signed/public URLs for read, with authenticated write policies.
+- **Asymmetric media rights fit**: sender can upload/replace media objects while receivers only receive read-capable URLs/tokens.
 
 ### Gaps to bridge
 
@@ -102,7 +112,7 @@ These are implementation-specific forms, not conceptual requirements.
 ### Main caveats
 
 - Heavier migration than Option A for current PouchDB-shaped API surface.
-- Attachment and public URL patterns still need separate design.
+- Attachment and public URL patterns still need separate design, including sender write vs receiver read-only policy enforcement.
 
 ### Option C — Firestore + Cloud Storage
 
@@ -114,7 +124,7 @@ These are implementation-specific forms, not conceptual requirements.
 ### Main caveats
 
 - Query model differs strongly from current design-doc view usage.
-- Shared/public read + role-based write is possible but policy design and vendor lock-in trade-offs are larger.
+- Shared/public read + role-based write is possible, but asymmetric media rights and URL lifecycle management increase policy complexity and lock-in trade-offs.
 
 ---
 
@@ -154,6 +164,7 @@ It preserves a document-oriented, browser-first developer model while moving clo
    - conflict detection metadata.
 2. Add periodic background sync (same cadence as current backup flow).
 3. Add resume-from-checkpoint and retry logic.
+4. Add media-object sync/reference validation so claim records never point to missing objects.
 
 ### Phase 3 — Shared/public database behavior
 
@@ -161,7 +172,10 @@ It preserves a document-oriented, browser-first developer model while moving clo
 2. Apply RLS policies:
    - read policy for public/signed access,
    - write policy for credentialed roles only.
-3. Store attachments in object storage with URL policy aligned to row visibility.
+3. Store attachments in object storage with asymmetric policy:
+   - publisher identity: read + write object rights,
+   - receiver identity: read-only object rights.
+4. Ensure transaction payloads carry only media references; media transfer stays out-of-band.
 
 ### Phase 4 — Data migration and dual-run
 
@@ -183,4 +197,5 @@ It preserves a document-oriented, browser-first developer model while moving clo
 - **View parity risk**: build an explicit mapping catalogue from each current view to SQL query/index definition.
 - **Conflict semantics drift**: define deterministic conflict resolution rules before production rollout.
 - **Attachment consistency**: use transactional metadata updates and background reconciliation jobs.
+- **Asymmetric rights drift**: test object ACL/signing paths so senders keep write rights while receivers remain read-only.
 - **Operational complexity**: start with backup-only remote sync, then expand to primary-cloud operation.
