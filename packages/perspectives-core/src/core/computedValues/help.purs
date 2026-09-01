@@ -27,12 +27,12 @@ import Perspectives.ContextAndRole (rol_context)
 import Perspectives.Conversation (ConversationSource, augmentConversationSource, cacheConversationArtifact, compileConversationSources, generateConversations, initializeConversationSource, readConversationSources, resolveConversationSource, storeConversationArtifactInRepository, storeConversationArtifactLocally)
 import Perspectives.Conversations.Parser (parseConversation)
 import Perspectives.Conversations.Renderer (conversationBodyToYaml, renderConversationFromContextYaml)
-import Perspectives.CoreTypes (type (~~>), MonadPerspectives, MonadPerspectivesTransaction, mkLibEffect1, mkLibEffect2, mkLibEffect5, mkLibFunc4, mkLibFunc5, (##=), (##>))
+import Perspectives.CoreTypes (type (~~>), MonadPerspectives, MonadPerspectivesTransaction, mkLibEffect1, mkLibEffect2, mkLibEffect5, mkLibFunc1, mkLibFunc4, (##=), (##>))
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.Error.Boundaries (handleExternalFunctionError, handleExternalStatementError)
-import Perspectives.External.HiddenFunctionCache (HiddenFunctionDescription)
 import Perspectives.Extern.Parsing (withRepositoryModel)
+import Perspectives.External.HiddenFunctionCache (HiddenFunctionDescription)
 import Perspectives.Identifiers (modelUriVersion)
 import Perspectives.InstanceRepresentation (PerspectContext(..))
 import Perspectives.Instances.Builders (createAndAddRoleInstance)
@@ -46,8 +46,8 @@ import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleIns
 import Perspectives.Representation.Perspective (Perspective(..))
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
 import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType, roletype2string)
-import Perspectives.Sidecar.HashQFD (qfdSignature)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Stable)
+import Perspectives.Sidecar.HashQFD (qfdSignature)
 import Perspectives.Sidecar.ToReadable (toReadable)
 
 type InitialContextDescriptor =
@@ -191,12 +191,8 @@ toConversationText contextTypes audienceRoleTypes targetRoleTypes perspectiveIds
 
 toConversationYaml
   :: Array String
-  -> Array String
-  -> Array String
-  -> Array String
-  -> Array String
   -> (RoleInstance ~~> Value)
-toConversationYaml _ _ _ _ texts _ =
+toConversationYaml texts _ =
   try
     ( ArrayT case head texts of
         Nothing -> throwError $ error "ToConversationYaml requires conversation text."
@@ -305,7 +301,7 @@ externalFunctions =
   [ mkLibEffect1 "model://perspectives.domains#HelpLib$InitializeConversations" True initializeConversations
   , mkLibEffect2 "model://perspectives.domains#HelpLib$GenerateConversations" True generateConversations
   , mkLibFunc4 "model://perspectives.domains#HelpLib$ToConversationText" True toConversationText
-  , mkLibFunc5 "model://perspectives.domains#HelpLib$ToConversationYaml" True toConversationYaml
+  , mkLibFunc1 "model://perspectives.domains#HelpLib$ToConversationYaml" True toConversationYaml
   , mkLibEffect5 "model://perspectives.domains#HelpLib$MergeConversationYamlLocally" True mergeConversationYamlLocally
   , mkLibEffect5 "model://perspectives.domains#HelpLib$MergeConversationYaml" True mergeConversationYaml
   ]
