@@ -10,7 +10,7 @@ import Prelude
 
 import Control.Monad.Error.Class (class MonadThrow, throwError, try)
 import Control.Monad.Trans.Class (lift)
-import Data.Array (catMaybes, concat, elem, filter, head, null, nub)
+import Data.Array (catMaybes, concat, elem, filter, head, nub, null, uncons)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
@@ -28,29 +28,30 @@ import Perspectives.ContextAndRole (rol_context)
 import Perspectives.Conversation (ConversationSource, augmentConversationSource, cacheConversationArtifact, compileConversationSources, generateConversations, initializeConversationSource, readConversationSources, resolveConversationLabel, resolveConversationSource, storeConversationArtifactInRepository, storeConversationArtifactLocally)
 import Perspectives.Conversations.Parser (parseConversation)
 import Perspectives.Conversations.Renderer (conversationBodyToYaml, renderConversationFromContextYaml)
-import Perspectives.CoreTypes (type (~~>), MonadPerspectives, MonadPerspectivesTransaction, mkLibEffect1, mkLibEffect2, mkLibEffect5, mkLibFunc4, mkLibFunc5, (##=), (##>))
+import Perspectives.CoreTypes (type (~~>), MonadPerspectives, MonadPerspectivesTransaction, mkLibEffect1, mkLibEffect2, mkLibEffect5, mkLibFunc4, mkLibFunc5, (##=), (##>), (##>>))
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.Error.Boundaries (handleExternalFunctionError, handleExternalStatementError)
-import Perspectives.External.HiddenFunctionCache (HiddenFunctionDescription)
 import Perspectives.Extern.Parsing (withRepositoryModel)
+import Perspectives.External.HiddenFunctionCache (HiddenFunctionDescription)
 import Perspectives.Identifiers (modelUriVersion, typeUri2ModelUri_, unversionedModelUri)
 import Perspectives.InstanceRepresentation (PerspectContext(..))
 import Perspectives.Instances.Builders (createAndAddRoleInstance)
-import Perspectives.Instances.ObjectGetters (allRoleBinders, binding, context, externalRole, getEnumeratedRoleInstances, getMyType)
+import Perspectives.Instances.Me (getMyType)
+import Perspectives.Instances.ObjectGetters (allRoleBinders, binding, context, externalRole, getEnumeratedRoleInstances)
 import Perspectives.ModelDependencies (conversationSourceContextType, conversationSourceDocumentKind, conversationSourceDocumentName, conversationSourceYaml, conversationSources, modelURIReadable, modelsInUse, versionedModelURI)
 import Perspectives.Names (getMySystem)
 import Perspectives.Persistent (getPerspectContext, getPerspectRol)
 import Perspectives.Query.UnsafeCompiler (getPropertyValues, getRoleInstances)
 import Perspectives.Representation.Class.Role (displayNameOfRoleType, perspectivesOfRoleType)
 import Perspectives.Representation.Context (Context(..))
-import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance, Value(..))
+import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance, Value(..))
 import Perspectives.Representation.Perspective (Perspective(..))
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
-import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType, roletype2string)
+import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), roletype2string)
 import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransaction)
-import Perspectives.Sidecar.HashQFD (qfdSignature)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Stable)
+import Perspectives.Sidecar.HashQFD (qfdSignature)
 import Perspectives.Sidecar.StableIdMapping (PropertyUri(..), RoleUri(..), fromLocalModels, idUriForProperty, idUriForRole, loadStableMapping)
 import Perspectives.Sidecar.ToReadable (toReadable)
 
@@ -335,35 +336,36 @@ getConversationBranch contextType perspectiveId = do
           candidates <- concat <$> traverse (candidateHelpProjectContexts typeIds.conversationBranchesRoleType) manifestExternals
           resolveCandidate candidates typeIds conversationLabel
   where
-  resolveCandidate [] _ _ = pure Nothing
-  resolveCandidate ({ helpProjectContext, modelManifestExternal, myRoleType } : rest) typeIds conversationLabel = do
-    existing <- findExistingBranch helpProjectContext typeIds contextType conversationLabel
-    case existing of
-      Just { branchExternal, branchContext } -> do
-        text <- ensureConversationText modelManifestExternal contextType conversationLabel myRoleType branchExternal typeIds.conversationTextPropertyType
-        pure $ Just
-          { branchExternal: unwrap branchExternal
-          , branchContext: unwrap branchContext
-          , authoringRoleType: roletype2string myRoleType
-          , conversationText: text
-          , conversationTextPropertyType: unwrap typeIds.conversationTextPropertyType
-          , contextTypePropertyType: unwrap typeIds.contextTypePropertyType
-          , conversationIdentifierPropertyType: unwrap typeIds.conversationIdentifierPropertyType
-          }
-      Nothing -> do
-        created <- createBranch helpProjectContext modelManifestExternal myRoleType typeIds contextType conversationLabel
-        case created of
-          Nothing -> resolveCandidate rest typeIds conversationLabel
-          Just { branchExternal, branchContext, conversationText } ->
-            pure $ Just
-              { branchExternal: unwrap branchExternal
-              , branchContext: unwrap branchContext
-              , authoringRoleType: roletype2string myRoleType
-              , conversationText
-              , conversationTextPropertyType: unwrap typeIds.conversationTextPropertyType
-              , contextTypePropertyType: unwrap typeIds.contextTypePropertyType
-              , conversationIdentifierPropertyType: unwrap typeIds.conversationIdentifierPropertyType
-              }
+  resolveCandidate candidates typeIds conversationLabel = case uncons candidates of
+    Nothing -> pure Nothing
+    Just { head, tail } -> do
+      existing <- findExistingBranch head.helpProjectContext typeIds contextType conversationLabel
+      case existing of
+        Just { branchExternal, branchContext } -> do
+          text <- ensureConversationText head.modelManifestExternal contextType conversationLabel head.myRoleType branchExternal typeIds.conversationTextPropertyType
+          pure $ Just
+            { branchExternal: unwrap branchExternal
+            , branchContext: unwrap branchContext
+            , authoringRoleType: roletype2string head.myRoleType
+            , conversationText: text
+            , conversationTextPropertyType: unwrap typeIds.conversationTextPropertyType
+            , contextTypePropertyType: unwrap typeIds.contextTypePropertyType
+            , conversationIdentifierPropertyType: unwrap typeIds.conversationIdentifierPropertyType
+            }
+        Nothing -> do
+          created <- createBranch head.helpProjectContext head.modelManifestExternal head.myRoleType typeIds contextType conversationLabel
+          case created of
+            Nothing -> resolveCandidate tail typeIds conversationLabel
+            Just { branchExternal, branchContext, conversationText } ->
+              pure $ Just
+                { branchExternal: unwrap branchExternal
+                , branchContext: unwrap branchContext
+                , authoringRoleType: roletype2string head.myRoleType
+                , conversationText
+                , conversationTextPropertyType: unwrap typeIds.conversationTextPropertyType
+                , contextTypePropertyType: unwrap typeIds.contextTypePropertyType
+                , conversationIdentifierPropertyType: unwrap typeIds.conversationIdentifierPropertyType
+                }
 
   candidateHelpProjectContexts conversationBranchesRoleType manifestExternal = do
     binderRoles <- manifestExternal ##= allRoleBinders
@@ -414,7 +416,7 @@ createBranch
   -> String
   -> MonadPerspectives (Maybe { branchExternal :: RoleInstance, branchContext :: ContextInstance, conversationText :: String })
 createBranch helpProjectContext modelManifestExternal myRoleType typeIds contextType conversationLabel = do
-  created <- try $ runMonadPerspectivesTransaction (roletype2string myRoleType) do
+  created <- try $ runMonadPerspectivesTransaction myRoleType do
     createAndAddRoleInstance
       typeIds.conversationBranchesRoleType
       (unwrap helpProjectContext)
@@ -435,7 +437,7 @@ createBranch helpProjectContext modelManifestExternal myRoleType typeIds context
               case mtext of
                 Left _ -> pure Nothing
                 Right text -> do
-                  void $ runMonadPerspectivesTransaction (roletype2string myRoleType) do
+                  void $ runMonadPerspectivesTransaction myRoleType do
                     setProperty [ branchExternal ] typeIds.contextTypePropertyType Nothing [ Value contextType ]
                     setProperty [ branchExternal ] typeIds.conversationIdentifierPropertyType Nothing [ Value conversationLabel ]
                     setProperty [ branchExternal ] typeIds.conversationTextPropertyType Nothing [ Value text ]
@@ -448,7 +450,7 @@ ensureConversationText modelManifestExternal contextType conversationLabel myRol
     Just (Value text) | text /= "" -> pure text
     _ -> do
       text <- renderConversationText modelManifestExternal contextType conversationLabel
-      void $ runMonadPerspectivesTransaction (roletype2string myRoleType) $
+      void $ runMonadPerspectivesTransaction myRoleType $
         setProperty [ branchExternal ] conversationTextPropertyType Nothing [ Value text ]
       pure text
 
@@ -486,15 +488,15 @@ mergeConversationBranchLocally
   -> RoleInstance
   -> MonadPerspectivesTransaction Unit
 mergeConversationBranchLocally contextTypePropertyType conversationIdentifierPropertyType conversationTextPropertyType branchExternal = do
-  mcontextType <- lift $ branchExternal ##> getPropertyValues (ENP contextTypePropertyType)
+  mcontextType <- lift (branchExternal ##> getPropertyValues (ENP contextTypePropertyType))
   contextType <- case mcontextType of
     Just (Value value) -> pure value
     Nothing -> throwError $ error "ConversationBranch has no ContextType."
-  mconversationLabel <- lift $ branchExternal ##> getPropertyValues (ENP conversationIdentifierPropertyType)
+  mconversationLabel <- lift (branchExternal ##> getPropertyValues (ENP conversationIdentifierPropertyType))
   conversationLabel <- case mconversationLabel of
     Just (Value value) -> pure value
     Nothing -> throwError $ error "ConversationBranch has no ConversationIdentifier."
-  mconversationText <- lift $ branchExternal ##> getPropertyValues (ENP conversationTextPropertyType)
+  mconversationText <- lift (branchExternal ##> getPropertyValues (ENP conversationTextPropertyType))
   conversationText <- case mconversationText of
     Just (Value value) -> pure value
     Nothing -> throwError $ error "ConversationBranch has no ConversationText."
@@ -503,7 +505,7 @@ mergeConversationBranchLocally contextTypePropertyType conversationIdentifierPro
     Right body -> pure $ conversationBodyToYaml body
   project <- lift $ getAuthoringProject branchExternal
   matchingSources <- lift $ catMaybes <$> traverse (sourceForContextType contextType) project.sources
-  located <- lift $ catMaybes <$> traverse sourceWithConversation matchingSources
+  located <- lift $ catMaybes <$> traverse (sourceWithConversation conversationLabel) matchingSources
   resolved <- case head located of
     Nothing -> throwError $ error $ "No conversation source found for context type '" <> contextType <> "' and conversation '" <> conversationLabel <> "'."
     Just source -> pure { conversationId: conversationLabel, source }
@@ -517,14 +519,16 @@ mergeConversationBranchLocally contextTypePropertyType conversationIdentifierPro
     | replacement.roleInstance == source.roleInstance = replacement
     | otherwise = source
 
+  sourceForContextType :: String -> ConversationSource -> MonadPerspectives (Maybe ConversationSource)
   sourceForContextType targetContextType source = do
-    msourceContextType <- lift $ source.roleInstance ##> getPropertyValues (ENP $ EnumeratedPropertyType conversationSourceContextType)
+    msourceContextType <- source.roleInstance ##> getPropertyValues (ENP $ EnumeratedPropertyType conversationSourceContextType)
     pure case msourceContextType of
       Just (Value sourceContextType) | sourceContextType == targetContextType -> Just source
       _ -> Nothing
 
-  sourceWithConversation source = do
-    rendered <- liftEffect $ renderConversationFromContextYaml source.yaml conversationLabel
+  sourceWithConversation :: String -> ConversationSource -> MonadPerspectives (Maybe ConversationSource)
+  sourceWithConversation label source = do
+    rendered <- liftEffect $ renderConversationFromContextYaml source.yaml label
     pure case rendered of
       Left _ -> Nothing
       Right _ -> Just source
