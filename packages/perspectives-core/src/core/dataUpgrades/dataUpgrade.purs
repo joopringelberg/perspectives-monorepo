@@ -444,6 +444,18 @@ runDataUpgrades = do
           (updateModelForUpgrade $ ModelUri "model://perspectives.domains#System@6.3")
     )
 
+  runUpgrade installedVersion "3.3.10"
+    ( \_ ->
+        runMonadPerspectivesTransaction'
+          false
+          (ENR $ EnumeratedRoleType sysUser)
+          ( do
+              updateModelForUpgrade $ ModelUri "model://perspectives.domains#System@6.3"
+              updateModelForUpgrade $ ModelUri "model://perspectives.domains#CouchdbManagement@12.4"
+              updateModelForUpgrade $ ModelUri "model://joopringelberg.nl#StadsKamers@5.0"
+          )
+    )
+
   log ("Data upgrades complete. Current version: " <> pdrVersion)
   -- Add new upgrades above this line and provide the pdr version number in which they were introduced.
 

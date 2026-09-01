@@ -10,7 +10,7 @@ import Prelude
 
 import Control.Monad.Error.Class (class MonadThrow, throwError, try)
 import Control.Monad.Trans.Class (lift)
-import Data.Array (catMaybes, concat, elem, head, null, nub)
+import Data.Array (catMaybes, concat, elem, filter, head, null, nub)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
@@ -80,7 +80,8 @@ initializeConversations modelUris manifestExternal =
       Just value -> pure value
     { namespace, descriptors } <- lift $ withRepositoryModel (ModelUri versionedModelUri :: ModelUri Stable)
       \(DomeinFile { namespace, contexts }) -> do
-        descriptors <- traverse contextDescriptor (Object.values contexts)
+        let nonRootContexts = filter (\(Context { readableName }) -> unwrap readableName /= unwrap namespace) (Object.values contexts)
+        descriptors <- traverse contextDescriptor nonRootContexts
         pure { namespace, descriptors }
     manifest <- lift $ getPerspectRol manifestExternal
     let manifestContext = rol_context manifest

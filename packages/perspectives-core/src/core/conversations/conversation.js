@@ -186,6 +186,7 @@ export const compileConversationSourcesImpl = (documentNames, yamlSources, mappi
       fail(documentName, `unsupported schema '${String(document.schema)}'.`);
     }
     validateDocumentModel(mapping, document.model, versionedModelUri, documentName);
+    if (document.schema === CONTEXT_SCHEMA && document.context === splitVersionedModelUri(document.model).modelUri) return;
     assertObject(document.conversations, documentName, "conversations");
     documents.set(documentName, document);
   });
