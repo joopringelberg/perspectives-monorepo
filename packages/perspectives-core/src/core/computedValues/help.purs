@@ -39,7 +39,7 @@ import Perspectives.InstanceRepresentation (PerspectContext(..))
 import Perspectives.Instances.Builders (createAndAddRoleInstance)
 import Perspectives.Instances.Me (getMyType)
 import Perspectives.Instances.ObjectGetters (allRoleBinders, binding, context, externalRole, getEnumeratedRoleInstances)
-import Perspectives.ModelDependencies (conversationSourceContextType, conversationSourceDocumentKind, conversationSourceDocumentName, conversationSourceYaml, conversationSources, modelURIReadable, modelsInUse, versionedModelURI)
+import Perspectives.ModelDependencies (conversationBranches, conversationText, conversationBranchecontextType, conversationBranchIdentifier, conversationSourceContextType, conversationSourceDocumentKind, conversationSourceDocumentName, conversationSourceYaml, conversationSources, modelsInUse, versionedModelURI)
 import Perspectives.Names (getMySystem)
 import Perspectives.Persistent (getPerspectContext, getPerspectRol)
 import Perspectives.Query.UnsafeCompiler (getPropertyValues, getRoleInstances)
@@ -52,7 +52,6 @@ import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), 
 import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransaction)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Stable)
 import Perspectives.Sidecar.HashQFD (qfdSignature)
-import Perspectives.Sidecar.StableIdMapping (PropertyUri(..), RoleUri(..), fromLocalModels, idUriForProperty, idUriForRole, loadStableMapping)
 import Perspectives.Sidecar.ToReadable (toReadable)
 
 type InitialContextDescriptor =
@@ -282,13 +281,6 @@ type ConversationEditorBranch =
   , conversationIdentifierPropertyType :: String
   }
 
-type HelpProjectTypeIds =
-  { conversationBranchesRoleType :: EnumeratedRoleType
-  , conversationTextPropertyType :: EnumeratedPropertyType
-  , contextTypePropertyType :: EnumeratedPropertyType
-  , conversationIdentifierPropertyType :: EnumeratedPropertyType
-  }
-
 getAuthoringProject :: RoleInstance -> MonadPerspectives AuthoringProject
 getAuthoringProject branchExternal = do
   branchRoles <- branchExternal ##= allRoleBinders
@@ -324,46 +316,42 @@ getConversationBranch contextType perspectiveId = do
   case mconversationLabel of
     Nothing -> pure Nothing
     Just conversationLabel -> do
-      mtypeIds <- getHelpProjectTypeIds
-      case mtypeIds of
-        Nothing -> pure Nothing
-        Just typeIds -> do
-          manifestExternals <- getTargetModelManifestExternals contextType
-          candidates <- concat <$> traverse (candidateHelpProjectContexts typeIds.conversationBranchesRoleType) manifestExternals
-          resolveCandidate candidates typeIds conversationLabel
+      manifestExternals <- getTargetModelManifestExternals contextType
+      candidates <- concat <$> traverse candidateHelpProjectContexts manifestExternals
+      resolveCandidate candidates conversationLabel
   where
-  resolveCandidate candidates typeIds conversationLabel = case uncons candidates of
+  resolveCandidate candidates conversationLabel = case uncons candidates of
     Nothing -> pure Nothing
     Just { head, tail } -> do
-      existing <- findExistingBranch head.helpProjectContext typeIds contextType conversationLabel
+      existing <- findExistingBranch head.helpProjectContext contextType conversationLabel
       case existing of
         Just { branchExternal, branchContext } -> do
-          text <- ensureConversationText head.modelManifestExternal contextType conversationLabel head.myRoleType branchExternal typeIds.conversationTextPropertyType
+          text <- ensureConversationText head.modelManifestExternal contextType conversationLabel head.myRoleType branchExternal (EnumeratedPropertyType conversationText)
           pure $ Just
             { branchExternal: unwrap branchExternal
             , branchContext: unwrap branchContext
             , authoringRoleType: roletype2string head.myRoleType
             , conversationText: text
-            , conversationTextPropertyType: unwrap typeIds.conversationTextPropertyType
-            , contextTypePropertyType: unwrap typeIds.contextTypePropertyType
-            , conversationIdentifierPropertyType: unwrap typeIds.conversationIdentifierPropertyType
+            , conversationTextPropertyType: conversationText
+            , contextTypePropertyType: conversationBranchecontextType
+            , conversationIdentifierPropertyType: conversationBranchIdentifier
             }
         Nothing -> do
-          created <- createBranch head.helpProjectContext head.modelManifestExternal head.myRoleType typeIds contextType conversationLabel
+          created <- createBranch head.helpProjectContext head.modelManifestExternal head.myRoleType contextType conversationLabel
           case created of
-            Nothing -> resolveCandidate tail typeIds conversationLabel
+            Nothing -> resolveCandidate tail conversationLabel
             Just { branchExternal, branchContext, conversationText } ->
               pure $ Just
                 { branchExternal: unwrap branchExternal
                 , branchContext: unwrap branchContext
                 , authoringRoleType: roletype2string head.myRoleType
                 , conversationText
-                , conversationTextPropertyType: unwrap typeIds.conversationTextPropertyType
-                , contextTypePropertyType: unwrap typeIds.contextTypePropertyType
-                , conversationIdentifierPropertyType: unwrap typeIds.conversationIdentifierPropertyType
+                , conversationTextPropertyType: conversationText
+                , contextTypePropertyType: conversationBranchecontextType
+                , conversationIdentifierPropertyType: conversationBranchIdentifier
                 }
 
-  candidateHelpProjectContexts conversationBranchesRoleType manifestExternal = do
+  candidateHelpProjectContexts manifestExternal = do
     binderRoles <- manifestExternal ##= allRoleBinders
     contexts <- concat <$> traverse (\role -> role ##= context) binderRoles
     catMaybes <$> traverse (toCandidate manifestExternal) (nub contexts)
@@ -373,17 +361,16 @@ getConversationBranch contextType perspectiveId = do
       case mmyRoleType of
         Nothing -> pure Nothing
         Just myRoleType -> do
-          _ <- helpProjectContext ##= getRoleInstances (ENR conversationBranchesRoleType)
+          _ <- helpProjectContext ##= getRoleInstances (ENR $ EnumeratedRoleType conversationBranches)
           pure $ Just { helpProjectContext, modelManifestExternal, myRoleType }
 
 findExistingBranch
   :: ContextInstance
-  -> HelpProjectTypeIds
   -> String
   -> String
   -> MonadPerspectives (Maybe { branchExternal :: RoleInstance, branchContext :: ContextInstance })
-findExistingBranch helpProjectContext typeIds contextType conversationLabel = do
-  branches <- helpProjectContext ##= getRoleInstances (ENR typeIds.conversationBranchesRoleType)
+findExistingBranch helpProjectContext contextType conversationLabel = do
+  branches <- helpProjectContext ##= getRoleInstances (ENR $ EnumeratedRoleType conversationBranches)
   found <- catMaybes <$> traverse branchIfMatching branches
   pure $ head found
   where
@@ -396,8 +383,8 @@ findExistingBranch helpProjectContext typeIds contextType conversationLabel = do
         case mbranchExternal of
           Nothing -> pure Nothing
           Just branchExternal -> do
-            mcontextType <- branchExternal ##> getPropertyValues (ENP typeIds.contextTypePropertyType)
-            mconversationLabel <- branchExternal ##> getPropertyValues (ENP typeIds.conversationIdentifierPropertyType)
+            mcontextType <- branchExternal ##> getPropertyValues (ENP $ EnumeratedPropertyType conversationBranchecontextType)
+            mconversationLabel <- branchExternal ##> getPropertyValues (ENP $ EnumeratedPropertyType conversationBranchIdentifier)
             pure case mcontextType, mconversationLabel of
               Just (Value existingContextType), Just (Value existingConversationLabel)
                 | existingContextType == contextType && existingConversationLabel == conversationLabel -> Just { branchExternal, branchContext }
@@ -407,14 +394,13 @@ createBranch
   :: ContextInstance
   -> RoleInstance
   -> RoleType
-  -> HelpProjectTypeIds
   -> String
   -> String
   -> MonadPerspectives (Maybe { branchExternal :: RoleInstance, branchContext :: ContextInstance, conversationText :: String })
-createBranch helpProjectContext modelManifestExternal myRoleType typeIds contextType conversationLabel = do
+createBranch helpProjectContext modelManifestExternal myRoleType contextType conversationLabel = do
   created <- try $ runMonadPerspectivesTransaction myRoleType do
     createAndAddRoleInstance
-      typeIds.conversationBranchesRoleType
+      (EnumeratedRoleType conversationBranches)
       (unwrap helpProjectContext)
       (RolSerialization { id: Nothing, properties: PropertySerialization Object.empty, binding: Nothing })
   case created of
@@ -434,9 +420,9 @@ createBranch helpProjectContext modelManifestExternal myRoleType typeIds context
                 Left _ -> pure Nothing
                 Right text -> do
                   void $ runMonadPerspectivesTransaction myRoleType do
-                    setProperty [ branchExternal ] typeIds.contextTypePropertyType Nothing [ Value contextType ]
-                    setProperty [ branchExternal ] typeIds.conversationIdentifierPropertyType Nothing [ Value conversationLabel ]
-                    setProperty [ branchExternal ] typeIds.conversationTextPropertyType Nothing [ Value text ]
+                    setProperty [ branchExternal ] (EnumeratedPropertyType conversationBranchecontextType) Nothing [ Value contextType ]
+                    setProperty [ branchExternal ] (EnumeratedPropertyType conversationBranchIdentifier) Nothing [ Value conversationLabel ]
+                    setProperty [ branchExternal ] (EnumeratedPropertyType conversationText) Nothing [ Value text ]
                   pure $ Just { branchExternal, branchContext, conversationText: text }
 
 ensureConversationText :: RoleInstance -> String -> String -> RoleType -> RoleInstance -> EnumeratedPropertyType -> MonadPerspectives String
@@ -546,44 +532,6 @@ getTargetModelManifestExternals contextType = do
         pure case mversionedModelUri of
           Just (Value versionedModelUri) | unversionedModelUri versionedModelUri == modelUri -> Just manifestExternal
           _ -> Nothing
-
-getHelpProjectTypeIds :: MonadPerspectives (Maybe HelpProjectTypeIds)
-getHelpProjectTypeIds = do
-  mhelpProjectModel <- getVersionedStableModelUri "model://joopringelberg.nl#HelpProject"
-  case mhelpProjectModel of
-    Nothing -> pure Nothing
-    Just helpProjectVersionedStableModelUri -> do
-      mmapping <- loadStableMapping (ModelUri helpProjectVersionedStableModelUri :: ModelUri Stable) fromLocalModels
-      pure do
-        mapping <- mmapping
-        conversationBranchesRoleType <- EnumeratedRoleType <$> idUriForRole mapping (RoleUri "model://joopringelberg.nl#HelpProject$HelpProject$ConversationBranches")
-        conversationTextPropertyType <- EnumeratedPropertyType <$> idUriForProperty mapping (PropertyUri "model://joopringelberg.nl#HelpProject$HelpProject$ConversationBranch$ConversationText")
-        contextTypePropertyType <- EnumeratedPropertyType <$> idUriForProperty mapping (PropertyUri "model://joopringelberg.nl#HelpProject$HelpProject$ConversationBranch$ContextType")
-        conversationIdentifierPropertyType <- EnumeratedPropertyType <$> idUriForProperty mapping (PropertyUri "model://joopringelberg.nl#HelpProject$HelpProject$ConversationBranch$ConversationIdentifier")
-        pure
-          { conversationBranchesRoleType
-          , conversationTextPropertyType
-          , contextTypePropertyType
-          , conversationIdentifierPropertyType
-          }
-
-getVersionedStableModelUri :: String -> MonadPerspectives (Maybe String)
-getVersionedStableModelUri readableModelUri = do
-  system <- getMySystem
-  modelRoles <- (ContextInstance system) ##= getRoleInstances (ENR $ EnumeratedRoleType modelsInUse)
-  candidates <- catMaybes <$> traverse matchingModel modelRoles
-  pure $ head candidates
-  where
-  matchingModel modelRole = do
-    mmanifestExternal <- modelRole ##> binding
-    case mmanifestExternal of
-      Nothing -> pure Nothing
-      Just manifestExternal -> do
-        mreadableModelUri <- manifestExternal ##> getPropertyValues (CP $ CalculatedPropertyType modelURIReadable)
-        mversionedModelUri <- manifestExternal ##> getPropertyValues (CP $ CalculatedPropertyType versionedModelURI)
-        pure case mreadableModelUri, mversionedModelUri of
-          Just (Value readableUri), Just (Value versionedUri) | readableUri == readableModelUri -> Just versionedUri
-          _, _ -> Nothing
 
 externalFunctions :: Array (Tuple String HiddenFunctionDescription)
 externalFunctions =
