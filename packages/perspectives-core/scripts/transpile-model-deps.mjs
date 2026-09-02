@@ -277,7 +277,8 @@ function hasSingleLocalSegment(s) {
       "model://perspectives.domains#Sensor": "model://perspectives.domains#s2gyoyohau",
       "model://perspectives.domains#Parsing": "model://perspectives.domains#salp36dvb9",
       "model://perspectives.domains#Files": "model://perspectives.domains#piln392sut",
-      "model://perspectives.domains#RabbitMQ": "model://perspectives.domains#m203lt2idk"
+      "model://perspectives.domains#RabbitMQ": "model://perspectives.domains#m203lt2idk",
+      "model://perspectives.domains#HelpProject": "model://perspectives.domains#siqjgdxh28"
     };
     
   const text = await fs.readFile(srcFile, 'utf8')

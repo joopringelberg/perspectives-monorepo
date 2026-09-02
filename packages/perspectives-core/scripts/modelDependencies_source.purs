@@ -415,3 +415,18 @@ invitationMessageProp = "model://perspectives.domains#System$Invitation$External
 
 serialisedInvitationProp :: String
 serialisedInvitationProp = "model://perspectives.domains#System$Invitation$External$SerialisedInvitation"
+
+------------------------------------------------------------------------------------
+-- HELPPROJECT
+------------------------------------------------------------------------------------
+conversationBranches :: String
+conversationBranches = "model://perspectives.domains#HelpProject$HelpProject$ConversationBranches"
+
+conversationText :: String
+conversationText = "model://perspectives.domains#HelpProject$ConversationBranch$External$ConversationText"
+
+conversationBranchecontextType :: String
+conversationBranchecontextType = "model://perspectives.domains#HelpProject$ConversationBranch$External$ContextType"
+
+conversationBranchIdentifier :: String
+conversationBranchIdentifier = "model://perspectives.domains#HelpProject$ConversationBranch$External$ConversationLabel"
