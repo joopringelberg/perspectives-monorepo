@@ -364,9 +364,10 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
     });
 
     if (activation.target.kind === 'role' && activation.target.perspectiveId) {
+      const target = activation.target;
       PDRproxy.then(pproxy => pproxy.getConversationBranch(
-        activation.target.contextType,
-        activation.target.perspectiveId,
+        target.contextType,
+        target.perspectiveId,
         branches => {
           if (requestId !== this.helpRequestId) return;
           this.setState(state => state.helpViewer?.requestId === requestId
