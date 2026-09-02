@@ -281,6 +281,12 @@ type ConversationEditorBranch =
   , conversationIdentifierPropertyType :: String
   }
 
+type HelpProjectCandidate =
+  { helpProjectContext :: ContextInstance
+  , modelManifestExternal :: RoleInstance
+  , myRoleType :: RoleType
+  }
+
 getAuthoringProject :: RoleInstance -> MonadPerspectives AuthoringProject
 getAuthoringProject branchExternal = do
   branchRoles <- branchExternal ##= allRoleBinders
@@ -293,10 +299,12 @@ getAuthoringProject branchExternal = do
     [] -> throwError $ error "The ConversationBranch is not connected to a VersionedModelManifest with ConversationSources."
     _ -> throwError $ error "The ConversationBranch resolves to more than one VersionedModelManifest."
   where
+  rolesInContext :: ContextInstance -> MonadPerspectives (Array RoleInstance)
   rolesInContext contextInstance = do
     PerspectContext { rolInContext } <- getPerspectContext contextInstance
     pure $ concat $ Object.values rolInContext
 
+  projectInContext :: ContextInstance -> MonadPerspectives (Maybe AuthoringProject)
   projectInContext contextInstance = do
     sourceRoles <- contextInstance ##= getConversationSources
     if null sourceRoles then pure Nothing
@@ -308,6 +316,7 @@ getAuthoringProject branchExternal = do
           sources <- readConversationSources $ map unwrap sourceRoles
           pure $ Just { sources, versionedModelUri: uri }
 
+  getConversationSources :: ContextInstance ~~> RoleInstance
   getConversationSources = getEnumeratedRoleInstances (EnumeratedRoleType conversationSources)
 
 getConversationBranch :: String -> String -> MonadPerspectives (Maybe ConversationEditorBranch)
@@ -320,6 +329,7 @@ getConversationBranch contextType perspectiveId = do
       candidates <- concat <$> traverse candidateHelpProjectContexts manifestExternals
       resolveCandidate candidates conversationLabel
   where
+  resolveCandidate :: Array HelpProjectCandidate -> String -> MonadPerspectives (Maybe ConversationEditorBranch)
   resolveCandidate candidates conversationLabel = case uncons candidates of
     Nothing -> pure Nothing
     Just { head, tail } -> do
@@ -351,11 +361,13 @@ getConversationBranch contextType perspectiveId = do
                 , conversationIdentifierPropertyType: conversationBranchIdentifier
                 }
 
+  candidateHelpProjectContexts :: RoleInstance -> MonadPerspectives (Array HelpProjectCandidate)
   candidateHelpProjectContexts manifestExternal = do
     binderRoles <- manifestExternal ##= allRoleBinders
     contexts <- concat <$> traverse (\role -> role ##= context) binderRoles
     catMaybes <$> traverse (toCandidate manifestExternal) (nub contexts)
     where
+    toCandidate :: RoleInstance -> ContextInstance -> MonadPerspectives (Maybe HelpProjectCandidate)
     toCandidate modelManifestExternal helpProjectContext = do
       mmyRoleType <- helpProjectContext ##> getMyType
       case mmyRoleType of
@@ -374,6 +386,7 @@ findExistingBranch helpProjectContext contextType conversationLabel = do
   found <- catMaybes <$> traverse branchIfMatching branches
   pure $ head found
   where
+  branchIfMatching :: RoleInstance -> MonadPerspectives (Maybe { branchExternal :: RoleInstance, branchContext :: ContextInstance })
   branchIfMatching branch = do
     mboundContext <- branch ##> (binding >=> context)
     case mboundContext of
@@ -451,12 +464,14 @@ renderConversationText modelManifestExternal contextType conversationLabel = do
         Left renderError -> throwError $ error $ show renderError
         Right text -> pure text
   where
+  sourceForContextType :: String -> ConversationSource -> MonadPerspectives (Maybe ConversationSource)
   sourceForContextType targetContextType source = do
     msourceContextType <- source.roleInstance ##> getPropertyValues (ENP $ EnumeratedPropertyType conversationSourceContextType)
     pure case msourceContextType of
       Just (Value sourceContextType) | sourceContextType == targetContextType -> Just source
       _ -> Nothing
 
+  sourceWithConversation :: ConversationSource -> MonadPerspectives (Maybe ConversationSource)
   sourceWithConversation source = do
     rendered <- liftEffect $ renderConversationFromContextYaml source.yaml conversationLabel
     pure case rendered of
@@ -523,6 +538,7 @@ getTargetModelManifestExternals contextType = do
   manifestExternals <- catMaybes <$> traverse (matchingManifest modelUri) modelRoles
   pure $ nub manifestExternals
   where
+  matchingManifest :: String -> RoleInstance -> MonadPerspectives (Maybe RoleInstance)
   matchingManifest modelUri modelRole = do
     mmanifestExternal <- modelRole ##> binding
     case mmanifestExternal of
