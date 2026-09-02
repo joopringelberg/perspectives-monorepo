@@ -460,7 +460,7 @@ domain model://perspectives.domains#System@6.3
       -- Notice that these roles are filled with the public version of VersionedModelManifest$External.
       -- We can actually only show properties that are in that perspective.
       perspective on ModelsInUse
-        only (Create, CreateAndFill, Fill, RemoveFiller)
+        only (Create, CreateAndFill, Fill, RemoveFiller, Remove)
         props (ModelName, Description, Version, Patch, Build, ShouldNotBeRemoved) verbs (Consult)
         props (InstalledPatch, InstalledBuild, UpdateOnBuild, DetachedFiller) verbs (SetPropertyValue)
         in object state Filled
@@ -471,7 +471,7 @@ domain model://perspectives.domains#System@6.3
           action Reattach
             bind_ (roleinstance (sys:VersionedModelManifest$External) DetachedFiller) to origin
         in object state CanBeRemoved
-          all roleverbs
+          only (Remove)
           props (ModelName, Description, Version, Patch, Build, ShouldNotBeRemoved) verbs (Consult)
 
       perspective on ModelsToUpdate
@@ -590,7 +590,8 @@ domain model://perspectives.domains#System@6.3
             detail
           ModelsInUse
             master
-              without props (ModelName, Description, Version, Patch, Build, InstalledPatch, InstalledBuild, UpdateOnBuild, DetachedFiller, ShouldNotBeRemoved)
+              with props (VersionName)
+              only (Remove)
             detail
               without props (DetachedFiller, ShouldNotBeRemoved)
           ModelsToUpdate
