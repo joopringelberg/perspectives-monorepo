@@ -38,8 +38,8 @@ import Perspectives.Identifiers (modelUriVersion, typeUri2ModelUri_, unversioned
 import Perspectives.InstanceRepresentation (PerspectContext(..))
 import Perspectives.Instances.Builders (createAndAddRoleInstance)
 import Perspectives.Instances.Me (getMyType)
-import Perspectives.Instances.ObjectGetters (allRoleBinders, binding, context, externalRole, getEnumeratedRoleInstances)
-import Perspectives.ModelDependencies (conversationBranches, conversationText, conversationBranchecontextType, conversationBranchIdentifier, conversationSourceContextType, conversationSourceDocumentKind, conversationSourceDocumentName, conversationSourceYaml, conversationSources, modelsInUse, versionedModelURI)
+import Perspectives.Instances.ObjectGetters (allRoleBinders, binding, context, externalRole, getEnumeratedRoleInstances, getRecursivelyFilledRoles')
+import Perspectives.ModelDependencies (conversationBranchIdentifier, conversationBranchecontextType, conversationBranches, conversationSourceContextType, conversationSourceDocumentKind, conversationSourceDocumentName, conversationSourceYaml, conversationSources, conversationText, helpProject, helpProjectModel, modelsInUse, versionedModelURI)
 import Perspectives.Names (getMySystem)
 import Perspectives.Persistent (getPerspectContext, getPerspectRol)
 import Perspectives.Query.UnsafeCompiler (getPropertyValues, getRoleInstances)
@@ -48,7 +48,7 @@ import Perspectives.Representation.Context (Context(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance, Value(..))
 import Perspectives.Representation.Perspective (Perspective(..))
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
-import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), roletype2string)
+import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), roletype2string)
 import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransaction)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Stable)
 import Perspectives.Sidecar.HashQFD (qfdSignature)
@@ -363,7 +363,7 @@ getConversationBranch contextType perspectiveId = do
 
   candidateHelpProjectContexts :: RoleInstance -> MonadPerspectives (Array HelpProjectCandidate)
   candidateHelpProjectContexts manifestExternal = do
-    binderRoles <- manifestExternal ##= allRoleBinders
+    binderRoles <- manifestExternal ##= getRecursivelyFilledRoles' (ContextType helpProject) (EnumeratedRoleType helpProjectModel)
     contexts <- concat <$> traverse (\role -> role ##= context) binderRoles
     catMaybes <$> traverse (toCandidate manifestExternal) (nub contexts)
     where
@@ -372,9 +372,7 @@ getConversationBranch contextType perspectiveId = do
       mmyRoleType <- helpProjectContext ##> getMyType
       case mmyRoleType of
         Nothing -> pure Nothing
-        Just myRoleType -> do
-          _ <- helpProjectContext ##= getRoleInstances (ENR $ EnumeratedRoleType conversationBranches)
-          pure $ Just { helpProjectContext, modelManifestExternal, myRoleType }
+        Just myRoleType -> pure $ Just { helpProjectContext, modelManifestExternal, myRoleType }
 
 findExistingBranch
   :: ContextInstance

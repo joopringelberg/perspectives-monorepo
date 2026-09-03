@@ -419,6 +419,12 @@ serialisedInvitationProp = "model://perspectives.domains#System$Invitation$Exter
 ------------------------------------------------------------------------------------
 -- HELPPROJECT
 ------------------------------------------------------------------------------------
+helpProject :: String
+helpProject = "model://perspectives.domains#HelpProject$HelpProject"
+
+helpProjectModel :: String
+helpProjectModel = "model://perspectives.domains#HelpProject$HelpProject$Model"
+
 conversationBranches :: String
 conversationBranches = "model://perspectives.domains#HelpProject$HelpProject$ConversationBranches"
 
