@@ -74,7 +74,7 @@ domain model://perspectives.domains#HelpProject@3.0
       perspective on CoAuthors
         only (Create, Fill, Remove)
 
-    user CoAuthors filledBy (sys:TheWorld$PerspectivesUsers)
+    user CoAuthors (relational) filledBy (sys:TheWorld$PerspectivesUsers)
       perspective on ConversationBranches
         only (CreateAndFill, Remove)
       perspective on ContextYamls
@@ -84,7 +84,7 @@ domain model://perspectives.domains#HelpProject@3.0
 
     context Model filledBy cm:VersionedModelManifest
 
-    context ConversationBranches filledBy ConversationBranch
+    context ConversationBranches (relational) filledBy ConversationBranch
       state BranchExists = exists binding
         on entry
           do for Author
@@ -140,7 +140,7 @@ domain model://perspectives.domains#HelpProject@3.0
         in 
           callEffect helplib:MergeConversationYamlLocally( extern >> ContextType, extern >> AudienceRoleType, extern >> TargetRoleType, extern >> PerspectiveId, yaml )
 
-    user CoAuthors filledBy (sys:TheWorld$PerspectivesUsers)
+    user CoAuthors (relational) filledBy (sys:TheWorld$PerspectivesUsers)
       in context state Draft
         perspective on extern
           props (ConversationText) verbs (Consult, SetPropertyValue)
