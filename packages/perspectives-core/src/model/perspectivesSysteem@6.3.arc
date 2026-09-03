@@ -473,6 +473,8 @@ domain model://perspectives.domains#System@6.3
         in object state CanBeRemoved
           only (Remove)
           props (ModelName, Description, Version, Patch, Build, ShouldNotBeRemoved) verbs (Consult)
+          action UnInstall
+            remove role origin
 
       perspective on ModelsToUpdate
         props (ModelName, Description, Version) verbs (Consult)
@@ -542,6 +544,7 @@ domain model://perspectives.domains#System@6.3
 
                         * Create and accept invitations to connect with other users.
                         * Go to an App store to install a new App.
+                        * To remove an App, remove the role instance from ModelsInUse.
                         * On the left, under **Who** you see your contacts.
                         >
             row  
@@ -591,7 +594,7 @@ domain model://perspectives.domains#System@6.3
           ModelsInUse
             master
               with props (VersionName)
-              only (Remove)
+              no roleverbs
             detail
               without props (DetachedFiller, ShouldNotBeRemoved)
           ModelsToUpdate
@@ -701,6 +704,7 @@ domain model://perspectives.domains#System@6.3
         -- notify User
         --   "Model {ModelToRemove} has been removed completely."
         do for User
+          -- This will remove the model root context. In its on exit, we clean up the instance of IndexedContexts and StartContexts that were created for this model. It will also remove the model from the local store.
           callDestructiveEffect cdb:RemoveModelFromLocalStore ( ModelToRemove )
     
     thing ModelsToUpdate = (filter ModelsInUse with isInState InstallUpdate or isInState InstallBuild)

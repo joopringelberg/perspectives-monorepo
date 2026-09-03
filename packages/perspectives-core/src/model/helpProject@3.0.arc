@@ -28,6 +28,7 @@ domain model://perspectives.domains#HelpProject@3.0
         startcontext <- filter sys:MySystem >> StartContexts with filledBy (mm:MyHelpProjects >> extern)
       in
         remove role startcontext
+        remove role indexedcontext
 
   aspect user sys:PerspectivesSystem$Installer
   
