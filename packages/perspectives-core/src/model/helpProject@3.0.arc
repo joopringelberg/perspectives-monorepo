@@ -1,6 +1,6 @@
-domain model://joopringelberg.nl#HelpProject@1.0
+domain model://perspectives.domains#HelpProject@3.0
   use sys for model://perspectives.domains#System
-  use mm for model://joopringelberg.nl#HelpProject
+  use mm for model://perspectives.domains#HelpProject
   use cm for model://perspectives.domains#CouchdbManagement
   use helplib for model://perspectives.domains#HelpLib
 
@@ -12,13 +12,13 @@ domain model://joopringelberg.nl#HelpProject@1.0
       do for sys:PerspectivesSystem$Installer
         letA
           -- This is to add an entry to the Start Contexts in System.
-          app <- create context HelpProjects
+          app <- create context HelpProjectApp
           start <- create role StartContexts in sys:MySystem
         in
           -- Being a RootContext, too, Installer can fill a new instance
           -- of StartContexts with it.
           bind_ app >> extern to start
-          Name = "Minimal Model App" for start
+          Name = "Help Project App" for start
           IsSystemModel = true for start
 
   on exit
@@ -28,24 +28,28 @@ domain model://joopringelberg.nl#HelpProject@1.0
         startcontext <- filter sys:MySystem >> StartContexts with filledBy (mm:MyHelpProjects >> extern)
       in
         remove role startcontext
+        remove role indexedcontext
 
   aspect user sys:PerspectivesSystem$Installer
   
   -------------------------------------------------------------------------------
   ---- INDEXED CONTEXT
-  ---- The top-level context of the HelpProject model is HelpProjects. It is indexed in the system.
+  ---- The top-level context of the HelpProject model is HelpProjectApp. It is indexed in the system.
   ---- We use it to collect HelpProject instances. Each such project is dedicated to a version of a model.
   -------------------------------------------------------------------------------
-  case HelpProjects
+  case HelpProjectApp
     indexed mm:MyHelpProjects
     aspect sys:RootContext
     external
     
     user Manager = me
-      perspective on HelpProjects >> binding >> context >> Author
+      perspective on AllProjects >> binding >> context >> Author
         only (Create, Fill)
+      perspective on AllProjects
+        only (CreateAndFill, Remove)
+        props (ModelUri) verbs (Consult)
 
-    context HelpProjects filledBy HelpProject
+    context AllProjects filledBy HelpProject
       state ProjectExists = exists binding
         on entry
           do for Manager
@@ -67,9 +71,11 @@ domain model://joopringelberg.nl#HelpProject@1.0
       perspective on ConversationBranches >> binding >> context >> Author
         only (Create, Fill, Remove)
       perspective on Model
-        only (CreateAndFill, Remove)
+        only (Create, Fill, Remove)
+      perspective on CoAuthors
+        only (Create, Fill, Remove)
 
-    user CoAuthor filledBy (sys:TheWorld$PerspectivesUsers)
+    user CoAuthors (relational) filledBy (sys:TheWorld$PerspectivesUsers)
       perspective on ConversationBranches
         only (CreateAndFill, Remove)
       perspective on ContextYamls
@@ -79,7 +85,7 @@ domain model://joopringelberg.nl#HelpProject@1.0
 
     context Model filledBy cm:VersionedModelManifest
 
-    context ConversationBranches filledBy ConversationBranch
+    context ConversationBranches (relational) filledBy ConversationBranch
       state BranchExists = exists binding
         on entry
           do for Author
@@ -89,7 +95,7 @@ domain model://joopringelberg.nl#HelpProject@1.0
   -------------------------------------------------------------------------------
   ---- CONVERSATION BRANCH
   ---- A conversation branch is a variant of a conversation. 
-  ---- It is created by a user who is either the Author or the CoAuthor of the HelpProject.
+  ---- It is created by a user who is either the Author or the CoAuthors of the HelpProject.
   ---- It is initialized either empty or with a conversation text that is rendered from 
   ---- the yaml document of the context in which the conversation appears.
   ---- The GUI passes on the following identifying information:
@@ -135,7 +141,7 @@ domain model://joopringelberg.nl#HelpProject@1.0
         in 
           callEffect helplib:MergeConversationYamlLocally( extern >> ContextType, extern >> AudienceRoleType, extern >> TargetRoleType, extern >> PerspectiveId, yaml )
 
-    user CoAuthor filledBy (sys:TheWorld$PerspectivesUsers)
+    user CoAuthors (relational) filledBy (sys:TheWorld$PerspectivesUsers)
       in context state Draft
         perspective on extern
           props (ConversationText) verbs (Consult, SetPropertyValue)

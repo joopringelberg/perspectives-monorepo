@@ -62,6 +62,7 @@ import Perspectives.HumanReadableType (translateType)
 import Perspectives.Identifiers (buitenRol, deconstructBuitenRol, isExternalRole, isTypeUri, typeUri2ModelUri_, typeUri2couchdbFilename)
 import Perspectives.Inspector.Factories (makeInspectableContext, makeInspectableRole)
 import Perspectives.InstanceRepresentation (PerspectRol(..))
+import Perspectives.Extern.Help (getConversationBranch, mergeConversationBranchLocally)
 import Perspectives.Instances.Builders (createAndAddRoleInstance, constructContext)
 import Perspectives.Instances.Combinators (filter)
 import Perspectives.Instances.Me (getAllMyRoleTypes, getMyType, isMe)
@@ -535,6 +536,16 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
             setter
 
     -- { request: "GetScreen", subject: UserRoleType, predicate: ContextType, object: ContextInstance }
+    Api.GetConversationBranch -> do
+      branch <- getConversationBranch subject predicate
+      sendResponse
+        ( Result corrId $ case branch of
+            Nothing -> []
+            Just value -> [ writeJSON value ]
+        )
+        setter
+
+    -- { request: "GetScreen", subject: UserRoleType, predicate: ContextType, object: ContextInstance }
     Api.GetScreen -> do
       userRoleType <- getRoleType subject
       subjectGetter <- getRoleFunction subject
@@ -841,6 +852,20 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
       ( do
           void $ runMonadPerspectivesTransaction authoringRole (setProperty [ (RoleInstance subject) ] (EnumeratedPropertyType predicate) Nothing [ (Value object) ])
           sendResponse (Result corrId []) setter
+      )
+      (\e -> sendResponse (Error corrId (show e)) setter)
+    Api.SaveConversationBranch -> catchError
+      ( case read contextDescription of
+          Left err -> sendResponse (Error corrId $ "Incorrectly formed SaveConversationBranch contextDescription: " <> show err) setter
+          Right ({ contextTypePropertyType, conversationIdentifierPropertyType, conversationTextPropertyType } :: { contextTypePropertyType :: String, conversationIdentifierPropertyType :: String, conversationTextPropertyType :: String }) -> do
+            void $ runMonadPerspectivesTransaction authoringRole
+              ( mergeConversationBranchLocally
+                  (EnumeratedPropertyType contextTypePropertyType)
+                  (EnumeratedPropertyType conversationIdentifierPropertyType)
+                  (EnumeratedPropertyType conversationTextPropertyType)
+                  (RoleInstance subject)
+              )
+            sendResponse (Result corrId []) setter
       )
       (\e -> sendResponse (Error corrId (show e)) setter)
     Api.AddProperty -> catchError

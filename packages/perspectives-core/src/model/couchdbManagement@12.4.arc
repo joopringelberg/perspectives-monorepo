@@ -1004,6 +1004,7 @@ domain model://perspectives.domains#CouchdbManagement@12.4
           in 
             callEffect cdb:UpdateModel( VersionedModelURI, false )
             ModelToRemove = VersionedModelURI for basicmodel
+            -- Fill the ModelsInUse role with the new VersionedModelManifest.
             bind_ origin >> binding to basicmodel
       perspective on Versions >> binding >> context >> Author
         only (Fill, Create)

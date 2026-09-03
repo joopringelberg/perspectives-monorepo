@@ -69,7 +69,7 @@ import Perspectives.Sync.InvertedQueryResult (InvertedQueryResult(..))
 import Perspectives.Sync.Transaction (Transaction(..), TransactionDestination(..), createTransaction)
 import Perspectives.Types.ObjectGetters (contextRootStates, publicUrl_, roleRootStates)
 import Perspectives.Warning (PerspectivesWarning(..))
-import Prelude (Unit, bind, discard, flip, join, not, pure, show, unit, void, ($), (&&), (*>), (<$>), (<<<), (<>), (>), (>=>), (>>=), (||))
+import Prelude (Unit, bind, discard, flip, join, not, pure, show, unit, void, ($), (&&), (*>), (<$>), (<<<), (<>), (>), (>=>), (>>=), (||), (/=))
 import Unsafe.Coerce (unsafeCoerce)
 
 -----------------------------------------------------------
@@ -323,7 +323,7 @@ phase2 share authoringRole r = do
               urlComputer <- lift $ context2propertyValue qfd
               murl <- lift (ctxt ##> urlComputer)
               case murl of
-                Just (Value url) -> do
+                Just (Value url) | url /= "/" -> do
                   deltas <- expandDeltas publicRoleTransaction url
                   -- These deltas for a public role aren't sent anywhere but executed
                   -- right here. Notice that no changes to local state will result from executing such a transaction.
@@ -331,7 +331,7 @@ phase2 share authoringRole r = do
                   -- Run embedded, do not share.
                   lift $ runEmbeddedIfNecessary false authoringRole (executeDeltas deltas)
                 -- If the URL is not computed, we log this and do nothing. In this installation, there probably should not be a proxy for the public role anyway; but we don't have a way of knowing that on constructing the context.
-                Nothing -> lift $ toReadable userType >>= \readableUserType -> debugState (padding <> "Cannot compute a URL to publish to for this user role type and instance: " <> show readableUserType <> " ('" <> show userId <> "')")
+                _ -> lift $ toReadable userType >>= \readableUserType -> debugState (padding <> "Cannot compute a URL to publish to for this user role type and instance: " <> show readableUserType <> " ('" <> show userId <> "')")
             Just (S _ _) -> throwError (error ("Attempt to acces QueryFunctionDescription of the url of a public role before the expression has been compiled. This counts as a system programming error. User type = " <> (show userType)))
         Peer _ -> pure unit
     -- Remove the deltas; we don't want to execute them again.

@@ -21,6 +21,7 @@ module Perspectives.Conversation
   , initializeConversationSource
   , readConversationSources
   , resolveConversationSource
+  , resolveConversationLabel
   , storeConversationArtifactInRepository
   , storeConversationArtifactLocally
   ) where
@@ -31,7 +32,7 @@ import Control.Monad.Error.Class (throwError, try)
 import Control.Monad.Trans.Class (lift)
 import Data.Array (find, head)
 import Data.Either (Either(..))
-import Data.Function.Uncurried (Fn5, runFn5)
+import Data.Function.Uncurried (Fn3, Fn5, runFn3, runFn5)
 import Data.Maybe (Maybe(..))
 import Data.MediaType (MediaType(..))
 import Data.Nullable (Nullable, toMaybe)
@@ -67,6 +68,9 @@ foreign import resolveConversationImpl
 
 foreign import resolveConversationSourceImpl
   :: EffectFn6 String (Array String) String String String String (Nullable { conversationId :: String, documentName :: String })
+
+foreign import resolveConversationLabelImpl
+  :: Fn3 Foreign String String (Nullable String)
 
 foreign import augmentConversationSourceImpl :: EffectFn3 String String String String
 
@@ -227,6 +231,11 @@ getHelpConversation contextType audienceRoleType targetRoleType perspectiveId = 
         Nothing -> ""
         Just identifier -> identifier
     )
+
+resolveConversationLabel :: String -> String -> MonadPerspectives (Maybe String)
+resolveConversationLabel contextType perspectiveId = do
+  store <- loadConversationStore contextType
+  pure $ toMaybe $ runFn3 resolveConversationLabelImpl store contextType perspectiveId
 
 -- | Load and decode conversations.json once per model. The cached Foreign value
 -- | is a validated JavaScript object, so lookups do not repeatedly parse JSON.

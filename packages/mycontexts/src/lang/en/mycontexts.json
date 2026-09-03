@@ -180,4 +180,8 @@
   , "help_invalid": "This conversation cannot be displayed."
   , "help_complete": "End of conversation"
   , "help_answers": "Possible answers"
+  , "help_edit": "Edit help conversation"
+  , "help_edit_title": "Conversation editor"
+  , "help_edit_cancel": "Cancel"
+  , "help_edit_save": "Save"
   }

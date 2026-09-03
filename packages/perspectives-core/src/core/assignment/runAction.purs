@@ -34,6 +34,7 @@ import Partial.Unsafe (unsafePartial)
 import Perspectives.CompileAssignment (compileAssignment)
 import Perspectives.CompileRoleAssignment (compileAssignmentFromRole)
 import Perspectives.CoreTypes (MonadPerspectivesTransaction, (##>))
+import Perspectives.HumanReadableType (translateType)
 import Perspectives.Identifiers (isTypeUri)
 import Perspectives.Instances.Me (getMeInRoleAndContext)
 import Perspectives.Instances.ObjectGetters (roleType_)
@@ -43,7 +44,7 @@ import Perspectives.Representation.Action (Action(..)) as ACTION
 import Perspectives.Representation.Class.Role (getRoleType)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..))
 import Perspectives.Representation.Perspective (Perspective(..))
-import Perspectives.Representation.TypeIdentifiers (RoleType(..))
+import Perspectives.Representation.TypeIdentifiers (ActionIdentifier(..), RoleType(..))
 import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.Types.ObjectGetters (findPerspective, findPerspectiveForObject, getAction, getActionFromUnqualifiedName, getContextAction, getContextActionFromUnqualifiedName)
 
@@ -104,7 +105,8 @@ runAction authoringRole perspectiveId actionName context object = do
       lift $ addBinding "currentactor" [ unwrap author ]
       updater <- lift $ compileAssignmentFromRole action
       readableAuthoringRole <- lift $ toReadable authoringRole
-      lift $ debugState ("Executing perspective action '" <> actionName <> "' for authoring role type '" <> show readableAuthoringRole <> "' in context '" <> context <> "'.")
+      readableActionName <- lift $ translateType (ActionIdentifier actionName)
+      lift $ debugState ("Executing perspective action '" <> readableActionName <> "' for authoring role type '" <> show readableAuthoringRole <> "' in context '" <> context <> "'.")
       updater (RoleInstance object)
       lift $ restoreFrame oldFrame
     _, _ -> throwError $ error
@@ -139,7 +141,8 @@ runActionForObject authoringRole actionName context object = do
       lift $ addBinding "currentactor" [ unwrap author ]
       updater <- lift $ compileAssignmentFromRole action
       readableAuthoringRole <- lift $ toReadable authoringRole
-      lift $ debugState ("Executing perspective action '" <> actionName <> "' for authoring role type '" <> show readableAuthoringRole <> "' in context '" <> context <> "' on object '" <> object <> "'.")
+      readableActionName <- lift $ translateType (ActionIdentifier actionName)
+      lift $ debugState ("Executing perspective action '" <> readableActionName <> "' for authoring role type '" <> show readableAuthoringRole <> "' in context '" <> context <> "' on object '" <> object <> "'.")
       updater (RoleInstance object)
       lift $ restoreFrame oldFrame
     _, _ -> throwError $ error

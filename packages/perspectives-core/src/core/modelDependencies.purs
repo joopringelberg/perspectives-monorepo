@@ -415,3 +415,24 @@ invitationMessageProp = "model://perspectives.domains#tiodn6tcyc$nkllrx0n2x$Exte
 
 serialisedInvitationProp :: String
 serialisedInvitationProp = "model://perspectives.domains#tiodn6tcyc$nkllrx0n2x$External$t8txixzv0y"
+
+------------------------------------------------------------------------------------
+-- HELPPROJECT
+------------------------------------------------------------------------------------
+helpProject :: String
+helpProject = "model://perspectives.domains#siqjgdxh28$d5od2wfzb1"
+
+helpProjectModel :: String
+helpProjectModel = "model://perspectives.domains#siqjgdxh28$d5od2wfzb1$pxyando20i"
+
+conversationBranches :: String
+conversationBranches = "model://perspectives.domains#siqjgdxh28$d5od2wfzb1$n1aurnot6t"
+
+conversationText :: String
+conversationText = "model://perspectives.domains#siqjgdxh28$lssfjn8xok$External$x9c758uu9l"
+
+conversationBranchecontextType :: String
+conversationBranchecontextType = "model://perspectives.domains#siqjgdxh28$lssfjn8xok$External$muafe4rs03"
+
+conversationBranchIdentifier :: String
+conversationBranchIdentifier = "model://perspectives.domains#siqjgdxh28$lssfjn8xok$External$dchiw5pxy1"
