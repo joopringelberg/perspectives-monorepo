@@ -390,4 +390,3 @@ When this design is implemented, verify at least:
    `before` data.
 6. **Delete-versus-modify:** a deleted role is reconstructed and then modified
    correctly.
-
