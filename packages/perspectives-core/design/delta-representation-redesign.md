@@ -263,7 +263,7 @@ Use a transport envelope per sender → receiver hop:
 TransportEnvelope
   header
   ciphertext
-  encryptedContentKey / keyId
+  recipients[]
   iv / nonce
   authorSignature
   transportSender
@@ -315,17 +315,40 @@ of authors or every pair of installations. Fresh per-hop content keys are
 enough, provided each recipient has a stable transport public key (or
 equivalent).
 
-#### Multi-recipient optimisation
+#### Multi-recipient fan-out
 
-When one installation sends the same transaction to multiple peers, it may use
-either of two equivalent strategies:
+Fan-out to multiple peers is expected to be an important case. The current
+practice of generating a separate transaction per instance of a user role, even
+when the recipients all receive the same deltas, should therefore be phased out.
 
-1. **separate envelopes per recipient** — simplest model;
-2. **one ciphertext plus multiple wrapped content keys** — more efficient when
-   many recipients receive the same payload.
+The preferred transport shape is:
 
-Because the peers are trusted, either strategy is acceptable. The second is
-likely preferable if broadcast fan-out becomes a performance concern.
+1. **one canonical payload** for the transaction;
+2. **one ciphertext** for that payload;
+3. **multiple recipient entries**, each containing that recipient's wrapped
+   content key (and, if needed, recipient metadata such as key id).
+
+Conceptually:
+
+```text
+TransportEnvelope
+  header
+  ciphertext
+  recipients[
+    { recipient, wrappedContentKey, keyId? },
+    ...
+  ]
+  iv / nonce
+  authorSignature
+  transportSender
+```
+
+This removes avoidable duplication in both serialisation work and transport
+volume while still allowing each intended peer to unwrap the shared content key
+independently.
+
+Separate per-recipient envelopes should remain only as an implementation
+fallback, not as the primary design.
 
 #### Consequence for forwarding
 
