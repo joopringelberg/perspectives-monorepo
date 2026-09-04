@@ -39,7 +39,7 @@ perspectivesUsersPublicKey :: String
 perspectivesUsersPublicKey = "model://perspectives.domains#tiodn6tcyc$xku8d2dtb7$atijsr67hl"
 
 perspectivesUsersTransportPublicKey :: String
-perspectivesUsersTransportPublicKey = "model://perspectives.domains#System$Identifiable$TransportPublicKey"
+perspectivesUsersTransportPublicKey = "model://perspectives.domains#tiodn6tcyc$xku8d2dtb7$l6efjjgjpi"
 
 modelDataUpgrade :: String
 modelDataUpgrade = "model://perspectives.domains#tiodn6tcyc$s9ayjqlfrd"

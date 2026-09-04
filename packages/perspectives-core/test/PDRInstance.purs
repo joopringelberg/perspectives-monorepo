@@ -213,6 +213,9 @@ startPDRInstance pouchdbUser runtimeOptions mLogColor bus = do
         Just color -> infoTest (color <> "Starting PDR instance for user: " <> pouchdbUser.systemIdentifier <> ansiReset)
         Nothing -> infoTest ("Starting PDR instance for user: " <> pouchdbUser.systemIdentifier)
       setTopicLogLevel RESOURCE CT.Error
+      setTopicLogLevel INSTALL CT.Trace
+      setTopicLogLevel AUTH CT.Trace
+      setTopicLogLevel STARTUP CT.Trace
     state
 
   -- If we have a bus, replace the default real StompClient factory with the in-process stub.
