@@ -51,16 +51,17 @@ import Test.Unit.Main (runTest)
 main :: Effect Unit
 main = launchAff_ do
   constructiveSynchronisationResults <- getSynchronisationResults
-  -- destructiveSynchronisationResults <- DestructiveSynchronisationTests.getSynchronisationResults
-  -- compilationResults <- getCompilationResults
-  -- queryStepResults <- getSinglePDRResults queryStepTestModelConfiguration
-  -- destructiveResults <- getSinglePDRResults singlePDRDestructiveTestModelConfiguration
-  -- transactionExecutionResults <- getSinglePDRResults transactionExecutionTestModelConfiguration
+  destructiveSynchronisationResults <- DestructiveSynchronisationTests.getSynchronisationResults
+  compilationResults <- getCompilationResults
+  queryStepResults <- getSinglePDRResults queryStepTestModelConfiguration
+  destructiveResults <- getSinglePDRResults singlePDRDestructiveTestModelConfiguration
+  transactionExecutionResults <- getSinglePDRResults transactionExecutionTestModelConfiguration
   liftEffect $ runTest do
     scaffoldTests
     synchronisationSuite constructiveSynchronisationResults
-    -- DestructiveSynchronisationTests.synchronisationSuite destructiveSynchronisationResults
-    -- modelCompilationSuite compilationResults
-    -- queryStepSuite queryStepResults
-    -- singlePDRDestructiveSuite destructiveResults
-    -- transactionExecutionSuite transactionExecutionResults
+    DestructiveSynchronisationTests.synchronisationSuite destructiveSynchronisationResults
+    modelCompilationSuite compilationResults
+    queryStepSuite queryStepResults
+    singlePDRDestructiveSuite destructiveResults
+    transactionExecutionSuite transactionExecutionResults
+  

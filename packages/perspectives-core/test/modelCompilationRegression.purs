@@ -79,7 +79,7 @@ import Test.Unit.Assert (assert)
 
 getCompilationResults :: Aff (Array CompilationResult)
 getCompilationResults = do
-  withPDRCached (testPouchdbUser "alice") defaultRuntimeOptions Nothing noBus "test/pdr-snapshot/layer3-clean/alice" \pdr -> runInPDR pdr do
+  withPDRCached (testPouchdbUser "alice") defaultRuntimeOptions Nothing noBus "test/pdr-snapshot/newdeltas/alice" \pdr -> runInPDR pdr do
     setTopicLogLevel MODEL Info
     manifests :: Array RoleInstance <- getSafeViewOnDatabase manifestsDb "defaultViews/roleView" (Key modelManifest)
     runMonadPerspectivesTransaction' doNotShareWithPeers (ENR $ EnumeratedRoleType sysUser) do
