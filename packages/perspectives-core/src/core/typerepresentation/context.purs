@@ -29,7 +29,6 @@ import Data.Show.Generic (genericShow)
 import Foreign (unsafeToForeign)
 import Foreign.Object (Object, empty)
 import Perspectives.Couchdb.Revision (class Revision, Revision_)
-import Perspectives.InvertedQuery (InvertedQuery)
 import Perspectives.Parsing.Arc.Position (ArcPosition)
 import Perspectives.Persistent.PublicStore (PublicStore)
 import Perspectives.Representation.Class.EnumReadForeign (enumReadForeign)
@@ -65,8 +64,6 @@ type ContextRecord =
   , context :: Maybe ContextType
 
   , indexedContext :: Maybe ContextInstance
-
-  , roleInvertedQueries :: Object (Array InvertedQuery) -- OBSOLETE!
 
   -- Type-level alias map for a ContextType.
   -- A role can be visible under more than one name when its aspect closure is considered.
@@ -112,8 +109,6 @@ defaultContext id dname kind context pos public = Context
   , pos: pos
 
   , indexedContext: Nothing
-
-  , roleInvertedQueries: empty
 
   , roleAliases: empty
   }

@@ -544,9 +544,6 @@ traverseScreenElement user ctxt a = case a of
         -- The condition should be strictly true.
         _ -> pure $ Nothing
 
------------------------------------------------------------
--- GET TABLEFORM OBSOLETE!!
------------------------------------------------------------ 
 serialisedTableFormForContextAndUser :: RoleInstance -> RoleType -> ContextType -> RoleType -> (ContextInstance ~~> SerialisedTableForm)
 serialisedTableFormForContextAndUser userRoleInstance userRoleType contextType objectRoleType =
   tableFormForContextAndUser userRoleInstance userRoleType contextType objectRoleType >=> pure <<< SerialisedTableForm <<< writeJSON

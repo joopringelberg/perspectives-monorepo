@@ -416,7 +416,7 @@ setPathForStep qfd@(SQD dom qf ran fun man) qWithAK users states statesPerProper
         , model
         }
 
-    -- The query would be added to roleInvertedQueries of the context. Such inverse queries are run when a new
+    -- The query would be stored as an RTRoleKey sidecar entry on the context. Such inverse queries are run when a new
     -- instance of the role type is added to the context (or when it is removed). But the external role never changes,
     -- so this is superfluous.
     QF.DataTypeGetter QF.ExternalRoleF -> pure unit

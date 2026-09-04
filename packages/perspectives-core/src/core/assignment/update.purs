@@ -43,7 +43,6 @@ import Control.Monad.State (StateT, evalStateT, put, get) as ST
 import Control.Monad.Trans.Class (lift)
 import Data.Array (concat, cons, difference, elemIndex, filter, filterA, find, foldM, foldMap, nub, null, snoc)
 import Data.Array (head) as ARR
-import Data.Array.NonEmpty (NonEmptyArray, head, toArray)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.Maybe (Maybe(..), fromMaybe, isJust, maybe)
@@ -65,7 +64,7 @@ import Perspectives.CoreTypes (class Persistent, InformedAssumption(..), LogLeve
 import Perspectives.Deltas (addCorrelationIdentifiersToTransactie, addDelta)
 import Perspectives.DependencyTracking.Array.Trans (runArrayT)
 import Perspectives.DependencyTracking.Dependency (findContextStateRequests, findMeRequests, findPropertyRequests, findRoleRequests, findRoleStateRequests)
-import Perspectives.Error.Boundaries (handlePerspectContextError, handlePerspectRolError, handlePerspectRolError')
+import Perspectives.Error.Boundaries (handlePerspectContextError, handlePerspectRolError)
 import Perspectives.Error.Pretty (humanizePerspectivesWarning)
 import Perspectives.Identifiers (startsWithSegments, typeUri2LocalName_, typeUri2couchdbFilename)
 import Perspectives.InstanceRepresentation (PerspectContext, PerspectRol(..))
@@ -204,65 +203,6 @@ addRoleInstanceToContext contextId rolName (Tuple roleId receivedDelta) = do
     addDelta $ DeltaInTransaction { users, delta }
     -- QUERY UPDATES
     (lift $ findRoleRequests contextId rolName) >>= addCorrelationIdentifiersToTransactie
-
--- OBSOLETE!!
--- | Modifies the context instance by detaching the given role instances.
--- | Notice that this function does neither uncache nor unsave the rolInstances
--- | themselves. Instead, use removeRoleInstance.
--- | Does not touch the binding of any of the role instances.
--- | PERSISTENCE of the context instance.
--- | SYNCHRONISATION by ContextDelta and UniverseRoleDelta.
--- | STATE EVALUATION
--- | QUERY UPDATES
--- | CURRENTUSER for contextId and one of rolInstances.
-removeRoleInstancesFromContext :: ContextInstance -> EnumeratedRoleType -> (Updater (NonEmptyArray RoleInstance))
-removeRoleInstancesFromContext contextId rolName rolInstances = (lift $ try $ getPerspectContext contextId) >>=
-  handlePerspectContextError "removeRoleInstancesFromContext"
-    \(pe :: PerspectContext) -> do
-      -- Guarantees STATE EVALUATION because contexts with a vantage point are added to
-      -- the transaction, too.
-      -- As a side effect, usersWithPerspectiveOnRoleInstance adds Deltas to the transaction for the continuation of the
-      -- path beyond the given role instance.
-      -- The last boolean argument prevents usersWithPerspectiveOnRoleInstance from doing this.
-      users <- usersWithPerspectiveOnRoleInstance rolName (head rolInstances) contextId false
-      subject <- getSubject
-      -- SYNCHRONISATION
-      -- Create one delta per role instance (each delta operates on exactly one resource-key).
-      for_ (toArray rolInstances) \ri -> do
-        let rkey = unwrap ri
-        rversion <- lift $ incrementResourceVersion rkey
-        delta <- signDelta
-          ( writeJSON $ stripResourceSchemes $ UniverseRoleDelta
-              { id: contextId
-              , contextType: context_pspType pe
-              , roleInstance: ri
-              , roleType: rolName
-              , authorizedRole: Nothing
-              , deltaType: RemoveRoleInstance
-              , subject
-              , resourceKey: rkey
-              , resourceVersion: rversion
-              }
-          )
-        addDelta $ DeltaInTransaction { users, delta }
-      -- QUERY UPDATES.
-      (lift $ findRoleRequests contextId rolName) >>= addCorrelationIdentifiersToTransactie
-      -- Modify the context: remove the role instances from those recorded with the role type.
-      (roles :: Array PerspectRol) <- foldM
-        (\roles roleId -> (lift $ try $ getPerspectRol roleId) >>= (handlePerspectRolError' "removeRoleInstancesFromContext" roles (pure <<< (flip cons roles))))
-        []
-        (toArray rolInstances)
-      unlinked <- lift $ isUnlinked_ rolName
-      changedContext <-
-        if unlinked then pure pe
-        else lift (modifyContext_rolInContext pe rolName (flip difference (toArray rolInstances)))
-      -- PERSISTENCE.
-      case find rol_isMe roles of
-        Nothing -> lift $ cacheAndSave contextId changedContext
-        Just _ -> do
-          (lift $ findMeRequests contextId) >>= addCorrelationIdentifiersToTransactie
-          -- CURRENTUSER.
-          lift $ cacheAndSave contextId (changeContext_me changedContext Nothing)
 
 -- | Detach the role instances from their current context and attach them to the new context.
 -- | This is not just a convenience function. The combination of removeRoleInstancesFromContext and addRoleInstanceToContext would add UniverseRoleDeltas, which we don't need here.

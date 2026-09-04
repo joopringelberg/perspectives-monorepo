@@ -64,7 +64,7 @@ This module is imported both by the core and by clients and bridges the gap betw
   1 with core and client in the same javascript process;
   2 with core and client in different javascript processes, connected by the Channel Messaging API
     https://developer.mozilla.org/en-US/docs/Web/API/Channel_Messaging_API
-  3 with core and client in different processes, connected by TCP. OBSOLETE!! We have commented the code out. It will serve as an example when we develop the Language Server. See the design text "TCP architecture.txt".
+  3 with core and client in different processes, connected by TCP. That code is commented out and kept only as an example for future Language Server work; see the design text "TCP architecture.txt".
 The core resolves two promises:
   - one called PDRproxy, resolving to an instance of PerspectivesProxy with an InternalChannel, to be used in the first architecture by direct import;
   - one called InternalChannel, resolving to an instance of InternalChannel, to be used in the second architecture, used by the Service Worker by direct import;
@@ -1949,27 +1949,6 @@ export class PerspectivesProxy
   disableLogging(): void
   {
     this.channel.port.postMessage({ proxyRequest: "disableLogging" });
-  }
-
-  /**
-   * TESTING ONLY. Deletes a resource document from PouchDB by its Perspectives resource identifier.
-   * This performs a proper PouchDB delete (not a raw IndexedDB removal), so PouchDB metadata stays consistent.
-   * Call from browser console: pdr.deleteResource("model://perspect.it/...")
-   *
-   * @param resourceIdentifier - The full Perspectives resource identifier (context or role).
-   * @returns A promise that resolves to true if the document was deleted, false otherwise.
-   */
-  deleteResource(resourceIdentifier : string) : Promise<boolean>
-  {
-    const proxy = this;
-    return new Promise(function (resolver, rejecter)
-      {
-        proxy.send(
-          { request: "DeleteResource", subject: resourceIdentifier, onlyOnce: true },
-          (r => resolver(r[0] === "true")),
-          function(e){ rejecter( e )}
-        );
-      });
   }
 
 }
