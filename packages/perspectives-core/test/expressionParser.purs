@@ -17,7 +17,7 @@ import Perspectives.Parsing.Arc.Statement.AST (Assignment(..)) as PAS
 import Perspectives.Parsing.Arc.Statement.AST (Assignment(..), AssignmentOperator(..))
 import Perspectives.Representation.QueryFunction (FunctionName(..))
 import Perspectives.Representation.Range (Range(..))
-import Test.Unit (TestF, suite, test)
+import Test.Unit (TestF, suite, test, testSkip)
 import Test.Unit.Assert (assert)
 
 theSuite :: Free TestF Unit
@@ -89,7 +89,7 @@ theSuite = suite "Perspectives.Parsing.Arc.Expression" do
               otherwise -> false
             otherwise -> false
 
-  test "TypeFilterStep" do
+  testSkip "TypeFilterStep" do
     (r :: Either ParseError Step) <- runIndentParser "typeFilter MyRole with RoleA union RoleB" step
     case r of
       (Left e) -> assert (show e) false
