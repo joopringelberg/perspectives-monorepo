@@ -8,11 +8,11 @@ import Perspectives.Query.QueryTypes (Domain(..))
 import Perspectives.Query.UnsafeCompiler (compareRangeValues)
 import Perspectives.Representation.QueryFunction (FunctionName(..))
 import Perspectives.Representation.Range (Range(..))
-import Test.Unit (TestF, suiteOnly, test)
+import Test.Unit (TestF, suite, suiteOnly, test)
 import Test.Unit.Assert (assert)
 
 theSuite :: Free TestF Unit
-theSuite = suiteOnly "Query comparison operators" do
+theSuite = suite "Query comparison operators" do
   test "numeric equality compares parsed numbers" do
     result <- compareRangeValues (VDOM PNumber Nothing) EqualsF "2.0" "2"
     assert "Expected numeric equality to treat 2.0 and 2 as equal." result
