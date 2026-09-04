@@ -32,7 +32,7 @@ import Perspectives.ModelDependencies (bodiesWithAccountsModelName, couchdbManag
 import Perspectives.Persistent (entitiesDatabaseName, getDomeinFile, invertedQueryDatabaseName, modelDatabaseName)
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), EnumeratedRoleType(..), RoleType(..))
 import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransaction)
-import Perspectives.SetupCouchdb (setContext2RoleView, setContextSpecialisationsView, setContextView, setCredentialsView, setFilled2FillerView, setFiller2FilledView, setFilterValueView, setModelIdNamespaceView, setModelView, setPendingInvitationView, setRTContextKeyView, setRTFilledKeyView, setRTFillerKeyView, setRTPropertyKeyView, setRTRoleKeyView, setRole2ContextView, setRoleFromContextView, setRoleSpecialisationsView, setRoleView)
+import Perspectives.SetupCouchdb (setContext2RoleView, setContextSpecialisationsView, setContextView, setCredentialsView, setFilled2FillerView, setFiller2FilledView, setFilterValueView, setModelIdNamespaceView, setModelView, setRTContextKeyView, setRTFilledKeyView, setRTFillerKeyView, setRTPropertyKeyView, setRTRoleKeyView, setRole2ContextView, setRoleFromContextView, setRoleSpecialisationsView, setRoleView)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.Sync.Transaction (Transaction(..), UninterpretedTransactionForPeer)
 import Prelude (Unit, bind, discard, void, ($), (>>=))
@@ -47,8 +47,6 @@ setupUser :: Maybe UninterpretedTransactionForPeer -> MonadPerspectives Unit
 setupUser uninterpretedIdentityDoc = do
   entitiesDatabaseName >>= setRoleView
   entitiesDatabaseName >>= setRoleFromContextView
-  -- OBSOLETE. Remove if testing shows the current definitioin of pendingInvitations works.
-  entitiesDatabaseName >>= setPendingInvitationView
   entitiesDatabaseName >>= setContextView
   entitiesDatabaseName >>= setCredentialsView
   entitiesDatabaseName >>= setFiller2FilledView
@@ -84,8 +82,6 @@ reSetupUser :: MonadPerspectives Unit
 reSetupUser = do
   entitiesDatabaseName >>= setRoleView
   entitiesDatabaseName >>= setRoleFromContextView
-  -- OBSOLETE. Remove if testing shows the current definitioin of pendingInvitations works.
-  entitiesDatabaseName >>= setPendingInvitationView
   entitiesDatabaseName >>= setContextView
   entitiesDatabaseName >>= setCredentialsView
   entitiesDatabaseName >>= setFiller2FilledView
