@@ -55,7 +55,12 @@ export const IdentityFileUploader: FC<{ setIdentityFile: (json: IdentityFile | n
   );
 }
 
-export interface KeyPair { privateKey: JsonWebKey, publicKey: JsonWebKey }
+export interface KeyPair {
+  privateKey: JsonWebKey,
+  publicKey: JsonWebKey,
+  transportPrivateKey: JsonWebKey,
+  transportPublicKey: JsonWebKey
+}
 
 export const KeyPairFileUploader: FC<{ setKeyPairFile: (json: KeyPair | null) => void }> = ({ setKeyPairFile: setKeyPairFile }) => {
   const [feedback, setFeedback] = useState('');
@@ -68,7 +73,7 @@ export const KeyPairFileUploader: FC<{ setKeyPairFile: (json: KeyPair | null) =>
         .then(t => {
           json = JSON.parse( decodeURIComponent(t));
           // Check if the file is a keypair file
-          if (json.privateKey && json.publicKey) {
+          if (json.privateKey && json.publicKey && json.transportPrivateKey && json.transportPublicKey) {
             event.target.setCustomValidity('');
               setFeedback('')
               setKeyPairFile(json);

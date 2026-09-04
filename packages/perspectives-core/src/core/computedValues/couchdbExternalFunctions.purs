@@ -59,7 +59,7 @@ import Partial.Unsafe (unsafePartial)
 import Perspectives.ApiTypes (ContextSerialization(..), PropertySerialization(..), RolSerialization(..))
 import Perspectives.Assignment.StateCache (clearModelStates)
 import Perspectives.Assignment.Update (withAuthoringRole)
-import Perspectives.Authenticate (getMyPublicKey)
+import Perspectives.Authenticate (getMyPublicKey, getMyTransportPublicKey)
 import Perspectives.ContextAndRole (changeRol_isMe, context_id, rol_id)
 import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), InformedAssumption(..), MonadPerspectives, MonadPerspectivesTransaction, mkLibEffect1, mkLibEffect2, mkLibEffect3, mkLibFunc2)
 import Perspectives.Couchdb (DatabaseName, SecurityDocument(..))
@@ -552,8 +552,9 @@ initSystem = do
   createTheWorld :: MonadPerspectivesTransaction Unit
   createTheWorld = do
     mpublicKey <- lift getMyPublicKey
-    case mpublicKey of
-      Just publicKey -> do
+    mtransportPublicKey <- lift getMyTransportPublicKey
+    case mpublicKey, mtransportPublicKey of
+      Just publicKey, Just transportPublicKey -> do
         -- Create TheWorld, complete with the PerspectivesUser role of TheWorld that represents the identity 
         -- of the natural person setting up this installation.
         worldresult <- runExceptT $ constructContext Nothing
@@ -573,7 +574,7 @@ initSystem = do
             puser <- createAndAddRoleInstance_ (EnumeratedRoleType DEP.perspectivesUsers) worldId
               ( RolSerialization
                   { id: Just perspectivesUser
-                  , properties: PropertySerialization (singleton DEP.perspectivesUsersPublicKey [ publicKey ])
+                  , properties: PropertySerialization (fromFoldable [ Tuple DEP.perspectivesUsersPublicKey [ publicKey ], Tuple DEP.perspectivesUsersTransportPublicKey [ transportPublicKey ] ])
                   , binding: Nothing
                   }
               )
@@ -612,7 +613,7 @@ initSystem = do
                       }
                   )
                   false
-      Nothing -> lift $ errorInstall "No public key found on setting up!"
+      _, _ -> lift $ errorInstall "No installation key pair found on setting up!"
 
   createSystem :: MonadPerspectivesTransaction Unit
   createSystem = do

@@ -130,7 +130,8 @@ type TransactionRecord f =
   }
 
 type PublicKeyInfo =
-  { key :: String -- the cryptographic (public) key, serialised as JWK.
+  { key :: String -- the signing (public) key, serialised as JWK.
+  , transportKey :: String -- the RSA-OAEP transport (public) key, serialised as JWK.
   , deltas :: Array SignedDelta
   }
 

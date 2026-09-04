@@ -26,9 +26,11 @@ module Perspectives.AMQP.IncomingPost
   ) where
 
 import Control.Coroutine (Consumer, Producer, await, runProcess, ($$))
+import Control.Monad.Error.Class (throwError)
 import Control.Monad.Rec.Class (forever)
 import Control.Monad.Trans.Class (lift)
 import Data.Array (length, nub, sort)
+import Data.Array as Arr
 import Data.Either (Either(..))
 import Data.List.NonEmpty (head)
 import Data.Maybe (Maybe(..))
@@ -36,9 +38,11 @@ import Data.Newtype (unwrap)
 import Data.String (take)
 import Data.Traversable (for, traverse)
 import Effect.Class (liftEffect)
+import Effect.Exception (error)
 import Foreign (ForeignError(..), MultipleErrors)
 import Perspectives.AMQP.Stomp (StructuredMessage, acknowledge, markHandled, messageProducer, sendToTopic)
 import Perspectives.Assignment.Update (setProperty)
+import Perspectives.Authenticate (decryptForRecipient, getTransportPrivateKey)
 import Perspectives.CoreTypes (BrokerService, MonadPerspectives, MonadPerspectivesQuery, (##>))
 import Perspectives.Identifiers (buitenRol)
 import Perspectives.Instances.ObjectGetters (context, externalRole, getProperty)
@@ -55,9 +59,9 @@ import Perspectives.ResourceIdentifiers (takeGuid)
 import Perspectives.RunMonadPerspectivesTransaction (detectPublicStateChanges, runMonadPerspectivesTransaction')
 import Perspectives.Sync.HandleTransaction (executeTransaction)
 import Perspectives.Sync.OutgoingTransaction (OutgoingTransaction(..))
-import Perspectives.Sync.TransactionForPeer (TransactionForPeer)
+import Perspectives.Sync.TransactionForPeer (EncryptedTransactionForPeer(..), TransactionForPeer)
 import Prelude (Unit, bind, pure, show, unit, void, ($), (*>), (<$>), (<>), (==), (>), (>>=), (<<<), (>=>), (>>>), discard, map)
-import Simple.JSON (writeJSON)
+import Simple.JSON (readJSON, writeJSON)
 
 incomingPost :: MonadPerspectives Unit
 incomingPost = do
@@ -74,7 +78,7 @@ incomingPost = do
   -- Save the client in state.
   setStompClient stpClient
   -- Create a messageProducer: ConnectAndSubscriptionParameters
-  (transactionProducer :: Producer (Either MultipleErrors (StructuredMessage TransactionForPeer)) MonadPerspectives Unit) <- pure $ messageProducer stpClient
+  (transactionProducer :: Producer (Either MultipleErrors (StructuredMessage EncryptedTransactionForPeer)) MonadPerspectives Unit) <- pure $ messageProducer stpClient
     { topic -- the PerspectivesSystem identifier.
     , queueId
     , login
@@ -85,7 +89,7 @@ incomingPost = do
   void $ runProcess $ transactionProducer $$ transactionConsumer
 
   where
-  transactionConsumer :: Consumer (Either MultipleErrors (StructuredMessage TransactionForPeer)) MonadPerspectives Unit
+  transactionConsumer :: Consumer (Either MultipleErrors (StructuredMessage EncryptedTransactionForPeer)) MonadPerspectives Unit
   transactionConsumer = do
     postDB <- lift $ postDatabaseName
     forever do
@@ -109,10 +113,11 @@ incomingPost = do
             showPendingIncomingTransactions pendingCount
             padding <- transactionLevel
             debugBroker $ padding <> "Executing incoming post transaction from author " <> unwrap (unwrap body).author <> " and timestamp " <> show (unwrap body).timeStamp
+            transaction <- decryptTransaction body
             runMonadPerspectivesTransaction'
               false
               (ENR $ EnumeratedRoleType sysUser)
-              (executeTransaction body)
+              (executeTransaction transaction)
             detectPublicStateChanges
             remainingCount <- markHandled markHandled_
             showPendingIncomingTransactions remainingCount
@@ -141,6 +146,18 @@ incomingPost = do
         else pure unit
         void $ for transactions \(OutgoingTransaction { _id, receiver, transaction }) -> liftEffect $ sendToTopic stompClient receiver _id (writeJSON transaction)
       _ -> pure unit
+
+  decryptTransaction :: EncryptedTransactionForPeer -> MonadPerspectives TransactionForPeer
+  decryptTransaction (EncryptedTransactionForPeer { encryptedDeltas, author, perspectivesSystem, timeStamp, publicKeys }) = do
+    currentUser <- getPerspectivesUser
+    transportPrivateKey <- getTransportPrivateKey
+    case transportPrivateKey, Arr.head (Arr.filter (\wrappedKey -> wrappedKey.recipient == takeGuid (unwrap currentUser)) encryptedDeltas.wrappedKeys) of
+      Just privateKey, Just wrappedKey -> do
+        payload <- liftAff $ decryptForRecipient encryptedDeltas.ciphertext encryptedDeltas.iv wrappedKey.wrappedKey privateKey
+        case readJSON payload of
+          Right (transaction :: TransactionForPeer) -> pure transaction
+          Left e -> throwError (error $ "Could not decode decrypted transaction payload: " <> show e)
+      _, _ -> throwError (error $ "No wrapped transport key found for recipient " <> show currentUser)
 
 -- | Construct the BrokerService from the database, if possible, and set it in PerspectivesState.
 retrieveBrokerService :: MonadPerspectives Unit
