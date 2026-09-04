@@ -272,6 +272,26 @@ export function replicateOnce (origin, recovery, last_seq) {
   };
 }
 
+export function replicateDatabaseImpl (sourceDbName, targetDbName) {
+  return function(onError, onSuccess) {
+    const sourceDb = createDatabaseImpl(sourceDbName);
+    const targetDb = createDatabaseImpl(targetDbName);
+    targetDb.replicate.from(sourceDb, { live: false })
+      .on('complete', function() {
+        console.log(`replicateDatabase: replicated ${sourceDbName} to ${targetDbName}.`);
+        onSuccess(undefined);
+      })
+      .on('error', function(err) {
+        console.error(`replicateDatabase: error replicating ${sourceDbName} to ${targetDbName}:`, err);
+        onError(convertPouchError(err));
+      });
+
+    return function(cancelError, cancelerError, cancelerSuccess) {
+      cancelerSuccess();
+    };
+  };
+}
+
 export function addDocumentImpl ( database, doc, force ) {
   return function (onError, onSuccess) {
     database.put(doc, {force: force}, function(err, response)

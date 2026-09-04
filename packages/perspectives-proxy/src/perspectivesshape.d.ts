@@ -337,6 +337,10 @@ export type RuntimeOptions = {
   privateKey?: CryptoKey;
   // Default: the CryptoKey object that has been created on setting up the installation. This is extractable.
   publicKey?: CryptoKey;
+  // Default: the RSA-OAEP CryptoKey object that has been created on setting up the installation. This is not extractable.
+  transportPrivateKey?: CryptoKey;
+  // Default: the RSA-OAEP CryptoKey object that has been created on setting up the installation. This is extractable.
+  transportPublicKey?: CryptoKey;
   // Default: the package number taken from package.json
   myContextsVersion: string;
 };
