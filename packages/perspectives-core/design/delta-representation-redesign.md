@@ -88,7 +88,7 @@ deltaOperation
 isDeletion
 createdAt
 payloadHash
-inverseStrategy
+inverseMode?
 ```
 
 #### Field rationale
@@ -104,7 +104,7 @@ inverseStrategy
 | `contextKey` | Keeps context-related retrieval efficient without inspecting payloads. |
 | `deltaFamily`, `deltaOperation` | Avoid repeated trial deserialisation when filtering by delta kind. |
 | `payloadHash` | What is signed and verified, independent of transport encryption. |
-| `inverseStrategy` | Declares how undo/rollback is derived for this delta. |
+| `inverseMode?` | Optional per-delta override when one delta type admits more than one inverse mechanism. |
 
 `baseResourceKey` is the important new indexing field. For a role-level delta it
 equals `resourceKey`; for `role#binding` and `role#property` deltas it equals
@@ -132,6 +132,26 @@ Recommended rule:
 | Context/role deletion | Use replay/reconstruction rather than embedding full snapshots in every delta. |
 
 This keeps most deltas small while reducing lookup work for common undo cases.
+
+#### Type-level versus token-level inverse strategy
+
+`inverseStrategy` should primarily be a **type-level property**, not a mandatory
+field on every stored delta.
+
+That means:
+
+- `RolePropertyDelta` and `RoleBindingDelta` normally use a stored-before-value
+  strategy;
+- structural deletion deltas normally use reconstruction/replay;
+- creation deltas normally use the corresponding delete operation.
+
+Only when one delta type can validly use more than one inverse mechanism should
+the individual delta carry an override. For that reason the canonical header
+should not require `inverseStrategy` on every token; at most it should allow an
+optional `inverseMode` override.
+
+This keeps the normal case simpler and avoids duplicating information that is
+already known from the delta type.
 
 ### 4. Local persistence model
 
@@ -259,6 +279,62 @@ When installation `A` forwards a delta originally authored by `C` to `B`:
 This avoids the need for `A` to possess `C`'s secrets while still protecting
 transport traffic.
 
+### 4a. Keying model for a trusted peer network
+
+Perspectives peers form a trusted network. The confidentiality goal is therefore
+to protect traffic from observers **outside** that network, not to hide deltas
+from the peers that legitimately receive and forward them.
+
+For that reason, the recommended model is **hop-by-hop transport encryption**,
+not end-to-end author-only encryption.
+
+#### Recommended key structure
+
+Each installation should have:
+
+1. a long-lived **signing identity** for authorship;
+2. a long-lived **transport encryption public key** (or equivalent key-agreement
+   identity) for receiving encrypted traffic;
+3. fresh symmetric **content keys** generated per transport batch or per
+   transaction.
+
+#### Do authors need their own pairwise long-lived keys?
+
+**Not necessarily.**
+
+The preferred approach is:
+
+- for each outgoing hop, the sender generates a fresh symmetric content key;
+- the payload is encrypted with that symmetric key;
+- that symmetric key is wrapped for the next-hop recipient using the
+  recipient's transport public key;
+- a new content key may be generated for the next forwarding hop.
+
+So the design does **not** require a dedicated long-lived secret for every pair
+of authors or every pair of installations. Fresh per-hop content keys are
+enough, provided each recipient has a stable transport public key (or
+equivalent).
+
+#### Multi-recipient optimisation
+
+When one installation sends the same transaction to multiple peers, it may use
+either of two equivalent strategies:
+
+1. **separate envelopes per recipient** — simplest model;
+2. **one ciphertext plus multiple wrapped content keys** — more efficient when
+   many recipients receive the same payload.
+
+Because the peers are trusted, either strategy is acceptable. The second is
+likely preferable if broadcast fan-out becomes a performance concern.
+
+#### Consequence for forwarding
+
+An intermediary peer is allowed to decrypt and inspect the canonical payload,
+because peers are trusted participants in the same network. When forwarding, it
+re-encrypts for the next hop while preserving the original author's signature.
+
+That property is exactly why signing and encryption should remain separate.
+
 ### 5. Should deltas be stored locally encrypted?
 
 **Not by default.**
@@ -328,6 +404,28 @@ Recommended status fields:
 Undo then becomes "append new inverse deltas and update status metadata",
 instead of mutating history.
 
+### Bounded undo and future cutoffs
+
+This approach is compatible with a future decision to support only a **limited
+depth** of undo history.
+
+The important consequence is that the representation should distinguish between:
+
+1. **history needed for current synchronisation and reconstruction**;
+2. **history retained for user-visible undo**.
+
+That allows a future retention policy such as:
+
+- user undo is available only within the most recent `N` transactions, or within
+  a configurable time window;
+- older deltas may be compacted once their effect is represented by a checkpoint
+  or current persisted state;
+- after that cutoff, user undo is refused, while normal synchronisation and
+  resource reconstruction continue from the retained checkpoint + newer deltas.
+
+So the proposed representation does not force infinite undo depth. It is
+designed so that old history can later be compacted behind an explicit cutoff.
+
 ### Reconstruction rule
 
 Reconstruction should always use:
@@ -345,7 +443,8 @@ When two deltas collide on the same `(resourceKey, resourceVersion)`:
 - the loser is retained in history;
 - rollback uses either:
   - the payload's `before` data; or
-  - replay/reconstruction, depending on `inverseStrategy`.
+  - replay/reconstruction, depending on the delta type and any optional
+    per-delta inverse override.
 
 ## Recommended consequences for the relevant modules
 
@@ -369,7 +468,8 @@ These are design consequences only:
 | Transport representation | per-hop encrypted envelope around the payload |
 | Header visibility | unencrypted and indexable |
 | Local at-rest encryption | deferred; not the default |
-| Undo support | hybrid: store `before` data for small deltas, replay for structural deletion |
+| Undo support | hybrid: store `before` data for small deltas, replay for structural deletion, allow future retention cutoffs |
+| Inverse strategy location | type-level by default; optional token-level override only when needed |
 | Resource grouping | explicit `baseResourceKey` |
 | Delta ordering in IDs | zero-padded version segment |
 | Old/new universe separation | explicit `universeEpoch` |
