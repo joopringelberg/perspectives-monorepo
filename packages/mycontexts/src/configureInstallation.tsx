@@ -55,7 +55,7 @@ const ConfigureInstallation: FC<{callback: (data: InstallationResult) => void}> 
             { i18next.t( "configuration_WelcomeMessage", {ns: 'mycontexts'} )}
           </p>
           <Button variant="primary" onClick={() => setShowFAQPanel(true)} className="mb-2">
-            MyContexts FAQ's
+            MyContexts FAQs
           </Button>
           <Button variant="primary" onClick={() => setShowInstallPanel(true)}>
             { i18next.t( "conversationDialog_Install", {ns: 'mycontexts'}) }
@@ -273,7 +273,7 @@ const InstallModal: FC<{ show: boolean; onHide: () => void, callback: (data: Ins
     </Modal.Footer>
   </Modal>)};
 
-function handleInstall ( { deviceName, keyPair, identityFile, couchdbUrl, couchdbPort, userName, password }: InstallationData, callback: (data: InstallationResult) => void ) {
+function handleInstall ( { keyPair, identityFile }: InstallationData, callback: (data: InstallationResult) => void ) {
   // A function that generates a CUID using the current epoch as fingerprint.
   const cuid2 = Cuid2.init({
     // A custom random function with the same API as Math.random.
@@ -410,7 +410,7 @@ function createKeypair (perspectivesUsersId: string) : Promise<KeyPair >
     .then( () => ({ privateKey, publicKey, transportPrivateKey, transportPublicKey }) )
 }
 
-function SliderWithTooltip({ label, tooltip, callback }: { label: string, tooltip: string, callback: (e: any) => void }): ReactElement { 
+function SliderWithTooltip({ label, tooltip, callback }: { label: string, tooltip: string, callback: (checked: boolean) => void }): ReactElement {
   return (
     <Form.Group as={Row} controlId="formIdentityFile" className="mt-3">
     <Col sm={1}>
@@ -425,8 +425,7 @@ function SliderWithTooltip({ label, tooltip, callback }: { label: string, toolti
             placement="bottom-start"
             delay={{ show: 250, hide: 400 }}
             overlay={(props) => (
-              <Tooltip id="MyContexts-tooltip" {...props} show={
-                props.show}>{tooltip}
+              <Tooltip id="MyContexts-tooltip" {...props}>{tooltip}
               </Tooltip> )}
         >
         <Form.Label>{label}</Form.Label>
@@ -436,7 +435,7 @@ function SliderWithTooltip({ label, tooltip, callback }: { label: string, toolti
 );
 }
 
-function Slider({ label, callback }: { label: string, callback: (e: any) => void }): ReactElement {
+function Slider({ label, callback }: { label: string, callback: (checked: boolean) => void }): ReactElement {
   return (
     <Form.Group as={Row} className="mt-3">
     <Col sm={1}>

@@ -24,7 +24,7 @@ module Perspectives.Deltas where
 
 import Control.Monad.AvarMonadAsk (modify, gets) as AA
 import Control.Monad.State.Trans (StateT, execStateT, get, lift, modify, put)
-import Data.Array (catMaybes, concat, elemIndex, filterA, foldl, head, nub, null, snoc, sortBy, union)
+import Data.Array (catMaybes, concat, elemIndex, filter, filterA, foldl, head, nub, null, snoc, sortBy, union)
 import Data.DateTime.Instant (toDateTime)
 import Data.Map (Map, empty, filter, insert, lookup, toUnfoldable, values) as Map
 import Data.Maybe (Maybe(..), fromJust, isJust, maybe)
@@ -33,6 +33,7 @@ import Data.Ordering (Ordering)
 import Data.Traversable (for, for_)
 import Data.TraversableWithIndex (forWithIndex)
 import Data.Tuple (Tuple(..))
+import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
 import Effect.Now (now)
 import Partial.Unsafe (unsafePartial)
@@ -60,7 +61,7 @@ import Perspectives.Persistent (getPerspectRol, postDatabaseName)
 import Perspectives.PerspectivesState (nextTransactionNumber, stompClient)
 import Perspectives.Query.UnsafeCompiler (getDynamicPropertyGetter)
 import Perspectives.Representation.ADT (ADT(..))
-import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser, RoleInstance(..), Value(..), perspectivesUser2RoleInstance)
+import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser(..), RoleInstance(..), Value(..), perspectivesUser2RoleInstance)
 import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..), RoleType(..))
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.Sync.DateTime (SerializableDateTime(..))
@@ -98,7 +99,7 @@ sendPeerTransactions customizedTransacties =
     recipientKeys <- catMaybes <$> for recipients recipientTransportKey
     if null recipientKeys then pure unit
     else do
-      encryptedPayload <- encryptForRecipients (writeJSON transaction) (map (\(Tuple _ key) -> { recipient: unwrap key.recipient, transportKey: key.transportKey }) recipientKeys)
+      encryptedPayload <- liftAff $ encryptForRecipients (writeJSON transaction) (map (\(Tuple _ key) -> { recipient: unwrap key.recipient, transportKey: key.transportKey }) recipientKeys)
       let
         encryptedTransaction = EncryptedTransactionForPeer
           { author: (unwrap transaction).author
@@ -136,11 +137,6 @@ sendPeerTransactions customizedTransacties =
       occurringUsers = map (_.author <<< unwrap) deltas
     in
       TransactionForPeer rec { publicKeys = ENCMAP.filterKeys (\k -> isJust $ elemIndex k occurringUsers) publicKeys }
-
-  type RecipientKey =
-    { recipient :: UnschemedResourceIdentifier
-    , transportKey :: String
-    }
 
   recipientTransportKey :: UnschemedResourceIdentifier -> MonadPerspectives (Maybe (Tuple UnschemedResourceIdentifier RecipientKey))
   recipientTransportKey recipient = do
@@ -211,6 +207,11 @@ saveTransactionInOutgoingPost userId messageId t@(EncryptedTransactionForPeer { 
 -- | An object of TransactionForPeer where the keys are the string value of RoleInstances, invariably identifying user roles.
 -- | Must be either an instance of sys:PerspectivesSystem$User, or of a RoleInstance of a type with RoleKind Visitor.
 type TransactionPerUser = Map.Map TransactionDestination TransactionForPeer
+
+type RecipientKey =
+  { recipient :: UnschemedResourceIdentifier
+  , transportKey :: String
+  }
 
 -- | The Transaction holds Deltas and each Delta names user instances who should receive that Delta.
 -- | This function builds a custom version of the Transaction for each such user.

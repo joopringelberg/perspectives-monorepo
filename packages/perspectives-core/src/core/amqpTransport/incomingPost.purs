@@ -37,6 +37,7 @@ import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
 import Data.String (take)
 import Data.Traversable (for, traverse)
+import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
 import Effect.Exception (error)
 import Foreign (ForeignError(..), MultipleErrors)
@@ -151,7 +152,7 @@ incomingPost = do
   decryptTransaction (EncryptedTransactionForPeer { encryptedDeltas, author, perspectivesSystem, timeStamp, publicKeys }) = do
     currentUser <- getPerspectivesUser
     transportPrivateKey <- getTransportPrivateKey
-    case transportPrivateKey, Arr.head (Arr.filter (\wrappedKey -> wrappedKey.recipient == takeGuid (unwrap currentUser)) encryptedDeltas.wrappedKeys) of
+    case transportPrivateKey, Arr.head (Arr.filter (\wrappedKey -> unwrap wrappedKey.recipient == takeGuid (unwrap currentUser)) encryptedDeltas.wrappedKeys) of
       Just privateKey, Just wrappedKey -> do
         payload <- liftAff $ decryptForRecipient encryptedDeltas.ciphertext encryptedDeltas.iv wrappedKey.wrappedKey privateKey
         case readJSON payload of

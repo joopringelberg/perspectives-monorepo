@@ -38,6 +38,9 @@ perspectivesUsersCancelled = "model://perspectives.domains#System$Identifiable$C
 perspectivesUsersPublicKey :: String
 perspectivesUsersPublicKey = "model://perspectives.domains#System$Identifiable$PublicKey"
 
+perspectivesUsersTransportPublicKey :: String
+perspectivesUsersTransportPublicKey = "model://perspectives.domains#System$Identifiable$TransportPublicKey"
+
 modelDataUpgrade :: String
 modelDataUpgrade = "model://perspectives.domains#System$ModelDataUpgrade"
 
