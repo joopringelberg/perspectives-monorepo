@@ -84,7 +84,7 @@ transactionExecutionTestNameProperty :: String
 transactionExecutionTestNameProperty = "model://joopringelberg.nl#TransactionExecutionTests$Test$External$TestName"
 
 transactionExecutionSnapshotDirectory :: String
-transactionExecutionSnapshotDirectory = "test/pdr-snapshot/transaction-execution"
+transactionExecutionSnapshotDirectory = "test/pdr-snapshot/layer3-clean/alice"
 
 transactionExecutionTests :: Array ModelTest
 transactionExecutionTests = 

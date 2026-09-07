@@ -20,7 +20,7 @@ import Perspectives.Query.ExpressionCompiler (contextRoleRangeHasNonExternalRole
 import Perspectives.Query.QueryTypes (RoleInContext(..))
 import Perspectives.Representation.ADT (ADT(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedRoleType(..), RoleType(..))
-import Test.Unit (TestF, suiteOnly, test)
+import Test.Unit (TestF, suite, suiteOnly, test)
 import Test.Unit.Assert (assert)
 
 testDirectory :: String
@@ -30,7 +30,7 @@ modelDirectory :: String
 modelDirectory = "../perspectives-core/src/model/"
 
 theSuite :: Free TestF Unit
-theSuite = suiteOnly "Perspectives.Parsing.Arc.Model" do
+theSuite = suite "Perspectives.Parsing.Arc.Model" do
 
   --------------------------------------------------------------------------------
   ---- PARSE SYSTEM MODEL

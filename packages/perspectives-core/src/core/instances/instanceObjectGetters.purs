@@ -652,7 +652,6 @@ roleModelName =
   roleType >=> \rt ->
     ArrayT $ pure $ maybe [] (pure <<< Value) (typeUri2ModelUri (unwrap rt))
 
--- OBSOLETE
 -- | Return the value of the local property "Name", or return the last segment of the role type name.
 getRoleName :: RoleInstance ~~> Value
 getRoleName = orElse

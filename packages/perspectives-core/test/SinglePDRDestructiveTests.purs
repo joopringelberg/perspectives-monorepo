@@ -97,7 +97,7 @@ destructiveTestNameProperty :: String
 destructiveTestNameProperty = "model://joopringelberg.nl#SinglePDRDestructiveTests$Test$External$TestName"
 
 destructiveSnapshotDirectory :: String
-destructiveSnapshotDirectory = "test/pdr-snapshot/destructive"
+destructiveSnapshotDirectory = "test/pdr-snapshot/layer3-clean/alice"
 
 destructiveTests :: Array ModelTest
 destructiveTests = 

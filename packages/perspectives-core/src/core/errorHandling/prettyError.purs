@@ -95,10 +95,16 @@ humanizePerspectivesError e = case e of
     lname' <- toReadable lname
     alts' <- traverse toReadable alts
     pure (NotUniquelyIdentifyingContext pos lname' alts')
+  DuplicateContextDeclaration pos ctype -> do
+    ctype' <- toReadable ctype
+    pure (DuplicateContextDeclaration pos ctype')
   NotUniquelyIdentifyingRoleType pos lname alts -> do
     lname' <- swapRoleType lname
     alts' <- traverse swapRoleType alts
     pure (NotUniquelyIdentifyingRoleType pos lname' alts')
+  DuplicateRoleDeclaration pos rtype -> do
+    rtype' <- swapRoleType rtype
+    pure (DuplicateRoleDeclaration pos rtype')
   NotUniquelyIdentifyingState pos lname alts -> do
     lname' <- toReadable lname
     alts' <- traverse toReadable alts

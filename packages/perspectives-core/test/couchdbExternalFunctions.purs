@@ -32,7 +32,7 @@ import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Stable)
 import Perspectives.Sidecar.StableIdMapping (emptyStableIdMapping)
 import Perspectives.TypePersistence.LoadArc.FS (loadCompileAndCacheArcFile, loadCompileAndCacheArcFile')
 import Test.Perspectives.Utils (assertEqual, developmentRepository, runMonadPerspectivesTransaction, runP, runTestadmin, withSystem)
-import Test.Unit (TestF, suiteOnly, test, testOnly)
+import Test.Unit (TestF, suite, suiteOnly, test, testOnly)
 import Test.Unit.Assert (assert)
  
 -- developmentRepository :: MonadPerspectives String
@@ -74,7 +74,7 @@ uploadToRepository dfId@(ModelUri domeinFileName) = do
 
 
 theSuite :: Free TestF Unit
-theSuite = suiteOnly "Perspectives.Extern.Couchdb" do 
+theSuite = suite "Perspectives.Extern.Couchdb" do 
 
   test "models" $ runP $ withSystem do
 

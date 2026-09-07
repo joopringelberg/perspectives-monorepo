@@ -163,6 +163,8 @@ data PerspectivesError
   | FieldConstraintRequiresStringRange ArcPosition ArcPosition PropertyType
 
   | MultipleDefaultUserRoles ContextType
+  | DuplicateContextDeclaration ArcPosition ContextType
+  | DuplicateRoleDeclaration ArcPosition RoleType
 
   | Custom String
   -- Incoming transaction / delta errors
@@ -209,6 +211,8 @@ instance showPerspectivesError :: Show PerspectivesError where
   show (UnknownMarkDownAction start end actionName roletype) = "(UnknownMarkDownAction) The action '" <> actionName <> "' is not defined for the role '" <> show roletype <> "'! Between " <> show start <> " and " <> show end <> ")."
   show (FieldConstraintRequiresStringRange start end pt) = "(FieldConstraintRequiresStringRange) The property '" <> propertytype2string pt <> "' must have a String range to use minLines/maxLines constraints. Between " <> show start <> " and " <> show end <> "."
   show (MultipleDefaultUserRoles ctype) = "(MultipleDefaultUserRoles) The context '" <> unwrap ctype <> "' has more than one user role marked as default. At most one user role may be the default."
+  show (DuplicateContextDeclaration pos ctype) = "(DuplicateContextDeclaration) The context '" <> unwrap ctype <> "' is declared more than once. Each context type may be declared only once. At: " <> show pos
+  show (DuplicateRoleDeclaration pos rtype) = "(DuplicateRoleDeclaration) The role '" <> roletype2string rtype <> "' is declared more than once. Each role type may be declared only once within its context. At: " <> show pos
   show (ContextHasNoRole ctype qn start end) = "(ContextHasNoRole) The Context-type '" <> show ctype <> "' has no enumerated role with the name '" <> qn <> "' (it may have a calculated role but that cannot be used here). Between " <> show start <> " and " <> show end
   show (RoleHasNoProperty rtype qn start end) = "(RoleHasNoProperty) The Role-type '" <> show rtype <> "' has no property with the name '" <> qn <> "' (between " <> show start <> " and " <> show end <> ")."
   show (RoleHasNoEnumeratedProperty rtype qn start end) = "(RoleHasNoEnumeratedProperty) The Role-type '" <> show rtype <> "' has no enumerated property with the name '" <> qn <> "' (between " <> show start <> " and " <> show end <> "). It may have a calculated property, but we cannot use that in this situation."
