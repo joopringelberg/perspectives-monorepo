@@ -85,8 +85,8 @@ testNameProperty :: String
 testNameProperty = "model://joopringelberg.nl#StateTestModel$Test$External$TestName"
 
 snapshotDirectory :: String
-snapshotDirectory = "test/pdr-snapshot/layer4"
-
+snapshotDirectory = "test/pdr-snapshot/layer3-clean/alice"
+  
 allTests :: Array ModelTest
 allTests =
   [ { testContextTypeName: test_ContextState_RoleStep, logConfiguration: emptyLogConfiguration }
