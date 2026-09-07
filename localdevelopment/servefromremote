@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HOSTS_FILE="${HOSTS_FILE:-/etc/hosts}"
+BEGIN_MARKER="# BEGIN Perspectives local development"
+END_MARKER="# END Perspectives local development"
+TEMP_FILE=$(mktemp)
+trap 'rm -f "$TEMP_FILE"' EXIT
+
+clean_hosts() {
+  awk -v begin_marker="$BEGIN_MARKER" -v end_marker="$END_MARKER" '
+    function is_managed(hostname) {
+      return hostname == "perspectives.domains" ||
+        hostname == "www.perspectives.domains" ||
+        hostname == "joopringelberg.nl" ||
+        hostname == "www.joopringelberg.nl" ||
+        hostname == "mycontexts.com" ||
+        hostname == "www.mycontexts.com"
+    }
+
+    $0 == begin_marker { in_managed_block = 1; next }
+    $0 == end_marker {
+      if (!in_managed_block) {
+        print "Found an unmatched Perspectives hosts end marker." > "/dev/stderr"
+        exit 2
+      }
+      in_managed_block = 0
+      next
+    }
+    in_managed_block { next }
+
+    {
+      original = $0
+      comment_position = index(original, "#")
+      if (comment_position > 0) {
+        comment = substr(original, comment_position)
+        data = substr(original, 1, comment_position - 1)
+      } else {
+        comment = ""
+        data = original
+      }
+
+      field_count = split(data, fields, /[[:space:]]+/)
+      address = ""
+      remaining_hosts = ""
+      changed = 0
+
+      for (field_number = 1; field_number <= field_count; field_number++) {
+        if (fields[field_number] == "") continue
+        if (address == "") {
+          address = fields[field_number]
+        } else if (is_managed(fields[field_number])) {
+          changed = 1
+        } else {
+          remaining_hosts = remaining_hosts (remaining_hosts == "" ? "" : " ") fields[field_number]
+        }
+      }
+
+      if (!changed) {
+        print original
+      } else if (remaining_hosts != "") {
+        printf "%s\t%s", address, remaining_hosts
+        if (comment != "") printf " %s", comment
+        printf "\n"
+      } else if (comment != "") {
+        print comment
+      }
+    }
+
+    END {
+      if (in_managed_block) {
+        print "Found a Perspectives hosts block without an end marker." > "/dev/stderr"
+        exit 2
+      }
+    }
+  ' "$HOSTS_FILE"
+}
+
+write_hosts() {
+  if [[ "$HOSTS_FILE" == "/etc/hosts" ]]; then
+    sudo /usr/bin/tee "$HOSTS_FILE" >/dev/null < "$TEMP_FILE"
+  else
+    /usr/bin/tee "$HOSTS_FILE" >/dev/null < "$TEMP_FILE"
+  fi
+}
+
+clean_hosts > "$TEMP_FILE"
+write_hosts
+
+if [[ "$HOSTS_FILE" == "/etc/hosts" ]]; then
+  sudo /usr/bin/dscacheutil -flushcache
+  sudo /usr/bin/killall -HUP mDNSResponder 2>/dev/null || true
+fi
+
+echo "perspectives.domains, joopringelberg.nl, and mycontexts.com now use remote DNS."
