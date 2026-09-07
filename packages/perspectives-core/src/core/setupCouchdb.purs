@@ -117,18 +117,6 @@ setRoleFromContextView dbname = void $ addViewToDatabase dbname "defaultViews" "
 -- | Import the view definition as a String.
 foreign import roleFromContextView :: String
 
--- OBSOLETE. Remove if testing shows the current definitioin of pendingInvitations works.
------------------------------------------------------------
--- THE VIEW 'PENDINGINVITATIONS'
--- This view collects instances model:System$Invitation$External.
------------------------------------------------------------
--- | Add a view to the couchdb installation in the 'repository' db.
-setPendingInvitationView :: forall f. String -> MonadPouchdb f Unit
-setPendingInvitationView dbname = void $ addViewToDatabase dbname "defaultViews" "pendingInvitations" ({ map: pendingInvitations, reduce: Nothing })
-
--- | Import the view definition as a String.
-foreign import pendingInvitations :: String
-
 -----------------------------------------------------------
 -- THE VIEW 'CONTEXTVIEW'
 -- This view collects instances of a particular context type.

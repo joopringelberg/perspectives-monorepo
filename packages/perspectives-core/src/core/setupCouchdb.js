@@ -18,15 +18,6 @@ export const roleView = (function (doc)
 
 }).toString();
 
-// OBSOLETE. Remove if testing shows the current definitioin of pendingInvitations works.
-export const pendingInvitations = (function(doc)
-{
-  if (doc.properties["model://perspectives.domains#System$Invitation$External$Message"])
-  {
-    emit(doc.id, doc.id);
-  }
-}).toString();
-
 export const contextView = (function (doc)
 {
   emit(doc.pspType, doc.id);

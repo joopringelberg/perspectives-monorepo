@@ -97,7 +97,7 @@ import Perspectives.Representation.TypeIdentifiers (RoleType(..))
 import Perspectives.ResourceIdentifiers (createDefaultIdentifier, resourceIdentifier2DocLocator, resourceIdentifier2WriteDocLocator, takeGuid)
 import Perspectives.RoleAssignment (roleIsMe)
 import Perspectives.SaveUserData (scheduleContextRemoval, setFirstBinding)
-import Perspectives.SetupCouchdb (contextViewFilter, roleViewFilter, setContext2RoleView, setContextView, setCredentialsView, setFiller2FilledView, setFilled2FillerView, setPendingInvitationView, setRoleFromContextView, setRoleView, setRole2ContextView)
+import Perspectives.SetupCouchdb (contextViewFilter, roleViewFilter, setContext2RoleView, setContextView, setCredentialsView, setFiller2FilledView, setFilled2FillerView, setRoleFromContextView, setRoleView, setRole2ContextView)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable, Stable)
 import Perspectives.Sidecar.ToStable (toStable)
 import Perspectives.Sync.HandleTransaction (executeTransaction)
@@ -702,8 +702,6 @@ createEntitiesDatabase databaseUrls databaseNames namespaces _ =
             ( \_ -> do
                 setRoleView dbName
                 setRoleFromContextView dbName
-                -- OBSOLETE. Remove if testing shows the current definitioin of pendingInvitations works.
-                setPendingInvitationView dbName
                 setContextView dbName
                 setCredentialsView dbName
                 setFiller2FilledView dbName

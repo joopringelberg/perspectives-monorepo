@@ -73,7 +73,7 @@ import Perspectives.ModelDependencies (actualSharedFileServer, allSettings, file
 import Perspectives.ModelGraph (constructModelGraph)
 import Perspectives.Names (expandDefaultNamespaces, getMySystem, getUserIdentifier, lookupIndexedContext)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
-import Perspectives.Persistence.API (deleteDocument, getAttachment, toFile)
+import Perspectives.Persistence.API (getAttachment, toFile)
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistent (getPerspectContext, getPerspectRol, saveMarkedResources)
 import Perspectives.PerspectivesState (getPerspectivesUser, getWarnings, resetWarnings)
@@ -559,7 +559,6 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
           (ContextInstance object)
           onlyOnce
     -- { request: "GetTableForm", subject: UserRoleType, predicate: ContextInstance, object: RoleType }
-    -- OBSOLETE
     Api.GetTableForm -> do
       userRoleType <- getRoleType subject
       objectRoleType <- getRoleType object
@@ -983,14 +982,6 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
       ( do
           roleType <- roleType_ (RoleInstance subject)
           void $ runMonadPerspectivesTransaction authoringRole (evaluateRoleState (RoleInstance subject) (StateIdentifier $ unwrap roleType))
-      )
-      \e -> sendResponse (Error corrId (show e)) setter
-
-    Api.DeleteResource -> catchError
-      ( do
-          { database, documentName } <- resourceIdentifier2DocLocator subject
-          success <- deleteDocument database documentName Nothing
-          sendResponse (Result corrId [ show success ]) setter
       )
       \e -> sendResponse (Error corrId (show e)) setter
 

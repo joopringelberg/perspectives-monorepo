@@ -46,6 +46,7 @@ import Test.Unit.Main (runTest)
 
 -- Pure parser (no MonadPerspectives at all)
 import Test.Parsing.Arc.Expression (theSuite) as TPAE
+import Test.ObsoleteRepresentationCleanup (theSuite) as ORC
 
 -- Pure ArrayT combinator tests (no MonadPerspectives)
 import Test.ArrayT (theSuite) as ARRT
@@ -74,6 +75,7 @@ main = runTest do
   AIP.theSuite -- Incoming-post status message formatting
   TQCO.theSuite -- Typed query comparison operators
   SUTN.theSuite -- Stable ID mapping regression tests
+  ORC.theSuite -- Serialization regression for obsolete representation members
 
   -- Read a file from the file-system, but otherwise pure (no MonadPerspectives / no HTTP)
   TPAM.theSuite -- ARC model parser (parses .arc files from the model/
@@ -82,16 +84,16 @@ main = runTest do
   ADTTESTS.theSuite -- ExpandedADT / CNF / ADT unit tests (with assertions)
 
   -- ── ARC parsing phases 1–3 (in-memory; file-system for .arc fixtures) ──────
-  -- NOTE: this suite is not ready: it contains a large number of failing tests.
+  -- NOTE: the broader phase suites are not ready: they contain a large number of failing tests.
   -- TPA.theSuite         -- Phase 1 — tokenise + parse
   -- TPA2.theSuite        -- Phase 2 — name resolution / type inference
   -- TPA3.theSuite        -- Phase 3 — inverted query indexing
 
-  -- This small suite fails.
-  -- TPA3.completeTypeNormalisationSuite
+-- This small suite fails.
+-- TPA3.completeTypeNormalisationSuite
 
-  -- This small suite fails.
-  -- TPA3.recursiveFillerComparisonSuite
+-- This small suite fails.
+-- TPA3.recursiveFillerComparisonSuite
 
 -- -- ── Query description compiler (in-memory DomeinFile cache) ────────────────
 -- QDC.theSuite
