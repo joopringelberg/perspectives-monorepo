@@ -393,14 +393,15 @@ installModelLocally (Tuple dfrecord@{ id, namespace, referredModels, invertedQue
   { patch, build, versionedModelName, unversionedModelname, versionedModelManifest } <- catchError
     (lift $ computeVersionedAndUnversiondName id)
     -- Provide reasonable default values. This is a fallback for test situations when we compile a model locally.
-    \_ -> pure 
-            { patch: "0"
-            , build: "0"
-            , versionedModelName: case (modelUriVersion $unwrap id) of
-                Just v -> unwrap id
-                Nothing -> unwrap id <> "@1.0"
-            , unversionedModelname: unversionedModelUri $ unwrap id
-            , versionedModelManifest: Nothing }
+    \_ -> pure
+      { patch: "0"
+      , build: "0"
+      , versionedModelName: case (modelUriVersion $ unwrap id) of
+          Just v -> unwrap id
+          Nothing -> unwrap id <> "@1.0"
+      , unversionedModelname: unversionedModelUri $ unwrap id
+      , versionedModelManifest: Nothing
+      }
   -- Store the model in Couchdb, that is: in the local store of models.
   -- Save it with the revision of the local version that we have, if any (do not use the repository version).
   { documentName: unversionedDocumentName } <- lift $ resourceIdentifier2WriteDocLocator unversionedModelname

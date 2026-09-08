@@ -385,9 +385,10 @@ handleScreens screenEs = do
           objectRoleType' <- lift2 $ case objectRoleType of
             ENR ert -> ENR <$> toReadable ert
             CR crt -> CR <$> toReadable crt
-          (lift2 $ humanizePerspectivesError
-           (UnauthorizedForRole "Auteur" subjectRoleType' objectRoleType' (maybe [] roleVerbList2Verbs roleVerbs) (Just start') (Just end')) )
-           >>= throwError 
+          ( lift2 $ humanizePerspectivesError
+              (UnauthorizedForRole "Auteur" subjectRoleType' objectRoleType' (maybe [] roleVerbList2Verbs roleVerbs) (Just start') (Just end'))
+          )
+            >>= throwError
         -- Compute the excluded properties from either withProps (inclusion) or withoutProps (exclusion).
         -- When withProps is used, also capture the ordered inclusion list as requiredProperties
         -- so the client can sort columns/fields accordingly.
