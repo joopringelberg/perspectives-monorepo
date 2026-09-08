@@ -53,7 +53,7 @@ import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
 import Perspectives.DomeinCache (AttachmentFiles)
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.Error.Boundaries (handleExternalFunctionError, handleExternalStatementError)
-import Perspectives.Error.Pretty (renderPerspectivesError)
+import Perspectives.Error.Pretty (renderMultiplePerspectivesErrors, renderPerspectivesError)
 import Perspectives.ErrorLogging (logPerspectivesError)
 import Perspectives.Extern.Couchdb (retrieveModelFromLocalStore, updateModel)
 import Perspectives.Extern.Files (getPFileTextValue)
@@ -130,7 +130,9 @@ applyImmediately modelUri_ arcSource_ basedOnVersion_ versionedModelManifest =
                 r <- lift $ runEmbeddedTransaction true (ENR $ EnumeratedRoleType MD.sysUser)
                   (loadAndCompileArcFile_ (Sidecar.ModelUri modelUri) arcSource true modelCuid modelUriReadable mbasedOnVersion)
                 case r of
-                  Left errs -> lift $ addWarning ({ message: "Error in Parsing$ApplyImmediately.", error: show errs, externalRoleId: "", contextName: "" })
+                  Left errs -> do
+                    rendered <- lift $ renderMultiplePerspectivesErrors errs
+                    lift $ addWarning ({ message: "Error in Parsing$ApplyImmediately.", error: rendered, externalRoleId: "", contextName: "" })
                   Right _ -> pure unit
           \e -> lift $ addWarning ({ message: "Error in Parsing$ApplyImmediately.", error: show e, externalRoleId: "", contextName: "" })
     )
@@ -161,7 +163,9 @@ uploadToRepository modelUri_ arcSource_ basedOnVersion_ versionedModelManifest =
             Just (Value modelCuid), Just (Value modelUriReadable) -> do
               r <- loadAndCompileArcFile_ ((Sidecar.ModelUri modelUri) :: Sidecar.ModelUri Sidecar.Stable) arcSource false modelCuid modelUriReadable mbasedOnVersion
               case r of
-                Left m -> logPerspectivesError $ Custom ("uploadToRepository: " <> show m)
+                Left m -> do
+                  rendered <- lift $ renderMultiplePerspectivesErrors m
+                  logPerspectivesError $ Custom ("uploadToRepository: " <> rendered)
                 -- Here we will have a tuple of the DomeinFile and an instance of StoredQueries plus the updated mapping.
                 Right (Tuple df@(DomeinFile { id, namespace }) (Tuple invertedQueries mapping')) -> do
                   lift $ void $ uploadToRepository_ split df invertedQueries mapping'
@@ -310,7 +314,9 @@ storeModelLocally_ modelUri_ arcSource_ basedOnVersion_ versionedModelManifest =
             Just (Value modelCuid), Just (Value modelUriReadable) -> do
               r <- loadAndCompileArcFile_ (Sidecar.ModelUri modelUri) arcSource false modelCuid modelUriReadable mbasedOnVersion
               case r of
-                Left m -> logPerspectivesError $ Custom ("StoreModelLocally: " <> show m)
+                Left m -> do
+                  rendered <- lift $ renderMultiplePerspectivesErrors m
+                  logPerspectivesError $ Custom ("StoreModelLocally: " <> rendered)
                 -- Here we will have a tuple of the DomeinFile and an instance of StoredQueries.
                 Right (Tuple (DomeinFile dfr@{ id, namespace }) (Tuple invertedQueries mapping')) -> do
                   (Tuple _ attachments) <- retrieveModelFromLocalStore id

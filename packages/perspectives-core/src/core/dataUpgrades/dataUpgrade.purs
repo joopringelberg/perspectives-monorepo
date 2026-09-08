@@ -86,6 +86,7 @@ import Perspectives.DataUpgrade.UpdateLocalModels (updateLocalModels)
 import Perspectives.DependencyTracking.Array.Trans (runArrayT)
 import Perspectives.DomeinCache (storeDomeinFileInCache, storeDomeinFileInCouchdbPreservingAttachments)
 import Perspectives.DomeinFile (DomeinFile(..))
+import Perspectives.Error.Pretty (renderMultiplePerspectivesErrors)
 import Perspectives.ErrorLogging (logPerspectivesError)
 import Perspectives.Extern.Couchdb (addModelToLocalStore, isInitialLoad, roleInstancesFromCouchdb, updateModel', updateModelForUpgrade, updateModel_)
 import Perspectives.Extern.Utilities (isLowerVersion, pdrVersion)
@@ -531,7 +532,9 @@ indexedQueries _ = do
     (ENR $ EnumeratedRoleType sysUser)
     (runExceptT (executeInTopologicalOrder (catMaybes uninterpretedDomeinFiles) recompileModel))
   case r of
-    Left errors -> logPerspectivesError (Custom ("recompileLocalModels: " <> show errors))
+    Left errors -> do
+      rendered <- renderMultiplePerspectivesErrors errors
+      logPerspectivesError (Custom ("recompileLocalModels: " <> rendered))
     Right success -> saveMarkedResources
 
 updateModels0250 :: Upgrade
