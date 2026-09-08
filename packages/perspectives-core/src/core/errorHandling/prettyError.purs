@@ -127,6 +127,9 @@ humanizePerspectivesError e = case e of
   ContextHasNoRole contextADT roleType start end -> do
     contextADT' <- traverse toReadable contextADT
     pure (ContextHasNoRole contextADT' roleType start end)
+  RoleHasNoEnumeratedProperty adt ert start end -> do
+    adt' <- traverse toReadable adt
+    pure (RoleHasNoEnumeratedProperty adt' ert start end)
 
   -- Default: leave unchanged.
   _ -> pure e

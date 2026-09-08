@@ -13,3 +13,14 @@ export function isUnauthorized (e)
     (e.status == 401)
     );
 }
+
+export function invalidateDatabaseConnectors (_url)
+{
+  return function (_couchdbUrl)
+  {
+    return function (databases)
+    {
+      return databases;
+    };
+  };
+}

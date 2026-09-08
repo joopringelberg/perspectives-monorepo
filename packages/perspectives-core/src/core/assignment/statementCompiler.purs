@@ -574,7 +574,7 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
       (candidates :: Array PropertyType) <- filter isEnumeratedProperty <$> (lookForUnqualifiedPropertyType propertyIdentifier) rt
       case head candidates of
         Just (ENP et) | length candidates == 1 -> pure et
-        otherwise -> throwError $ RoleHasNoEnumeratedProperty rt propertyIdentifier start end
+        otherwise -> (lift2 $ humanizePerspectivesError (RoleHasNoEnumeratedProperty rt propertyIdentifier start end)) >>= throwError
 
     -- | If the name is already qualified, use it as-is; otherwise look for an EnumeratedRole with matching
     -- | local name in the Domain.
