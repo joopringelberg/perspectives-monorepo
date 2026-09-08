@@ -51,6 +51,7 @@ import Test.ObsoleteRepresentationCleanup (theSuite) as ORC
 -- Pure ArrayT combinator tests (no MonadPerspectives)
 import Test.ArrayT (theSuite) as ARRT
 import Test.AMQP.IncomingPost (theSuite) as AIP
+import Test.Error.Pretty (theSuite) as TEP
 import Test.Query.ComparisonOperators (theSuite) as TQCO
 import Test.SidecarUniqueTypeNames (theSuite) as SUTN
 
@@ -73,6 +74,7 @@ main = runTest do
   TPAE.theSuite -- ARC expression parser
   ARRT.theSuite -- ArrayT combinators
   AIP.theSuite -- Incoming-post status message formatting
+  TEP.theSuite -- Error pretty-printing helpers
   TQCO.theSuite -- Typed query comparison operators
   SUTN.theSuite -- Stable ID mapping regression tests
   ORC.theSuite -- Serialization regression for obsolete representation members
@@ -83,11 +85,11 @@ main = runTest do
   -- ── Pure ADT algebra (runP wraps in-memory computations only) ──────────────
   ADTTESTS.theSuite -- ExpandedADT / CNF / ADT unit tests (with assertions)
 
-  -- ── ARC parsing phases 1–3 (in-memory; file-system for .arc fixtures) ──────
-  -- NOTE: the broader phase suites are not ready: they contain a large number of failing tests.
-  -- TPA.theSuite         -- Phase 1 — tokenise + parse
-  -- TPA2.theSuite        -- Phase 2 — name resolution / type inference
-  -- TPA3.theSuite        -- Phase 3 — inverted query indexing
+-- ── ARC parsing phases 1–3 (in-memory; file-system for .arc fixtures) ──────
+-- NOTE: the broader phase suites are not ready: they contain a large number of failing tests.
+-- TPA.theSuite         -- Phase 1 — tokenise + parse
+-- TPA2.theSuite        -- Phase 2 — name resolution / type inference
+-- TPA3.theSuite        -- Phase 3 — inverted query indexing
 
 -- This small suite fails.
 -- TPA3.completeTypeNormalisationSuite

@@ -61,6 +61,7 @@ import Perspectives.Authenticate (getMyPublicKey)
 import Perspectives.CoreTypes (MonadPerspectivesQuery, MonadPerspectivesTransaction, mkLibFunc2)
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..), runArrayT)
 import Perspectives.Error.Boundaries (handleExternalFunctionError)
+import Perspectives.Error.Pretty (renderMultiplePerspectivesErrors)
 import Perspectives.External.HiddenFunctionCache (HiddenFunctionDescription)
 import Perspectives.Identifiers (getFirstMatch)
 import Perspectives.Instances.ObjectGetters (bottom, context, contextType, roleType)
@@ -190,6 +191,9 @@ instance Show EvaluationResult where
   show (PE parseError) = "error#" <> show parseError
   show (PSPE errs) = "error#" <> show errs
 
+showPerspectivesErrors :: MultiplePerspectivesErrors -> MonadPerspectivesQuery String
+showPerspectivesErrors errs = lift $ lift $ ("error#" <> _) <$> renderMultiplePerspectivesErrors errs
+
 -- | Evaluate the expression and apply it to the role instance.
 -- | The result is a (series of) error message(s) that will start with "error#" or a valid result in string form preceded by "result#".
 evalExpression :: String -> RoleInstance -> MonadPerspectivesQuery String
@@ -202,13 +206,13 @@ evalExpression expr roleId@(RoleInstance id) = do
     Right (parseTree :: Step) -> do
       s <- liftAff $ evalPhaseTwo' (expandPrefix parseTree)
       case s of
-        Left e -> pure $ show (PSPE e)
+        Left e -> showPerspectivesErrors e
         Right parseTree' -> do
           lift $ lift $ void $ ensureModel parseTree'
           (t :: Either MultiplePerspectivesErrors QueryFunctionDescription) <- lift $ lift $ evalPhaseTwo'
             (ExpressionCompiler.compileExpression (RDOM $ UET $ RoleInContext { context: ct, role: rt }) parseTree')
           case t of
-            Left errs -> pure $ show (PSPE errs)
+            Left errs -> showPerspectivesErrors errs
             Right qfd -> do
               -- Get a list of all models in the installation.
               modelUriMap <- lift $ lift $ getModelUris
@@ -249,13 +253,13 @@ compileExpression expr roleId = do
     Right (parseTree :: Step) -> do
       s <- liftAff $ evalPhaseTwo' (expandPrefix parseTree)
       case s of
-        Left e -> pure $ show (PSPE e)
+        Left e -> showPerspectivesErrors e
         Right parseTree' -> do
           lift $ lift $ void $ ensureModel parseTree'
           (t :: Either MultiplePerspectivesErrors QueryFunctionDescription) <- lift $ lift $ evalPhaseTwo'
             (ExpressionCompiler.compileExpression (RDOM $ UET $ RoleInContext { context: ct, role: rt }) parseTree')
           case t of
-            Left errs -> pure $ show (PSPE errs)
+            Left errs -> showPerspectivesErrors errs
             Right qfd -> do
               -- Get a list of all models in the installation.
               modelUriMap <- lift $ lift $ getModelUris

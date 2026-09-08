@@ -53,6 +53,7 @@ import Perspectives.Data.EncodableMap (EncodableMap, empty, insert, lookup, keys
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
 import Perspectives.DomeinCache (modifyEnumeratedRoleInDomeinFile, removeDomeinFileFromCache, storeDomeinFileInCache)
 import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, UpstreamAutomaticEffect(..), UpstreamStateNotification(..), addUpstreamAutomaticEffect, addUpstreamNotification)
+import Perspectives.Error.Pretty (renderPerspectivesError)
 import Perspectives.HumanReadableType (translateType)
 import Perspectives.Identifiers (Namespace, concatenateSegments, isTypeUri, qualifyWith, startsWithSegments, typeUri2LocalName_, typeUri2ModelUri_, typeUri2typeNameSpace)
 import Perspectives.Instances.ObjectGetters (contextType_, roleType_)
@@ -900,7 +901,9 @@ handlePostponedStateQualifiedParts = do
     objectMustBeRole objectQfd start end
     hasNotificationAspect <- lift2 ((roleIdentification2context user) ###>> hasContextAspect (ContextType READABLE.contextWithNotification))
     if hasNotificationAspect then pure unit
-    else lift2 $ addWarning $ { message: show $ NoNotificationAspect (roleIdentification2context user) start end, error: "", externalRoleId: "", contextName: "" }
+    else do
+      rendered <- lift2 $ renderPerspectivesError (NoNotificationAspect (roleIdentification2context user) start end)
+      lift2 $ addWarning { message: rendered, error: "", externalRoleId: "", contextName: "" }
     modifyAllStates
       ( case spec of
           AST.ContextState _ _ -> ContextNotification
