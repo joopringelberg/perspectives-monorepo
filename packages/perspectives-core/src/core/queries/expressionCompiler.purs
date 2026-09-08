@@ -68,6 +68,7 @@ import Perspectives.Representation.ADT (ADT(..), commonLeavesInADT)
 import Perspectives.Representation.CalculatedProperty (CalculatedProperty(..))
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
 import Perspectives.Representation.Class.PersistentType (StateIdentifier(..), getCalculatedProperty, getCalculatedRole, getContext, getEnumeratedProperty, getEnumeratedRole, typeExists)
+import Perspectives.Representation.Class.Property (getPropertyType)
 import Perspectives.Representation.Class.Property (propertyTypeIsFunctional, propertyTypeIsMandatory, range) as PROP
 import Perspectives.Representation.Class.Role (bindingOfADT, contextOfADT, contextOfRepresentation, externalRoleOfADT, getRoleADTFromString, getRoleType, roleADT, roleTypeIsFunctional, roleTypeIsMandatory)
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
@@ -397,7 +398,16 @@ compileSimpleStep currentDomain s@(ArcIdentifier pos ident) = do
                         (rts :: Array RoleType) <-
                           if isTypeUri ident then
                             if isExternalRole ident then pure [ ENR $ EnumeratedRoleType ident ]
-                            else lookForRoleTypeOfADT ident c
+                            -- If the namespace is not the one we're compiling, check whether the type is defined somewhere else.
+                            else do 
+                              currentNamespace <- unwrap <$> getsDF _.namespace
+                              if typeUri2ModelUri ident == Just currentNamespace 
+                                -- Look for the role type in the current model if the type URI belongs to the current namespace.
+                                then lookForRoleTypeOfADT ident c
+                                -- Otherwise, try to get the role type from another model.
+                                else (lift2 $ try $ getRoleType ident) >>= case _ of 
+                                  Left _ -> pure []
+                                  Right pts -> pure [pts]
                           else lookForUnqualifiedRoleTypeOfADT ident c
                         case uncons rts of
                           Nothing -> (lift $ lift $ humanizePerspectivesError (ContextHasNoRole c ident pos (endOf $ Simple s))) >>= throwError
@@ -410,7 +420,15 @@ compileSimpleStep currentDomain s@(ArcIdentifier pos ident) = do
                             else throwError (NotUniquelyIdentifyingRoleType pos (ENR $ EnumeratedRoleType ident) rts)
                     (RDOM r) -> do
                       (pts :: Array PropertyType) <-
-                        if isTypeUri ident then lookForPropertyType ident (roleInContext2Role <$> r)
+                        if isTypeUri ident then do 
+                          currentNamespace <- unwrap <$> getsDF _.namespace
+                          if typeUri2ModelUri ident == Just currentNamespace
+                            -- Look for the property type in the current model if the type URI belongs to the current namespace.
+                            then lookForPropertyType ident (roleInContext2Role <$> r)
+                            -- Otherwise, try to get the property type from another model.
+                            else (lift2 $ try $ getPropertyType ident) >>= case _ of 
+                              Left _ -> pure []
+                              Right pts -> pure [pts]
                         else lookForUnqualifiedPropertyType ident (roleInContext2Role <$> r)
                       case uncons pts of
                         Nothing -> throwError $ RoleHasNoProperty (roleInContext2Role <$> r) ident pos pos
