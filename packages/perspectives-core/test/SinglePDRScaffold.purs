@@ -48,15 +48,15 @@ import Effect.Aff (Aff, error)
 import Effect.Class (liftEffect)
 import Effect.Ref (Ref, new, read, write)
 import Effect.Unsafe (unsafePerformEffect)
+import Foreign.Object (empty) as OBJ
 import Node.Encoding (Encoding(..))
 import Node.FS.Aff (readTextFile)
 import Partial.Unsafe (unsafePartial)
-import Foreign.Object (empty) as OBJ
 import Perspectives.ApiTypes (ContextSerialization(..), PropertySerialization(..), RolSerialization(..))
 import Perspectives.Assignment.RunAction (runContextAction)
 import Perspectives.CoreTypes (LogLevel(..), LogTopic(..), (##>))
 import Perspectives.Extern.Couchdb (addModelToLocalStore_)
-import Perspectives.Identifiers (buitenRol, modelUri2LocalName)
+import Perspectives.Identifiers (buitenRol, modelUri2LocalName, unversionedModelUri)
 import Perspectives.Instances.Builders (createAndAddRoleInstance, constructContext)
 import Perspectives.Logging (ansiRed, infoTest)
 import Perspectives.ModelDependencies (sysUser)
@@ -158,7 +158,7 @@ getSinglePDRResults cfg = do
                       (ModelUri cfg.testModel :: ModelUri Stable)
                       source
                       true
-                      (unsafePartial modelUri2LocalName cfg.testModel)
+                      (unsafePartial modelUri2LocalName $ unversionedModelUri cfg.testModel)
                       modelUriReadable
                       basedOnVersion
                   )

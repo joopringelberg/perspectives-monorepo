@@ -195,6 +195,20 @@ It can be used explicitly with:
   https://perspectives.domains/_up
 ```
 
+### Node.js tests
+
+Node.js does not use the macOS Keychain trust store by default. Supply the
+mkcert root CA before starting a Node-based test that accesses the local HTTPS
+domains:
+
+```bash
+NODE_EXTRA_CA_CERTS="$(mkcert -CAROOT)/rootCA.pem" pnpm run test:rebootUniverse
+```
+
+The environment variable is read when Node starts, so setting it from inside a
+running test is too late. It augments Node's normal public CA set; it does not
+replace it.
+
 Browsers may continue to use an older service-worker cache after rebuilding
 MyContexts. For test runs that must use the latest executable, clear the site
 data or unregister the service worker for `mycontexts.com` in the browser's

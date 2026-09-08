@@ -26,7 +26,7 @@ module Perspectives.Extern.Couchdb where
 
 import Control.Monad.AvarMonadAsk (gets, modify)
 import Control.Monad.AvarMonadAsk (modify, gets) as AMA
-import Control.Monad.Error.Class (throwError, try)
+import Control.Monad.Error.Class (catchError, throwError, try)
 import Control.Monad.Except (runExceptT)
 import Control.Monad.State (execState, execStateT)
 import Control.Monad.Trans.Class (lift)
@@ -390,7 +390,17 @@ computeVersionedAndUnversiondName (ModelUri modelname) = do
 installModelLocally :: (Tuple (DomeinFileRecord Stable) AttachmentFiles) -> Boolean -> StoredQueries -> MonadPerspectivesTransaction Unit
 installModelLocally (Tuple dfrecord@{ id, namespace, referredModels, invertedQueriesInOtherDomains, upstreamStateNotifications, upstreamAutomaticEffects, _attachments } attachmentFiles) isInitialLoad' storedQueries = do
   lift $ traceInstall ("Entering `installModelLocally` for " <> unwrap namespace)
-  { patch, build, versionedModelName, unversionedModelname, versionedModelManifest } <- lift $ computeVersionedAndUnversiondName id
+  { patch, build, versionedModelName, unversionedModelname, versionedModelManifest } <- catchError
+    (lift $ computeVersionedAndUnversiondName id)
+    -- Provide reasonable default values. This is a fallback for test situations when we compile a model locally.
+    \_ -> pure 
+            { patch: "0"
+            , build: "0"
+            , versionedModelName: case (modelUriVersion $unwrap id) of
+                Just v -> unwrap id
+                Nothing -> unwrap id <> "@1.0"
+            , unversionedModelname: unversionedModelUri $ unwrap id
+            , versionedModelManifest: Nothing }
   -- Store the model in Couchdb, that is: in the local store of models.
   -- Save it with the revision of the local version that we have, if any (do not use the repository version).
   { documentName: unversionedDocumentName } <- lift $ resourceIdentifier2WriteDocLocator unversionedModelname
