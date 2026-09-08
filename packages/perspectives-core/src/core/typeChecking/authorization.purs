@@ -32,8 +32,9 @@ import Data.Monoid.Disj (Disj(..))
 import Data.Newtype (ala)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (MonadPerspectives, (##>>), (###=))
-import Perspectives.Logging (warnAuth)
+import Perspectives.Error.Pretty (humanizePerspectivesError)
 import Perspectives.Instances.ObjectGetters (roleType)
+import Perspectives.Logging (warnAuth)
 import Perspectives.Parsing.Arc.Position (ArcPosition)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Representation.Class.Role (adtOfRole, getRole)
@@ -66,7 +67,7 @@ roleHasPerspectiveOnRoleWithVerb :: RoleType -> EnumeratedRoleType -> Array Role
 roleHasPerspectiveOnRoleWithVerb subject roleType verbs mstart mend = do
   hasVerbs <- unsafePartial (roleType ###= hasPerspectiveOnRoleWithVerbs verbs subject)
   if ala Disj foldMap hasVerbs then pure $ Right true
-  else pure $ Left $ UnauthorizedForRole "Auteur" subject (ENR roleType) verbs mstart mend
+  else Left <$> humanizePerspectivesError (UnauthorizedForRole "Auteur" subject (ENR roleType) verbs mstart mend)
 
 -- | This function differs from `roleHasPerspectiveOnRoleWithVerb` in that it uses an
 -- | `authorizedRole` (second parameter). This is the role that binds the external role that we scrutinize,
@@ -80,7 +81,7 @@ roleHasPerspectiveOnExternalRoleWithVerbs subject mroleType verbs mstart mend = 
   Just rt -> do
     (hasPerspectiveWithVerb subject rt) >>=
       if _ then pure $ Right true
-      else pure $ Left $ UnauthorizedForRole "Auteur" subject rt verbs mstart mend
+      else Left <$> humanizePerspectivesError (UnauthorizedForRole "Auteur" subject rt verbs mstart mend)
     where
     hasPerspectiveWithVerb :: RoleType -> RoleType -> MonadPerspectives Boolean
     hasPerspectiveWithVerb subjectType authorizedRoleType = do

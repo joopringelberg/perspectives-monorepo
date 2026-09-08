@@ -39,6 +39,7 @@ import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.Data.EncodableMap (empty, fromFoldable, insert, singleton) as EM
 import Perspectives.DomeinFile (DomeinFile(..))
+import Perspectives.Error.Pretty (humanizePerspectivesError)
 import Perspectives.Identifiers (areLastSegmentsOf, concatenateSegments, isTypeUri, qualifyWith, startsWithSegments, typeUri2ModelUri_)
 import Perspectives.ModelDependencies.Readable as READABLE
 import Perspectives.Parsing.Arc.AST (ChatE(..), FreeFormScreenE(..), MarkDownE(..), PropertyFacet(..), PropertyVerbE(..), PropsOrView, RoleIdentification(..), TableFormSectionE(..), WhoWhatWhereScreenE(..), roleIdentification2context)
@@ -54,10 +55,10 @@ import Perspectives.Query.QueryTypes (Domain(..), domain2roleType, functional, r
 import Perspectives.Representation.ADT (ADT(..), allLeavesInADT)
 import Perspectives.Representation.Class.PersistentType (getCalculatedRole, getEnumeratedRole, tryGetPerspectType)
 import Perspectives.Representation.Class.Property (hasFacet, rangeOfPropertyType)
-import Perspectives.Representation.Range (Range(..))
 import Perspectives.Representation.Class.Role (allProperties, displayName, perspectivesOfRoleType, roleADTOfRoleType, roleTypeIsFunctional)
 import Perspectives.Representation.ExplicitSet (ExplicitSet(..), elements_)
 import Perspectives.Representation.Perspective (Perspective(..), perspectiveSupportsRoleVerbs)
+import Perspectives.Representation.Range (Range(..))
 import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FieldConstraintDef, FormDef(..), MarkDownDef(..), PropertyRestrictions, PropertyValueFillers, RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), ScreenMap, TabDef(..), TableDef(..), TableFormDef(..), TableFormOrWhenDef(..), TypeAheadFillerDef(..), TypeAheadFormDef(..), What(..), WhenDef(..), WhenTableFormDef(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef)
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..), optimistic, pessimistic)
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), ViewType(..), roletype2string)
@@ -384,7 +385,9 @@ handleScreens screenEs = do
           objectRoleType' <- lift2 $ case objectRoleType of
             ENR ert -> ENR <$> toReadable ert
             CR crt -> CR <$> toReadable crt
-          throwError (UnauthorizedForRole "Auteur" subjectRoleType' objectRoleType' (maybe [] roleVerbList2Verbs roleVerbs) (Just start') (Just end'))
+          (lift2 $ humanizePerspectivesError
+           (UnauthorizedForRole "Auteur" subjectRoleType' objectRoleType' (maybe [] roleVerbList2Verbs roleVerbs) (Just start') (Just end')) )
+           >>= throwError 
         -- Compute the excluded properties from either withProps (inclusion) or withoutProps (exclusion).
         -- When withProps is used, also capture the ordered inclusion list as requiredProperties
         -- so the client can sort columns/fields accordingly.
