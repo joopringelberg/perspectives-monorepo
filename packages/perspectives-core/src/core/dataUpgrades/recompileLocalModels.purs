@@ -32,6 +32,7 @@ import Main.RecompileBasicModels (UninterpretedDomeinFile, executeInTopologicalO
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (LogLevel(..), LogTopic(..), MonadPerspectives)
 import Perspectives.DomeinCache (lookupStableModelUri_)
+import Perspectives.Error.Pretty (renderMultiplePerspectivesErrors)
 import Perspectives.External.CoreModules (addAllExternalFunctions)
 import Perspectives.Identifiers (modelUri2ModelUrl)
 import Perspectives.Logging (errorUpgrade)
@@ -67,7 +68,9 @@ recompileLocalModels =
       (runExceptT (executeInTopologicalOrder (catMaybes uninterpretedDomeinFiles) recompileModel))
     void $ removeMessage "Updating local models..."
     case r of
-      Left errors -> errorUpgrade ("recompileLocalModels: " <> show errors) *> pure false
+      Left errors -> do
+        rendered <- renderMultiplePerspectivesErrors errors
+        errorUpgrade ("recompileLocalModels: " <> rendered) *> pure false
       Right success -> do
         saveMarkedResources
         pure success
@@ -94,8 +97,9 @@ recompileLocalModel modelUri = do
         (ENR $ EnumeratedRoleType sysUser)
         (runExceptT (recompileModel udf))
       case r of
-        Left errors -> errorUpgrade ("recompileLocalModels(" <> show modelUri <> "): " <> show errors) *> pure false
+        Left errors -> do
+          rendered <- renderMultiplePerspectivesErrors errors
+          errorUpgrade ("recompileLocalModels(" <> show modelUri <> "): " <> rendered) *> pure false
         Right success -> do
           saveMarkedResources
           pure true
-

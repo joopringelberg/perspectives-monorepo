@@ -9,6 +9,7 @@ import Data.Traversable (for, for_)
 import Foreign.Object (Object, lookup)
 import Main.RecompileBasicModels (UninterpretedDomeinFile(..))
 import Perspectives.CoreTypes (MonadPerspectives)
+import Perspectives.Error.Pretty (renderMultiplePerspectivesErrors)
 import Perspectives.Logging (errorUpgrade)
 import Perspectives.Persistence.API (addDocument_, documentsInDatabase, includeDocs)
 import Perspectives.PerspectivesState (modelsDatabaseName)
@@ -34,4 +35,3 @@ patchModels replacements = do
     Just replacement -> do
       { database, documentName } <- resourceIdentifier2WriteDocLocator namespace
       void $ addDocument_ database (dfr { arc = replacement }) documentName
-

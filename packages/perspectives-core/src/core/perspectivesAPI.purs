@@ -57,6 +57,7 @@ import Perspectives.CoreTypes (MP, MonadPerspectives, MonadPerspectivesTransacti
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..), runArrayT)
 import Perspectives.DependencyTracking.Dependency (registerSupportedEffect, unregisterSupportedEffect)
 import Perspectives.DomeinCache (retrieveDomeinFile)
+import Perspectives.Error.Pretty (renderMultiplePerspectivesErrors, renderPerspectivesError)
 import Perspectives.Fuzzysort (matchIndexedContextNames)
 import Perspectives.HumanReadableType (translateType)
 import Perspectives.Identifiers (buitenRol, deconstructBuitenRol, isExternalRole, isTypeUri, typeUri2ModelUri_, typeUri2couchdbFilename)
@@ -1034,7 +1035,9 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
         void $ lift $ retrieveDomeinFile (ModelUri $ unsafePartial typeUri2ModelUri_ ctype)
         ctxt <- runExceptT $ constructContext mroleType cd
         case ctxt of
-          (Left messages) -> lift $ sendResponse (Error corrId (show messages)) setter
+          (Left messages) -> do
+            rendered <- lift $ renderPerspectivesError messages
+            lift $ sendResponse (Error corrId rendered) setter
           (Right ctxtId) -> effect ctxtId
 
 -----------------------------------------------------------

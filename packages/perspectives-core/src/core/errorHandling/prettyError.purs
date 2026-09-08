@@ -6,6 +6,7 @@
 
 module Perspectives.Error.Pretty
   ( renderPerspectivesError
+  , renderMultiplePerspectivesErrors
   , humanizePerspectivesError
   , humanizePerspectivesWarning
   , renderPerspectivesWarning
@@ -15,6 +16,7 @@ module Perspectives.Error.Pretty
 
 import Prelude
 
+import Data.Foldable (intercalate)
 import Data.Maybe (Maybe(..))
 import Data.Traversable (for, traverse)
 import Perspectives.CoreTypes (LogLevel(..), LogTopic(..), MonadPerspectives)
@@ -31,6 +33,9 @@ import Perspectives.Warning (PerspectivesWarning(..))
 -- | Falls back to `show` if a constructor isn't handled specially.
 renderPerspectivesError :: PerspectivesError -> MonadPerspectives String
 renderPerspectivesError e = humanizePerspectivesError e >>= pure <<< show
+
+renderMultiplePerspectivesErrors :: Array PerspectivesError -> MonadPerspectives String
+renderMultiplePerspectivesErrors errs = intercalate "\n" <$> traverse renderPerspectivesError errs
 
 -- | Map typed identifiers inside an error to their readable counterparts.
 -- | Keep everything else unchanged. This allows using the existing Show instance
@@ -69,6 +74,10 @@ humanizePerspectivesError e = case e of
   StateDoesNotExist sid start end -> do
     sid' <- toReadable sid
     pure (StateDoesNotExist sid' start end)
+
+  NoNotificationAspect contextType start end -> do
+    contextType' <- toReadable contextType
+    pure (NoNotificationAspect contextType' start end)
 
   -- Constructors that carry only strings: try to prettify strings that look like URIs.
   UnknownProperty pos qname adt -> do
@@ -269,7 +278,7 @@ warnModellerPretty warning = do
   humanized <- humanizePerspectivesWarning warning
   let msg = show humanized
   -- modify \(s@{ warnings }) -> s { warnings = cons ({ message: msg, error: "" }) warnings }
-  pdrLog MODEL Warn (show warning)
+  pdrLog MODEL Warn msg
 
 -- | Log a PerspectivesWarning with associated error detail, with human-readable
 -- | type names, and accumulate it in the warnings list.
