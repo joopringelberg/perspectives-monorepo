@@ -508,6 +508,15 @@ domain model://perspectives.domains#CouchdbManagement@12.4
               -- Copy the namespace to the Repository, but replace dots with underscores.
               NameSpace_ = reponame for origin >> binding
 
+        -- Ad Admin may exist already if the Repository is created by Accounts.
+        -- By nesting NoAdmin in CreateDatabases we know that the Repository has been created.
+        state NoAdmin = AdminEndorses and not exists binding >> context >> Repository$Admin
+          on entry
+            do for Admin
+              -- create role Admin in binding >> context
+              bind context >> Admin to Admin in binding >> context
+
+
       state CreateDatabases = (not HasDatabases) and (exists NameSpace_) and AdminEndorses and exists context >> Admin >> Password
         on entry
           do for Admin
@@ -526,6 +535,7 @@ domain model://perspectives.domains#CouchdbManagement@12.4
               callEffect cdb:MakeDatabasePublic( baseurl, readinstances )
               callEffect cdb:MakeDatabaseWriteProtected( baseurl, readinstances )
               HasDatabases = true
+
       on exit
         do for Admin
           letA
@@ -545,13 +555,6 @@ domain model://perspectives.domains#CouchdbManagement@12.4
       state WithoutExternalDatabase = (not exists NameSpace_) or not AdminEndorses
 
       state NoNameSpace = not exists Repositories$NameSpace
-
-      -- Ad Admin may exist already if the Repository is created by Accounts.
-      state NoAdmin = AdminEndorses and not exists binding >> context >> Repository$Admin
-        on entry
-          do for Admin
-            -- create role Admin in binding >> context
-            bind context >> Admin to Admin in binding >> context
 
     context BespokeDatabases (relational) filledBy BespokeDatabase
     context MyBespokeDatabases = (filter BespokeDatabases with binding >> context >> Owner filledBy sys:Me) >> binding

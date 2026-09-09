@@ -60,7 +60,7 @@ import Perspectives.Identifiers (buitenRol, typeUri2typeNameSpace_)
 import Perspectives.Instances.Builders (createAndAddRoleInstance)
 import Perspectives.Instances.Combinators (filter, not') as COMB
 import Perspectives.Instances.Me (isMe)
-import Perspectives.Instances.ObjectGetters (Filled_(..), Filler_(..), contextType, filledBy, getActiveRoleStates_, roleType, roleType_)
+import Perspectives.Instances.ObjectGetters (Filled_(..), Filler_(..), contextType, filledBy, getActiveRoleStates_, roleType_)
 import Perspectives.Logging (logWhen, traceState)
 import Perspectives.ModelDependencies (contextWithNotification, notificationMessage, notifications)
 import Perspectives.Names (getMySystem)
