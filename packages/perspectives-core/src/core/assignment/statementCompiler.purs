@@ -540,7 +540,7 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
     qualifyWithRespectTo roleIdentifier contextFunctionDescription start end = do
       (ct :: ADT ContextType) <- case range contextFunctionDescription of
         (CDOM ct') -> pure ct'
-        otherwise -> throwError $ NotAContextDomain contextFunctionDescription otherwise start end
+        otherwise -> (lift2 $ humanizePerspectivesError $ NotAContextDomain contextFunctionDescription otherwise start end) >>= throwError
       rtarr <-
         if isTypeUri roleIdentifier then
           if isExternalRole roleIdentifier then pure [ ENR $ EnumeratedRoleType roleIdentifier ]
@@ -597,7 +597,7 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
       qfd <- compileExpression originDomain stp
       case range qfd of
         (CDOM _) -> pure qfd
-        otherwise -> throwError $ NotAContextDomain qfd (range qfd) (startOf stp) (endOf stp)
+        otherwise -> (lift2 $ humanizePerspectivesError $ NotAContextDomain qfd (range qfd) (startOf stp) (endOf stp)) >>= throwError
 
     ensureStringValue :: Maybe Step -> PhaseThree (Maybe QueryFunctionDescription)
     ensureStringValue mstp = case mstp of
@@ -605,7 +605,7 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
         qfd <- compileExpression originDomain stp
         case range qfd of
           (VDOM PString _) -> pure $ Just qfd
-          otherwise -> throwError $ NotAStringDomain qfd (startOf stp) (endOf stp)
+          otherwise -> (lift2 $ humanizePerspectivesError $ NotAStringDomain qfd (startOf stp) (endOf stp)) >>= throwError
       Nothing -> pure Nothing
 
     -- Compiles the Step and inverts it as well.
@@ -616,7 +616,7 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
       qfd <- compileExpression originDomain stp
       case range qfd of
         (RDOM _) -> pure qfd
-        otherwise -> throwError $ NotARoleDomain (range qfd) (startOf stp) (endOf stp)
+        otherwise -> (lift2 $ humanizePerspectivesError $ NotARoleDomain (range qfd) (startOf stp) (endOf stp)) >>= throwError
 
     ensureFunctional :: Step -> QueryFunctionDescription -> PhaseThree QueryFunctionDescription
     ensureFunctional stp qfd = case functional qfd of

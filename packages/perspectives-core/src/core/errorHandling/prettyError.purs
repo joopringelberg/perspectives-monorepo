@@ -23,7 +23,7 @@ import Perspectives.CoreTypes (LogLevel(..), LogTopic(..), MonadPerspectives)
 import Perspectives.Identifiers (typeUri2ModelUri, typeUri2LocalName_)
 import Perspectives.Logging (pdrLog)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
-import Perspectives.Query.QueryTypes (Domain(..))
+import Perspectives.Query.QueryTypes (Domain(..), QueryFunctionDescription(..))
 import Perspectives.Representation.TypeIdentifiers (PropertyType(..), RoleType(..))
 import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.Warning (PerspectivesWarning(..))
@@ -139,6 +139,16 @@ humanizePerspectivesError e = case e of
   RoleHasNoEnumeratedProperty adt ert start end -> do
     adt' <- traverse toReadable adt
     pure (RoleHasNoEnumeratedProperty adt' ert start end)
+  NotAContextDomain qfd dom start end -> do
+    qfd' <- humanizeQueryFunctionDescription qfd
+    dom' <- humanizeDomain dom
+    pure (NotAContextDomain qfd' dom' start end)
+  NotAStringDomain qfd start end -> do 
+    qfd' <- humanizeQueryFunctionDescription qfd
+    pure (NotAStringDomain qfd' start end)
+  NotARoleDomain dom start end -> do
+    dom' <- humanizeDomain dom
+    pure (NotARoleDomain dom' start end)
 
   -- Default: leave unchanged.
   _ -> pure e
@@ -163,6 +173,29 @@ humanizeDomain dom = case dom of
   ContextKind -> pure ContextKind
   RoleKind -> pure RoleKind
   AnyRoleType -> pure AnyRoleType
+
+humanizeQueryFunctionDescription :: QueryFunctionDescription -> MonadPerspectives QueryFunctionDescription
+humanizeQueryFunctionDescription qfd = case qfd of 
+  SQD dom fun ran f m -> do
+    dom' <- humanizeDomain dom
+    ran' <- humanizeDomain ran
+    pure (SQD dom' fun ran' f m)
+  UQD dom fun arg1 ran f m -> do
+    dom' <- humanizeDomain dom
+    arg1' <- humanizeQueryFunctionDescription arg1
+    ran' <- humanizeDomain ran
+    pure (UQD dom' fun arg1' ran' f m)
+  BQD dom fun arg1 arg2 ran f m -> do
+    dom' <- humanizeDomain dom
+    arg1' <- humanizeQueryFunctionDescription arg1
+    arg2' <- humanizeQueryFunctionDescription arg2
+    ran' <- humanizeDomain ran
+    pure (BQD dom' fun arg1' arg2' ran' f m)
+  MQD dom fun args ran f m -> do
+    dom' <- humanizeDomain dom
+    args' <- traverse humanizeQueryFunctionDescription args
+    ran' <- humanizeDomain ran
+    pure (MQD dom' fun args' ran' f m)
 
 -- If the string looks like a type URI, return the local name; otherwise unchanged.
 humanizeString :: String -> MonadPerspectives String
