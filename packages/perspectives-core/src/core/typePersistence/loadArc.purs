@@ -108,9 +108,20 @@ loadAndCompileArcFile_ dfid text saveInCache modelCuid modelUriReadable mbasedOn
 -- | 2. the inverted queries in the local inverted-query database,
 -- | 3. the stable-id mapping as `stableIdMapping.json` attachment on the local model document.
 -- | If compilation fails, returns the compilation errors unchanged.
+-- | NOTE: this function is only used from module Test.SinglePDRScaffold
 loadCompileAndStoreArcFile_ :: ModelUri Stable -> Source -> Boolean -> String -> String -> Maybe String -> MonadPerspectivesTransaction (Either (Array PerspectivesError) (Tuple (DomeinFile Stable) (Tuple StoredQueries StableIdMapping)))
-loadCompileAndStoreArcFile_ dfid text saveInCache modelCuid modelUriReadable mbasedOnVersion = do
-  result <- loadAndCompileArcFile_ dfid text saveInCache modelCuid modelUriReadable mbasedOnVersion
+loadCompileAndStoreArcFile_ dfid text saveInCache modelCuid modelUriReadable _mbasedOnVersion = do
+  version <- case modelUriVersion (unwrap dfid) of
+    Nothing -> throwError $ error ("ModelUri " <> show dfid <> " is expected to be versioned.")
+    Just v -> pure v
+  result <- loadAndCompileArcFileWithSidecar_
+    (over ModelUri unversionedModelUri dfid)
+    text
+    saveInCache
+    Nothing
+    modelCuid
+    modelUriReadable
+    (Just version)
   case result of
     Left errs -> pure $ Left errs
     Right (Tuple df@(DomeinFile dfr@{ id }) (Tuple invertedQueries mapping')) -> do

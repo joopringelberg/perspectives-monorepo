@@ -14,6 +14,8 @@ import { FAQModal } from './faqs';
 
 const PUBLICKEY = "_publicKey";
 const PRIVATEKEY = "_privateKey"; 
+const TRANSPORT_PUBLICKEY = "_transportPublicKey";
+const TRANSPORT_PRIVATEKEY = "_transportPrivateKey";
 
 export interface InstallationData {
   perspectivesUserId: string | null;
@@ -53,7 +55,7 @@ const ConfigureInstallation: FC<{callback: (data: InstallationResult) => void}> 
             { i18next.t( "configuration_WelcomeMessage", {ns: 'mycontexts'} )}
           </p>
           <Button variant="primary" onClick={() => setShowFAQPanel(true)} className="mb-2">
-            MyContexts FAQ's
+            MyContexts FAQs
           </Button>
           <Button variant="primary" onClick={() => setShowInstallPanel(true)}>
             { i18next.t( "conversationDialog_Install", {ns: 'mycontexts'}) }
@@ -254,6 +256,8 @@ const InstallModal: FC<{ show: boolean; onHide: () => void, callback: (data: Ins
         // setValue( perspectivesUserId + PUBLICKEY, keyPair.publicKey )
         deleteValue('privateKey');
         deleteValue('publicKey');
+        deleteValue('transportPrivateKey');
+        deleteValue('transportPublicKey');
         deleteValue('couchdbUrl');
         deleteValue('couchdbPort');
         deleteValue('userName');
@@ -269,7 +273,7 @@ const InstallModal: FC<{ show: boolean; onHide: () => void, callback: (data: Ins
     </Modal.Footer>
   </Modal>)};
 
-function handleInstall ( { deviceName, keyPair, identityFile, couchdbUrl, couchdbPort, userName, password }: InstallationData, callback: (data: InstallationResult) => void ) {
+function handleInstall ( { keyPair, identityFile }: InstallationData, callback: (data: InstallationResult) => void ) {
   // A function that generates a CUID using the current epoch as fingerprint.
   const cuid2 = Cuid2.init({
     // A custom random function with the same API as Math.random.
@@ -309,12 +313,28 @@ function handleInstall ( { deviceName, keyPair, identityFile, couchdbUrl, couchd
       true,
       ['sign']
     );
+    const importTransportPublicKey = window.crypto.subtle.importKey(
+      'jwk',
+      keyPair.transportPublicKey,
+      { name: 'RSA-OAEP', hash: 'SHA-256' },
+      true,
+      ['encrypt']
+    );
+    const importTransportPrivateKey = window.crypto.subtle.importKey(
+      'jwk',
+      keyPair.transportPrivateKey,
+      { name: 'RSA-OAEP', hash: 'SHA-256' },
+      true,
+      ['decrypt']
+    );
 
-    Promise.all([importPublicKey, importPrivateKey])
-      .then(([pubKey, privKey]) =>
+    Promise.all([importPublicKey, importPrivateKey, importTransportPublicKey, importTransportPrivateKey])
+      .then(([pubKey, privKey, transportPubKey, transportPrivKey]) =>
         Promise.all([
           setValue(perspectivesUserId + PUBLICKEY, pubKey),
-          savePrivateKey(perspectivesUserId, privKey)
+          savePrivateKey(perspectivesUserId, PRIVATEKEY, privKey, { name: 'ECDSA', namedCurve: 'P-384' }, ['sign']),
+          setValue(perspectivesUserId + TRANSPORT_PUBLICKEY, transportPubKey),
+          savePrivateKey(perspectivesUserId, TRANSPORT_PRIVATEKEY, transportPrivKey, { name: 'RSA-OAEP', hash: 'SHA-256' }, ['decrypt'])
         ])
       )
       .then(() => {
@@ -324,8 +344,8 @@ function handleInstall ( { deviceName, keyPair, identityFile, couchdbUrl, couchd
   }
     else {
     // Generate a new keypair
-    createKeypair(perspectivesUserId).then( ({ privateKey: exportedPrivateKey, publicKey: exportedPublicKey }) => {
-      const keyPair = { privateKey: exportedPrivateKey, publicKey: exportedPublicKey };
+    createKeypair(perspectivesUserId).then( ({ privateKey: exportedPrivateKey, publicKey: exportedPublicKey, transportPrivateKey, transportPublicKey }) => {
+      const keyPair = { privateKey: exportedPrivateKey, publicKey: exportedPublicKey, transportPrivateKey, transportPublicKey };
       setValue( "keyPair", keyPair)
       // The pair should be downloaded for future use.
       callback({ type: 'KeyPairData', perspectivesUserId, keyPair});
@@ -337,22 +357,28 @@ function handleInstall ( { deviceName, keyPair, identityFile, couchdbUrl, couchd
 
 // Given a CryptoKey, save the private key part in a way that it cannot be exported.
 // Return the exported private key as a JsonWebKey.
-function savePrivateKey (perspectivesUsersId: string, privateKey: CryptoKey) : Promise<JsonWebKey> {
+function savePrivateKey (
+  perspectivesUsersId: string,
+  keySuffix: string,
+  privateKey: CryptoKey,
+  algorithm: EcKeyImportParams | RsaHashedImportParams,
+  keyUsages: KeyUsage[]
+) : Promise<JsonWebKey> {
   let exportedPrivateKey: JsonWebKey;
   return window.crypto.subtle.exportKey( "jwk", privateKey )
     .then( buff => 
       {
         exportedPrivateKey = buff;
         // We must save the exported private key because it appears as if it can only be exported once.
-        return window.crypto.subtle.importKey( "jwk", buff, { name: "ECDSA", namedCurve: "P-384" }, false, ["sign"])
+        return window.crypto.subtle.importKey( "jwk", buff, algorithm, false, keyUsages)
       } )
-    .then( unextractablePrivateKey => setValue( perspectivesUsersId + PRIVATEKEY, unextractablePrivateKey))
+    .then( unextractablePrivateKey => setValue( perspectivesUsersId + keySuffix, unextractablePrivateKey))
     .then ( () => exportedPrivateKey)
 }
 
 function createKeypair (perspectivesUsersId: string) : Promise<KeyPair >
 {
-  let keypair : CryptoKeyPair, privateKey: JsonWebKey, publicKey: JsonWebKey;
+  let signingKeypair : CryptoKeyPair, transportKeypair: CryptoKeyPair, privateKey: JsonWebKey, publicKey: JsonWebKey, transportPrivateKey: JsonWebKey, transportPublicKey: JsonWebKey;
   return window.crypto.subtle.generateKey(
       {
       name: "ECDSA",
@@ -360,16 +386,31 @@ function createKeypair (perspectivesUsersId: string) : Promise<KeyPair >
       },
       true, // extractable.
       ["sign", "verify"])
-    .then( kp => keypair = kp)
-    .then( () => setValue( perspectivesUsersId + PUBLICKEY, keypair.publicKey ) )
-    .then( () => savePrivateKey( perspectivesUsersId, keypair.privateKey ) )
+    .then( kp => signingKeypair = kp)
+    .then(() => window.crypto.subtle.generateKey(
+      {
+        name: 'RSA-OAEP',
+        modulusLength: 4096,
+        publicExponent: new Uint8Array([1, 0, 1]),
+        hash: 'SHA-256'
+      },
+      true,
+      ['encrypt', 'decrypt']))
+    .then(kp => transportKeypair = kp)
+    .then( () => setValue( perspectivesUsersId + PUBLICKEY, signingKeypair.publicKey ) )
+    .then( () => savePrivateKey( perspectivesUsersId, PRIVATEKEY, signingKeypair.privateKey, { name: "ECDSA", namedCurve: "P-384" }, ["sign"]) )
     .then( exportedPrivateKey => privateKey = exportedPrivateKey)
-    .then( () => window.crypto.subtle.exportKey( "jwk", keypair.publicKey ) )
+    .then( () => window.crypto.subtle.exportKey( "jwk", signingKeypair.publicKey ) )
     .then( buff => publicKey = buff)
-    .then( () => ({ privateKey, publicKey }) )
+    .then(() => setValue(perspectivesUsersId + TRANSPORT_PUBLICKEY, transportKeypair.publicKey))
+    .then(() => savePrivateKey(perspectivesUsersId, TRANSPORT_PRIVATEKEY, transportKeypair.privateKey, { name: 'RSA-OAEP', hash: 'SHA-256' }, ['decrypt']))
+    .then(exportedPrivateKey => transportPrivateKey = exportedPrivateKey)
+    .then(() => window.crypto.subtle.exportKey("jwk", transportKeypair.publicKey))
+    .then(buff => transportPublicKey = buff)
+    .then( () => ({ privateKey, publicKey, transportPrivateKey, transportPublicKey }) )
 }
 
-function SliderWithTooltip({ label, tooltip, callback }: { label: string, tooltip: string, callback: (e: any) => void }): ReactElement { 
+function SliderWithTooltip({ label, tooltip, callback }: { label: string, tooltip: string, callback: (checked: boolean) => void }): ReactElement {
   return (
     <Form.Group as={Row} controlId="formIdentityFile" className="mt-3">
     <Col sm={1}>
@@ -384,8 +425,7 @@ function SliderWithTooltip({ label, tooltip, callback }: { label: string, toolti
             placement="bottom-start"
             delay={{ show: 250, hide: 400 }}
             overlay={(props) => (
-              <Tooltip id="MyContexts-tooltip" {...props} show={
-                props.show}>{tooltip}
+              <Tooltip id="MyContexts-tooltip" {...props}>{tooltip}
               </Tooltip> )}
         >
         <Form.Label>{label}</Form.Label>
@@ -395,7 +435,7 @@ function SliderWithTooltip({ label, tooltip, callback }: { label: string, toolti
 );
 }
 
-function Slider({ label, callback }: { label: string, callback: (e: any) => void }): ReactElement {
+function Slider({ label, callback }: { label: string, callback: (checked: boolean) => void }): ReactElement {
   return (
     <Form.Group as={Row} className="mt-3">
     <Col sm={1}>

@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HOSTS_FILE="${HOSTS_FILE:-/etc/hosts}"
+
+awk '
+  BEGIN {
+    managed["perspectives.domains"] = 1
+    managed["www.perspectives.domains"] = 1
+    managed["joopringelberg.nl"] = 1
+    managed["www.joopringelberg.nl"] = 1
+    managed["mycontexts.com"] = 1
+    managed["www.mycontexts.com"] = 1
+  }
+
+  {
+    data = $0
+    sub(/#.*/, "", data)
+    field_count = split(data, fields, /[[:space:]]+/)
+    address = ""
+
+    for (field_number = 1; field_number <= field_count; field_number++) {
+      if (fields[field_number] == "") continue
+      if (address == "") {
+        address = fields[field_number]
+      } else if (fields[field_number] in managed) {
+        seen[fields[field_number]] = 1
+        if (address == "127.0.0.1" || address == "::1") {
+          local[fields[field_number]] = 1
+        } else {
+          non_local[fields[field_number]] = 1
+        }
+      }
+    }
+  }
+
+  END {
+    all_local = 1
+    any_mapping = 0
+    any_non_local = 0
+
+    for (hostname in managed) {
+      if (!(hostname in local)) all_local = 0
+      if (hostname in seen) any_mapping = 1
+      if (hostname in non_local) any_non_local = 1
+    }
+
+    if (all_local && !any_non_local) {
+      print "local"
+    } else if (!any_mapping) {
+      print "remote"
+    } else {
+      print "mixed"
+    }
+  }
+' "$HOSTS_FILE"

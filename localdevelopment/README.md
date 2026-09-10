@@ -195,12 +195,39 @@ It can be used explicitly with:
   https://perspectives.domains/_up
 ```
 
+### Node.js tests
+
+Node.js does not use the macOS Keychain trust store by default. Supply the
+mkcert root CA before starting a Node-based test that accesses the local HTTPS
+domains:
+
+```bash
+NODE_EXTRA_CA_CERTS="$(mkcert -CAROOT)/rootCA.pem" pnpm run test:rebootUniverse
+```
+
+The environment variable is read when Node starts, so setting it from inside a
+running test is too late. It augments Node's normal public CA set; it does not
+replace it.
+
 Browsers may continue to use an older service-worker cache after rebuilding
 MyContexts. For test runs that must use the latest executable, clear the site
 data or unregister the service worker for `mycontexts.com` in the browser's
 developer tools before reloading.
 
-## 5. Switch back to remote services
+## 5. Check the current mode
+
+The hosts file is the persistent source of truth. Check it from the repository
+root with:
+
+```bash
+./localdevelopment/servefromwhere
+```
+
+The command prints `local` when all six managed hostnames resolve to loopback,
+`remote` when none are overridden, and `mixed` when the hosts file contains a
+partial or conflicting configuration.
+
+## 6. Switch back to remote services
 
 Run:
 
@@ -208,7 +235,7 @@ Run:
 ./localdevelopment/servefromremote
 ```
 
-This removes the marked block and any older manual mappings for the four
+This removes the marked block and any older manual mappings for the six
 managed hostnames, then flushes the macOS DNS caches. It does not stop Apache or
 CouchDB; public DNS simply becomes authoritative again.
 

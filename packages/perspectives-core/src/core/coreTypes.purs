@@ -372,6 +372,10 @@ type RuntimeOptions =
   , privateKey :: Maybe CryptoKey'
   -- Default: the CryptoKey object that has been created on setting up the installation. This is extractable.
   , publicKey :: Maybe CryptoKey'
+  -- Default: the RSA-OAEP CryptoKey object that has been created on setting up the installation. This is not extractable.
+  , transportPrivateKey :: Maybe CryptoKey'
+  -- Default: the RSA-OAEP CryptoKey object that has been created on setting up the installation. This is extractable.
+  , transportPublicKey :: Maybe CryptoKey'
   -- Default: the package number taken from package.json
   , myContextsVersion :: String
   }

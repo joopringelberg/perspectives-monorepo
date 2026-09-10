@@ -121,6 +121,8 @@ defaultRuntimeOptions =
   , useSystemVersion: null
   , privateKey: Nothing
   , publicKey: Nothing
+  , transportPrivateKey: Nothing
+  , transportPublicKey: Nothing
   , myContextsVersion: "1.0.0"
   }
 

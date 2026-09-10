@@ -1,7 +1,7 @@
 -- Copyright Joop Ringelberg and Cor Baars 2019, 2020, 2021, 2022, 2023, 2024, 2026
 
 -- PDRDEPENDENCY
-domain model://perspectives.domains#System@6.3
+domain model://perspectives.domains#System@7.0
   use sys for model://perspectives.domains#System
   use cdb for model://perspectives.domains#Couchdb
   use ser for model://perspectives.domains#Serialise

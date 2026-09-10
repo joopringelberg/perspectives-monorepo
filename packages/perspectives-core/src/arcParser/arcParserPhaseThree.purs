@@ -53,7 +53,7 @@ import Perspectives.Data.EncodableMap (EncodableMap, empty, insert, lookup, keys
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
 import Perspectives.DomeinCache (modifyEnumeratedRoleInDomeinFile, removeDomeinFileFromCache, storeDomeinFileInCache)
 import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, UpstreamAutomaticEffect(..), UpstreamStateNotification(..), addUpstreamAutomaticEffect, addUpstreamNotification)
-import Perspectives.Error.Pretty (renderPerspectivesError)
+import Perspectives.Error.Pretty (humanizePerspectivesError, renderPerspectivesError)
 import Perspectives.HumanReadableType (translateType)
 import Perspectives.Identifiers (Namespace, concatenateSegments, isTypeUri, qualifyWith, startsWithSegments, typeUri2LocalName_, typeUri2ModelUri_, typeUri2typeNameSpace)
 import Perspectives.Instances.ObjectGetters (contextType_, roleType_)
@@ -637,14 +637,17 @@ handlePostponedStateQualifiedParts = do
   collectStates mpath r = collectRoles r >>= \roles -> do
     -- Don't include aspects.
     roles' <- nub <$> lift2 (roles ###= (forceTypeArray >=> f >=> ArrayT <<< pure <<< allLeavesInADT))
+    -- roleADTOfRoleType may return Stable role identifiers for roles from already compiled (imported) models.
+    -- Normalise to Readable so we can safely append a Readable local state path segment below.
+    (readableRoles' :: Array EnumeratedRoleType) <- lift2 $ traverse toReadable roles'
     case mpath of
       -- For a Calculated role, we should now take the range of its calculation.
       -- This is because a Calculated role has no instances that have state.
       -- It calculates Enumerated role instances - and those have state!
-      Nothing -> pure (StateIdentifier <<< unwrap <$> roles')
+      Nothing -> pure (StateIdentifier <<< unwrap <$> readableRoles')
       Just p ->
         if isTypeUri p then pure [ StateIdentifier p ]
-        else pure (StateIdentifier <<< flip append p <<< flip append "$" <<< unwrap <$> roles')
+        else pure (StateIdentifier <<< flip append p <<< flip append "$" <<< unwrap <$> readableRoles')
 
     where
     f :: RoleType ~~~> ADT EnumeratedRoleType
@@ -656,7 +659,7 @@ handlePostponedStateQualifiedParts = do
   statesExist :: ArcPosition -> ArcPosition -> Array StateIdentifier -> PhaseThree (Array StateIdentifier)
   statesExist start end states = do
     for_ states \stateId -> (lift2 $ tryGetPerspectType stateId) >>= case _ of
-      Nothing -> throwError $ (StateDoesNotExist stateId start end)
+      Nothing -> (lift2 $ humanizePerspectivesError $ (StateDoesNotExist stateId start end)) >>= throwError
       Just _ -> pure unit
     pure states
 
@@ -711,7 +714,10 @@ handlePostponedStateQualifiedParts = do
       rolesADT <- collectRoles rident
       -- Expand to enumerated leaves (as collectStates does), but enforce singleton.
       roles' <- nub <$> lift2 (rolesADT ###= (forceTypeArray >=> f >=> ArrayT <<< pure <<< allLeavesInADT))
-      case roles' of
+      -- roleADTOfRoleType may return Stable role identifiers for roles from already compiled (imported) models.
+      -- Normalise to Readable so we can safely append a Readable local state path segment below.
+      (readableRoles' :: Array EnumeratedRoleType) <- lift2 $ traverse toReadable roles'
+      case readableRoles' of
         [] -> throwError (Custom ("No enumerated " <> label <> " role resolves for this state specification; make it explicit."))
         [ one ] -> pure $ StateIdentifier $
           case mpath of
@@ -1500,7 +1506,7 @@ handlePostponedStateQualifiedParts = do
                   []
               )
             modifyDF \drf@{ states } -> drf { states = insert (unwrap stateId) state' states }
-          else throwError $ StateDoesNotExist stateId start end
+          else (lift2 $ humanizePerspectivesError $ StateDoesNotExist stateId start end) >>= throwError
       Just (State sr) -> do
         -- modify the state
         state' <- State <$> (modifyState sr)

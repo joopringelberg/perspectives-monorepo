@@ -47,6 +47,7 @@
     "test:transaction": "pnpm exec spago build && ROLLUP_INPUT=./output/Test.TransactionExecutionTests/index.js ROLLUP_OUTPUT=./dist/test.transactionexecution.node.js rollup -c rollup.node.config.js && clear && node dist/test.transactionexecution.node.js",
     "test:transaction:compile": "pnpm exec spago build && ROLLUP_INPUT=./output/Test.TransactionExecutionTestsCompile/index.js ROLLUP_OUTPUT=./dist/test.transactionexecution.compile.node.js rollup -c rollup.node.config.js && clear && node dist/test.transactionexecution.compile.node.js",
     "test:compileModelsFromFile": "pnpm exec spago build && ROLLUP_INPUT=./output/Test.ModelFileCompilation/index.js ROLLUP_OUTPUT=./dist/test.modelFileCompilation.node.js rollup -c rollup.node.config.js && node dist/test.modelFileCompilation.node.js",
+    "test:rebootUniverse": "[ \"$(../../localdevelopment/servefromwhere)\" = local ] || { echo 'test:rebootUniverse requires perspectives.domains to be served locally; run localdevelopment/servefromlocal first' >&2; exit 1; } && pnpm exec spago build && ROLLUP_INPUT=./output/Test.RebootUniverse/index.js ROLLUP_OUTPUT=./dist/test.rebootUniverse.node.js rollup -c rollup.node.config.js  && clear && NODE_EXTRA_CA_CERTS=\"$(mkcert -CAROOT)/rootCA.pem\" node dist/test.rebootUniverse.node.js",
     "test:node": "pnpm exec spago build && ROLLUP_INPUT=./output/Test.Main/index.js ROLLUP_OUTPUT=./dist/test.node.js rollup -c rollup.node.config.js && node dist/test.node.js",
     "modulemap": "node build-module-map.mjs > module-map.json"
   },

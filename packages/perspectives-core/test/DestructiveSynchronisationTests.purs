@@ -78,8 +78,8 @@ synchronisationSuite results =
 synchronisationTestModelConfiguration :: SynchronisationModelConfiguration
 synchronisationTestModelConfiguration =
   { suiteName: "Destructive synchronisation tests"
-  , snapshotDirAlice: "test/pdr-snapshot/layer3-clean/alice"
-  , snapshotDirBob: "test/pdr-snapshot/layer3-clean/bob"
+  , snapshotDirAlice: "test/pdr-snapshot/newdeltas/alice"
+  , snapshotDirBob: "test/pdr-snapshot/newdeltas/bob"
   , testModel
   , indexedTestContext
   , testAppManager

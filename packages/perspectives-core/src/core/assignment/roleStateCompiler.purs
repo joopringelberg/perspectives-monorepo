@@ -33,7 +33,6 @@ import Prelude
 import Control.Monad.AvarMonadAsk (gets, modify)
 import Control.Monad.Error.Class (catchError)
 import Control.Monad.Trans.Class (lift)
-import Effect.Aff.Class (liftAff)
 import Data.Array (cons, elemIndex, filterA, foldMap, index, null)
 import Data.Array.NonEmpty (fromArray)
 import Data.FoldableWithIndex (forWithIndex_)
@@ -45,6 +44,7 @@ import Data.Traversable (for_)
 import Data.TraversableWithIndex (traverseWithIndex)
 import Data.Tuple (Tuple(..))
 import Effect.Aff (error, killFiber)
+import Effect.Aff.Class (liftAff)
 import Foreign.Object (singleton)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.ApiTypes (PropertySerialization(..), RolSerialization(..))
@@ -56,7 +56,7 @@ import Perspectives.CompileRoleAssignment (compileAssignmentFromRole, withAuthor
 import Perspectives.CompileTimeFacets (addTimeFacets)
 import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), LogLevel(..), LogTopic(..), MP, MonadPerspectives, MonadPerspectivesTransaction, Updater, WithAssumptions, liftToInstanceLevel, runMonadPerspectivesQuery, (##=), (##>>), (###>>))
 import Perspectives.Error.Pretty (humanizePerspectivesWarning)
-import Perspectives.Identifiers (buitenRol)
+import Perspectives.Identifiers (buitenRol, typeUri2typeNameSpace_)
 import Perspectives.Instances.Builders (createAndAddRoleInstance)
 import Perspectives.Instances.Combinators (filter, not') as COMB
 import Perspectives.Instances.Me (isMe)
@@ -74,7 +74,7 @@ import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunctio
 import Perspectives.Representation.Range (Range(..))
 import Perspectives.Representation.State (Notification(..), State(..), StateDependentPerspective(..), StateFulObject(..))
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
-import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedRoleType(..), RoleType, StateIdentifier)
+import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedRoleType(..), RoleType, StateIdentifier(..))
 import Perspectives.ScheduledAssignment (StateEvaluation(..))
 import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.Sync.Transaction (Transaction(..))
@@ -139,30 +139,37 @@ evaluateRootRoleState roleId = do
 -- | Put an error boundary around this function.
 evaluateRoleState :: RoleInstance -> StateIdentifier -> MonadPerspectivesTransaction Unit
 evaluateRoleState roleId stateId = do
-  padding <- lift transactionLevel
-  lift $ toReadable stateId >>= \readableStateId -> traceState (padding <> "Evaluating role state " <> unwrap readableStateId <> ": " <> unwrap roleId)
-  roleIsInState' <- conditionSatisfied roleId stateId
-  case roleIsInState' of
-    Determined roleIsInState ->
-      if roleIsInState then do
-        roleWasInState <- lift $ isActive stateId roleId
-        if roleWasInState then do
-          lift $ logWhen Trace STATE
-            ((<>) padding <$> (show <$> (humanizePerspectivesWarning $ AlreadyInRoleState roleId stateId)))
-          subStates <- lift $ subStates_ stateId
-          for_ subStates (evaluateRoleState roleId)
-        else enteringRoleState roleId stateId
-      else do
-        roleWasInState <- lift $ isActive stateId roleId
-        if roleWasInState then exitingRoleState roleId stateId
+  -- an extra guard: if the role is not in the parent state, then it cannot be in this state either.
+  -- Make an exception for the root state, which has no parent state.
+  rType <- lift $ roleType_ roleId 
+  let (parentStateId :: StateIdentifier) = (over StateIdentifier typeUri2typeNameSpace_) stateId
+  isInParentState <- lift $ isActive parentStateId roleId
+  if unwrap stateId == unwrap rType || isInParentState then do
+    padding <- lift transactionLevel
+    lift $ toReadable stateId >>= \readableStateId -> traceState (padding <> "Evaluating role state " <> unwrap readableStateId <> ": " <> unwrap roleId)
+    roleIsInState' <- conditionSatisfied roleId stateId
+    case roleIsInState' of
+      Determined roleIsInState ->
+        if roleIsInState then do
+          roleWasInState <- lift $ isActive stateId roleId
+          if roleWasInState then do
+            lift $ logWhen Trace STATE
+              ((<>) padding <$> (show <$> (humanizePerspectivesWarning $ AlreadyInRoleState roleId stateId)))
+            subStates <- lift $ subStates_ stateId
+            for_ subStates (evaluateRoleState roleId)
+          else enteringRoleState roleId stateId
         else do
-          lift $ logWhen Trace STATE
-            ((<>) padding <$> (show <$> (humanizePerspectivesWarning $ RoleStateNotValid roleId stateId)))
-    Undetermined -> modify
-      ( \t -> over Transaction
-          (\tr -> tr { postponedStateEvaluations = cons (RoleStateEvaluation stateId roleId) tr.postponedStateEvaluations })
-          t
-      )
+          roleWasInState <- lift $ isActive stateId roleId
+          if roleWasInState then exitingRoleState roleId stateId
+          else do
+            lift $ logWhen Trace STATE
+              ((<>) padding <$> (show <$> (humanizePerspectivesWarning $ RoleStateNotValid roleId stateId)))
+      Undetermined -> modify
+        ( \t -> over Transaction
+            (\tr -> tr { postponedStateEvaluations = cons (RoleStateEvaluation stateId roleId) tr.postponedStateEvaluations })
+            t
+        )
+  else pure unit
 
 -- | This function is only called (and should only be called) on states whose condition is valid.
 -- | On entering a state, we register that state with the role instance and trigger client query updates.

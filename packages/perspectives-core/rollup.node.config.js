@@ -166,6 +166,30 @@ export default async function () {
           return null;
         },
       },
+      // Keep connector invalidation Node-specific. Browser authentication keeps
+      // using the existing cookie-backed PouchDB connectors.
+      {
+        name: 'persistence-authentication-node',
+        resolveId(source, importer) {
+          if (
+            source === './foreign.js' &&
+            importer &&
+            importer.includes('Perspectives.Persistence.Authentication')
+          ) {
+            return path.join(__dirname, 'src/core/persistence/authentication.node.js');
+          }
+          return null;
+        },
+        load(id) {
+          if (id.includes('Perspectives.Persistence.Authentication') && id.endsWith('foreign.js')) {
+            return readFileSync(
+              path.join(__dirname, 'src/core/persistence/authentication.node.js'),
+              'utf8'
+            );
+          }
+          return null;
+        },
+      },
       resolve({ preferBuiltins: true }),
       commonjs(),
       json(),

@@ -31,6 +31,7 @@ module Perspectives.Persistence.API
 
 import Prelude
 
+import Affjax.RequestHeader (RequestHeader(..))
 import Affjax.StatusCode (StatusCode(..))
 import Affjax.Web as AJ
 import Control.Alt ((<|>))
@@ -43,7 +44,7 @@ import Data.Either (Either(..))
 import Data.HTTP.Method (Method(..))
 import Data.Maybe (Maybe(..), fromJust)
 import Data.MediaType (MediaType)
-import Data.Nullable (Nullable, toNullable)
+import Data.Nullable (Nullable, toMaybe, toNullable)
 import Data.String.Regex (Regex, match, test)
 import Data.String.Regex.Flags (noFlags)
 import Data.String.Regex.Unsafe (unsafeRegex)
@@ -54,18 +55,19 @@ import Effect.Aff.Class (liftAff)
 import Effect.Aff.Compat (EffectFnAff, fromEffectFnAff)
 import Effect.Class (liftEffect)
 import Effect.Class.Console (log)
-import Effect.Uncurried (EffectFn1, EffectFn2, EffectFn3, EffectFn6, runEffectFn1, runEffectFn2, runEffectFn3)
+import Effect.Uncurried (EffectFn1, EffectFn2, EffectFn3, EffectFn4, EffectFn6, runEffectFn1, runEffectFn2, runEffectFn3, runEffectFn4)
 import Foreign (F, Foreign, unsafeToForeign)
 import Foreign.Object (Object, delete, empty, insert, lookup)
 import Partial.Unsafe (unsafePartial)
 import Persistence.Attachment (class Attachment)
 import Perspectives.Couchdb (DeleteCouchdbDocument(..), PutCouchdbDocument(..), ViewDocResult(..), ViewDocResultRow(..), ViewResult(..), ViewResultRow(..), DocumentConflicts, onAccepted_)
 import Perspectives.Couchdb.Revision (class Revision, Revision_)
-import Perspectives.Persistence.Authentication (AuthoritySource(..), ensureAuthentication, defaultPerspectRequest)
+import Perspectives.Identifiers (url2Authority)
+import Perspectives.Persistence.Authentication (AuthoritySource(..), defaultPerspectRequest, ensureAuthentication, getCredentials)
 import Perspectives.Persistence.Errors (handleNotFound, handlePouchError, parsePouchError)
 import Perspectives.Persistence.RunEffectAff (runEffectFnAff1, runEffectFnAff2, runEffectFnAff3, runEffectFnAff6)
 import Perspectives.Persistence.State (getCouchdbBaseURL)
-import Perspectives.Persistence.Types (AttachmentName, CouchdbUrl, DatabaseName, DocumentName, DocumentWithRevision, MonadPouchdb, Password, PouchError, PouchdbDatabase, PouchdbExtraState, PouchdbState, PouchdbUser, SystemIdentifier, Url, UserName, ViewName, decodePouchdbUser', encodePouchdbUser', readPouchError)
+import Perspectives.Persistence.Types (AttachmentName, CouchdbUrl, Credential(..), DatabaseName, DocumentName, DocumentWithRevision, MonadPouchdb, Password, PouchError, PouchdbDatabase, PouchdbExtraState, PouchdbState, PouchdbUser, SystemIdentifier, Url, UserName, ViewName, decodePouchdbUser', encodePouchdbUser', readPouchError)
 import Simple.JSON (class ReadForeign, class WriteForeign, read, read', write)
 
 -----------------------------------------------------------
@@ -83,26 +85,47 @@ createDatabase dbname = withDatabase dbname (pure <<< const unit)
 createDatabaseConnector :: forall f. DatabaseName -> MonadPouchdb f Unit
 createDatabaseConnector dbname =
   if startsWithDatabaseEndpoint dbname then do
-    pdb <- liftEffect $ runEffectFn1 createDatabaseImpl dbname
+    credentials <- connectorCredentials dbname
+    pdb <- liftEffect $ runEffectFn3 createDatabaseImpl dbname credentials.username credentials.password
     modify \(s@{ databases }) -> s { databases = insert dbname pdb databases }
   else do
     mprefix <- getCouchdbBaseURL
     case mprefix of
       Nothing -> do
-        pdb <- liftEffect $ runEffectFn1 createDatabaseImpl dbname
+        pdb <- liftEffect $ runEffectFn3 createDatabaseImpl dbname nullConnectorCredentials.username nullConnectorCredentials.password
         modify \(s@{ databases }) -> s { databases = insert dbname pdb databases }
       Just prefix -> do
-        pdb <- liftEffect $ runEffectFn2 createRemoteDatabaseImpl dbname prefix
+        credentials <- connectorCredentials prefix
+        pdb <- liftEffect $ runEffectFn4 createRemoteDatabaseImpl dbname prefix credentials.username credentials.password
         modify \(s@{ databases }) -> s { databases = insert dbname pdb databases }
+
+  where
+  connectorCredentials :: String -> MonadPouchdb f { username :: Nullable UserName, password :: Nullable Password }
+  connectorCredentials url = case url2Authority url of
+    Nothing -> pure nullConnectorCredentials
+    Just authority -> getCredentials authority >>= case _ of
+      Nothing -> pure nullConnectorCredentials
+      Just (Credential username password) -> pure { username: toNullable (Just username), password: toNullable (Just password) }
+
+  nullConnectorCredentials :: { username :: Nullable UserName, password :: Nullable Password }
+  nullConnectorCredentials = { username: toNullable Nothing, password: toNullable Nothing }
 
 -- | PUT the database URL once to ensure it exists. Accept 201 (created) and 412 (already exists).
 createRemoteDatabaseIfMissing :: forall f. DatabaseName -> MonadPouchdb f Unit
 createRemoteDatabaseIfMissing dbUrl = do
   (rq :: AJ.Request String) <- defaultPerspectRequest
+  authenticationHeaders <- case url2Authority dbUrl of
+    Nothing -> pure []
+    Just authority -> getCredentials authority >>= case _ of
+      Nothing -> pure []
+      Just (Credential username password) -> pure $ case toMaybe (basicAuthenticationHeader username password) of
+        Nothing -> []
+        Just header -> [ RequestHeader "Authorization" header ]
   res <- liftAff $ AJ.request $ rq
     { method = Left PUT
     , url = dbUrl
     , content = Nothing
+    , headers = authenticationHeaders
     }
   onAccepted_
     (\response _ -> throwError (error $ "Failure in createRemoteDatabaseIfMissing. HTTP statuscode " <> show response.status))
@@ -119,15 +142,21 @@ startsWithDatabaseEndpoint = test endpointRegex
 
 -- | Creates a remote database or a local database, depending on whether the first argument is an Url or not.
 foreign import createDatabaseImpl
-  :: EffectFn1
+  :: EffectFn3
        String
+       (Nullable UserName)
+       (Nullable Password)
        PouchdbDatabase
 
 foreign import createRemoteDatabaseImpl
-  :: EffectFn2
+  :: EffectFn4
        DatabaseName
        CouchdbUrl
+       (Nullable UserName)
+       (Nullable Password)
        PouchdbDatabase
+
+foreign import basicAuthenticationHeader :: UserName -> Password -> Nullable String
 
 -----------------------------------------------------------
 -- DELETE DATABASE

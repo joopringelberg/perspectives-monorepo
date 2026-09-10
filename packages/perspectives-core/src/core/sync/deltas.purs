@@ -24,20 +24,22 @@ module Perspectives.Deltas where
 
 import Control.Monad.AvarMonadAsk (modify, gets) as AA
 import Control.Monad.State.Trans (StateT, execStateT, get, lift, modify, put)
-import Data.Array (catMaybes, concat, elemIndex, filterA, foldl, head, nub, null, snoc, sortBy, union)
+import Data.Array (catMaybes, concat, elemIndex, filter, filterA, foldl, head, nub, null, snoc, sortBy, union)
 import Data.DateTime.Instant (toDateTime)
-import Data.Map (Map, empty, insert, lookup, filter) as Map
+import Data.Map (Map, empty, filter, insert, lookup, toUnfoldable, values) as Map
 import Data.Maybe (Maybe(..), fromJust, isJust, maybe)
 import Data.Newtype (over, unwrap)
 import Data.Ordering (Ordering)
 import Data.Traversable (for, for_)
 import Data.TraversableWithIndex (forWithIndex)
 import Data.Tuple (Tuple(..))
+import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
 import Effect.Now (now)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.AMQP.Stomp (sendToTopic)
 import Perspectives.ApiTypes (CorrelationIdentifier)
+import Perspectives.Authenticate (encryptForRecipients)
 import Perspectives.ContextAndRole (rol_property)
 import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction, (##>))
 import Perspectives.Data.EncodableMap as ENCMAP
@@ -49,7 +51,7 @@ import Perspectives.Instances.Me (notIsMe)
 import Perspectives.Instances.ObjectGetters (deltaAuthor2ResourceIdentifier, getProperty, perspectivesUsersRole_, roleType_)
 import Perspectives.Logging (debugBroker, infoDelta)
 import Perspectives.ModelDependencies (connectedToAMQPBroker, userChannel) as DEP
-import Perspectives.ModelDependencies (perspectivesUsersCancelled, perspectivesUsersPublicKey)
+import Perspectives.ModelDependencies (perspectivesUsersCancelled, perspectivesUsersPublicKey, perspectivesUsersTransportPublicKey)
 import Perspectives.Names (getMySystem)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (Url, addDocument)
@@ -59,7 +61,7 @@ import Perspectives.Persistent (getPerspectRol, postDatabaseName)
 import Perspectives.PerspectivesState (nextTransactionNumber, stompClient)
 import Perspectives.Query.UnsafeCompiler (getDynamicPropertyGetter)
 import Perspectives.Representation.ADT (ADT(..))
-import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser, RoleInstance(..), Value(..), perspectivesUser2RoleInstance)
+import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser(..), RoleInstance(..), Value(..), perspectivesUser2RoleInstance)
 import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..), RoleType(..))
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.Sync.DateTime (SerializableDateTime(..))
@@ -67,7 +69,7 @@ import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
 import Perspectives.Sync.OutgoingTransaction (OutgoingTransaction(..))
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
 import Perspectives.Sync.Transaction (PublicKeyInfo, Transaction(..), TransactionDestination(..))
-import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..), addToTransactionForPeer, transactieID)
+import Perspectives.Sync.TransactionForPeer (EncryptedTransactionForPeer(..), TransactionForPeer(..), addToTransactionForPeer, transactieID)
 import Perspectives.Types.ObjectGetters (isPublicProxy)
 import Perspectives.UnschemedIdentifiers (UnschemedResourceIdentifier, unschemePerspectivesUser)
 import Prelude (Unit, bind, compare, discard, eq, flip, map, not, pure, show, unit, void, when, ($), (*>), (<$>), (<<<), (<>), (==), (>=>), (>>=), (>>>), (||))
@@ -88,20 +90,69 @@ distributeTransaction (Transaction tr@{ changedDomeinFiles }) = do
 distributeTransactie' :: Transaction -> MonadPerspectives TransactionPerUser
 distributeTransactie' t = do
   (customizedTransacties :: TransactionPerUser) <- transactieForEachUser t
+  sendPeerTransactions customizedTransacties
   map (unsafePartial fromJust) <<< Map.filter isJust <$> forWithIndex customizedTransacties sendTransactie
 
--- | If we have the visitor user, handle it by augmenting resources in the public store with the deltas.
-sendTransactie :: TransactionDestination -> TransactionForPeer -> MonadPerspectives (Maybe TransactionForPeer)
--- Remove keys that are not required for the peer, given the deltas.
--- Note that this is a suboptimal approach, as we would only have had to do this once for each user type.
-sendTransactie (Peer perspectivesUser) t = sendTransactieToUserUsingAMQP perspectivesUser (removeUnnecessaryKeys t) *> pure Nothing
+sendPeerTransactions :: TransactionPerUser -> MonadPerspectives Unit
+sendPeerTransactions customizedTransacties =
+  for_ (Map.values peerGroups) \(Tuple transaction recipients) -> do
+    recipientKeys <- catMaybes <$> for recipients recipientTransportKey
+    if null recipientKeys then pure unit
+    else do
+      encryptedPayload <- liftAff $ encryptForRecipients (writeJSON transaction) (map (\(Tuple _ key) -> { recipient: unwrap key.recipient, transportKey: key.transportKey }) recipientKeys)
+      let
+        encryptedTransaction = EncryptedTransactionForPeer
+          { author: (unwrap transaction).author
+          , perspectivesSystem: (unwrap transaction).perspectivesSystem
+          , timeStamp: (unwrap transaction).timeStamp
+          , encryptedDeltas:
+              { ciphertext: encryptedPayload.ciphertext
+              , iv: encryptedPayload.iv
+              , wrappedKeys: map (\(Tuple _ key) -> { recipient: key.recipient, wrappedKey: fromRecipient key.recipient encryptedPayload.wrappedKeys }) recipientKeys
+              }
+          , publicKeys: (unwrap transaction).publicKeys
+          }
+      for_ recipientKeys \(Tuple recipient _) -> sendTransactieToUserUsingAMQP recipient encryptedTransaction
   where
+  peerGroups :: Map.Map String (Tuple TransactionForPeer (Array UnschemedResourceIdentifier))
+  peerGroups =
+    foldl collectPeerGroup Map.empty (Map.toUnfoldable customizedTransacties :: Array (Tuple TransactionDestination TransactionForPeer))
+
+  collectPeerGroup :: Map.Map String (Tuple TransactionForPeer (Array UnschemedResourceIdentifier)) -> Tuple TransactionDestination TransactionForPeer -> Map.Map String (Tuple TransactionForPeer (Array UnschemedResourceIdentifier))
+  collectPeerGroup groups (Tuple destination transaction) = case destination of
+    Peer recipient ->
+      let
+        transaction' = removeUnnecessaryKeys transaction
+        serialised = writeJSON transaction'
+      in
+        case Map.lookup serialised groups of
+          Nothing -> Map.insert serialised (Tuple transaction' [ recipient ]) groups
+          Just (Tuple groupedTransaction recipients) -> Map.insert serialised (Tuple groupedTransaction (snoc recipients recipient)) groups
+    PublicDestination _ -> groups
+
   removeUnnecessaryKeys :: TransactionForPeer -> TransactionForPeer
   removeUnnecessaryKeys (TransactionForPeer rec@{ deltas, publicKeys }) =
     let
-      (occurringUsers :: Array PerspectivesUser) = map (_.author <<< unwrap) deltas
+      occurringUsers :: Array PerspectivesUser
+      occurringUsers = map (_.author <<< unwrap) deltas
     in
       TransactionForPeer rec { publicKeys = ENCMAP.filterKeys (\k -> isJust $ elemIndex k occurringUsers) publicKeys }
+
+  recipientTransportKey :: UnschemedResourceIdentifier -> MonadPerspectives (Maybe (Tuple UnschemedResourceIdentifier RecipientKey))
+  recipientTransportKey recipient = do
+    let recipientRole = perspectivesUser2RoleInstance $ deltaAuthor2ResourceIdentifier $ PerspectivesUser $ unwrap recipient
+    mtransportKey <- recipientRole ##> getProperty (EnumeratedPropertyType perspectivesUsersTransportPublicKey)
+    case mtransportKey of
+      Just (Value transportKey) -> pure $ Just $ Tuple recipient { recipient, transportKey }
+      _ -> pure Nothing
+
+  fromRecipient :: UnschemedResourceIdentifier -> Array { recipient :: String, wrappedKey :: String } -> String
+  fromRecipient recipient wrappedKeys =
+    unsafePartial $ fromJust $ _.wrappedKey <$> head (filter (\wk -> wk.recipient == unwrap recipient) wrappedKeys)
+
+-- | If we have the visitor user, handle it by augmenting resources in the public store with the deltas.
+sendTransactie :: TransactionDestination -> TransactionForPeer -> MonadPerspectives (Maybe TransactionForPeer)
+sendTransactie (Peer _) _ = pure Nothing
 sendTransactie (PublicDestination r) t = pure $ Just t
 
 -- | Send a transaction using the Couchdb Channel.
@@ -119,8 +170,8 @@ sendTransactieToUserUsingCouchdb cdbUrl userId t = do
 -- | `userId` WILL be either 
 -- |   * a model://perspectives.domains#System$PerspectivesSystem$User instance, or
 -- |   * an instance of the Visitor role.
-sendTransactieToUserUsingAMQP :: UnschemedResourceIdentifier -> TransactionForPeer -> MonadPerspectives Unit
-sendTransactieToUserUsingAMQP perspectivesUser t@(TransactionForPeer { timeStamp }) = do
+sendTransactieToUserUsingAMQP :: UnschemedResourceIdentifier -> EncryptedTransactionForPeer -> MonadPerspectives Unit
+sendTransactieToUserUsingAMQP perspectivesUser t@(EncryptedTransactionForPeer { timeStamp }) = do
   connected <- connectedToAMQPBroker
   n <- liftEffect $ now
   dt <- pure $ SerializableDateTime (toDateTime n)
@@ -147,8 +198,8 @@ sendTransactieToUserUsingAMQP perspectivesUser t@(TransactionForPeer { timeStamp
     mConnected <- (RoleInstance $ buitenRol mySystem) ##> getProperty (EnumeratedPropertyType DEP.connectedToAMQPBroker)
     pure $ mConnected == (Just $ Value "true")
 
-saveTransactionInOutgoingPost :: UnschemedResourceIdentifier -> String -> TransactionForPeer -> MonadPerspectives Unit
-saveTransactionInOutgoingPost userId messageId t@(TransactionForPeer { timeStamp }) = do
+saveTransactionInOutgoingPost :: UnschemedResourceIdentifier -> String -> EncryptedTransactionForPeer -> MonadPerspectives Unit
+saveTransactionInOutgoingPost userId messageId t@(EncryptedTransactionForPeer { timeStamp }) = do
   debugBroker $ "Saving transaction for user " <> unwrap userId <> " in OutgoingTransactions post database with transaction timestamp " <> show timeStamp
   postDB <- postDatabaseName
   void $ addDocument postDB (OutgoingTransaction { _id: messageId, receiver: userId, transaction: t }) messageId
@@ -156,6 +207,11 @@ saveTransactionInOutgoingPost userId messageId t@(TransactionForPeer { timeStamp
 -- | An object of TransactionForPeer where the keys are the string value of RoleInstances, invariably identifying user roles.
 -- | Must be either an instance of sys:PerspectivesSystem$User, or of a RoleInstance of a type with RoleKind Visitor.
 type TransactionPerUser = Map.Map TransactionDestination TransactionForPeer
+
+type RecipientKey =
+  { recipient :: UnschemedResourceIdentifier
+  , transportKey :: String
+  }
 
 -- | The Transaction holds Deltas and each Delta names user instances who should receive that Delta.
 -- | This function builds a custom version of the Transaction for each such user.
@@ -303,10 +359,12 @@ addPublicKeysToTransaction (Transaction tr@{ deltas }) = do
     creationDeltas <- getDeltasForResource (unwrap roleInstanceId)
     -- Get property deltas for the public key property.
     pkPropertyDeltas <- getDeltasForResource (unwrap roleInstanceId <> "#" <> unwrap (EnumeratedPropertyType perspectivesUsersPublicKey))
-    let allDeltas = map (\(DeltaStoreRecord { signedDelta }) -> signedDelta) (creationDeltas <> pkPropertyDeltas)
-    case head $ rol_property authorRole (EnumeratedPropertyType perspectivesUsersPublicKey) of
-      Nothing -> logPerspectivesError (NoPublicKeyForAuthor (unwrap roleInstanceId)) *> pure Nothing
-      Just (Value key) -> pure $ Just { key, deltas: allDeltas }
+    transportPkPropertyDeltas <- getDeltasForResource (unwrap roleInstanceId <> "#" <> unwrap (EnumeratedPropertyType perspectivesUsersTransportPublicKey))
+    let allDeltas = map (\(DeltaStoreRecord { signedDelta }) -> signedDelta) (creationDeltas <> pkPropertyDeltas <> transportPkPropertyDeltas)
+    case head $ rol_property authorRole (EnumeratedPropertyType perspectivesUsersPublicKey), head $ rol_property authorRole (EnumeratedPropertyType perspectivesUsersTransportPublicKey) of
+      Just (Value key), Just (Value transportKey) -> pure $ Just { key, transportKey, deltas: allDeltas }
+      Nothing, _ -> logPerspectivesError (NoPublicKeyForAuthor (unwrap roleInstanceId)) *> pure Nothing
+      _, Nothing -> logPerspectivesError (NoPublicKeyForAuthor (unwrap roleInstanceId)) *> pure Nothing
 
 -- | Priority ordering for delta types. Lower number = executed first.
 -- | Implements the partial order required for correct peer execution:

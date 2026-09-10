@@ -54,7 +54,7 @@ import Perspectives.AMQP.IncomingPost (retrieveBrokerService, incomingPost)
 import Perspectives.Api (resumeApi, setupApi) as API
 import Perspectives.ApiTypes (PropertySerialization(..), RolSerialization(..))
 import Perspectives.Assignment.Update (setProperty)
-import Perspectives.Authenticate (getPrivateKey)
+import Perspectives.Authenticate (getPrivateKey, getTransportPrivateKey)
 import Perspectives.CoreTypes (IndexedResource(..), IntegrityFix(..), JustInTimeModelLoad(..), LogLevel(..), LogTopic(..), MonadPerspectivesTransaction, PerspectivesState, RepeatingTransaction(..), RuntimeOptions, MonadPerspectives, (##=), (##>>))
 import Perspectives.Couchdb (SecurityDocument(..))
 import Perspectives.DataUpgrade (runDataUpgrades)
@@ -212,8 +212,9 @@ runPDR_ usr rawPouchdbUser options callback = do
         ( do
             addAllExternalFunctions
             addIndexedNames
-            key <- getPrivateKey
-            modify \(s@{ runtimeOptions }) -> s { runtimeOptions = runtimeOptions { privateKey = unsafeCoerce key } }
+            signingKey <- getPrivateKey
+            transportKey <- getTransportPrivateKey
+            modify \(s@{ runtimeOptions }) -> s { runtimeOptions = runtimeOptions { privateKey = unsafeCoerce signingKey, transportPrivateKey = unsafeCoerce transportKey } }
             getinstalledModelCuids fromLocalModels >>= setModelUris
             runDataUpgrades
             retrieveAllCredentials
@@ -660,8 +661,9 @@ createAccount_ pouchdbUser runtimeOptions maybeIdentityDocument = do
   runPerspectivesWithState
     ( do
         addAllExternalFunctions
-        key <- getPrivateKey
-        modify \(s@{ runtimeOptions: ro }) -> s { runtimeOptions = ro { privateKey = unsafeCoerce key } }
+        signingKey <- getPrivateKey
+        transportKey <- getTransportPrivateKey
+        modify \(s@{ runtimeOptions: ro }) -> s { runtimeOptions = ro { privateKey = unsafeCoerce signingKey, transportPrivateKey = unsafeCoerce transportKey } }
         getSystemIdentifier >>= createUserDatabases
         setupUser (UninterpretedTransactionForPeer <$> maybeIdentityDocument)
         saveMarkedResources
@@ -716,8 +718,9 @@ reCreateInstances rawPouchdbUser options callback = void $ runAff handler
               -- clear the caches, otherwise nothing happens.
               resetCaches
               addAllExternalFunctions
-              key <- getPrivateKey
-              modify \(s@{ runtimeOptions }) -> s { runtimeOptions = runtimeOptions { privateKey = unsafeCoerce key } }
+              signingKey <- getPrivateKey
+              transportKey <- getTransportPrivateKey
+              modify \(s@{ runtimeOptions }) -> s { runtimeOptions = runtimeOptions { privateKey = unsafeCoerce signingKey, transportPrivateKey = unsafeCoerce transportKey } }
               getSystemIdentifier >>= createUserDatabases
               reSetupUser
               saveMarkedResources
@@ -779,8 +782,9 @@ resetAccount usr rawPouchdbUser options callback = void $ runAff handler
               -- clear the caches, otherwise nothing happens.
               resetCaches
               addAllExternalFunctions
-              key <- getPrivateKey
-              modify \(s@{ runtimeOptions }) -> s { runtimeOptions = runtimeOptions { privateKey = unsafeCoerce key } }
+              signingKey <- getPrivateKey
+              transportKey <- getTransportPrivateKey
+              modify \(s@{ runtimeOptions }) -> s { runtimeOptions = runtimeOptions { privateKey = unsafeCoerce signingKey, transportPrivateKey = unsafeCoerce transportKey } }
               getSystemIdentifier >>= createUserDatabases
               setupUser Nothing
               saveMarkedResources
@@ -1060,4 +1064,3 @@ recoverFromRecoveryPoint rawPouchdbUser callback = void $ runAff handler
   handler (Right e) = do
     logPerspectivesError $ Custom $ "Recovered from recovery point!"
     callback e
-

@@ -11,6 +11,7 @@
 > **Related documentation**
 > - `packages/perspectives-core/docs/transaction-execution.md` — transaction lifecycle and phase 1/2 processing (no duplication here)
 > - `packages/perspectives-core/design/deterministic-delta-ordering.md` — original design document
+> - `packages/perspectives-core/design/delta-representation-redesign.md` — proposed successor design for dropping legacy support, separating transport encryption from stored deltas, and preparing undo-oriented metadata
 
 ---
 

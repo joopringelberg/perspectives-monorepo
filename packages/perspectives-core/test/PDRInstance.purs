@@ -73,7 +73,7 @@ import Perspectives.AMQP.Stomp.Stub (InProcessBus, createInProcessBus, makeStomp
 import Perspectives.ApiTypes (PropertySerialization(..), RolSerialization(..))
 import Perspectives.Assignment.RunAction (runActionForObject, runContextAction)
 import Perspectives.Assignment.Update (setProperty)
-import Perspectives.Authenticate (getPrivateKey)
+import Perspectives.Authenticate (getPrivateKey, getTransportPrivateKey)
 import Perspectives.CoreTypes (BrokerService, IndexedResource, IntegrityFix, JustInTimeModelLoad(..), LogLevel(..), LogTopic(..), MonadPerspectivesTransaction, RepeatingTransaction, RuntimeOptions, TypeFix, (##>))
 import Perspectives.CoreTypes (LogLevel(..)) as CT
 import Perspectives.Extern.Files (getPFileTextValue)
@@ -213,6 +213,9 @@ startPDRInstance pouchdbUser runtimeOptions mLogColor bus = do
         Just color -> infoTest (color <> "Starting PDR instance for user: " <> pouchdbUser.systemIdentifier <> ansiReset)
         Nothing -> infoTest ("Starting PDR instance for user: " <> pouchdbUser.systemIdentifier)
       setTopicLogLevel RESOURCE CT.Error
+      setTopicLogLevel INSTALL CT.Trace
+      setTopicLogLevel AUTH CT.Trace
+      setTopicLogLevel STARTUP CT.Trace
     state
 
   -- If we have a bus, replace the default real StompClient factory with the in-process stub.
@@ -254,8 +257,9 @@ startPDRInstance pouchdbUser runtimeOptions mLogColor bus = do
   runPerspectivesWithState
     ( do
         addAllExternalFunctions
-        key <- getPrivateKey
-        modify \(s@{ runtimeOptions: ro }) -> s { runtimeOptions = ro { privateKey = unsafeCoerce key } }
+        signingKey <- getPrivateKey
+        transportKey <- getTransportPrivateKey
+        modify \(s@{ runtimeOptions: ro }) -> s { runtimeOptions = ro { privateKey = unsafeCoerce signingKey, transportPrivateKey = unsafeCoerce transportKey } }
         getSystemIdentifier >>= createUserDatabases
         setupUser Nothing
         -- Set the firstname of the user's main role instance, so that invitations get serialised with a complete Inviter.
@@ -394,8 +398,9 @@ startPDRInstanceFromSnapshot pouchdbUser runtimeOptions mLogColor bus snapshotDi
     ( do
         addAllExternalFunctions
         addIndexedNames
-        key <- getPrivateKey
-        modify \(s@{ runtimeOptions: ro }) -> s { runtimeOptions = ro { privateKey = unsafeCoerce key } }
+        signingKey <- getPrivateKey
+        transportKey <- getTransportPrivateKey
+        modify \(s@{ runtimeOptions: ro }) -> s { runtimeOptions = ro { privateKey = unsafeCoerce signingKey, transportPrivateKey = unsafeCoerce transportKey } }
         getSystemIdentifier >>= createUserDatabases
         getinstalledModelCuids fromLocalModels >>= setModelUris
     )
