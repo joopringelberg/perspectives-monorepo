@@ -40,6 +40,7 @@ import Data.Map (empty)
 import Data.Maybe (Maybe(..), fromJust, isJust)
 import Data.Newtype (unwrap)
 import Data.Traversable (for, traverse)
+import Data.Tuple (Tuple(..))
 import Foreign.Object (keys, lookup)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (MonadPerspectives, (###=))
@@ -390,33 +391,42 @@ compileSimpleStep currentDomain s@(ArcIdentifier pos ident) = do
                   pure $ SQD currentDomain (QF.RoleIndividual (RoleInstance ident)) (RDOM (UET (RoleInContext { context, role }))) True True
                 Nothing -> do
                   case currentDomain of
-                    (CDOM c) ->
-                      if ident == "External" then do
+                    (CDOM c) -> do
+                      -- An identifier that denotes the External role of the current context `c` -- whether written
+                      -- as the bare word "External", or as a fully qualified own-model name ending in "$External"
+                      -- -- must be handled directly through `externalRoleOfADT`. The External role of a context is
+                      -- not among the roles returned by `lookForRoleTypeOfADT`/`allRoles` (by design, see
+                      -- `allEnumeratedRoles`), so it can never be found through the generic role lookup below.
+                      isOwnExternalRole <-
+                        if ident == "External" then pure true
+                        else if isTypeUri ident && isExternalRole ident then do
+                          currentNamespace <- unwrap <$> getsDF _.namespace
+                          pure (typeUri2ModelUri ident == Just currentNamespace)
+                        else pure false
+                      if isOwnExternalRole then do
                         (rts :: ADT RoleInContext) <- lift2 $ externalRoleOfADT c
                         pure $ SQD currentDomain (QF.DataTypeGetter ExternalRoleF) (RDOM rts) True True
                       else do
-                        (rts :: Array RoleType) <-
+                        -- `isForeignRoleType` is true iff `ident` was resolved as a role type defined in another
+                        -- model (not embedded in the current context ADT `c`). In that case the role type returned
+                        -- by `getRoleType` is already fully resolved and correct.
+                        (Tuple (rts :: Array RoleType) (isForeignRoleType :: Boolean)) <-
                           if isTypeUri ident then
-                            if isExternalRole ident then pure [ ENR $ EnumeratedRoleType ident ]
                             -- If the namespace is not the one we're compiling, check whether the type is defined somewhere else.
-                            else do
+                            do
                               currentNamespace <- unwrap <$> getsDF _.namespace
                               if typeUri2ModelUri ident == Just currentNamespace
                               -- Look for the role type in the current model if the type URI belongs to the current namespace.
-                              then lookForRoleTypeOfADT ident c
+                              then Tuple <$> lookForRoleTypeOfADT ident c <*> pure false
                               -- Otherwise, try to get the role type from another model.
                               else (lift2 $ try $ getRoleType ident) >>= case _ of
-                                Left _ -> pure []
-                                Right pts -> pure [ pts ]
-                          else lookForUnqualifiedRoleTypeOfADT ident c
+                                Left _ -> pure (Tuple [] false)
+                                Right pts -> pure (Tuple [ pts ] true)
+                          else Tuple <$> lookForUnqualifiedRoleTypeOfADT ident c <*> pure false
                         case uncons rts of
                           Nothing -> (lift $ lift $ humanizePerspectivesError (ContextHasNoRole c ident pos (endOf $ Simple s))) >>= throwError
                           Just { head, tail } ->
-                            if null tail then
-                              if isExternalRole ident then do
-                                (rts' :: ADT RoleInContext) <- lift2 $ externalRoleOfADT c
-                                pure $ SQD currentDomain (QF.DataTypeGetter ExternalRoleF) (RDOM rts') True True
-                              else unsafePartial $ makeRoleGetter currentDomain head
+                            if null tail then unsafePartial $ makeRoleGetter currentDomain head
                             else throwError (NotUniquelyIdentifyingRoleType pos (ENR $ EnumeratedRoleType ident) rts)
                     (RDOM r) -> do
                       (pts :: Array PropertyType) <-
