@@ -143,12 +143,15 @@ humanizePerspectivesError e = case e of
     qfd' <- humanizeQueryFunctionDescription qfd
     dom' <- humanizeDomain dom
     pure (NotAContextDomain qfd' dom' start end)
-  NotAStringDomain qfd start end -> do 
+  NotAStringDomain qfd start end -> do
     qfd' <- humanizeQueryFunctionDescription qfd
     pure (NotAStringDomain qfd' start end)
   NotARoleDomain dom start end -> do
     dom' <- humanizeDomain dom
     pure (NotARoleDomain dom' start end)
+  DomainTypeRequired domains dom start end -> do
+    dom' <- humanizeDomain dom
+    pure (DomainTypeRequired domains dom' start end)
 
   -- Default: leave unchanged.
   _ -> pure e
@@ -175,7 +178,7 @@ humanizeDomain dom = case dom of
   AnyRoleType -> pure AnyRoleType
 
 humanizeQueryFunctionDescription :: QueryFunctionDescription -> MonadPerspectives QueryFunctionDescription
-humanizeQueryFunctionDescription qfd = case qfd of 
+humanizeQueryFunctionDescription qfd = case qfd of
   SQD dom fun ran f m -> do
     dom' <- humanizeDomain dom
     ran' <- humanizeDomain ran

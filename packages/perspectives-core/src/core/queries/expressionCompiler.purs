@@ -446,7 +446,7 @@ compileSimpleStep currentDomain s@(ArcIdentifier pos ident) = do
                           if null tail then makePropertyGetter currentDomain pt
                           -- Notice: we arbitrarily report back in terms of enumerated properties.
                           else throwError $ NotUniquelyIdentifyingPropertyType pos (ENP $ EnumeratedPropertyType ident) pts
-                    otherwise -> throwError $ DomainTypeRequired "context or role" currentDomain pos (endOf (Simple s))
+                    otherwise -> (lift2 $ humanizePerspectivesError $ DomainTypeRequired "context or role" currentDomain pos (endOf (Simple s))) >>= throwError
 
 compileSimpleStep currentDomain (PublicRole pos ident) = do
   rType <- lift2 $ roleType_ (RoleInstance ident)
@@ -485,7 +485,7 @@ compileSimpleStep currentDomain s@(Filler pos membeddingContext) = do
         -- Nothing -> throwError $ RoleHasNoBinding pos (roleInContext2Role <$> r)
         Nothing -> pure $ SQD currentDomain (QF.DataTypeGetterWithParameter FillerF "direct") AnyRoleType True False
     AnyRoleType -> pure $ SQD currentDomain (QF.DataTypeGetterWithParameter FillerF "direct") AnyRoleType True False
-    otherwise -> throwError $ DomainTypeRequired "role" currentDomain pos (endOf $ Simple s)
+    otherwise -> (lift2 $ humanizePerspectivesError $ DomainTypeRequired "role" currentDomain pos (endOf $ Simple s)) >>= throwError
 
 compileSimpleStep currentDomain s@(Filled pos binderName membeddingContext) = do
   (qBinderType :: EnumeratedRoleType) <-
@@ -523,7 +523,7 @@ compileSimpleStep currentDomain s@(Filled pos binderName membeddingContext) = do
     AnyRoleType -> do
       EnumeratedRole { context } <- lift2 $ getEnumeratedRole qBinderType
       pure $ SQD currentDomain (QF.FilledF qBinderType context) (RDOM (UET $ RoleInContext { context, role: qBinderType })) False False
-    otherwise -> throwError $ DomainTypeRequired "role" currentDomain pos (endOf $ Simple s)
+    otherwise -> (lift2 $ humanizePerspectivesError $ DomainTypeRequired "role" currentDomain pos (endOf $ Simple s)) >>= throwError
 
 compileSimpleStep currentDomain s@(Context pos) = do
   case currentDomain of
@@ -531,27 +531,27 @@ compileSimpleStep currentDomain s@(Context pos) = do
       (typeOfContext :: ADT ContextType) <- pure $ contextOfADT r
       pure $ SQD currentDomain (QF.DataTypeGetter ContextF) (CDOM typeOfContext) True True
     -- NOTE: if we want to allow AnyRoleType here, we must also create AnyRoleType as a Domain.
-    otherwise -> throwError $ DomainTypeRequired "role" currentDomain pos (endOf $ Simple s)
+    otherwise -> (lift2 $ humanizePerspectivesError $ DomainTypeRequired "role" currentDomain pos (endOf $ Simple s)) >>= throwError
 
 compileSimpleStep currentDomain s@(TypeOfContext pos) = do
   case currentDomain of
     (CDOM (r :: ADT ContextType)) -> do
       pure $ SQD currentDomain (QF.TypeGetter TypeOfContextF) ContextKind True True
-    otherwise -> throwError $ DomainTypeRequired "context" currentDomain pos (endOf $ Simple s)
+    otherwise -> (lift2 $ humanizePerspectivesError $ DomainTypeRequired "context" currentDomain pos (endOf $ Simple s)) >>= throwError
 
 compileSimpleStep currentDomain s@(TypeOfRole pos) = do
   case currentDomain of
     (RDOM (r :: ADT RoleInContext)) -> do
       pure $ SQD currentDomain (QF.TypeGetter TypeOfRoleF) RoleKind True True
     AnyRoleType -> pure $ SQD currentDomain (QF.TypeGetter TypeOfRoleF) RoleKind True True
-    otherwise -> throwError $ DomainTypeRequired "role" currentDomain pos (endOf $ Simple s)
+    otherwise -> (lift2 $ humanizePerspectivesError $ DomainTypeRequired "role" currentDomain pos (endOf $ Simple s)) >>= throwError
 
 compileSimpleStep currentDomain s@(Translate pos) = do
   case currentDomain of
     ContextKind -> pure $ SQD currentDomain QF.TranslateContextType (VDOM PString Nothing) True True
     RoleKind -> pure $ SQD currentDomain QF.TranslateRoleType (VDOM PString Nothing) True True
     AnyRoleType -> pure $ SQD currentDomain QF.TranslateRoleType (VDOM PString Nothing) True True
-    otherwise -> throwError $ DomainTypeRequired "context or role" currentDomain pos (endOf $ Simple s)
+    otherwise -> (lift2 $ humanizePerspectivesError $ DomainTypeRequired "context or role" currentDomain pos (endOf $ Simple s)) >>= throwError
 
 compileSimpleStep currentDomain s@(RoleTypeIndividual pos typeName) = do
   nameSpace <- getsDF _.id
@@ -577,7 +577,7 @@ compileSimpleStep currentDomain s@(RoleTypes pos) = do
   case currentDomain of
     ContextKind -> do
       pure $ SQD currentDomain (QF.TypeGetter RoleTypesF) RoleKind True True
-    otherwise -> throwError $ DomainTypeRequired "context type" currentDomain pos (endOf $ Simple s)
+    otherwise -> (lift2 $ humanizePerspectivesError $ DomainTypeRequired "context type" currentDomain pos (endOf $ Simple s)) >>= throwError
 
 compileSimpleStep currentDomain s@(SpecialisesRoleType pos roleName) = do
   case currentDomain of
@@ -597,7 +597,7 @@ compileSimpleStep currentDomain s@(SpecialisesRoleType pos roleName) = do
             -- Notice : we arbitrarily report back in terms of enumerated roles.
             otherwise -> throwError $ NotUniquelyIdentifyingRoleType pos (ENR $ EnumeratedRoleType roleName) (map ENR qnames)
       pure $ SQD currentDomain (QF.DataTypeGetterWithParameter SpecialisesRoleTypeF (unwrap qRoleName)) (VDOM PBool Nothing) (isFunctionalFunction SpecialisesRoleTypeF) False
-    otherwise -> throwError $ DomainTypeRequired "role type" currentDomain pos (endOf $ Simple s)
+    otherwise -> (lift2 $ humanizePerspectivesError $ DomainTypeRequired "role type" currentDomain pos (endOf $ Simple s)) >>= throwError
 
 compileSimpleStep currentDomain s@(IsInState pos stateName) = do
   -- If the domain is a SUM, the stateName must belong to at least one of the members.
@@ -614,7 +614,7 @@ compileSimpleStep currentDomain s@(IsInState pos stateName) = do
     CDOM adt -> do
       (allContexts :: Array ContextType) <- lift $ lift (adt ###= allTypesInContextADT)
       f (unwrap <$> allContexts)
-    otherwise -> throwError $ DomainTypeRequired "role or context" currentDomain pos (endOf $ Simple s)
+    otherwise -> (lift2 $ humanizePerspectivesError $ DomainTypeRequired "role or context" currentDomain pos (endOf $ Simple s)) >>= throwError
   pure $ SQD currentDomain (QF.DataTypeGetterWithParameter IsInStateF (unwrap qualifiedStateName)) (VDOM PBool Nothing) (isFunctionalFunction IsInStateF) False
 
   where
@@ -644,7 +644,7 @@ compileSimpleStep currentDomain s@(IsInState pos stateName) = do
 compileSimpleStep currentDomain s@(RegEx pos (reg :: RegExP)) = do
   case currentDomain of
     VDOM PString _ -> pure $ SQD currentDomain (QF.RegExMatch reg) (VDOM PBool Nothing) True False
-    otherwise -> throwError $ DomainTypeRequired "string" currentDomain pos (endOf $ Simple s)
+    otherwise -> (lift2 $ humanizePerspectivesError $ DomainTypeRequired "string" currentDomain pos (endOf $ Simple s)) >>= throwError
 
 compileSimpleStep currentDomain (TypeTimeOnlyContext pos ctype) = pure $
   SQD currentDomain (QF.TypeTimeOnlyContextF ctype) (CDOM (UET $ ContextType ctype)) True True
@@ -661,20 +661,20 @@ compileSimpleStep currentDomain s@(Extern pos) = do
     (CDOM c) -> do
       (rts :: ADT RoleInContext) <- lift2 $ externalRoleOfADT c
       pure $ SQD currentDomain (QF.DataTypeGetter ExternalRoleF) (RDOM rts) True True
-    otherwise -> throwError $ DomainTypeRequired "context" currentDomain pos (endOf $ Simple s)
+    otherwise -> (lift2 $ humanizePerspectivesError $ DomainTypeRequired "context" currentDomain pos (endOf $ Simple s)) >>= throwError
 
 compileSimpleStep currentDomain s@(IndexedName pos) = do
   case currentDomain of
     (CDOM c) -> pure $ SQD currentDomain (QF.DataTypeGetter IndexedContextName) (VDOM PString Nothing) True False
     (RDOM r) -> pure $ SQD currentDomain (QF.DataTypeGetter IndexedRoleName) (VDOM PString Nothing) True False
     AnyRoleType -> pure $ SQD currentDomain (QF.DataTypeGetter IndexedRoleName) (VDOM PString Nothing) True False
-    otherwise -> throwError $ DomainTypeRequired "role or context" currentDomain pos (endOf $ Simple s)
+    otherwise -> (lift2 $ humanizePerspectivesError $ DomainTypeRequired "role or context" currentDomain pos (endOf $ Simple s)) >>= throwError
 
 -- This is the result of parsing 'this'. It is a reference to the current object, so always functional.
 compileSimpleStep currentDomain (Identity _) = pure $ SQD currentDomain (QF.DataTypeGetter IdentityF) currentDomain True True
 
 compileSimpleStep currentDomain s@(Modelname _) = case currentDomain of
-  VDOM _ Nothing -> throwError $ NoPropertyTypeWithValue (startOf (Simple s)) (endOf (Simple s))
+  VDOM _ Nothing -> (lift2 $ humanizePerspectivesError $ NoPropertyTypeWithValue (startOf (Simple s)) (endOf (Simple s))) >>= throwError
   _ -> pure $ SQD currentDomain (QF.DataTypeGetter ModelNameF) (VDOM PString Nothing) Unknown True
 
 -- We compile the SequenceFunction as a UnaryCombinator, which is a stretch.
@@ -742,7 +742,7 @@ compileUnaryStep currentDomain st@(DurationOperator start duration s) = do
     Millisecond _ -> pure MilliSecond_
   case range descriptionOfs of
     VDOM PNumber _ -> pure $ replaceRange descriptionOfs (VDOM (PDuration durationRange) Nothing)
-    otherwise -> throwError $ DomainTypeRequired "number" (range descriptionOfs) start (endOf s)
+    otherwise -> (lift2 $ humanizePerspectivesError $ DomainTypeRequired "number" (range descriptionOfs) start (endOf s)) >>= throwError
 
 compileUnaryStep currentDomain st@(ContextIndividual pos qualifiedIdentifier s) = do
   descriptionOfs <- compileStep currentDomain s
@@ -753,7 +753,7 @@ compileUnaryStep currentDomain st@(ContextIndividual pos qualifiedIdentifier s) 
       case mqualifiedContext of
         Left _ -> throwError $ UnknownContext pos (ContextType qualifiedIdentifier)
         Right _ -> pure $ UQD currentDomain (QF.UnaryCombinator ContextIndividualF) descriptionOfs (CDOM $ UET $ ContextType qualifiedIdentifier) True True
-    otherwise -> throwError $ DomainTypeRequired "role" currentDomain pos (endOf s)
+    otherwise -> (lift2 $ humanizePerspectivesError $ DomainTypeRequired "role" currentDomain pos (endOf s)) >>= throwError
 
 compileUnaryStep currentDomain st@(RoleIndividual pos qualifiedIdentifier s) = do
   descriptionOfs <- compileStep currentDomain s
@@ -766,7 +766,7 @@ compileUnaryStep currentDomain st@(RoleIndividual pos qualifiedIdentifier s) = d
         Right _ -> do
           role <- lift $ lift $ getEnumeratedRole (EnumeratedRoleType qualifiedIdentifier)
           pure $ UQD currentDomain (QF.UnaryCombinator RoleIndividualF) descriptionOfs (RDOM $ UET $ RoleInContext { role: EnumeratedRoleType qualifiedIdentifier, context: contextOfRepresentation role }) True True
-    otherwise -> throwError $ DomainTypeRequired "string" (range descriptionOfs) pos (endOf s)
+    otherwise -> (lift2 $ humanizePerspectivesError $ DomainTypeRequired "string" (range descriptionOfs) pos (endOf s)) >>= throwError
 
 compileUnaryStep currentDomain (TypeFilterStep start end candidateStep typeExpression) = do
   source <- compileStep currentDomain candidateStep
