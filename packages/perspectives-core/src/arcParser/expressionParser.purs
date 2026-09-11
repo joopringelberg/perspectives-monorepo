@@ -48,7 +48,7 @@ import Partial.Unsafe (unsafePartial)
 import Perspectives.Parsing.Arc.Expression.AST (BinaryStep(..), ComputationStep(..), ComputedType(..), FilledByAttribute(..), Operator(..), PureLetStep(..), SimpleStep(..), Step(..), TypeCombination(..), UnaryStep(..), VarBinding(..))
 import Perspectives.Parsing.Arc.Expression.RegExP (RegExP(..))
 import Perspectives.Parsing.Arc.Identifiers (arcIdentifier, boolean, email, lowerCaseAlphaNumName, pubParser, regexFlags', reserved)
-import Perspectives.Parsing.Arc.IndentParser (IP, entireBlock, getPosition)
+import Perspectives.Parsing.Arc.IndentParser (IP, entireBlock, getPosition, onSameLine)
 import Perspectives.Parsing.Arc.Position (ArcPosition(..))
 import Perspectives.Parsing.Arc.Token (mandatoryWhiteSpace, reservedIdentifier, token)
 import Perspectives.Representation.Class.PersistentType (ContextType(..))
@@ -202,7 +202,7 @@ simpleStep' =
       <|>
         Simple <$> (RoleTypeIndividual <$> getPosition <*> try (token.brackets ((reserved "role") *> arcIdentifier)))
       <|>
-        Simple <$> (Filler <$> (getPosition <* reserved "binding") <*> (optionMaybe (reserved "in" *> arcIdentifier)))
+        Simple <$> (Filler <$> (getPosition <* reserved "binding") <*> (optionMaybe (try $ onSameLine (reserved "in" *> arcIdentifier))))
       <|>
         Simple <$> (Filled <$> (getPosition <* reserved "binder") <*> arcIdentifier <*> (optionMaybe (reserved "in" *> arcIdentifier)))
       <|>
