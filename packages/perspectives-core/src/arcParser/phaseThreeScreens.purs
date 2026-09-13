@@ -519,7 +519,7 @@ collectRoles (ExplicitRole ctxt rt pos) = do
 collectRoles (ImplicitRole ctxt s) = compileExpression (CDOM (UET ctxt)) s >>= \qfd ->
   case range qfd of
     RDOM adt -> pure $ nub $ map ENR (allLeavesInADT $ roleInContext2Role <$> adt)
-    otherwise -> throwError $ NotARoleDomain otherwise (startOf s) (endOf s)
+    otherwise -> (lift2 $ humanizePerspectivesError $ NotARoleDomain otherwise (startOf s) (endOf s)) >>= throwError
 
 -- We lookup the qualified name of these properties here, for the object of the perspective.
 -- The (partial) names for properties used here may be defined outside

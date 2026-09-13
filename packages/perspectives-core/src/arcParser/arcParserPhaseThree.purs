@@ -618,7 +618,7 @@ handlePostponedStateQualifiedParts = do
   collectRoleInContexts (ImplicitRole ctxt s) = compileExpression (CDOM (UET ctxt)) s >>= \qfd ->
     case range qfd of
       RDOM adt -> pure adt
-      otherwise -> throwError $ NotARoleDomain otherwise (startOf s) (endOf s)
+      otherwise -> (lift2 $ humanizePerspectivesError $ NotARoleDomain otherwise (startOf s) (endOf s)) >>= throwError
 
   makeTypeTimeOnlyRoleBinding :: String -> RoleIdentification -> ADT QT.RoleInContext -> ArcPosition -> PhaseThree VarBinding
   makeTypeTimeOnlyRoleBinding varName roleIdentification usersInContext pos = case roleIdentification of
@@ -1551,7 +1551,7 @@ objectMustBeRole :: Maybe QueryFunctionDescription -> ArcPosition -> ArcPosition
 objectMustBeRole qfd start end = case range <$> qfd of
   Just (RDOM _) -> pure unit
   Nothing -> pure unit
-  (Just r) -> throwError (NotARoleDomain r start end)
+  (Just r) -> (lift2 $ humanizePerspectivesError (NotARoleDomain r start end)) >>= throwError
 
 addUserRoleGraph :: PhaseThree Unit
 addUserRoleGraph = do

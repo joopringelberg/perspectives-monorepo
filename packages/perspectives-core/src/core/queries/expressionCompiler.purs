@@ -173,7 +173,7 @@ validateCalculatedRoleRange kindOfRole start end = case _ of
     if kindOfRole == RTI.ContextRole then
       throwError $ NotAContextRole start end
     else
-      throwError $ NotARoleDomain r start end
+      (lift2 $ humanizePerspectivesError $ NotARoleDomain r start end) >>= throwError
 
 contextRoleRangeHasNonExternalRole :: ADT RoleInContext -> Boolean
 contextRoleRangeHasNonExternalRole = any nonExternalRole <<< commonLeavesInADT
@@ -715,13 +715,13 @@ compileUnaryStep currentDomain st@(FilledBy pos s) = do
   descriptionOfs <- compileStep currentDomain s
   case range descriptionOfs of
     RDOM _ -> pure $ UQD currentDomain (QF.UnaryCombinator FilledByF) descriptionOfs (VDOM PBool Nothing) True True
-    otherwise -> throwError $ NotARoleDomain (range descriptionOfs) pos (endOf s)
+    otherwise -> (lift2 $ humanizePerspectivesError $ NotARoleDomain (range descriptionOfs) pos (endOf s)) >>= throwError
 
 compileUnaryStep currentDomain st@(Fills pos s) = do
   descriptionOfs <- compileStep currentDomain s
   case range descriptionOfs of
     RDOM _ -> pure $ UQD currentDomain (QF.UnaryCombinator FillsF) descriptionOfs (VDOM PBool Nothing) True True
-    otherwise -> throwError $ NotARoleDomain (range descriptionOfs) pos (endOf s)
+    otherwise -> (lift2 $ humanizePerspectivesError $ NotARoleDomain (range descriptionOfs) pos (endOf s)) >>= throwError
 
 compileUnaryStep currentDomain st@(Available pos s) = do
   descriptionOfs <- compileStep currentDomain s
@@ -845,7 +845,7 @@ compileBinaryStep currentDomain s@(BinaryStep { operator, left, right }) =
             (VDOM PBool Nothing)
             True
             (THREE.and (mandatory f1) (mandatory f2))
-          _, _ -> throwError $ NotARoleDomain currentDomain (startOf left) (endOf right)
+          _, _ -> (lift2 $ humanizePerspectivesError $ NotARoleDomain currentDomain (startOf left) (endOf right)) >>= throwError
         else throwError (NotFunctional (startOf right) (endOf right) right)
       else throwError (NotFunctional (startOf left) (endOf left) left)
     FillsOp pos -> do
@@ -861,7 +861,7 @@ compileBinaryStep currentDomain s@(BinaryStep { operator, left, right }) =
             (VDOM PBool Nothing)
             True
             (THREE.and (mandatory f1) (mandatory f2))
-          _, _ -> throwError $ NotARoleDomain currentDomain (startOf left) (endOf right)
+          _, _ -> (lift2 $ humanizePerspectivesError $ NotARoleDomain currentDomain (startOf left) (endOf right)) >>= throwError
         else throwError (NotFunctional (startOf right) (endOf right) right)
       else throwError (NotFunctional (startOf left) (endOf left) left)
 

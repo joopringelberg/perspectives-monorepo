@@ -438,7 +438,7 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
           qfd <- compileExpression originDomain e
           case range qfd of
             (RDOM _) -> pure qfd
-            otherwise -> throwError $ NotARoleDomain (range qfd) (startOf e) (endOf e)
+            otherwise -> (lift2 $ humanizePerspectivesError $ NotARoleDomain (range qfd) (startOf e) (endOf e)) >>= throwError
 
       (qualifiedProperty :: EnumeratedPropertyType) <- qualifyPropertyWithRespectTo propertyIdentifier roleQfd f.start f.end
       -- Compile the value expression to a QueryFunctionDescription. Its range must comply with the range of the qualifiedProperty. It is compiled relative to the current context; not relative to the object!
@@ -481,7 +481,7 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
             (RDOM _) ->
               if pessimistic $ functional qfd then pure qfd
               else throwError $ NotFunctional (startOf e) (endOf e) e
-            otherwise -> throwError $ NotARoleDomain (range qfd) (startOf e) (endOf e)
+            otherwise -> (lift2 $ humanizePerspectivesError $ NotARoleDomain (range qfd) (startOf e) (endOf e)) >>= throwError
       (qualifiedProperty :: EnumeratedPropertyType) <- qualifyPropertyWithRespectTo propertyIdentifier roleQfd f.start f.end
       pure $ MQD originDomain (QF.CreateFileF mimeType qualifiedProperty) [ filenameQfd, contentQfd, roleQfd ] originDomain True False
 
@@ -570,7 +570,7 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
     qualifyPropertyWithRespectTo propertyIdentifier roleQfd start end = do
       (rt :: ADT EnumeratedRoleType) <- case range roleQfd of
         (RDOM rt') -> pure $ roleInContext2Role <$> rt'
-        otherwise -> throwError $ NotARoleDomain otherwise start end
+        otherwise -> (lift2 $ humanizePerspectivesError $ NotARoleDomain otherwise start end) >>= throwError
       (candidates :: Array PropertyType) <- filter isEnumeratedProperty <$> (lookForUnqualifiedPropertyType propertyIdentifier) rt
       case head candidates of
         Just (ENP et) | length candidates == 1 -> pure et
