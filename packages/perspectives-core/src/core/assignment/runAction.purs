@@ -71,11 +71,13 @@ runContextAction user actionName context = do
       lift $ debugState ("Executing context action '" <> actionName <> "' for user role type '" <> show readableUserRoleType <> "' in context '" <> context <> "'.")
       updater (ContextInstance context)
       lift $ restoreFrame oldFrame
-    _, _ -> throwError $ error
-      $ "cannot identify Action with role type '" <> show userRoleType
-          <> "' and action name '"
-          <> actionName
-          <> "'."
+    _, _ -> do
+      readableUserRoleType <- lift $ toReadable userRoleType
+      throwError $ error
+        $ "cannot identify Action with role type '" <> show readableUserRoleType
+            <> "' and action name '"
+            <> actionName
+            <> "'."
 
 -- | Execute a perspective action on behalf of an authoring role in a context instance.
 -- | Parameters:
@@ -109,13 +111,15 @@ runAction authoringRole perspectiveId actionName context object = do
       lift $ debugState ("Executing perspective action '" <> readableActionName <> "' for authoring role type '" <> show readableAuthoringRole <> "' in context '" <> context <> "'.")
       updater (RoleInstance object)
       lift $ restoreFrame oldFrame
-    _, _ -> throwError $ error
-      $ "cannot identify Action with role type '" <> show authoringRole
-          <> "', perspectiveId '"
-          <> perspectiveId
-          <> "' and action name '"
-          <> actionName
-          <> "'."
+    _, _ -> do
+      readableAuthoringRole <- lift $ toReadable authoringRole
+      throwError $ error
+        $ "cannot identify Action with role type '" <> show readableAuthoringRole
+            <> "', perspectiveId '"
+            <> perspectiveId
+            <> "' and action name '"
+            <> actionName
+            <> "'."
 
 -- | Execute a perspective action on behalf of an authoring role in a context instance,
 -- | finding the perspective by matching the object role type instead of by perspective id.
@@ -145,10 +149,12 @@ runActionForObject authoringRole actionName context object = do
       lift $ debugState ("Executing perspective action '" <> readableActionName <> "' for authoring role type '" <> show readableAuthoringRole <> "' in context '" <> context <> "' on object '" <> object <> "'.")
       updater (RoleInstance object)
       lift $ restoreFrame oldFrame
-    _, _ -> throwError $ error
-      $ "cannot identify Action with role type '" <> show authoringRole
-          <> "' and action name '"
-          <> actionName
-          <> "' for object '"
-          <> object
-          <> "'."
+    _, _ -> do
+      readableAuthoringRole <- lift $ toReadable authoringRole
+      throwError $ error
+        $ "cannot identify Action with role type '" <> show readableAuthoringRole
+            <> "' and action name '"
+            <> actionName
+            <> "' for object '"
+            <> object
+            <> "'."
