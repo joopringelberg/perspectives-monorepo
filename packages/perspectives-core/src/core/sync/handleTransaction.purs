@@ -78,7 +78,6 @@ import Perspectives.ResourceIdentifiers (createPublicIdentifier, isInPublicSchem
 import Perspectives.SaveUserData (removeBinding, removeContextIfUnbound, replaceBinding, scheduleContextRemoval, scheduleRoleRemoval, setFirstBinding, synchronise)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.StrippedDelta (addPublicResourceScheme, addResourceSchemes, addSchemeToResourceIdentifier)
-import Perspectives.Sync.LegacyDeltas (extractLegacyResourceKey, toContextDelta, toRoleBindingDelta, toRolePropertyDelta, toUniverseContextDelta, toUniverseRoleDelta)
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
 import Perspectives.Sync.Transaction (PublicKeyInfo, Transaction(..))
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..))
@@ -484,10 +483,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
       Nothing -> Nothing
       Just stringified -> case extractOrderingInfo stringified of
         Just { resourceKey, resourceVersion } -> Just { signedDelta: s, stringified, resourceKey, resourceVersion, author }
-        -- Legacy delta: derive resourceKey from content, use -1 to signal "compute next version".
-        Nothing -> case extractLegacyResourceKey stringified of
-          Just rkey -> Just { signedDelta: s, stringified, resourceKey: rkey, resourceVersion: (-1), author }
-          Nothing -> Just { signedDelta: s, stringified, resourceKey: "", resourceVersion: 0, author }
+        Nothing -> Nothing
 
   -- STEP 2: Check for gaps. If any delta has resourceVersion > localVersion + 1, block the transaction.
   let
@@ -518,22 +514,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
         Nothing -> Nothing
     if resourceKey /= "" then do
       localVersion <- lift $ getResourceVersion resourceKey
-      if resourceVersion < 0 then do
-        -- Legacy delta: always execute, compute next version.
-        executeDelta s (Just stringified)
-        rversion <- lift $ incrementResourceVersion resourceKey
-        lift $ storeDelta $ DeltaStoreRecord
-          { _id: deltaStoreDocId resourceKey rversion author
-          , _rev: Nothing
-          , resourceKey
-          , resourceVersion: rversion
-          , author
-          , signedDelta: s
-          , deltaType
-          , applied: true
-          , contextKey
-          }
-      else if resourceVersion < localVersion then do
+      if resourceVersion < localVersion then do
         -- Outdated delta: version is behind local version. Store but don't execute.
         lift $ renderPerspectivesWarning >=> traceSync $ (SkippingOutdatedDelta resourceKey deltaType resourceVersion localVersion)
         lift $ storeDelta $ DeltaStoreRecord
@@ -707,9 +688,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
             , applied: true
             , contextKey
             }
-    else
-      -- No resourceKey: legacy delta without ordering info, just execute.
-      executeDelta s (Just stringified)
+    else pure unit
 
   -- | Returns true if a deltaType string represents a role-instance deletion.
   isDeletionDeltaType :: String -> Boolean
@@ -825,19 +804,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
                 Right d4 -> lift ((addResourceSchemes storageSchemes d4)) >>= flip executeUniverseRoleDelta s
                 Left _ -> case runExcept $ readJSON' stringifiedDelta of
                   Right d5 -> lift (addResourceSchemes storageSchemes d5) >>= flip executeUniverseContextDelta s
-                  -- Fallback: try legacy delta formats (old DeltaRecord without resourceKey/resourceVersion,
-                  -- old UniverseRoleDelta with roleInstances array). Legacy deltas are trusted without re-verification.
-                  Left _ -> case runExcept $ readJSON' stringifiedDelta of
-                    Right ld1 -> lift (addResourceSchemes storageSchemes (toRolePropertyDelta ld1)) >>= flip executeRolePropertyDelta s
-                    Left _ -> case runExcept $ readJSON' stringifiedDelta of
-                      Right ld2 -> lift (addResourceSchemes storageSchemes (toRoleBindingDelta ld2)) >>= flip executeRoleBindingDelta s
-                      Left _ -> case runExcept $ readJSON' stringifiedDelta of
-                        Right ld3 -> lift (addResourceSchemes storageSchemes (toContextDelta ld3)) >>= flip executeContextDelta s
-                        Left _ -> case runExcept $ readJSON' stringifiedDelta of
-                          Right ld4 -> lift (addResourceSchemes storageSchemes (toUniverseRoleDelta ld4)) >>= flip executeUniverseRoleDelta s
-                          Left _ -> case runExcept $ readJSON' stringifiedDelta of
-                            Right ld5 -> lift (addResourceSchemes storageSchemes (toUniverseContextDelta ld5)) >>= flip executeUniverseContextDelta s
-                            Left _ -> lift $ renderPerspectivesError >=> warnSync $ (UnparseableIncomingDelta stringifiedDelta)
+                  Left _ -> lift $ renderPerspectivesError >=> warnSync $ (UnparseableIncomingDelta stringifiedDelta)
       )
       (\e -> lift $ renderPerspectivesError >=> warnSync $ (DeltaExecutionError (show e)))
 

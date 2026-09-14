@@ -123,6 +123,8 @@ domain model://perspectives.domains#System
       -- the private key is never available in Perspectives data, only as an object in IndexedDB.
       -- PDRDEPENDENCY
       property PublicKey (String)
+      -- PDRDEPENDENCY
+      property TransportPublicKey (String)
 
   user Addressable
     property Street (String)
@@ -169,7 +171,7 @@ domain model://perspectives.domains#System
     user Initializer = me
       perspective on PerspectivesUsers
         only (Create)
-        props (Identifiable$PublicKey, SharedFileServerKey, HasKey) verbs (SetPropertyValue, AddPropertyValue)
+        props (Identifiable$PublicKey, Identifiable$TransportPublicKey, SharedFileServerKey, HasKey) verbs (SetPropertyValue, AddPropertyValue)
  
   -- MySocialEnvironment is the same on all of my devices.
     -- PDRDEPENDENCY
@@ -190,7 +192,7 @@ domain model://perspectives.domains#System
     -- PDRDEPENDENCY
     user Persons (relational, unlinked) filledBy (PerspectivesUsers, NonPerspectivesUsers)
       perspective on Me
-        props (Cancelled, LastName, FirstName, PublicKey) verbs (Consult)
+        props (Cancelled, LastName, FirstName, PublicKey, TransportPublicKey) verbs (Consult)
 
     -- Me is a computed alias for the local user's Persons entry.
     user Me = me
@@ -206,7 +208,7 @@ domain model://perspectives.domains#System
               text
       perspective on Me
         only (Create, Fill)
-        props (FirstName, LastName, PublicKey) verbs (Consult)
+        props (FirstName, LastName, PublicKey, TransportPublicKey) verbs (Consult)
         props (Cancelled) verbs (SetPropertyValue, Consult)
         action Cancel
           Cancelled = true
@@ -217,7 +219,7 @@ domain model://perspectives.domains#System
       -- that previously was filled by a NonPerspectivesUsers instance.
       perspective on sys:TheWorld >> PerspectivesUsers
         props (FirstName, LastName) verbs (Consult)
-        props (Cancelled) verbs (SetPropertyValue)
+        props (Cancelled, TransportPublicKey) verbs (SetPropertyValue, Consult)
   
   -- PDRDEPENDENCY
   case PerspectivesSystem

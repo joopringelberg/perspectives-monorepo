@@ -438,7 +438,7 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
           qfd <- compileExpression originDomain e
           case range qfd of
             (RDOM _) -> pure qfd
-            otherwise -> throwError $ NotARoleDomain (range qfd) (startOf e) (endOf e)
+            otherwise -> (lift2 $ humanizePerspectivesError $ NotARoleDomain (range qfd) (startOf e) (endOf e)) >>= throwError
 
       (qualifiedProperty :: EnumeratedPropertyType) <- qualifyPropertyWithRespectTo propertyIdentifier roleQfd f.start f.end
       -- Compile the value expression to a QueryFunctionDescription. Its range must comply with the range of the qualifiedProperty. It is compiled relative to the current context; not relative to the object!
@@ -481,7 +481,7 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
             (RDOM _) ->
               if pessimistic $ functional qfd then pure qfd
               else throwError $ NotFunctional (startOf e) (endOf e) e
-            otherwise -> throwError $ NotARoleDomain (range qfd) (startOf e) (endOf e)
+            otherwise -> (lift2 $ humanizePerspectivesError $ NotARoleDomain (range qfd) (startOf e) (endOf e)) >>= throwError
       (qualifiedProperty :: EnumeratedPropertyType) <- qualifyPropertyWithRespectTo propertyIdentifier roleQfd f.start f.end
       pure $ MQD originDomain (QF.CreateFileF mimeType qualifiedProperty) [ filenameQfd, contentQfd, roleQfd ] originDomain True False
 
@@ -540,7 +540,7 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
     qualifyWithRespectTo roleIdentifier contextFunctionDescription start end = do
       (ct :: ADT ContextType) <- case range contextFunctionDescription of
         (CDOM ct') -> pure ct'
-        otherwise -> throwError $ NotAContextDomain contextFunctionDescription otherwise start end
+        otherwise -> (lift2 $ humanizePerspectivesError $ NotAContextDomain contextFunctionDescription otherwise start end) >>= throwError
       rtarr <-
         if isTypeUri roleIdentifier then
           if isExternalRole roleIdentifier then pure [ ENR $ EnumeratedRoleType roleIdentifier ]
@@ -570,11 +570,11 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
     qualifyPropertyWithRespectTo propertyIdentifier roleQfd start end = do
       (rt :: ADT EnumeratedRoleType) <- case range roleQfd of
         (RDOM rt') -> pure $ roleInContext2Role <$> rt'
-        otherwise -> throwError $ NotARoleDomain otherwise start end
+        otherwise -> (lift2 $ humanizePerspectivesError $ NotARoleDomain otherwise start end) >>= throwError
       (candidates :: Array PropertyType) <- filter isEnumeratedProperty <$> (lookForUnqualifiedPropertyType propertyIdentifier) rt
       case head candidates of
         Just (ENP et) | length candidates == 1 -> pure et
-        otherwise -> throwError $ RoleHasNoEnumeratedProperty rt propertyIdentifier start end
+        otherwise -> (lift2 $ humanizePerspectivesError (RoleHasNoEnumeratedProperty rt propertyIdentifier start end)) >>= throwError
 
     -- | If the name is already qualified, use it as-is; otherwise look for an EnumeratedRole with matching
     -- | local name in the Domain.
@@ -597,7 +597,7 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
       qfd <- compileExpression originDomain stp
       case range qfd of
         (CDOM _) -> pure qfd
-        otherwise -> throwError $ NotAContextDomain qfd (range qfd) (startOf stp) (endOf stp)
+        otherwise -> (lift2 $ humanizePerspectivesError $ NotAContextDomain qfd (range qfd) (startOf stp) (endOf stp)) >>= throwError
 
     ensureStringValue :: Maybe Step -> PhaseThree (Maybe QueryFunctionDescription)
     ensureStringValue mstp = case mstp of
@@ -605,7 +605,7 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
         qfd <- compileExpression originDomain stp
         case range qfd of
           (VDOM PString _) -> pure $ Just qfd
-          otherwise -> throwError $ NotAStringDomain qfd (startOf stp) (endOf stp)
+          otherwise -> (lift2 $ humanizePerspectivesError $ NotAStringDomain qfd (startOf stp) (endOf stp)) >>= throwError
       Nothing -> pure Nothing
 
     -- Compiles the Step and inverts it as well.
@@ -616,7 +616,7 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
       qfd <- compileExpression originDomain stp
       case range qfd of
         (RDOM _) -> pure qfd
-        otherwise -> throwError $ NotARoleDomain (range qfd) (startOf stp) (endOf stp)
+        otherwise -> (lift2 $ humanizePerspectivesError $ NotARoleDomain (range qfd) (startOf stp) (endOf stp)) >>= throwError
 
     ensureFunctional :: Step -> QueryFunctionDescription -> PhaseThree QueryFunctionDescription
     ensureFunctional stp qfd = case functional qfd of

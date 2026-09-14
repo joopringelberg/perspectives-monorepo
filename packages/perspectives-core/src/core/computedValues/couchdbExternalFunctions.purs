@@ -26,7 +26,7 @@ module Perspectives.Extern.Couchdb where
 
 import Control.Monad.AvarMonadAsk (gets, modify)
 import Control.Monad.AvarMonadAsk (modify, gets) as AMA
-import Control.Monad.Error.Class (throwError, try)
+import Control.Monad.Error.Class (catchError, throwError, try)
 import Control.Monad.Except (runExceptT)
 import Control.Monad.State (execState, execStateT)
 import Control.Monad.Trans.Class (lift)
@@ -59,7 +59,7 @@ import Partial.Unsafe (unsafePartial)
 import Perspectives.ApiTypes (ContextSerialization(..), PropertySerialization(..), RolSerialization(..))
 import Perspectives.Assignment.StateCache (clearModelStates)
 import Perspectives.Assignment.Update (withAuthoringRole)
-import Perspectives.Authenticate (getMyPublicKey)
+import Perspectives.Authenticate (getMyPublicKey, getMyTransportPublicKey)
 import Perspectives.ContextAndRole (changeRol_isMe, context_id, rol_id)
 import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), InformedAssumption(..), MonadPerspectives, MonadPerspectivesTransaction, mkLibEffect1, mkLibEffect2, mkLibEffect3, mkLibFunc2)
 import Perspectives.Couchdb (DatabaseName, SecurityDocument(..))
@@ -390,7 +390,18 @@ computeVersionedAndUnversiondName (ModelUri modelname) = do
 installModelLocally :: (Tuple (DomeinFileRecord Stable) AttachmentFiles) -> Boolean -> StoredQueries -> MonadPerspectivesTransaction Unit
 installModelLocally (Tuple dfrecord@{ id, namespace, referredModels, invertedQueriesInOtherDomains, upstreamStateNotifications, upstreamAutomaticEffects, _attachments } attachmentFiles) isInitialLoad' storedQueries = do
   lift $ traceInstall ("Entering `installModelLocally` for " <> unwrap namespace)
-  { patch, build, versionedModelName, unversionedModelname, versionedModelManifest } <- lift $ computeVersionedAndUnversiondName id
+  { patch, build, versionedModelName, unversionedModelname, versionedModelManifest } <- catchError
+    (lift $ computeVersionedAndUnversiondName id)
+    -- Provide reasonable default values. This is a fallback for test situations when we compile a model locally.
+    \_ -> pure
+      { patch: "0"
+      , build: "0"
+      , versionedModelName: case (modelUriVersion $ unwrap id) of
+          Just v -> unwrap id
+          Nothing -> unwrap id <> "@1.0"
+      , unversionedModelname: unversionedModelUri $ unwrap id
+      , versionedModelManifest: Nothing
+      }
   -- Store the model in Couchdb, that is: in the local store of models.
   -- Save it with the revision of the local version that we have, if any (do not use the repository version).
   { documentName: unversionedDocumentName } <- lift $ resourceIdentifier2WriteDocLocator unversionedModelname
@@ -552,8 +563,9 @@ initSystem = do
   createTheWorld :: MonadPerspectivesTransaction Unit
   createTheWorld = do
     mpublicKey <- lift getMyPublicKey
-    case mpublicKey of
-      Just publicKey -> do
+    mtransportPublicKey <- lift getMyTransportPublicKey
+    case mpublicKey, mtransportPublicKey of
+      Just publicKey, Just transportPublicKey -> do
         -- Create TheWorld, complete with the PerspectivesUser role of TheWorld that represents the identity 
         -- of the natural person setting up this installation.
         worldresult <- runExceptT $ constructContext Nothing
@@ -573,7 +585,7 @@ initSystem = do
             puser <- createAndAddRoleInstance_ (EnumeratedRoleType DEP.perspectivesUsers) worldId
               ( RolSerialization
                   { id: Just perspectivesUser
-                  , properties: PropertySerialization (singleton DEP.perspectivesUsersPublicKey [ publicKey ])
+                  , properties: PropertySerialization (fromFoldable [ Tuple DEP.perspectivesUsersPublicKey [ publicKey ], Tuple DEP.perspectivesUsersTransportPublicKey [ transportPublicKey ] ])
                   , binding: Nothing
                   }
               )
@@ -612,7 +624,7 @@ initSystem = do
                       }
                   )
                   false
-      Nothing -> lift $ errorInstall "No public key found on setting up!"
+      _, _ -> lift $ errorInstall "No installation key pair found on setting up!"
 
   createSystem :: MonadPerspectivesTransaction Unit
   createSystem = do
