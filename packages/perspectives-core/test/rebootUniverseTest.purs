@@ -45,13 +45,13 @@ rebootUniverseConfiguration =
   , testsType: rebootUniverseTestsType
   , testSucceededProperty: rebootUniverseTestSucceededProperty
   , testNameProperty: rebootUniverseTestNameProperty
-  , setupLogConfiguration:
+  , setupLogConfiguration: --emptyLogConfiguration
       { pdr:
-        [ { topic: TEST, logLevel: Trace }
-        , { topic: RESOURCE, logLevel: Trace }
-        , { topic: STATE, logLevel: Trace }
-        , { topic: INSTALL, logLevel: Trace }
-        ]
+          [ { topic: TEST, logLevel: Trace }
+          -- , { topic: RESOURCE, logLevel: Trace }
+          -- , { topic: STATE, logLevel: Trace }
+          , { topic: INSTALL, logLevel: Trace }
+          ]
       }
   , tests: rebootUniverseTests
   }
@@ -90,19 +90,30 @@ rebootUniverseTestNameProperty = "model://joopringelberg.nl#RebootUniverse$Test$
 rebootUniverseSnapshotDirectory :: String
 rebootUniverseSnapshotDirectory = "test/pdr-snapshot/rebootuniverse/alice"
 
+-- Outcomment all tests to just re-create the snapshot without trying to create databases.
 rebootUniverseTests :: Array ModelTest
-rebootUniverseTests = 
-  [ 
-      { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$ManageCouchdb", logConfiguration: emptyLogConfiguration }
+rebootUniverseTests =
+  [ { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$Cleanup", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$ManageCouchdb", logConfiguration: debugConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$CreatePerspectivesDomainsRepository", logConfiguration: emptyLogConfiguration }
+  -- , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$CreateManifest", logConfiguration: emptyLogConfiguration }
+  -- , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$CreateVersion", logConfiguration: emptyLogConfiguration }
+  -- , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$CompileModel", logConfiguration: emptyLogConfiguration }
+  -- , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_Couchdb", logConfiguration: debugConfiguration }
+  -- , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_Serialise", logConfiguration: emptyLogConfiguration }
+  -- , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_Sensor", logConfiguration: emptyLogConfiguration }
+  -- , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_Utilities", logConfiguration: emptyLogConfiguration }
+  -- , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_System", logConfiguration: emptyLogConfiguration }
   ]
 
 debugConfiguration :: LogConfiguration
-debugConfiguration =       
+debugConfiguration =
   { pdr:
-    [
-    -- { topic: TEST, logLevel: Trace }
-     { topic: RESOURCE, logLevel: Trace }
-    , { topic: STATE, logLevel: Trace }
-    -- , { topic: INSTALL, logLevel: Trace }
-    ]
+      [
+        -- { topic: TEST, logLevel: Trace }
+        { topic: RESOURCE, logLevel: Trace }
+      , { topic: STATE, logLevel: Trace }
+      -- , { topic: INSTALL, logLevel: Trace }
+      ]
   }

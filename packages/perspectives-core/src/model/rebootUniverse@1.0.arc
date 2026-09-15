@@ -3,6 +3,8 @@ domain model://joopringelberg.nl#RebootUniverse@1.0
   use mm for model://joopringelberg.nl#RebootUniverse
   use sensor for model://perspectives.domains#Sensor
   use cdb for model://perspectives.domains#Couchdb
+  use cm for model://perspectives.domains#CouchdbManagement
+  use p for model://perspectives.domains#Parsing
 
   -------------------------------------------------------------------------------
   ---- SETTING UP
@@ -70,13 +72,15 @@ domain model://joopringelberg.nl#RebootUniverse@1.0
         props (TestName, TestSucceeded) verbs (SetPropertyValue, Consult)
 
   ------------------------------------------------------------------------------
-  ---- MANAGECOUCHDB
+  ---- CLEANUP
+  ---- Remove the databases created on the previous run.
   ------------------------------------------------------------------------------
-  case ManageCouchdb
+  case Cleanup
     aspect mm:Test
 
     external
-      state Success = context >> ( (exists Embedded1 >> binding) and Embedded1 >> binding >> context >> isInState EmbeddedContext1 )
+      property Finished (Boolean)
+      state Success = Finished
         on entry
           do for Tester
             TestSucceeded = true
@@ -84,14 +88,505 @@ domain model://joopringelberg.nl#RebootUniverse@1.0
     user Tester filledBy (sys:TheWorld$PerspectivesUsers)
       aspect mm:Test$Tester
       perspective on extern
-      perspective on Embedded1
-        only (CreateAndFill)
+        props (Finished) verbs (SetPropertyValue, Consult)
+      
       action RunTest
-        TestName = "ManageCouchdb - Context creation with no automatic actions" for extern
-        create context EmbeddedContext1 bound to Embedded1
+        letA
+          url <- "https://perspectives.domains/"
+        in
+          -- Give Tester credentials.
+          callEffect cdb:AddCredentials( url, "alice", "alice" )
+          -- Remove cw_servers_and_repositories
+          callEffect cdb:DeleteCouchdbDatabase( url, "cw_servers_and_repositories" )
+          -- Remove cw_perspectives_domains
+          callEffect cdb:DeleteCouchdbDatabase( url, "cw_perspectives_domains" )
+          -- Remove models_perspectives_domains
+          callEffect cdb:DeleteCouchdbDatabase( url, "models_perspectives_domains" )
+          TestName = "Cleanup - remove the databases created on the previous run." for extern
+          Finished = true for extern
 
-    context Embedded1 filledBy EmbeddedContext1
+  ------------------------------------------------------------------------------
+  ---- MANAGECOUCHDB
+  ---- 1. Create a CouchdbServer
+  ------------------------------------------------------------------------------
+  case ManageCouchdb
+    aspect mm:Test
+    state TesterExists = exists Tester
+      on entry
+        do for Tester
+          callEffect cdb:AddCredentials( "https://perspectives.domains/", "alice", "alice" )
 
-    case EmbeddedContext1
+    external
+      state Success = (exists cm:MyCouchdbApp >> CouchdbServers) and 
+        (exists exists cm:MyCouchdbApp >> CouchdbServers >> binding >> context >> Admin)
 
-  
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on extern
+      
+      -- Same perspective as cm:CouchdbManagementApp$Manager
+      perspective on cm:CouchdbManagementApp$CouchdbServers
+        only (CreateAndFill, RemoveContext, DeleteContext, Create, Fill)
+        props (Name) verbs (Consult)
+        props (Url, CouchdbServers$CouchdbPort, AdminUserName, AdminPassword, Name) verbs (SetPropertyValue)
+
+      action RunTest
+        letA
+          server <- create role cm:CouchdbManagementApp$CouchdbServers in cm:MyCouchdbApp
+        in
+          TestName = "ManageCouchdb - create a server registration." for extern
+          Url = "https://perspectives.domains/" for server
+          CouchdbPort = "5987" for server
+          AdminUserName = "alice" for server
+          AdminPassword = "alice" for server
+
+  ------------------------------------------------------------------------------
+  ---- CREATE REPOSITORY PERSPECTIVES.DOMAINS
+  ---- 1. Create a repository role.
+  ---- 2. Set the NameSpace property to "perspectives.domains"
+  ---- 3. Set the AdminEndorses property to true.
+  ------------------------------------------------------------------------------
+  case CreatePerspectivesDomainsRepository
+    aspect mm:Test
+
+    external
+      state Success = (exists cm:MyCouchdbApp >> CouchdbServers) and 
+        -- CouchdbServer has an Admin
+        (exists exists cm:MyCouchdbApp >> CouchdbServers >> binding >> context >> Admin) and
+        -- CouchdbServer has a Repository
+        (exists cm:MyCouchdbApp >> CouchdbServers >> binding >> context >> Repositories >> binding)
+        -- Repository has an Admin
+        and (exists cm:MyCouchdbApp >> CouchdbServers >> binding >> context >> Repositories >> binding >> context >> Admin)
+
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on extern
+
+      -- Same perspective as cm:CouchdbServer$Admin      
+      perspective on cm:CouchdbServer$Repositories
+        all roleverbs
+        props (Repositories$NameSpace, AdminEndorses, IsPublic, AdminLastName) verbs (Consult)
+        props (IsPublic, NameSpace_, HasDatabases) verbs (SetPropertyValue)
+        in object state WithoutExternalDatabase
+          props (AdminEndorses) verbs (SetPropertyValue)
+        in object state CreateDatabases
+          props (IsPublic) verbs (SetPropertyValue)
+        in object state NoNameSpace
+          props (Repositories$NameSpace) verbs (SetPropertyValue, AddPropertyValue)
+
+      action RunTest
+        letA
+          server <- cm:MyCouchdbApp >> CouchdbServers >> binding >> context >>= first
+          repo <- create role cm:CouchdbServer$Repositories in server
+        in
+          TestName = "CreatePerspectivesDomainsRepository - create a repository." for extern
+          NameSpace = "perspectives.domains" for repo
+          AdminEndorses = true for repo
+
+  ------------------------------------------------------------------------------
+  ---- CREATE MANIFEST
+  ---- 1. Create a Manifests role.
+  ---- 2. Set the LocalName property to "couchdb"
+  ------------------------------------------------------------------------------
+  case CreateManifest
+    aspect mm:Test
+
+    external
+      -- We need to explicitly trigger checking the condition for Success, because
+      -- the indexed context blocks inverted query access to the context.
+      property TestFinished (Boolean)
+      state Success = letE
+          server <- cm:MyCouchdbApp >> CouchdbServers >> binding >> context
+          repo <- server >> Repositories >> binding >> context
+          manifest <- repo >> Manifests >> binding >> context
+        in
+          TestFinished and (exists manifest)
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on extern
+        props (TestFinished) verbs (SetPropertyValue, Consult)
+
+      -- Same perspective as cm:Repository$Admin      
+      perspective on cm:Repository$Manifests
+        only (Create, Fill, Delete, Remove, RemoveContext, DeleteContext, CreateAndFill)
+        props (DomeinFileName, LocalModelName) verbs (SetPropertyValue, Consult)
+        props (Description, ModelCuid) verbs (Consult)
+        in object state ReadyToMake
+          props (ModelCuid) verbs (SetPropertyValue)
+      
+      action RunTest
+        letA
+          server <- cm:MyCouchdbApp >> CouchdbServers >> binding >> context >>= first
+          repo <- server >> Repositories >> binding >> context >>= first
+          manifest <- create role cm:Repository$Manifests in repo
+        in
+          TestName = "CreateManifest - create a manifest." for extern
+          LocalModelName = "Couchdb" for manifest
+          TestFinished = true for extern
+
+  ------------------------------------------------------------------------------
+  ---- CREATE VERSION
+  ---- 1. Create a Versions role.
+  ---- 2. Set the Version property to "1.0"
+  ------------------------------------------------------------------------------
+  case CreateVersion
+    aspect mm:Test
+
+    external
+      -- We need to explicitly trigger checking the condition for Success, because
+      -- the indexed context blocks inverted query access to the context.
+      property TestFinished (Boolean)
+      state Success = letE
+          server <- cm:MyCouchdbApp >> CouchdbServers >> binding >> context
+          repo <- server >> Repositories >> binding >> context
+          manifest <- repo >> Manifests >> binding >> context
+          version <- manifest >> ModelManifest$Versions >> binding >> context
+        in
+          TestFinished and (exists version)
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on extern
+        props (TestFinished) verbs (SetPropertyValue, Consult)
+      
+      -- Same perspective as cm:ModelManifest$Author
+      perspective on cm:ModelManifest$Versions
+        only (Create, Fill, RemoveContext, CreateAndFill, Delete, DeleteContext)
+        props (Versions$Version, Description, Patch, Build) verbs (Consult, SetPropertyValue)
+
+      action RunTest
+        letA
+          server <- cm:MyCouchdbApp >> CouchdbServers >> binding >> context
+          repo <- server >> Repositories >> binding >> context
+          manifest <- (filter repo >> Manifests with LocalModelName == "Couchdb") >> binding >> context 
+          version <- create role cm:ModelManifest$Versions in manifest
+        in
+          TestName = "CreateVersion - create a version." for extern
+          Versions$Version = "4.0" for version
+          TestFinished = true for extern
+
+  ------------------------------------------------------------------------------
+  ---- COMPILE MODEL
+  ---- 1. Set property AutoUpload op true
+  ---- 2. Set property Store op "Repository"
+  ---- 3. Set property ArcSource to the value of p:getLocalArcSource
+  ------------------------------------------------------------------------------
+  case CompileModel
+    aspect mm:Test
+
+    external
+      -- We need to explicitly trigger checking the condition for Success, because
+      -- the indexed context blocks inverted query access to the context.
+      property TestFinished (Boolean)
+      property TestStarted (Boolean)
+      state AfterStart = TestStarted
+        on entry
+          -- We need to give transactions enough time to propagate before marking the test as finished.
+          do for Tester after 1 Seconds
+            TestFinished = true
+      state Success = letE
+          server <- cm:MyCouchdbApp >> CouchdbServers >> binding >> context
+          repo <- server >> Repositories >> binding >> context
+          manifest <- (filter repo >> Manifests with LocalModelName == "Couchdb") >> binding >> context
+          version <- manifest >> ModelManifest$Versions >> binding >> context
+          translation <- version >> Translation
+        in
+          TestFinished and (exists translation >> TranslationYaml)
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on extern
+        props (TestFinished, TestStarted) verbs (SetPropertyValue, Consult)
+      
+      perspective on cm:VersionedModelManifest$External
+        props (ArcFile, AutoUpload, Store) verbs (Consult, SetPropertyValue)
+
+      perspective on cm:VersionedModelManifest$Translation
+        props (GenerateYaml) verbs (Consult, SetPropertyValue)
+
+      action RunTest
+        letA
+          server <- cm:MyCouchdbApp >> CouchdbServers >> binding >> context
+          repo <- server >> Repositories >> binding >> context
+          manifest <- (filter repo >> Manifests with LocalModelName == "Couchdb") >> binding >> context 
+          version <- manifest >> ModelManifest$Versions >> binding >>= first
+          source <- callExternal p:GetLocalArcSource( version >> ModelURIReadable ) returns String 
+          translation <- version >> context >> Translation
+        in
+          TestName = "CompileModel - compile and upload model and generate yaml." for extern
+          create file "whatever" as "text/arc" in ArcFile for version
+            source
+          Store = "Repository" for version
+          AutoUpload = true for version
+          GenerateYaml = true for translation
+          TestStarted = true for extern
+
+------------------------------------------------------------------------------
+  ---- ADD MODEL
+  ---- This case can be used as an aspect to create individual tests for concrete models.
+  ------------------------------------------------------------------------------
+  case AddModel
+    aspect mm:Test
+
+    state TesterExists = exists Tester >> binding
+    
+      state ExistsRepository = exists Repository >> binding
+
+        state ManifestIsConstructed = exists (filter Repository >> binding >> context >> Manifests with (LocalModelName == origin >> extern >> ModelName)) >> binding
+          on entry
+            do for Tester
+              bind (filter Repository >> binding >> context >> Manifests with (LocalModelName == origin >> extern >> ModelName)) >> binding >>= first to Manifest
+        
+        -- -- Just a single Version is expected to exist for each Manifest.
+        state VersionIsConstructed = exists (Manifest >> binding >> context >> Versions >> binding)
+          on entry
+            do for Tester
+              bind (Manifest >> binding >> context >> Versions >> binding) >>= first to Version
+
+    external
+      property NameSpace (String)
+      property ModelName (String)
+      property VersionNumber (String)
+
+      property StartTest (Boolean)
+      property StartParsing (Boolean)
+
+      state CreateManifest = StartTest
+        on entry
+          do for Tester after 20 Milliseconds
+            letA
+              manifest <- create role cm:Repository$Manifests in context >> Repository >> binding >> context
+            in
+              LocalModelName = ModelName for manifest
+              EnteredModelCuid = callExternal p:GetLocalModelCuid( "model://" + NameSpace + "#" + ModelName ) returns String for manifest
+
+      -- Is the Manifest role filled with the external role of the new ModelManifest?
+      state CreateVersion = exists context >> Manifest >> binding
+        on entry
+          do for Tester after 20 Milliseconds
+            letA
+              version <- create role cm:ModelManifest$Versions in context >> Manifest >> binding >> context
+            in
+              Versions$Version = VersionNumber for version
+      
+      state CompileModel = exists context >> Version >> binding
+        on entry
+          do for Tester
+            letA
+              version <- context >> Version >> binding
+            in
+              create file "whatever" as "text/arc" in ArcFile for version
+                callExternal p:GetLocalArcSource( version >> ModelURIReadable ) returns String 
+              Store = "Repository" for version
+              GenerateYaml = true for version >> context >> Translation
+              StartParsing = true
+
+      state StartParsing = StartParsing
+        on entry
+          do for Tester after 20 Milliseconds
+            letA
+              version <- context >> Version >> binding
+            in
+              AutoUpload = true for version
+      
+      state Success = letE
+          translation <- context >> Version >> binding >> context >> Translation
+        in
+          (exists translation >> TranslationYaml)
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on extern
+        props (NameSpace, VersionNumber, ModelName, StartTest, StartParsing) verbs (SetPropertyValue, Consult)
+
+      perspective on Repository
+        only (CreateAndFill)
+      
+      perspective on Manifest
+        only (CreateAndFill)
+      
+      perspective on Version
+        only (CreateAndFill)
+
+      -- Same perspective as cm:Repository$Admin      
+      perspective on cm:Repository$Manifests
+        only (Create, Fill, Delete, Remove, RemoveContext, DeleteContext, CreateAndFill)
+        props (DomeinFileName, LocalModelName, EnteredModelCuid) verbs (SetPropertyValue, Consult)
+        props (Description, ModelCuid) verbs (Consult)
+        in object state ReadyToMake
+          props (ModelCuid) verbs (SetPropertyValue)
+      
+      -- Same perspective as cm:ModelManifest$Author
+      perspective on cm:ModelManifest$Versions
+        only (Create, Fill, RemoveContext, CreateAndFill, Delete, DeleteContext)
+        props (Versions$Version, Description, Patch, Build) verbs (Consult, SetPropertyValue)
+
+      perspective on cm:VersionedModelManifest$External
+        props (ArcFile, AutoUpload, Store) verbs (Consult, SetPropertyValue)
+
+      perspective on cm:VersionedModelManifest$Translation
+        props (GenerateYaml) verbs (Consult, SetPropertyValue)
+      
+      action RunTestTemplate
+        -- Set these in the specialised versions.
+        NameSpace = "perspectives.domains" for extern
+        ModelName = "Files" for extern
+        VersionNumber = "3.0" for extern
+        TestName = "AddModel_Files - manifest, version and compiled model and translation for Files." for extern
+
+        bind cm:MyCouchdbApp >> (filter CouchdbServers >> binding >> context >> Repositories with (Repositories$NameSpace == origin >> extern >> NameSpace)) >> binding >>= first to Repository
+        StartTest = true for extern
+
+    -- Is filled with the external role of the Repository.
+    context Repository filledBy cm:Repository
+    -- Is filled with the external role of the Manifest.
+    context Manifest filledBy cm:ModelManifest
+    -- Is filled with the external role of the VersionedModelManifest.
+    context Version filledBy cm:VersionedModelManifest
+
+------------------------------------------------------------------------------
+  ---- COUCHDB
+  ---- This case can be used as an aspect to create individual tests for concrete models.
+  ---- Cuid = nip6odtx4r
+  ------------------------------------------------------------------------------
+  case AddModel_Couchdb
+    aspect mm:AddModel
+
+    user Tester
+      aspect mm:Test$Tester
+      aspect mm:AddModel$Tester
+
+      action RunTest
+        -- Set these in the specialised versions.
+        NameSpace = "perspectives.domains" for extern
+        ModelName = "Couchdb" for extern
+        VersionNumber = "4.0" for extern
+        TestName = "Add the model Couchdb" for extern
+
+        bind cm:MyCouchdbApp >> (filter CouchdbServers >> binding >> context >> Repositories with (Repositories$NameSpace == origin >> extern >> NameSpace)) >> binding >>= first to Repository
+        StartTest = true for extern
+
+    aspect context mm:AddModel$Repository
+    aspect context mm:AddModel$Manifest
+    aspect context mm:AddModel$Version
+
+------------------------------------------------------------------------------
+  ---- SERIALISE
+  ---- This case can be used as an aspect to create individual tests for concrete models.
+  ------------------------------------------------------------------------------
+  case AddModel_Serialise
+    aspect mm:AddModel
+
+    user Tester
+      aspect mm:Test$Tester
+      aspect mm:AddModel$Tester
+
+      action RunTest
+        -- Set these in the specialised versions.
+        NameSpace = "perspectives.domains" for extern
+        ModelName = "Serialise" for extern
+        VersionNumber = "3.0" for extern
+        TestName = "Add the model Serialise" for extern
+
+        bind cm:MyCouchdbApp >> (filter CouchdbServers >> binding >> context >> Repositories with (Repositories$NameSpace == origin >> extern >> NameSpace)) >> binding >>= first to Repository
+        StartTest = true for extern
+
+    aspect context mm:AddModel$Repository
+    aspect context mm:AddModel$Manifest
+    aspect context mm:AddModel$Version
+
+------------------------------------------------------------------------------
+  ---- SENSOR
+  ---- This case can be used as an aspect to create individual tests for concrete models.
+  ------------------------------------------------------------------------------
+  case AddModel_Sensor
+    aspect mm:AddModel
+
+    user Tester
+      aspect mm:Test$Tester
+      aspect mm:AddModel$Tester
+
+      action RunTest
+        -- Set these in the specialised versions.
+        NameSpace = "perspectives.domains" for extern
+        ModelName = "Sensor" for extern
+        VersionNumber = "3.0" for extern
+        TestName = "Add the model Sensor" for extern
+
+        bind cm:MyCouchdbApp >> (filter CouchdbServers >> binding >> context >> Repositories with (Repositories$NameSpace == origin >> extern >> NameSpace)) >> binding >>= first to Repository
+        StartTest = true for extern
+
+    aspect context mm:AddModel$Repository
+    aspect context mm:AddModel$Manifest
+    aspect context mm:AddModel$Version
+
+------------------------------------------------------------------------------
+  ---- UTILITIES
+  ---- This case can be used as an aspect to create individual tests for concrete models.
+  ------------------------------------------------------------------------------
+  case AddModel_Utilities
+    aspect mm:AddModel
+
+    user Tester
+      aspect mm:Test$Tester
+      aspect mm:AddModel$Tester
+
+      action RunTest
+        -- Set these in the specialised versions.
+        NameSpace = "perspectives.domains" for extern
+        ModelName = "Utilities" for extern
+        VersionNumber = "3.0" for extern
+        TestName = "Add the model Utilities" for extern
+
+        bind cm:MyCouchdbApp >> (filter CouchdbServers >> binding >> context >> Repositories with (Repositories$NameSpace == origin >> extern >> NameSpace)) >> binding >>= first to Repository
+        StartTest = true for extern
+
+    aspect context mm:AddModel$Repository
+    aspect context mm:AddModel$Manifest
+    aspect context mm:AddModel$Version
+
+------------------------------------------------------------------------------
+  ---- SYSTEM
+  ---- This case can be used as an aspect to create individual tests for concrete models.
+  ------------------------------------------------------------------------------
+  case AddModel_System
+    aspect mm:AddModel
+
+    user Tester
+      aspect mm:Test$Tester
+      aspect mm:AddModel$Tester
+
+      action RunTest
+        -- Set these in the specialised versions.
+        NameSpace = "perspectives.domains" for extern
+        ModelName = "System" for extern
+        VersionNumber = "7.0" for extern
+        TestName = "Add the model System" for extern
+
+        bind cm:MyCouchdbApp >> (filter CouchdbServers >> binding >> context >> Repositories with (Repositories$NameSpace == origin >> extern >> NameSpace)) >> binding >>= first to Repository
+        StartTest = true for extern
+
+    aspect context mm:AddModel$Repository
+    aspect context mm:AddModel$Manifest
+    aspect context mm:AddModel$Version
