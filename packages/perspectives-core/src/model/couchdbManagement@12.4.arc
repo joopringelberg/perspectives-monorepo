@@ -726,13 +726,16 @@ domain model://perspectives.domains#CouchdbManagement@12.4
       -- to both the cw_servers_and_repositories and to the Repository database.
       perspective on Manifests
         only (Create, Fill, Delete, Remove, RemoveContext, DeleteContext, CreateAndFill)
-        props (DomeinFileName, LocalModelName) verbs (SetPropertyValue, Consult)
+        props (DomeinFileName, LocalModelName, EnteredModelCuid) verbs (SetPropertyValue, Consult)
         props (Description, ModelCuid) verbs (Consult)
         in object state ReadyToMake
           props (ModelCuid) verbs (SetPropertyValue)
       
       action CreateManifest
-        create role Manifests
+        letA
+          manifest <- create role Manifests
+        in
+          EnteredModelCuid = callExternal util:GenSym() returns String for manifest
       
       perspective on Manifests >> binding >> context >> Author
         only (Create, Fill)
@@ -810,12 +813,15 @@ domain model://perspectives.domains#CouchdbManagement@12.4
 
       perspective on Manifests
         only (Create, Fill, Delete, Remove, RemoveContext, DeleteContext, CreateAndFill)
-        props (LocalModelName, DomeinFileName) verbs (SetPropertyValue, DeleteProperty, Consult)
+        props (LocalModelName, DomeinFileName, EnteredModelCuid) verbs (SetPropertyValue, DeleteProperty, Consult)
         props (Description, ModelCuid) verbs (Consult)
         in object state NoLocalModelName
           props (ModelCuid) verbs (SetPropertyValue)
       action CreateManifest
-        create role Manifests
+        letA
+          manifest <- create role Manifests
+        in
+          EnteredModelCuid = callExternal util:GenSym() returns String for manifest
       
       perspective on Manifests >> binding >> context >> Author
         only (Create, Fill)
@@ -898,34 +904,31 @@ domain model://perspectives.domains#CouchdbManagement@12.4
     -- are stored in this Repository.
     context Manifests (relational) filledBy ModelManifest
       aspect sys:ManifestCollection$Manifests
+      property EnteredModelCuid (String)
       -- LocalModelName
       -- ModelCuid
       state NoLocalModelName = not exists LocalModelName
-      state ReadyToMake = (not exists binding)
+      state ReadyToMake = (not exists binding) and (exists EnteredModelCuid)
         on entry
           do for Admin
             letA 
-              -- TODO: temporary workaround to avoid generating a new cuid each time.
-              -- Comment out once we're in a Stable universe.
-              cuid <- callExternal util:GenSym() returns String
-              manifestname <- (context >> extern >> NameSpace_ + "-" + cuid)
+              manifestname <- (context >> extern >> NameSpace_ + "-" + EnteredModelCuid)
             in
               -- As the PDR derives this name from the modelURI, we have to name the ModelManifest with its LocalModelName.
               create_ context ModelManifest named manifestname bound to origin
               bind currentactor to Author in origin >> binding >> context
               DomeinFileName = manifestname + ".json" for origin >> binding
-              ModelCuid = cuid for origin >> binding
+              ModelCuid = EnteredModelCuid for origin >> binding
 
           do for Authors
             letA 
-              cuid <- callExternal util:GenSym() returns String
-              manifestname <- (context >> extern >> NameSpace_ + "-" + cuid)
+              manifestname <- (context >> extern >> NameSpace_ + "-" + EnteredModelCuid)
             in
               -- As the PDR derives this name from the modelURI, we have to name the ModelManifest with its LocalModelName.
               create_ context ModelManifest named manifestname bound to origin
               bind currentactor to Author in origin >> binding >> context
               DomeinFileName = manifestname + ".json" for origin >> binding
-              ModelCuid = cuid for origin >> binding
+              ModelCuid = EnteredModelCuid for origin >> binding
 
     aspect thing sys:ContextWithNotification$Notifications
 

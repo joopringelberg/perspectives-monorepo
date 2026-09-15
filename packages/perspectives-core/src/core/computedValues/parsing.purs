@@ -58,7 +58,7 @@ import Perspectives.ErrorLogging (logPerspectivesError)
 import Perspectives.Extern.Couchdb (retrieveModelFromLocalStore, updateModel)
 import Perspectives.Extern.Files (getPFileTextValue)
 import Perspectives.External.HiddenFunctionCache (HiddenFunctionDescription)
-import Perspectives.Identifiers (ModelUriString, isModelUri, modelUri2ModelUrl, unversionedModelUri)
+import Perspectives.Identifiers (ModelUriString, isModelUri, modelUri2LocalName, modelUri2ModelUrl, unversionedModelUri)
 import Perspectives.InvertedQuery.Storable (StoredQueries)
 import Perspectives.ModelDependencies (modelURIReadable, sysUser, versionedModelManifestModelCuid) as MD
 import Perspectives.ModelTranslation (augmentModelTranslation, emptyTranslationTable, generateFirstTranslation, generateTranslationTable, parseTranslation_pass1, parseTranslation_pass2, writeReadableTranslationYaml, writeTranslationYaml) as MT
@@ -502,8 +502,26 @@ getLocalArcSource modelUris _ = case head modelUris of
       Just (ModelUri stableModelUri) -> do
         { documentName } <- pure $ unsafePartial modelUri2ModelUrl stableModelUri
         modelsdb <- lift $ lift $ modelsDatabaseName
-        UninterpretedDomeinFile udf  <- lift $ lift $ getDocument_ modelsdb documentName
+        UninterpretedDomeinFile udf <- lift $ lift $ getDocument_ modelsdb documentName
         pure $ Value udf.arc
+
+-- Hoe krijg je de Cuid gegeven de Readable LocalModelName en de namespace?
+-- 	- Je kunt ModelURIReadable berekenen als de Repository er is en de LocalModelName
+-- 	- ik geef ModelURIReadable nu mee aan GetLocalModelCuid
+-- 	- met lookupStableModelUri_ kun je de stable identifier opzoeken en daar zit de CUID in.
+-- 	- met modelUri2LocalName haal je uit de stable identifier de CUID.
+getLocalModelCuid :: Array ModelUriString -> (RoleInstance ~~> Value)
+getLocalModelCuid modelUris _ = case head modelUris of
+  Nothing -> handleExternalFunctionError "model://perspectives.domains#Parsing$GetLocalModelCuid"
+    (Left (error "No model URI provided."))
+  Just modelUri -> do
+    mstableModelUri <- lift $ lift $ lookupStableModelUri_ (ModelUri modelUri)
+    case mstableModelUri of
+      Nothing -> handleExternalFunctionError "model://perspectives.domains#Parsing$GetLocalModelCuid"
+        (Left $ error ("Cannot find stable model URI for model URI: " <> modelUri))
+      Just (ModelUri stableModelUri) -> do
+        let cuid = unsafePartial $ modelUri2LocalName stableModelUri
+        pure $ Value cuid
 
 -- | An Array of External functions. Each External function is inserted into the ExternalFunctionCache and can be retrieved
 -- | with `Perspectives.External.HiddenFunctionCache.lookupHiddenFunction`.
@@ -523,4 +541,5 @@ externalFunctions =
   , mkLibFunc2 "model://perspectives.domains#Parsing$AugmentModelTranslation" True augmentModelTranslation
   , mkLibFunc1 "model://perspectives.domains#Parsing$GenerateTCPConfiguration" True generateTCPConfiguration
   , mkLibFunc1 "model://perspectives.domains#Parsing$GetLocalArcSource" True getLocalArcSource
+  , mkLibFunc1 "model://perspectives.domains#Parsing$GetLocalModelCuid" True getLocalModelCuid
   ]
