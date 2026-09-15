@@ -71,6 +71,13 @@ runContextAction user actionName context = do
       lift $ debugState ("Executing context action '" <> actionName <> "' for user role type '" <> show readableUserRoleType <> "' in context '" <> context <> "'.")
       updater (ContextInstance context)
       lift $ restoreFrame oldFrame
+    Nothing, _ -> do
+      readableUserRoleType <- lift $ toReadable userRoleType
+      throwError $ error
+        $ "cannot find instance of user role type '" <> show readableUserRoleType
+            <> "' when executing action with name '"
+            <> actionName
+            <> "'."
     _, _ -> do
       readableUserRoleType <- lift $ toReadable userRoleType
       throwError $ error
