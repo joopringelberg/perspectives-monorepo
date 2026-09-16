@@ -88,7 +88,7 @@ rebootUniverseTestNameProperty :: String
 rebootUniverseTestNameProperty = "model://joopringelberg.nl#RebootUniverse$Test$External$TestName"
 
 rebootUniverseSnapshotDirectory :: String
-rebootUniverseSnapshotDirectory = "test/pdr-snapshot/rebootuniverse/alice"
+rebootUniverseSnapshotDirectory = "test/pdr-snapshot/universe/alice"
 
 -- Outcomment all tests to just re-create the snapshot without trying to create databases.
 rebootUniverseTests :: Array ModelTest
@@ -96,15 +96,24 @@ rebootUniverseTests =
   [ { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$Cleanup", logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$ManageCouchdb", logConfiguration: debugConfiguration }
   , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$CreatePerspectivesDomainsRepository", logConfiguration: emptyLogConfiguration }
-  -- , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$CreateManifest", logConfiguration: emptyLogConfiguration }
-  -- , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$CreateVersion", logConfiguration: emptyLogConfiguration }
-  -- , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$CompileModel", logConfiguration: emptyLogConfiguration }
-  -- , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel", logConfiguration: emptyLogConfiguration }
-  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_Couchdb", logConfiguration: debugConfiguration }
-  -- , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_Serialise", logConfiguration: emptyLogConfiguration }
-  -- , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_Sensor", logConfiguration: emptyLogConfiguration }
-  -- , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_Utilities", logConfiguration: emptyLogConfiguration }
-  -- , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_System", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_Couchdb", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_Serialise", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_Sensor", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_Utilities", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_System", logConfiguration: debugConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_BodiesWithAccounts", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_Parsing", logConfiguration: debugConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_HelpLib", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_Files", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_CouchdbManagement", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_BrokerServices", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_RabbitMQ", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_HyperContext", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_Introduction", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_HelpProject", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_Disconnect", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_RepositoryRegistry", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_SharedFileServices", logConfiguration: emptyLogConfiguration }
   ]
 
 debugConfiguration :: LogConfiguration
