@@ -51,6 +51,7 @@ import Effect.Aff.AVar (tryRead)
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
 import Effect.Exception (error)
+import Foreign (unsafeToForeign)
 import Foreign.Object (empty, fromFoldable, insert, singleton)
 import IDBKeyVal (idbDel, idbSet)
 import JS.Iterable (toArray)
@@ -75,10 +76,10 @@ import Perspectives.Instances.Builders (constructContext, createAndAddRoleInstan
 import Perspectives.Instances.CreateContext (constructEmptyContext)
 import Perspectives.Instances.Me (computeMe_)
 import Perspectives.InvertedQuery.Storable (StoredQueries, clearInvertedQueriesDatabase, getInvertedQueriesOfModel, removeInvertedQueriesContributedByModel, saveInvertedQueries)
-import Perspectives.Logging (debugInstall, errorInstall, infoInstall, traceInstall)
+import Perspectives.Logging (debugInstall, errorInstall, infoInstall, traceInstall, warnInstall)
 import Perspectives.ModelDependencies as DEP
 import Perspectives.Names (getMySystem, getUserIdentifier)
-import Perspectives.Persistence.API (DesignDocument(..), Keys(..), MonadPouchdb, addDocument_, createDatabase, deleteDatabase, getAttachment, getDocument, recoverFromRecoveryPoint, refreshRecoveryPoint, replicateDatabase, splitRepositoryFileUrl, tryGetDocument_, withDatabase)
+import Perspectives.Persistence.API (DesignDocument(..), Keys(..), MonadPouchdb, addAttachment, addDocument_, createDatabase, deleteDatabase, getAttachment, getDocument, recoverFromRecoveryPoint, refreshRecoveryPoint, replicateDatabase, retrieveDocumentVersion, splitRepositoryFileUrl, toFile, tryGetDocument_, withDatabase)
 import Perspectives.Persistence.API (deleteDocument, documentsInDatabase, excludeDocs) as Persistence
 import Perspectives.Persistence.Authentication (addCredentials) as Authentication
 import Perspectives.Persistence.CouchdbFunctions (addRoleToUser, concatenatePathSegments, removeRoleFromUser, user2couchdbuser)
@@ -88,7 +89,7 @@ import Perspectives.Persistence.State (getSystemIdentifier, getCouchdbBaseURL, g
 import Perspectives.Persistence.Types (Credential(..), UserName, Password)
 import Perspectives.Persistent (entitiesDatabaseName, forceSaveDomeinFile, getDomeinFile, getPerspectRol, saveEntiteit, saveEntiteit_, saveMarkedResources, tryGetPerspectContext, tryGetPerspectEntiteit)
 import Perspectives.Persistent.FromViews (getSafeViewOnDatabase)
-import Perspectives.PerspectivesState (clearQueryCache, contextCache, conversationCacheDelete, getCurrentLanguage, getPerspectivesUser, isInstalledModel, lookupModelUri, modelsDatabaseName, removeTranslationTable, roleCache, setModelUri)
+import Perspectives.PerspectivesState (clearQueryCache, contextCache, conversationCacheDelete, getCurrentLanguage, getPerspectivesUser, getTranslationTable, isInstalledModel, lookupModelUri, modelsDatabaseName, removeTranslationTable, roleCache, setModelUri)
 import Perspectives.Representation.Class.Cacheable (CalculatedRoleType(..), ContextType(..), EnumeratedRoleType(..), cacheEntity)
 import Perspectives.Representation.Class.Identifiable (identifier)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser(..), RoleInstance, Value(..), perspectivesUser2RoleInstance)
@@ -102,8 +103,8 @@ import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable, Stable
 import Perspectives.Sidecar.ToStable (toStable)
 import Perspectives.Sync.HandleTransaction (executeTransaction)
 import Perspectives.Sync.Transaction (Transaction(..), UninterpretedTransactionForPeer(..))
-import Prelude (Unit, bind, const, discard, eq, flip, pure, show, unit, void, ($), (<$>), (<<<), (<>), (==), (>>=), (*>))
-import Simple.JSON (read_, write)
+import Prelude (Unit, bind, const, discard, eq, flip, pure, show, unit, void, ($), (*>), (<$>), (<<<), (<>), (==), (>>=))
+import Simple.JSON (read_, write, writeJSON)
 import Unsafe.Coerce (unsafeCoerce)
 
 -- TEMPORARY HACK FOR SYS:THEWORLD AS CONTEXT TYPE
@@ -1098,6 +1099,34 @@ moveDataToLocal _ =
     )
     >>= handleExternalStatementError "model://perspectives.domains#Couchdb$MoveDataToLocal"
 
+-- uploadOldTranslation
+-- Retrieve from the local DomeinFile the translation table.
+-- Upload it to the repository DomeinFile of the corresponding model version.
+-- Try to work from the versioned model uri: this shoulde be an argument to the function.
+-- Make it an effect, using mkLibEffect1.
+uploadOldTranslation :: Array String -> RoleInstance -> MonadPerspectivesTransaction Unit
+uploadOldTranslation modelUris _ = do
+  case head modelUris of
+    Nothing -> handleExternalStatementError "model://perspectives.domains#Couchdb$UploadOldTranslation"
+      (Left (error "No model URI provided."))
+    Just modelUri -> do
+      -- Get the attachment "translation.json" from the local DomeinFile. It is just a resource.
+      let unversionedModelName = unversionedModelUri modelUri
+      moldTranslationTable <- lift $ getTranslationTable unversionedModelName
+      case moldTranslationTable of
+        Nothing -> warnInstall ("No translation table found for model URI: " <> modelUri)
+        Just oldTranslationTable -> case (unsafePartial modelUri2ModelUrl modelUri) of
+          { repositoryUrl, documentName } -> do
+            theFile <- liftEffect $ toFile "translationtable.json" "application/json" (unsafeToForeign $ writeJSON oldTranslationTable)
+            mRev <- lift $ retrieveDocumentVersion repositoryUrl documentName
+            void $ lift $ addAttachment
+              repositoryUrl
+              documentName
+              mRev
+              "translationtable.json"
+              theFile
+              (MediaType "text/json")
+
 -- | An Array of External functions. Each External function is inserted into the ExternalFunctionCache and can be retrieved
 -- | with `Perspectives.External.HiddenFunctionCache.lookupHiddenFunction`.
 externalFunctions :: Array (Tuple String HiddenFunctionDescription)
@@ -1140,5 +1169,6 @@ externalFunctions =
   , Tuple "model://perspectives.domains#Couchdb$ClearAndFillInvertedQueriesDatabase" { func: unsafeCoerce clearAndFillInvertedQueriesDatabase, nArgs: 0, isFunctional: True, isEffect: true }
   , mkLibEffect3 "model://perspectives.domains#Couchdb$MoveDataToRemote" True moveDataToRemote
   , Tuple "model://perspectives.domains#Couchdb$MoveDataToLocal" { func: unsafeCoerce moveDataToLocal, nArgs: 0, isFunctional: True, isEffect: true }
+  , mkLibEffect1 "model://perspectives.domains#Couchdb$UploadOldTranslation" True uploadOldTranslation
 
   ]
