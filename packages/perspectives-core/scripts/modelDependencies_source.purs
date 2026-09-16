@@ -235,9 +235,6 @@ domeinFileNameOnVersionedModelManifest = "model://perspectives.domains#System$Ve
 domeinFileNameWithVersion :: String
 domeinFileNameWithVersion = "model://perspectives.domains#System$VersionedModelManifest$External$VersionedDomeinFileName"
 
-versionedModelManifestModelCuid :: String
-versionedModelManifestModelCuid = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$ModelCuid"
-
 patch :: String
 patch = "model://perspectives.domains#System$VersionedModelManifest$External$Patch"
 
@@ -249,6 +246,12 @@ installedPatch = "model://perspectives.domains#System$PerspectivesSystem$ModelsI
 
 installedBuild :: String
 installedBuild = "model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$InstalledBuild"
+
+localModelNameProperty :: String
+localModelNameProperty = "model://perspectives.domains#System$ManifestCollection$Manifests$LocalModelName"
+
+modelCuidProperty :: String
+modelCuidProperty = "model://perspectives.domains#System$ModelManifest$External$ModelCuid"
 
 ------------------------------------------------------------------------------------
 -- COUCHDBMANAGEMENT
@@ -285,6 +288,12 @@ conversationSourceLastYamlChangeDT = "model://perspectives.domains#CouchdbManage
 
 modelURIReadable :: String
 modelURIReadable = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$ModelURIReadable"
+
+versionedModelManifestModelCuid :: String
+versionedModelManifestModelCuid = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$ModelCuid"
+
+manifestsRole :: String
+manifestsRole = "model://perspectives.domains#CouchdbManagement$Repository$Manifests"
 
 ------------------------------------------------------------------------------------
 -- INVITATION
