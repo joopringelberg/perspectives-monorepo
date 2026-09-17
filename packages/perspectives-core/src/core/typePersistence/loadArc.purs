@@ -34,6 +34,9 @@ import Data.List (List(..))
 import Data.Map (lookup)
 import Data.Maybe (Maybe(..))
 import Data.Newtype (over, unwrap)
+import Data.String.Regex (Regex, replace) as Regex
+import Data.String.Regex.Flags (noFlags)
+import Data.String.Regex.Unsafe (unsafeRegex)
 import Data.Tuple (Tuple(..))
 import Data.Unit (unit)
 import Effect.Class (liftEffect)
@@ -141,7 +144,7 @@ loadCompileAndStoreArcFile_ dfid text saveInCache modelCuid modelUriReadable _mb
 -- | Version should equal the version of the domain declaration in the ARC file.
 -- | modelUriReadable should be the Readable ModelUri with version for error reporting.
 loadAndCompileArcFileWithSidecar_ :: ModelUri Stable -> Source -> Boolean -> Maybe StableIdMapping -> String -> String -> Maybe String -> MonadPerspectivesTransaction (Either (Array PerspectivesError) (Tuple (DomeinFile Stable) (Tuple StoredQueries StableIdMapping)))
-loadAndCompileArcFileWithSidecar_ dfid@(ModelUri stableModelUri) text saveInCache mMapping modelCuid modelUriReadable mversion =
+loadAndCompileArcFileWithSidecar_ dfid@(ModelUri stableModelUri) rawText saveInCache mMapping modelCuid modelUriReadable mversion =
   catchError
     ( do
         (r :: Either ParseError ContextE) <- lift $ liftAff $ runIndentParser text domain
@@ -161,6 +164,11 @@ loadAndCompileArcFileWithSidecar_ dfid@(ModelUri stableModelUri) text saveInCach
     (\e -> pure $ Left [ Custom (show e) ])
 
   where
+  -- Strip trailing whitespace beyond a single newline so the parser (which requires exactly
+  -- one trailing newline and no trailing blank lines) always succeeds.
+  text :: String
+  text = normalizeTrailingWhitespace rawText
+
   compileIt :: ContextE -> MonadPerspectivesTransaction (Either (Array PerspectivesError) (Tuple (DomeinFile Stable) (Tuple StoredQueries StableIdMapping)))
   compileIt (ContextE rec@{ id: sourceIdReadable, pos }) =
     if testModelName (unversionedModelUri sourceIdReadable) then do
@@ -226,3 +234,11 @@ type CrlSource = String
 
 parseError2PerspectivesError :: ParseError -> PerspectivesError
 parseError2PerspectivesError (ParseError message pos) = ParserError message (position2ArcPosition pos)
+
+-- | Strips all trailing whitespace and replaces it with a single newline, so the parser
+-- | (which requires exactly one trailing newline and no trailing blank lines) always succeeds.
+normalizeTrailingWhitespace :: String -> String
+normalizeTrailingWhitespace s = Regex.replace trailingWhitespaceRegex "" s <> "\n"
+
+trailingWhitespaceRegex :: Regex.Regex
+trailingWhitespaceRegex = unsafeRegex "\\s+$" noFlags
