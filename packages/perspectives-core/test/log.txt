@@ -1,0 +1,504 @@
+[DEBUG] [STATE]   Entering context state model://perspectives.domains#CouchdbManagement$VersionedModelManifest for context def:#perspectives_domains-xyfxpg3lzq@12.4
+[DEBUG] [STATE]   Entering context state model://perspectives.domains#CouchdbManagement$VersionedModelManifest$NoTranslation for context def:#perspectives_domains-xyfxpg3lzq@12.4
+[TRACE] [STATE]   (RunContextStateAutomaticAction) Running automatic action for state StateIdentifier model://perspectives.domains#CouchdbManagement$VersionedModelManifest$NoTranslation in context "def:#perspectives_domains-xyfxpg3lzq@12.4"
+[TRACE] [RESOURCE] Created role instance def:#h8oofz9qrs of type EnumeratedRoleType "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$Translation" in context def:#perspectives_domains-xyfxpg3lzq@12.4
+[DEBUG] [STATE]   Entering context state model://perspectives.domains#System$ContextWithNotification for context def:#perspectives_domains-xyfxpg3lzq@12.4
+[DEBUG] [STATE]   Entering context state model://perspectives.domains#System$VersionedModelManifest for context def:#perspectives_domains-xyfxpg3lzq@12.4
+[TRACE] [STATE]   Entering role state model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External for role def:#perspectives_domains-xyfxpg3lzq@12.4$External
+[TRACE] [STATE]   Evaluating role state model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$BecomesRecommended: def:#perspectives_domains-xyfxpg3lzq@12.4$External
+[TRACE] [STATE]   (RoleStateNotValid) Role "def:#perspectives_domains-xyfxpg3lzq@12.4$External" is not in state StateIdentifier model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$BecomesRecommended
+[TRACE] [STATE]   Evaluating role state model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$ProcessArc: def:#perspectives_domains-xyfxpg3lzq@12.4$External
+[TRACE] [STATE]   (RoleStateNotValid) Role "def:#perspectives_domains-xyfxpg3lzq@12.4$External" is not in state StateIdentifier model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$ProcessArc
+[TRACE] [STATE]   Evaluating role state model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$AfterSuccesfulParse: def:#perspectives_domains-xyfxpg3lzq@12.4$External
+[TRACE] [STATE]   (RoleStateNotValid) Role "def:#perspectives_domains-xyfxpg3lzq@12.4$External" is not in state StateIdentifier model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$AfterSuccesfulParse
+[TRACE] [STATE]   Entering role state model://perspectives.domains#System$ContextWithNotification$External for role def:#perspectives_domains-xyfxpg3lzq@12.4$External
+[TRACE] [STATE]   Entering role state model://perspectives.domains#System$VersionedModelManifest$External for role def:#perspectives_domains-xyfxpg3lzq@12.4$External
+[TRACE] [STATE]   Entering role state model://perspectives.domains#CouchdbManagement$VersionedModelManifest$VisitorProxy for role def:#hi4oum8he4
+[TRACE] [STATE]   Entering role state model://perspectives.domains#CouchdbManagement$VersionedModelManifest$Author for role def:#h9poqc704e
+[TRACE] [STATE]   Entering role state model://perspectives.domains#System$ContextWithNotification$NotifiedUser for role def:#h9poqc704e
+[DEBUG] [STATE]   Entering phase1 of transaction 268
+[TRACE] [STATE]   Entering role state model://perspectives.domains#CouchdbManagement$VersionedModelManifest$Translation for role def:#h8oofz9qrs
+[TRACE] [STATE]   Evaluating role state model://perspectives.domains#CouchdbManagement$VersionedModelManifest$Translation$GenerateYaml: def:#h8oofz9qrs
+[TRACE] [STATE]   (RoleStateNotValid) Role "def:#h8oofz9qrs" is not in state StateIdentifier model://perspectives.domains#CouchdbManagement$VersionedModelManifest$Translation$GenerateYaml
+[TRACE] [STATE]   Evaluating role state model://perspectives.domains#CouchdbManagement$VersionedModelManifest$Translation$GenerateTranslationTable: def:#h8oofz9qrs
+[TRACE] [STATE]   (RoleStateNotValid) Role "def:#h8oofz9qrs" is not in state StateIdentifier model://perspectives.domains#CouchdbManagement$VersionedModelManifest$Translation$GenerateTranslationTable
+[DEBUG] [STATE]   Entering phase2 of transaction 268
+[DEBUG] [STATE]   Evaluate states - processing 6 invertedQueryResults
+[DEBUG] [STATE]     computing state evaluations for: (ContextStateQuery StateIdentifier model://perspectives.domains#xyfxpg3lzq$j4md0196ew$w0ka5n70us ["def:#perspectives_domains-xyfxpg3lzq@12.4"])
+[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#xyfxpg3lzq$purp0vollf$ghdhfh0c6p$h79vbyld0q ["def:#yohopvgfdb"])
+[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#xyfxpg3lzq$j4md0196ew$External$ktx7ik0gkb ["def:#perspectives_domains-xyfxpg3lzq@12.4$External"])
+[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#xyfxpg3lzq$j4md0196ew$External$j6utwqf4po ["def:#perspectives_domains-xyfxpg3lzq@12.4$External"])
+[DEBUG] [STATE]     computing state evaluations for: (ContextStateQuery StateIdentifier model://joopringelberg.nl#eqcwpoi6u6$kd437fxxql$kaeltxj7yq$hq5lwv6t2b$zkhn74b5xs ["def:#i32g9jr40i"])
+[DEBUG] [STATE]     computing state evaluations for: (ContextStateQuery StateIdentifier model://perspectives.domains#xyfxpg3lzq$purp0vollf$i3315cobkx ["def:#perspectives_domains-xyfxpg3lzq"])
+[DEBUG] [STATE]   ==========RUNNING 6 UNIQUE STATE EVALUATIONS============
+[DEBUG] [STATE]   Exiting context state model://perspectives.domains#xyfxpg3lzq$j4md0196ew$w0ka5n70us for context def:#perspectives_domains-xyfxpg3lzq@12.4
+[TRACE] [STATE]   Evaluating role state model://perspectives.domains#CouchdbManagement$ModelManifest$Versions$ReadyToMake: def:#yohopvgfdb
+[TRACE] [STATE]   Exiting role state model://perspectives.domains#CouchdbManagement$ModelManifest$Versions$ReadyToMake for role def:#yohopvgfdb
+[TRACE] [STATE]   Evaluating role state model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$AfterSuccesfulParse: def:#perspectives_domains-xyfxpg3lzq@12.4$External
+[TRACE] [STATE]   (RoleStateNotValid) Role "def:#perspectives_domains-xyfxpg3lzq@12.4$External" is not in state StateIdentifier model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$AfterSuccesfulParse
+[TRACE] [STATE]   Evaluating role state model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$ProcessArc: def:#perspectives_domains-xyfxpg3lzq@12.4$External
+[TRACE] [STATE]   (RoleStateNotValid) Role "def:#perspectives_domains-xyfxpg3lzq@12.4$External" is not in state StateIdentifier model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$ProcessArc
+[DEBUG] [STATE]   Entering context state model://joopringelberg.nl#RebootUniverse$AddModel$TesterExists$ExistsRepository$VersionIsConstructed for context def:#i32g9jr40i
+[TRACE] [STATE]   (RunContextStateAutomaticAction) Running automatic action for state StateIdentifier model://joopringelberg.nl#RebootUniverse$AddModel$TesterExists$ExistsRepository$VersionIsConstructed in context "def:#i32g9jr40i"
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[TRACE] [RESOURCE] (FilledRoleInstance) Filled role instance "def:#l8o8bxghvs" of type  EnumeratedRoleType "model://joopringelberg.nl#RebootUniverse$AddModel$Version" by filler "def:#perspectives_domains-xyfxpg3lzq@12.4$External" of type  EnumeratedRoleType "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External"
+[TRACE] [RESOURCE] Created role instance def:#l8o8bxghvs of type EnumeratedRoleType "model://joopringelberg.nl#RebootUniverse$AddModel$Version" in context def:#i32g9jr40i
+[TRACE] [STATE]   (AlreadyInContextState) Context "def:#perspectives_domains-xyfxpg3lzq" is already in state StateIdentifier model://perspectives.domains#CouchdbManagement$ModelManifest$NoRecommendations
+[DEBUG] [STATE]   Evaluate states - processing 2 invertedQueryResults
+[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://joopringelberg.nl#eqcwpoi6u6$kd437fxxql$External$k0e2thni3p ["def:#i32g9jr40i$External"])
+[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://joopringelberg.nl#eqcwpoi6u6$kd437fxxql$External$ea92yupae9 ["def:#i32g9jr40i$External"])
+[DEBUG] [STATE]   ==========RUNNING 2 UNIQUE STATE EVALUATIONS============
+[TRACE] [STATE]   Evaluating role state model://joopringelberg.nl#RebootUniverse$AddModel$External$CompileModel: def:#i32g9jr40i$External
+[TRACE] [STATE]   Entering role state model://joopringelberg.nl#RebootUniverse$AddModel$External$CompileModel for role def:#i32g9jr40i$External
+[TRACE] [STATE]   (RunRoleStateAutomaticAction) Running automatic action for state StateIdentifier model://joopringelberg.nl#RebootUniverse$AddModel$External$CompileModel in role "def:#i32g9jr40i$External"
+[DEBUG] [RESOURCE] setProperty: set property model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$ArcFile to values ["{\"roleFileName\":\"perspectives_domains-xyfxpg3lzq@12.4$External\",\"propertyType\":\"model://perspectives.domains#xyfxpg3lzq$j4md0196ew$External$yy61b8s5rf\",\"mimeType\":\"text/arc\",\"fileName\":\"whatever\"}"]
+[WARN] [RESOURCE] (RoleInstanceAlreadyHasPropertyValue) Role instance "def:#perspectives_domains-xyfxpg3lzq@12.4$External" already has value ["{\"roleFileName\":\"perspectives_domains-xyfxpg3lzq@12.4$External\",\"propertyType\":\"model://perspectives.domains#xyfxpg3lzq$j4md0196ew$External$yy61b8s5rf\",\"mimeType\":\"text/arc\",\"fileName\":\"whatever\"}"] for property model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$ArcFile
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[DEBUG] [RESOURCE] setProperty: set property model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$Store to values ["Repository"]
+[DEBUG] [RESOURCE] setProperty: set property model://joopringelberg.nl#RebootUniverse$AddModel$External$StartParsing to values ["true"]
+[TRACE] [STATE]   Evaluating role state model://joopringelberg.nl#RebootUniverse$AddModel$External$AugmentYaml: def:#i32g9jr40i$External
+[TRACE] [STATE]   (RoleStateNotValid) Role "def:#i32g9jr40i$External" is not in state StateIdentifier model://joopringelberg.nl#RebootUniverse$AddModel$External$AugmentYaml
+[DEBUG] [STATE]   Evaluate states - processing 4 invertedQueryResults
+[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://joopringelberg.nl#eqcwpoi6u6$kd437fxxql$External$u5yg3k9dzt ["def:#i32g9jr40i$External"])
+[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#xyfxpg3lzq$j4md0196ew$External$ktx7ik0gkb$vckpl34vqf ["def:#perspectives_domains-xyfxpg3lzq@12.4$External"])
+[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#xyfxpg3lzq$j4md0196ew$External$ktx7ik0gkb$infeqog23n ["def:#perspectives_domains-xyfxpg3lzq@12.4$External"])
+[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#xyfxpg3lzq$j4md0196ew$External$j6utwqf4po ["def:#perspectives_domains-xyfxpg3lzq@12.4$External"])
+[DEBUG] [STATE]   ==========RUNNING 4 UNIQUE STATE EVALUATIONS============
+[TRACE] [STATE]   Evaluating role state model://joopringelberg.nl#RebootUniverse$AddModel$External$StartParsing: def:#i32g9jr40i$External
+[TRACE] [STATE]   Entering role state model://joopringelberg.nl#RebootUniverse$AddModel$External$StartParsing for role def:#i32g9jr40i$External
+[TRACE] [STATE]   (RunRoleStateAutomaticAction) Running automatic action for state StateIdentifier model://joopringelberg.nl#RebootUniverse$AddModel$External$StartParsing in role "def:#i32g9jr40i$External"
+[TRACE] [STATE] (RoleStateHasBeenEvaluatedBefore) State StateIdentifier model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$ProcessArc has already been evaluated for role "def:#perspectives_domains-xyfxpg3lzq@12.4$External"
+[DEBUG] [STATE]   Rerun phase1 for transaction 268
+[DEBUG] [STATE]   Entering phase1 of transaction 268
+[TRACE] [STATE]   Entering role state model://joopringelberg.nl#RebootUniverse$AddModel$Version for role def:#l8o8bxghvs
+[DEBUG] [STATE]   Entering phase2 of transaction 268
+[DEBUG] [STATE]   Evaluate states - processing 0 invertedQueryResults
+[DEBUG] [STATE]   Processing public role transaction for user "def:#hi4oum8he4" in transaction 268
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[DEBUG] [STATE]     Starting embedded non-sharing transaction because it was necessary.
+[DEBUG] [STATE]     Starting non-sharing transaction 269
+[WARN] [RESOURCE] (RoleInstanceAlreadyHasPropertyValue) Role instance "pub:https://perspectives.domains/cw_perspectives_domains/#alice" already has value ["{\"key_ops\":[\"verify\"],\"ext\":true,\"kty\":\"EC\",\"x\":\"V2gluYDrbRCTn8NL5JdRH9GnA9rfwRbeaMTEBSvwX6lkMa3_vv11P48nQu4tuLw5\",\"y\":\"0lVl5LRGcp4ojutt15prYeoYDHZwO-Zo3O0pb71SpiwNEMbRS78TYzANZDCXoDsv\",\"crv\":\"P-384\"}"] for property model://perspectives.domains#System$Identifiable$PublicKey
+[WARN] [RESOURCE] (RoleInstanceAlreadyHasPropertyValue) Role instance "pub:https://perspectives.domains/cw_perspectives_domains/#alice" already has value ["{\"key_ops\":[\"encrypt\"],\"ext\":true,\"kty\":\"RSA\",\"n\":\"oqktnnMsgI2rmrGHrsEMdyVj6HTsfbHoTFR-fMWihfDQTOMqRmGlk8-nW3GHau-d6_OUBXlNagzO975j9ngPBXRGOJKNAGbCIYQ74ZUuuQA-f4PtzPsBaNbdxkLB98gnF77B4HR6SpuV_uYi-3Agfmbia0ED3HmsExzVKW5alSVvPKd7rZbwrZDtFVcgR0PyUtf5xqzJif5aFi7eQ2PordLkPiRpDaPCKliG_GZWpeDeCmsto5nBKZPW8_oprmpcS2wT8YVVxfV9O-kqXUExIPBPMuiuPIzcv95gUXvoSE4T1EA84FVlsPXegW6TCdAir3XtSGvoMAYGay2p4RD8vf2WxjpATUtD5AF8Ief5WTC4urewvkoG3aW35YU0ir_dKdtPmhq8Smq1H2hCzewCzkue3fLVVpQFARTU9TY7uIpyzGhTj76K16n-14_RatG7ZvH0B0Ebc1IiTjJAcqAc1tlmyQ9FDpdTP_oJbqogxvU65jOuzgr2qMarSnAhjfVwN46as6s8qDGH77EWAlt29IPiOpBgQSABYzi8A9YHAFW3TJL3RY5I8Ejzc4XkNO0DYrnTnTymxgoMqm8SbTo_msIfCRNohZItzGDV2YlyUY3zLao2NFGNFEMbcds2gMXCV_sgEjucP7FooavY9JAR8rZjHt0JYYXvQ9Pr2DGdomk\",\"e\":\"AQAB\",\"alg\":\"RSA-OAEP-256\"}"] for property model://perspectives.domains#System$Identifiable$TransportPublicKey
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[DEBUG] [RESOURCE] setProperty: set property model://perspectives.domains#System$ModelManifest$External$DomeinFileName to values ["perspectives_domains-xyfxpg3lzq.json"]
+[DEBUG] [STATE]     Entering phase1 of transaction 269
+[DEBUG] [STATE]     run sharing transaction from nonsharing transaction 269
+[DEBUG] [STATE]       Starting embedded sharing transaction because it was necessary.
+[DEBUG] [STATE]       Starting sharing transaction 270
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[DEBUG] [RESOURCE] setProperty: set property model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$AutoUpload to values ["true"]
+[DEBUG] [STATE]       Entering phase1 of transaction 270
+[DEBUG] [STATE]       Entering phase2 of transaction 270
+[DEBUG] [STATE]       Evaluate states - processing 1 invertedQueryResults
+[DEBUG] [STATE]         computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#xyfxpg3lzq$j4md0196ew$External$j6utwqf4po ["def:#perspectives_domains-xyfxpg3lzq@12.4$External"])
+[DEBUG] [STATE]       ==========RUNNING 1 UNIQUE STATE EVALUATIONS============
+[TRACE] [STATE]       Evaluating role state model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$ProcessArc: def:#perspectives_domains-xyfxpg3lzq@12.4$External
+[TRACE] [STATE]       Entering role state model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$ProcessArc for role def:#perspectives_domains-xyfxpg3lzq@12.4$External
+[TRACE] [STATE]       (RunRoleStateAutomaticAction) Running automatic action for state StateIdentifier model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$ProcessArc in role "def:#perspectives_domains-xyfxpg3lzq@12.4$External"
+[DEBUG] [STATE]       Exiting phase 2 for transaction 270.
+[DEBUG] [STATE]       Ending transaction 270
+[DEBUG] [STATE]       Starting non-sharing transaction 271
+[WARN] [RESOURCE] (RoleInstanceAlreadyHasPropertyValue) Role instance "pub:https://perspectives.domains/cw_perspectives_domains/#alice" already has value ["{\"key_ops\":[\"verify\"],\"ext\":true,\"kty\":\"EC\",\"x\":\"V2gluYDrbRCTn8NL5JdRH9GnA9rfwRbeaMTEBSvwX6lkMa3_vv11P48nQu4tuLw5\",\"y\":\"0lVl5LRGcp4ojutt15prYeoYDHZwO-Zo3O0pb71SpiwNEMbRS78TYzANZDCXoDsv\",\"crv\":\"P-384\"}"] for property model://perspectives.domains#System$Identifiable$PublicKey
+[WARN] [RESOURCE] (RoleInstanceAlreadyHasPropertyValue) Role instance "pub:https://perspectives.domains/cw_perspectives_domains/#alice" already has value ["{\"key_ops\":[\"encrypt\"],\"ext\":true,\"kty\":\"RSA\",\"n\":\"oqktnnMsgI2rmrGHrsEMdyVj6HTsfbHoTFR-fMWihfDQTOMqRmGlk8-nW3GHau-d6_OUBXlNagzO975j9ngPBXRGOJKNAGbCIYQ74ZUuuQA-f4PtzPsBaNbdxkLB98gnF77B4HR6SpuV_uYi-3Agfmbia0ED3HmsExzVKW5alSVvPKd7rZbwrZDtFVcgR0PyUtf5xqzJif5aFi7eQ2PordLkPiRpDaPCKliG_GZWpeDeCmsto5nBKZPW8_oprmpcS2wT8YVVxfV9O-kqXUExIPBPMuiuPIzcv95gUXvoSE4T1EA84FVlsPXegW6TCdAir3XtSGvoMAYGay2p4RD8vf2WxjpATUtD5AF8Ief5WTC4urewvkoG3aW35YU0ir_dKdtPmhq8Smq1H2hCzewCzkue3fLVVpQFARTU9TY7uIpyzGhTj76K16n-14_RatG7ZvH0B0Ebc1IiTjJAcqAc1tlmyQ9FDpdTP_oJbqogxvU65jOuzgr2qMarSnAhjfVwN46as6s8qDGH77EWAlt29IPiOpBgQSABYzi8A9YHAFW3TJL3RY5I8Ejzc4XkNO0DYrnTnTymxgoMqm8SbTo_msIfCRNohZItzGDV2YlyUY3zLao2NFGNFEMbcds2gMXCV_sgEjucP7FooavY9JAR8rZjHt0JYYXvQ9Pr2DGdomk\",\"e\":\"AQAB\",\"alg\":\"RSA-OAEP-256\"}"] for property model://perspectives.domains#System$Identifiable$TransportPublicKey
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[TRACE] [RESOURCE] (FilledRoleInstance) Filled role instance "pub:https://perspectives.domains/cw_servers_and_repositories/#a01qdsafq7" of type  EnumeratedRoleType "model://perspectives.domains#CouchdbManagement$Repository$Manifests" by filler "pub:https://perspectives.domains/cw_perspectives_domains/#perspectives_domains-xyfxpg3lzq$External" of type  EnumeratedRoleType "model://perspectives.domains#CouchdbManagement$ModelManifest$External"
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[TRACE] [RESOURCE] (FilledRoleInstance) Filled role instance "pub:https://perspectives.domains/cw_perspectives_domains/#yohopvgfdb" of type  EnumeratedRoleType "model://perspectives.domains#CouchdbManagement$ModelManifest$Versions" by filler "pub:https://perspectives.domains/cw_perspectives_domains/#perspectives_domains-xyfxpg3lzq@12.4$External" of type  EnumeratedRoleType "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External"
+[DEBUG] [RESOURCE] setProperty: set property model://perspectives.domains#System$ModelManifest$External$ModelCuid to values ["xyfxpg3lzq"]
+[DEBUG] [RESOURCE] setProperty: set property model://perspectives.domains#System$VersionedModelManifest$External$Patch to values ["0"]
+[DEBUG] [RESOURCE] setProperty: set property model://perspectives.domains#System$VersionedModelManifest$External$Build to values ["0"]
+[DEBUG] [STATE]       Entering phase1 of transaction 271
+[DEBUG] [STATE]       run sharing transaction from nonsharing transaction 271
+[DEBUG] [STATE]         Starting embedded sharing transaction because it was necessary.
+[DEBUG] [STATE]         Starting sharing transaction 272
+[DEBUG] [STATE]         Entering context state model://perspectives.domains#CouchdbManagement$ModelManifest for context pub:https://perspectives.domains/cw_perspectives_domains/#perspectives_domains-xyfxpg3lzq
+[DEBUG] [STATE]         Entering context state model://perspectives.domains#CouchdbManagement$ModelManifest$NoRecommendations for context pub:https://perspectives.domains/cw_perspectives_domains/#perspectives_domains-xyfxpg3lzq
+[DEBUG] [STATE]         Entering context state model://perspectives.domains#System$ModelManifest for context pub:https://perspectives.domains/cw_perspectives_domains/#perspectives_domains-xyfxpg3lzq
+[DEBUG] [STATE]         Entering context state model://perspectives.domains#System$RootContext for context pub:https://perspectives.domains/cw_perspectives_domains/#perspectives_domains-xyfxpg3lzq
+[DEBUG] [STATE]         Entering phase1 of transaction 272
+[DEBUG] [STATE]         Entering phase2 of transaction 272
+[DEBUG] [STATE]         Evaluate states - processing 0 invertedQueryResults
+[DEBUG] [STATE]         Exiting phase 2 for transaction 272.
+[DEBUG] [STATE]         Ending transaction 272
+[DEBUG] [STATE]       Starting sharing transaction 273
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[DEBUG] [STATE]         Starting embedded sharing transaction.
+[DEBUG] [STATE]         Starting sharing transaction 274
+[DEBUG] [STATE]         Entering context state model://perspectives.domains#CouchdbManagement$VersionedModelManifest for context pub:https://perspectives.domains/cw_perspectives_domains/#perspectives_domains-xyfxpg3lzq@12.4
+[DEBUG] [STATE]         Entering context state model://perspectives.domains#CouchdbManagement$VersionedModelManifest$NoTranslation for context pub:https://perspectives.domains/cw_perspectives_domains/#perspectives_domains-xyfxpg3lzq@12.4
+[DEBUG] [STATE]         Entering context state model://perspectives.domains#System$ContextWithNotification for context pub:https://perspectives.domains/cw_perspectives_domains/#perspectives_domains-xyfxpg3lzq@12.4
+[DEBUG] [STATE]         Entering context state model://perspectives.domains#System$VersionedModelManifest for context pub:https://perspectives.domains/cw_perspectives_domains/#perspectives_domains-xyfxpg3lzq@12.4
+[DEBUG] [STATE]         Entering phase1 of transaction 274
+[DEBUG] [STATE]         Entering phase2 of transaction 274
+[DEBUG] [STATE]         Evaluate states - processing 0 invertedQueryResults
+[DEBUG] [STATE]         Exiting phase 2 for transaction 274.
+[DEBUG] [STATE]       Ending transaction that needed to be embedded.
+[DEBUG] [STATE]         Ending transaction 274
+[DEBUG] [STATE]     returning to nonsharing transaction 269 from sharing transaction.
+[DEBUG] [STATE]       run sharing transaction from nonsharing transaction 269
+[DEBUG] [STATE]         Starting embedded sharing transaction because it was necessary.
+[DEBUG] [STATE]         Starting sharing transaction 275
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[DEBUG] [STATE]         Entering phase1 of transaction 275
+[DEBUG] [STATE]         Entering phase2 of transaction 275
+[DEBUG] [STATE]         Evaluate states - processing 0 invertedQueryResults
+[DEBUG] [STATE]         Exiting phase 2 for transaction 275.
+[DEBUG] [STATE]         Ending transaction that needed to be embedded.
+[DEBUG] [STATE]         Ending transaction 275
+[DEBUG] [STATE]       returning to nonsharing transaction 271 from sharing transaction.
+[DEBUG] [STATE]       run sharing transaction from nonsharing transaction 271
+[DEBUG] [STATE]         Starting embedded sharing transaction because it was necessary.
+[DEBUG] [STATE]         Starting sharing transaction 276
+[TRACE] [STATE]         Entering role state model://perspectives.domains#CouchdbManagement$ModelManifest$External for role pub:https://perspectives.domains/cw_perspectives_domains/#perspectives_domains-xyfxpg3lzq$External
+[TRACE] [STATE]         Evaluating role state model://perspectives.domains#CouchdbManagement$ModelManifest$External$RecomputeVersion: pub:https://perspectives.domains/cw_perspectives_domains/#perspectives_domains-xyfxpg3lzq$External
+[TRACE] [STATE]         (RoleStateNotValid) Role "pub:https://perspectives.domains/cw_perspectives_domains/#perspectives_domains-xyfxpg3lzq$External" is not in state StateIdentifier model://perspectives.domains#CouchdbManagement$ModelManifest$External$RecomputeVersion
+[TRACE] [STATE]         Entering role state model://perspectives.domains#System$ModelManifest$External for role pub:https://perspectives.domains/cw_perspectives_domains/#perspectives_domains-xyfxpg3lzq$External
+[TRACE] [STATE]         Entering role state model://perspectives.domains#System$RootContext$External for role pub:https://perspectives.domains/cw_perspectives_domains/#perspectives_domains-xyfxpg3lzq$External
+[DEBUG] [STATE]         Entering phase1 of transaction 276
+[DEBUG] [STATE]         Entering phase2 of transaction 276
+[DEBUG] [STATE]         Evaluate states - processing 0 invertedQueryResults
+[DEBUG] [STATE]         Exiting phase 2 for transaction 276.
+[DEBUG] [STATE]         Ending embedded transaction.
+[DEBUG] [STATE]         Ending transaction 276
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[DEBUG] [RESOURCE] setProperty: set property model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$ArcFeedback to values ["OK"]
+[DEBUG] [RESOURCE] setProperty: set property model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$LastChangeDT to values ["1789568158256.0"]
+[DEBUG] [RESOURCE] setProperty: set property model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$MustUpload to values ["true"]
+[DEBUG] [STATE]       Entering phase1 of transaction 273
+[DEBUG] [STATE]       Entering phase2 of transaction 273
+[DEBUG] [STATE]       Evaluate states - processing 4 invertedQueryResults
+[DEBUG] [STATE]         computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#xyfxpg3lzq$j4md0196ew$External$ktx7ik0gkb ["def:#perspectives_domains-xyfxpg3lzq@12.4$External"])
+[DEBUG] [STATE]         computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#xyfxpg3lzq$j4md0196ew$External$j6utwqf4po ["def:#perspectives_domains-xyfxpg3lzq@12.4$External"])
+[DEBUG] [STATE]         computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#xyfxpg3lzq$j4md0196ew$tnc2nzinrw$uf3miowqir ["def:#h8oofz9qrs"])
+[DEBUG] [STATE]         computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#xyfxpg3lzq$j4md0196ew$tnc2nzinrw$yyy1f5h3lv ["def:#h8oofz9qrs"])
+[DEBUG] [STATE]       ==========RUNNING 4 UNIQUE STATE EVALUATIONS============
+[TRACE] [STATE]       Evaluating role state model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$AfterSuccesfulParse: def:#perspectives_domains-xyfxpg3lzq@12.4$External
+[TRACE] [STATE]       Entering role state model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$AfterSuccesfulParse for role def:#perspectives_domains-xyfxpg3lzq@12.4$External
+[TRACE] [STATE]       Evaluating role state model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$AfterSuccesfulParse$UploadToRepository: def:#perspectives_domains-xyfxpg3lzq@12.4$External
+[TRACE] [STATE]       Entering role state model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$AfterSuccesfulParse$UploadToRepository for role def:#perspectives_domains-xyfxpg3lzq@12.4$External
+[TRACE] [STATE]       (RunRoleStateAutomaticAction) Running automatic action for state StateIdentifier model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$AfterSuccesfulParse$UploadToRepository in role "def:#perspectives_domains-xyfxpg3lzq@12.4$External"
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[TRACE] [RESOURCE] (FilledRoleInstance) Filled role instance "def:#jtjxerjn2c" of type  EnumeratedRoleType "model://perspectives.domains#System$ContextWithNotification$Notifications" by filler "def:#perspectives_domains-xyfxpg3lzq@12.4$External" of type  EnumeratedRoleType "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External"
+[DEBUG] [RESOURCE] setProperty: set property model://perspectives.domains#System$ContextWithNotification$Notifications$Message to values ["Version 12.4 (build 0 ) has been uploaded to the repository for perspectives.domains ."]
+[TRACE] [RESOURCE] Created role instance def:#jtjxerjn2c of type EnumeratedRoleType "model://perspectives.domains#System$ContextWithNotification$Notifications" in context def:#perspectives_domains-xyfxpg3lzq@12.4
+[TRACE] [STATE]       Evaluating role state model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$AfterSuccesfulParse$StoreInLocalDatabase: def:#perspectives_domains-xyfxpg3lzq@12.4$External
+[TRACE] [STATE]       (RoleStateNotValid) Role "def:#perspectives_domains-xyfxpg3lzq@12.4$External" is not in state StateIdentifier model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$AfterSuccesfulParse$StoreInLocalDatabase
+[TRACE] [STATE]       Evaluating role state model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$AfterSuccesfulParse$ApplyImmediately: def:#perspectives_domains-xyfxpg3lzq@12.4$External
+[TRACE] [STATE]       (RoleStateNotValid) Role "def:#perspectives_domains-xyfxpg3lzq@12.4$External" is not in state StateIdentifier model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$AfterSuccesfulParse$ApplyImmediately
+[TRACE] [STATE]       Evaluating role state model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$AfterSuccesfulParse$NoAction: def:#perspectives_domains-xyfxpg3lzq@12.4$External
+[TRACE] [STATE]       Entering role state model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$AfterSuccesfulParse$NoAction for role def:#perspectives_domains-xyfxpg3lzq@12.4$External
+[TRACE] [STATE]       (RunRoleStateAutomaticAction) Running automatic action for state StateIdentifier model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$AfterSuccesfulParse$NoAction in role "def:#perspectives_domains-xyfxpg3lzq@12.4$External"
+[TRACE] [RESOURCE] (FilledRoleInstance) Filled role instance "def:#byd3oxkty6" of type  EnumeratedRoleType "model://perspectives.domains#System$ContextWithNotification$Notifications" by filler "def:#perspectives_domains-xyfxpg3lzq@12.4$External" of type  EnumeratedRoleType "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External"
+[DEBUG] [RESOURCE] setProperty: set property model://perspectives.domains#System$ContextWithNotification$Notifications$Message to values ["Version 12.4 (build 0 ) has not been stored in the local store or applied to the current session."]
+[TRACE] [RESOURCE] Created role instance def:#byd3oxkty6 of type EnumeratedRoleType "model://perspectives.domains#System$ContextWithNotification$Notifications" in context def:#perspectives_domains-xyfxpg3lzq@12.4
+[TRACE] [STATE]       Evaluating role state model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$ProcessArc: def:#perspectives_domains-xyfxpg3lzq@12.4$External
+[TRACE] [STATE]       Exiting role state model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$ProcessArc for role def:#perspectives_domains-xyfxpg3lzq@12.4$External
+[TRACE] [STATE]       Evaluating role state model://perspectives.domains#CouchdbManagement$VersionedModelManifest$Translation$GenerateYaml: def:#h8oofz9qrs
+[TRACE] [STATE]       (RoleStateNotValid) Role "def:#h8oofz9qrs" is not in state StateIdentifier model://perspectives.domains#CouchdbManagement$VersionedModelManifest$Translation$GenerateYaml
+[TRACE] [STATE]       Evaluating role state model://perspectives.domains#CouchdbManagement$VersionedModelManifest$Translation$GenerateTranslationTable: def:#h8oofz9qrs
+[TRACE] [STATE]       (RoleStateNotValid) Role "def:#h8oofz9qrs" is not in state StateIdentifier model://perspectives.domains#CouchdbManagement$VersionedModelManifest$Translation$GenerateTranslationTable
+[DEBUG] [STATE]       Rerun phase1 for transaction 273
+[DEBUG] [STATE]       Entering phase1 of transaction 273
+[TRACE] [STATE]       Entering role state model://perspectives.domains#System$ContextWithNotification$Notifications for role def:#jtjxerjn2c
+[TRACE] [STATE]       Entering role state model://perspectives.domains#System$ContextWithNotification$Notifications for role def:#byd3oxkty6
+[DEBUG] [STATE]       Entering phase2 of transaction 273
+[DEBUG] [STATE]       Evaluate states - processing 0 invertedQueryResults
+[DEBUG] [STATE]       Exiting phase 2 for transaction 273.
+[DEBUG] [STATE]       Ending transaction 273
+[DEBUG] [STATE]       Starting sharing transaction 277
+[TRACE] [STATE]       Entering role state model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External for role pub:https://perspectives.domains/cw_perspectives_domains/#perspectives_domains-xyfxpg3lzq@12.4$External
+[TRACE] [STATE]       Evaluating role state model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$BecomesRecommended: pub:https://perspectives.domains/cw_perspectives_domains/#perspectives_domains-xyfxpg3lzq@12.4$External
+[TRACE] [STATE]       (RoleStateNotValid) Role "pub:https://perspectives.domains/cw_perspectives_domains/#perspectives_domains-xyfxpg3lzq@12.4$External" is not in state StateIdentifier model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$BecomesRecommended
+[TRACE] [STATE]       Evaluating role state model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$ProcessArc: pub:https://perspectives.domains/cw_perspectives_domains/#perspectives_domains-xyfxpg3lzq@12.4$External
+[TRACE] [STATE]       (RoleStateNotValid) Role "pub:https://perspectives.domains/cw_perspectives_domains/#perspectives_domains-xyfxpg3lzq@12.4$External" is not in state StateIdentifier model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$ProcessArc
+[TRACE] [STATE]       Evaluating role state model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$AfterSuccesfulParse: pub:https://perspectives.domains/cw_perspectives_domains/#perspectives_domains-xyfxpg3lzq@12.4$External
+[TRACE] [STATE]       (RoleStateNotValid) Role "pub:https://perspectives.domains/cw_perspectives_domains/#perspectives_domains-xyfxpg3lzq@12.4$External" is not in state StateIdentifier model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$AfterSuccesfulParse
+[TRACE] [STATE]       Entering role state model://perspectives.domains#System$ContextWithNotification$External for role pub:https://perspectives.domains/cw_perspectives_domains/#perspectives_domains-xyfxpg3lzq@12.4$External
+[TRACE] [STATE]       Entering role state model://perspectives.domains#System$VersionedModelManifest$External for role pub:https://perspectives.domains/cw_perspectives_domains/#perspectives_domains-xyfxpg3lzq@12.4$External
+[TRACE] [STATE]       Entering role state model://perspectives.domains#CouchdbManagement$ModelManifest$Versions for role pub:https://perspectives.domains/cw_perspectives_domains/#yohopvgfdb
+[TRACE] [STATE]       Evaluating role state model://perspectives.domains#CouchdbManagement$ModelManifest$Versions$ReadyToMake: pub:https://perspectives.domains/cw_perspectives_domains/#yohopvgfdb
+[TRACE] [STATE]       (RoleStateNotValid) Role "pub:https://perspectives.domains/cw_perspectives_domains/#yohopvgfdb" is not in state StateIdentifier model://perspectives.domains#CouchdbManagement$ModelManifest$Versions$ReadyToMake
+[TRACE] [STATE]       Entering role state model://perspectives.domains#System$ModelManifest$Versions for role pub:https://perspectives.domains/cw_perspectives_domains/#yohopvgfdb
+[TRACE] [STATE]       Entering role state model://perspectives.domains#CouchdbManagement$Repository$Manifests for role pub:https://perspectives.domains/cw_servers_and_repositories/#a01qdsafq7
+[TRACE] [STATE]       Evaluating role state model://perspectives.domains#CouchdbManagement$Repository$Manifests$NoLocalModelName: pub:https://perspectives.domains/cw_servers_and_repositories/#a01qdsafq7
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[TRACE] [STATE]       Entering role state model://perspectives.domains#CouchdbManagement$Repository$Manifests$NoLocalModelName for role pub:https://perspectives.domains/cw_servers_and_repositories/#a01qdsafq7
+[TRACE] [STATE]       Evaluating role state model://perspectives.domains#CouchdbManagement$Repository$Manifests$ReadyToMake: pub:https://perspectives.domains/cw_servers_and_repositories/#a01qdsafq7
+[TRACE] [STATE]       (RoleStateNotValid) Role "pub:https://perspectives.domains/cw_servers_and_repositories/#a01qdsafq7" is not in state StateIdentifier model://perspectives.domains#CouchdbManagement$Repository$Manifests$ReadyToMake
+[TRACE] [STATE]       Entering role state model://perspectives.domains#System$ManifestCollection$Manifests for role pub:https://perspectives.domains/cw_servers_and_repositories/#a01qdsafq7
+[DEBUG] [STATE]       Entering phase1 of transaction 277
+[DEBUG] [STATE]       Entering phase2 of transaction 277
+[DEBUG] [STATE]       Evaluate states - processing 0 invertedQueryResults
+[DEBUG] [STATE]       Exiting phase 2 for transaction 277.
+[DEBUG] [STATE]         Ending transaction that needed to be embedded.
+[DEBUG] [STATE]       Ending transaction 277
+[DEBUG] [STATE]       returning to nonsharing transaction 269 from sharing transaction.
+[DEBUG] [STATE]     Entering phase2 of transaction 269
+[DEBUG] [STATE]     run sharing transaction from nonsharing transaction 269
+[DEBUG] [STATE]         Ending transaction that needed to be embedded.
+[DEBUG] [STATE]       returning to nonsharing transaction 271 from sharing transaction.
+[DEBUG] [STATE]       Starting embedded sharing transaction because it was necessary.
+[DEBUG] [STATE]       Entering phase2 of transaction 271
+[DEBUG] [STATE]       run sharing transaction from nonsharing transaction 271
+[DEBUG] [STATE]         Starting embedded sharing transaction because it was necessary.
+[DEBUG] [STATE]         Starting sharing transaction 278
+[DEBUG] [STATE]         Evaluate states - processing 0 invertedQueryResults
+[DEBUG] [STATE]         Entering phase1 of transaction 278
+[DEBUG] [STATE]         Entering phase2 of transaction 278
+[DEBUG] [STATE]         Evaluate states - processing 0 invertedQueryResults
+[DEBUG] [STATE]         Exiting phase 2 for transaction 278.
+[DEBUG] [STATE]         Ending transaction 278
+[DEBUG] [STATE]       Starting sharing transaction 279
+[DEBUG] [STATE]       Evaluate states - processing 5 invertedQueryResults
+[DEBUG] [STATE]         computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#xyfxpg3lzq$purp0vollf$ghdhfh0c6p$h79vbyld0q ["pub:https://perspectives.domains/cw_perspectives_domains/#yohopvgfdb"])
+[DEBUG] [STATE]         computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#xyfxpg3lzq$j4md0196ew$External$ktx7ik0gkb ["pub:https://perspectives.domains/cw_perspectives_domains/#perspectives_domains-xyfxpg3lzq@12.4$External"])
+[DEBUG] [STATE]         computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#xyfxpg3lzq$j4md0196ew$External$j6utwqf4po ["pub:https://perspectives.domains/cw_perspectives_domains/#perspectives_domains-xyfxpg3lzq@12.4$External"])
+[DEBUG] [STATE]         computing state evaluations for: (ContextStateQuery StateIdentifier model://perspectives.domains#xyfxpg3lzq$purp0vollf$i3315cobkx ["pub:https://perspectives.domains/cw_perspectives_domains/#perspectives_domains-xyfxpg3lzq"])
+[DEBUG] [STATE]         computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#xyfxpg3lzq$r6cizdyven$murhlatx75$q7uavzkeoc ["pub:https://perspectives.domains/cw_servers_and_repositories/#a01qdsafq7"])
+[DEBUG] [STATE]       ==========RUNNING 5 UNIQUE STATE EVALUATIONS============
+[TRACE] [STATE]       Evaluating role state model://perspectives.domains#CouchdbManagement$ModelManifest$Versions$ReadyToMake: pub:https://perspectives.domains/cw_perspectives_domains/#yohopvgfdb
+[TRACE] [STATE]       (RoleStateNotValid) Role "pub:https://perspectives.domains/cw_perspectives_domains/#yohopvgfdb" is not in state StateIdentifier model://perspectives.domains#CouchdbManagement$ModelManifest$Versions$ReadyToMake
+[TRACE] [STATE]       Evaluating role state model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$AfterSuccesfulParse: pub:https://perspectives.domains/cw_perspectives_domains/#perspectives_domains-xyfxpg3lzq@12.4$External
+[TRACE] [STATE]       (RoleStateNotValid) Role "pub:https://perspectives.domains/cw_perspectives_domains/#perspectives_domains-xyfxpg3lzq@12.4$External" is not in state StateIdentifier model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$AfterSuccesfulParse
+[TRACE] [STATE]       Evaluating role state model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$ProcessArc: pub:https://perspectives.domains/cw_perspectives_domains/#perspectives_domains-xyfxpg3lzq@12.4$External
+[TRACE] [STATE]       (RoleStateNotValid) Role "pub:https://perspectives.domains/cw_perspectives_domains/#perspectives_domains-xyfxpg3lzq@12.4$External" is not in state StateIdentifier model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$ProcessArc
+[TRACE] [STATE]       (AlreadyInContextState) Context "pub:https://perspectives.domains/cw_perspectives_domains/#perspectives_domains-xyfxpg3lzq" is already in state StateIdentifier model://perspectives.domains#CouchdbManagement$ModelManifest$NoRecommendations
+[TRACE] [STATE]       Evaluating role state model://perspectives.domains#CouchdbManagement$Repository$Manifests$ReadyToMake: pub:https://perspectives.domains/cw_servers_and_repositories/#a01qdsafq7
+[TRACE] [STATE]       (RoleStateNotValid) Role "pub:https://perspectives.domains/cw_servers_and_repositories/#a01qdsafq7" is not in state StateIdentifier model://perspectives.domains#CouchdbManagement$Repository$Manifests$ReadyToMake
+[DEBUG] [STATE]       Entering phase1 of transaction 279
+[DEBUG] [STATE]       Entering phase2 of transaction 279
+[DEBUG] [STATE]       Evaluate states - processing 0 invertedQueryResults
+[DEBUG] [STATE]       Exiting phase 2 for transaction 279.
+[DEBUG] [STATE]       Ending transaction that needed to be embedded.
+[DEBUG] [STATE]       Ending transaction 279
+[DEBUG] [STATE]     returning to nonsharing transaction 269 from sharing transaction.
+[DEBUG] [STATE]     Exiting phase 2 for transaction 269.
+[DEBUG] [STATE]         Ending transaction that needed to be embedded.
+[DEBUG] [STATE]     Ending transaction 269
+[DEBUG] [STATE]       returning to nonsharing transaction 271 from sharing transaction.
+[DEBUG] [STATE]       Exiting phase 2 for transaction 271.
+[DEBUG] [STATE]   Ending transaction that needed to be embedded.
+[DEBUG] [STATE]       Ending transaction 271
+[DEBUG] [STATE] Processing public role transaction for user "def:#sucn4f9g34" in transaction 267
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[DEBUG] [STATE]     Ending transaction that needed to be embedded.
+[DEBUG] [STATE]   Processing public role transaction for user "def:#rj316ykpr7" in transaction 268
+[DEBUG] [STATE]   Starting embedded non-sharing transaction because it was necessary.
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[DEBUG] [STATE]     Starting embedded non-sharing transaction because it was necessary.
+[DEBUG] [STATE]     Starting non-sharing transaction 280
+[WARN] [RESOURCE] (RoleInstanceAlreadyHasPropertyValue) Role instance "pub:https://perspectives.domains/cw_servers_and_repositories/#alice" already has value ["{\"key_ops\":[\"verify\"],\"ext\":true,\"kty\":\"EC\",\"x\":\"V2gluYDrbRCTn8NL5JdRH9GnA9rfwRbeaMTEBSvwX6lkMa3_vv11P48nQu4tuLw5\",\"y\":\"0lVl5LRGcp4ojutt15prYeoYDHZwO-Zo3O0pb71SpiwNEMbRS78TYzANZDCXoDsv\",\"crv\":\"P-384\"}"] for property model://perspectives.domains#System$Identifiable$PublicKey
+[WARN] [RESOURCE] (RoleInstanceAlreadyHasPropertyValue) Role instance "pub:https://perspectives.domains/cw_servers_and_repositories/#alice" already has value ["{\"key_ops\":[\"encrypt\"],\"ext\":true,\"kty\":\"RSA\",\"n\":\"oqktnnMsgI2rmrGHrsEMdyVj6HTsfbHoTFR-fMWihfDQTOMqRmGlk8-nW3GHau-d6_OUBXlNagzO975j9ngPBXRGOJKNAGbCIYQ74ZUuuQA-f4PtzPsBaNbdxkLB98gnF77B4HR6SpuV_uYi-3Agfmbia0ED3HmsExzVKW5alSVvPKd7rZbwrZDtFVcgR0PyUtf5xqzJif5aFi7eQ2PordLkPiRpDaPCKliG_GZWpeDeCmsto5nBKZPW8_oprmpcS2wT8YVVxfV9O-kqXUExIPBPMuiuPIzcv95gUXvoSE4T1EA84FVlsPXegW6TCdAir3XtSGvoMAYGay2p4RD8vf2WxjpATUtD5AF8Ief5WTC4urewvkoG3aW35YU0ir_dKdtPmhq8Smq1H2hCzewCzkue3fLVVpQFARTU9TY7uIpyzGhTj76K16n-14_RatG7ZvH0B0Ebc1IiTjJAcqAc1tlmyQ9FDpdTP_oJbqogxvU65jOuzgr2qMarSnAhjfVwN46as6s8qDGH77EWAlt29IPiOpBgQSABYzi8A9YHAFW3TJL3RY5I8Ejzc4XkNO0DYrnTnTymxgoMqm8SbTo_msIfCRNohZItzGDV2YlyUY3zLao2NFGNFEMbcds2gMXCV_sgEjucP7FooavY9JAR8rZjHt0JYYXvQ9Pr2DGdomk\",\"e\":\"AQAB\",\"alg\":\"RSA-OAEP-256\"}"] for property model://perspectives.domains#System$Identifiable$TransportPublicKey
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[DEBUG] [RESOURCE] setProperty: set property model://perspectives.domains#System$ManifestCollection$Manifests$LocalModelName to values ["CouchdbManagement"]
+[WARN] [RESOURCE] (RoleInstanceAlreadyHasPropertyValue) Role instance "pub:https://perspectives.domains/cw_perspectives_domains/#perspectives_domains-xyfxpg3lzq$External" already has value ["xyfxpg3lzq"] for property model://perspectives.domains#System$ModelManifest$External$ModelCuid
+[DEBUG] [STATE]     Entering phase1 of transaction 280
+[DEBUG] [STATE]     Entering phase2 of transaction 280
+[DEBUG] [STATE]     run sharing transaction from nonsharing transaction 280
+[DEBUG] [STATE]       Starting embedded sharing transaction because it was necessary.
+[DEBUG] [STATE]       Starting sharing transaction 281
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[DEBUG] [RESOURCE] setProperty: set property model://perspectives.domains#System$VersionedModelManifest$External$Build to values ["1.0"]
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[DEBUG] [RESOURCE] setProperty: set property model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$MustUpload to values ["false"]
+[DEBUG] [RESOURCE] setProperty: set property model://perspectives.domains#CouchdbManagement$VersionedModelManifest$Translation$GenerateYaml to values ["true"]
+[DEBUG] [STATE]       Entering phase1 of transaction 281
+[DEBUG] [STATE]       Entering phase2 of transaction 281
+[DEBUG] [STATE]       Evaluate states - processing 2 invertedQueryResults
+[DEBUG] [STATE]         computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#xyfxpg3lzq$j4md0196ew$tnc2nzinrw$uf3miowqir ["def:#h8oofz9qrs"])
+[DEBUG] [STATE]         computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#xyfxpg3lzq$j4md0196ew$External$ktx7ik0gkb ["def:#perspectives_domains-xyfxpg3lzq@12.4$External"])
+[DEBUG] [STATE]       ==========RUNNING 2 UNIQUE STATE EVALUATIONS============
+[TRACE] [STATE]       Evaluating role state model://perspectives.domains#CouchdbManagement$VersionedModelManifest$Translation$GenerateYaml: def:#h8oofz9qrs
+[TRACE] [STATE]       Entering role state model://perspectives.domains#CouchdbManagement$VersionedModelManifest$Translation$GenerateYaml for role def:#h8oofz9qrs
+[TRACE] [STATE]       (RunRoleStateAutomaticAction) Running automatic action for state StateIdentifier model://perspectives.domains#CouchdbManagement$VersionedModelManifest$Translation$GenerateYaml in role "def:#h8oofz9qrs"
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[DEBUG] [RESOURCE] setProperty: set property model://perspectives.domains#CouchdbManagement$VersionedModelManifest$Translation$TranslationYaml to values ["{\"roleFileName\":\"h8oofz9qrs\",\"propertyType\":\"model://perspectives.domains#xyfxpg3lzq$j4md0196ew$tnc2nzinrw$aj7wercmnj\",\"mimeType\":\"text/yaml\",\"fileName\":\"model://perspectives.domains#CouchdbManagement@12.4.yaml\"}"]
+[WARN] [RESOURCE] (RoleInstanceAlreadyHasPropertyValue) Role instance "def:#h8oofz9qrs" already has value ["{\"roleFileName\":\"h8oofz9qrs\",\"propertyType\":\"model://perspectives.domains#xyfxpg3lzq$j4md0196ew$tnc2nzinrw$aj7wercmnj\",\"mimeType\":\"text/yaml\",\"fileName\":\"model://perspectives.domains#CouchdbManagement@12.4.yaml\"}"] for property model://perspectives.domains#CouchdbManagement$VersionedModelManifest$Translation$TranslationYaml
+[DEBUG] [RESOURCE] setProperty: set property model://perspectives.domains#CouchdbManagement$VersionedModelManifest$Translation$GenerateYaml to values ["false"]
+[TRACE] [STATE]       Evaluating role state model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$AfterSuccesfulParse: def:#perspectives_domains-xyfxpg3lzq@12.4$External
+[TRACE] [STATE]       Exiting role state model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$AfterSuccesfulParse for role def:#perspectives_domains-xyfxpg3lzq@12.4$External
+[TRACE] [STATE]       Exiting role state model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$AfterSuccesfulParse$UploadToRepository for role def:#perspectives_domains-xyfxpg3lzq@12.4$External
+[TRACE] [STATE]       Exiting role state model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$AfterSuccesfulParse$NoAction for role def:#perspectives_domains-xyfxpg3lzq@12.4$External
+[DEBUG] [STATE]       Evaluate states - processing 3 invertedQueryResults
+[DEBUG] [STATE]         computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#xyfxpg3lzq$j4md0196ew$tnc2nzinrw$uf3miowqir ["def:#h8oofz9qrs"])
+[DEBUG] [STATE]         computing state evaluations for: (RoleStateQuery StateIdentifier model://joopringelberg.nl#eqcwpoi6u6$kd437fxxql$External$ea92yupae9 ["def:#i32g9jr40i$External"])
+[DEBUG] [STATE]         computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#xyfxpg3lzq$j4md0196ew$tnc2nzinrw$yyy1f5h3lv ["def:#h8oofz9qrs"])
+[DEBUG] [STATE]       ==========RUNNING 3 UNIQUE STATE EVALUATIONS============
+[TRACE] [STATE] (RoleStateHasBeenEvaluatedBefore) State StateIdentifier model://perspectives.domains#CouchdbManagement$VersionedModelManifest$Translation$GenerateYaml has already been evaluated for role "def:#h8oofz9qrs"
+[TRACE] [STATE]       Evaluating role state model://joopringelberg.nl#RebootUniverse$AddModel$External$AugmentYaml: def:#i32g9jr40i$External
+[TRACE] [STATE]       Entering role state model://joopringelberg.nl#RebootUniverse$AddModel$External$AugmentYaml for role def:#i32g9jr40i$External
+[TRACE] [STATE]       (RunRoleStateAutomaticAction) Running automatic action for state StateIdentifier model://joopringelberg.nl#RebootUniverse$AddModel$External$AugmentYaml in role "def:#i32g9jr40i$External"
+[TRACE] [STATE]       Evaluating role state model://perspectives.domains#CouchdbManagement$VersionedModelManifest$Translation$GenerateTranslationTable: def:#h8oofz9qrs
+[TRACE] [STATE]       Entering role state model://perspectives.domains#CouchdbManagement$VersionedModelManifest$Translation$GenerateTranslationTable for role def:#h8oofz9qrs
+[TRACE] [STATE]       (RunRoleStateAutomaticAction) Running automatic action for state StateIdentifier model://perspectives.domains#CouchdbManagement$VersionedModelManifest$Translation$GenerateTranslationTable in role "def:#h8oofz9qrs"
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[DEBUG] [RESOURCE] setProperty: set property model://perspectives.domains#CouchdbManagement$VersionedModelManifest$Translation$LastYamlChangeDT to values ["1789568203233.0"]
+[DEBUG] [STATE]       Evaluate states - processing 1 invertedQueryResults
+[DEBUG] [STATE]         computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#xyfxpg3lzq$j4md0196ew$tnc2nzinrw$yyy1f5h3lv ["def:#h8oofz9qrs"])
+[DEBUG] [STATE]       ==========RUNNING 1 UNIQUE STATE EVALUATIONS============
+[TRACE] [STATE] (RoleStateHasBeenEvaluatedBefore) State StateIdentifier model://perspectives.domains#CouchdbManagement$VersionedModelManifest$Translation$GenerateTranslationTable has already been evaluated for role "def:#h8oofz9qrs"
+[DEBUG] [STATE]       Processing public role transaction for user "def:#hi4oum8he4" in transaction 281
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[DEBUG] [STATE]         Starting embedded non-sharing transaction because it was necessary.
+[DEBUG] [STATE]         Starting sharing transaction 282
+[WARN] [RESOURCE] (RoleInstanceAlreadyHasPropertyValue) Role instance "def:#perspectives_domains-xyfxpg3lzq@12.4$External" already has value ["false"] for property model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$MustUpload
+[DEBUG] [STATE]         Entering phase1 of transaction 282
+[DEBUG] [STATE]         Entering phase2 of transaction 282
+[DEBUG] [STATE]         Evaluate states - processing 0 invertedQueryResults
+[DEBUG] [STATE]         Exiting phase 2 for transaction 282.
+[DEBUG] [STATE]         Ending transaction 282
+[DEBUG] [STATE]         Starting non-sharing transaction 283
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[WARN] [RESOURCE] (RoleInstanceAlreadyHasPropertyValue) Role instance "pub:https://perspectives.domains/cw_perspectives_domains/#alice" already has value ["{\"key_ops\":[\"verify\"],\"ext\":true,\"kty\":\"EC\",\"x\":\"V2gluYDrbRCTn8NL5JdRH9GnA9rfwRbeaMTEBSvwX6lkMa3_vv11P48nQu4tuLw5\",\"y\":\"0lVl5LRGcp4ojutt15prYeoYDHZwO-Zo3O0pb71SpiwNEMbRS78TYzANZDCXoDsv\",\"crv\":\"P-384\"}"] for property model://perspectives.domains#System$Identifiable$PublicKey
+[WARN] [RESOURCE] (RoleInstanceAlreadyHasPropertyValue) Role instance "pub:https://perspectives.domains/cw_perspectives_domains/#alice" already has value ["{\"key_ops\":[\"encrypt\"],\"ext\":true,\"kty\":\"RSA\",\"n\":\"oqktnnMsgI2rmrGHrsEMdyVj6HTsfbHoTFR-fMWihfDQTOMqRmGlk8-nW3GHau-d6_OUBXlNagzO975j9ngPBXRGOJKNAGbCIYQ74ZUuuQA-f4PtzPsBaNbdxkLB98gnF77B4HR6SpuV_uYi-3Agfmbia0ED3HmsExzVKW5alSVvPKd7rZbwrZDtFVcgR0PyUtf5xqzJif5aFi7eQ2PordLkPiRpDaPCKliG_GZWpeDeCmsto5nBKZPW8_oprmpcS2wT8YVVxfV9O-kqXUExIPBPMuiuPIzcv95gUXvoSE4T1EA84FVlsPXegW6TCdAir3XtSGvoMAYGay2p4RD8vf2WxjpATUtD5AF8Ief5WTC4urewvkoG3aW35YU0ir_dKdtPmhq8Smq1H2hCzewCzkue3fLVVpQFARTU9TY7uIpyzGhTj76K16n-14_RatG7ZvH0B0Ebc1IiTjJAcqAc1tlmyQ9FDpdTP_oJbqogxvU65jOuzgr2qMarSnAhjfVwN46as6s8qDGH77EWAlt29IPiOpBgQSABYzi8A9YHAFW3TJL3RY5I8Ejzc4XkNO0DYrnTnTymxgoMqm8SbTo_msIfCRNohZItzGDV2YlyUY3zLao2NFGNFEMbcds2gMXCV_sgEjucP7FooavY9JAR8rZjHt0JYYXvQ9Pr2DGdomk\",\"e\":\"AQAB\",\"alg\":\"RSA-OAEP-256\"}"] for property model://perspectives.domains#System$Identifiable$TransportPublicKey
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[DEBUG] [RESOURCE] setProperty: set property model://perspectives.domains#System$ModelManifest$Versions$Version to values ["12.4"]
+[WARN] [RESOURCE] (RoleInstanceAlreadyHasPropertyValue) Role instance "pub:https://perspectives.domains/cw_perspectives_domains/#perspectives_domains-xyfxpg3lzq$External" already has value ["perspectives_domains-xyfxpg3lzq.json"] for property model://perspectives.domains#System$ModelManifest$External$DomeinFileName
+[WARN] [RESOURCE] (RoleInstanceAlreadyHasPropertyValue) Role instance "pub:https://perspectives.domains/cw_perspectives_domains/#perspectives_domains-xyfxpg3lzq$External" already has value ["xyfxpg3lzq"] for property model://perspectives.domains#System$ModelManifest$External$ModelCuid
+[DEBUG] [RESOURCE] setProperty: set property model://perspectives.domains#CouchdbManagement$ModelManifest$External$VersionToInstall to values ["12.4"]
+[WARN] [RESOURCE] (RoleInstanceAlreadyHasPropertyValue) Role instance "pub:https://perspectives.domains/cw_perspectives_domains/#perspectives_domains-xyfxpg3lzq@12.4$External" already has value ["0"] for property model://perspectives.domains#System$VersionedModelManifest$External$Patch
+[WARN] [RESOURCE] (RoleInstanceAlreadyHasPropertyValue) Role instance "pub:https://perspectives.domains/cw_perspectives_domains/#perspectives_domains-xyfxpg3lzq@12.4$External" already has value ["0"] for property model://perspectives.domains#System$VersionedModelManifest$External$Build
+[DEBUG] [STATE]         Entering phase1 of transaction 283
+[DEBUG] [STATE]         Entering phase2 of transaction 283
+[DEBUG] [STATE]         run sharing transaction from nonsharing transaction 283
+[DEBUG] [STATE]           Starting embedded sharing transaction because it was necessary.
+[DEBUG] [STATE]           Starting sharing transaction 284
+[DEBUG] [STATE]           Evaluate states - processing 1 invertedQueryResults
+[DEBUG] [STATE]             computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#xyfxpg3lzq$r6cizdyven$murhlatx75$debrufv9x1 ["pub:https://perspectives.domains/cw_servers_and_repositories/#a01qdsafq7"])
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[DEBUG] [STATE]           ==========RUNNING 1 UNIQUE STATE EVALUATIONS============
+[TRACE] [STATE]           Evaluating role state model://perspectives.domains#CouchdbManagement$Repository$Manifests$NoLocalModelName: pub:https://perspectives.domains/cw_servers_and_repositories/#a01qdsafq7
+[TRACE] [STATE]           Exiting role state model://perspectives.domains#CouchdbManagement$Repository$Manifests$NoLocalModelName for role pub:https://perspectives.domains/cw_servers_and_repositories/#a01qdsafq7
+[DEBUG] [STATE]           Entering phase1 of transaction 284
+[DEBUG] [STATE]           Entering phase2 of transaction 284
+[DEBUG] [STATE]           Evaluate states - processing 0 invertedQueryResults
+[DEBUG] [STATE]           Exiting phase 2 for transaction 284.
+[DEBUG] [STATE]           Ending transaction 284
+[DEBUG] [STATE]         Starting sharing transaction 285
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[INFO] [TEST] Test has a name: Add the model CouchdbManagement
+[DEBUG] [RESOURCE] setProperty: set property model://perspectives.domains#CouchdbManagement$VersionedModelManifest$Translation$GenerateYaml to values ["true"]
+[DEBUG] [RESOURCE] setProperty: set property model://joopringelberg.nl#RebootUniverse$AddModel$External$YamlGenerated to values ["true"]
+[DEBUG] [STATE]         Entering phase1 of transaction 285
+[DEBUG] [STATE]         Entering phase2 of transaction 285
+[DEBUG] [STATE]         Evaluate states - processing 2 invertedQueryResults
+[DEBUG] [STATE]           computing state evaluations for: (RoleStateQuery StateIdentifier model://joopringelberg.nl#eqcwpoi6u6$kd437fxxql$External$exzr17ovk3 ["def:#i32g9jr40i$External"])
+[DEBUG] [STATE]           computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#xyfxpg3lzq$j4md0196ew$tnc2nzinrw$uf3miowqir ["def:#h8oofz9qrs"])
+[DEBUG] [STATE]         ==========RUNNING 2 UNIQUE STATE EVALUATIONS============
+[TRACE] [STATE]         Evaluating role state model://joopringelberg.nl#RebootUniverse$AddModel$External$Success: def:#i32g9jr40i$External
+[TRACE] [STATE]         Entering role state model://joopringelberg.nl#RebootUniverse$AddModel$External$Success for role def:#i32g9jr40i$External
+[TRACE] [STATE]         (RunRoleStateAutomaticAction) Running automatic action for state StateIdentifier model://joopringelberg.nl#RebootUniverse$AddModel$External$Success in role "def:#i32g9jr40i$External"
+[TRACE] [STATE]         Evaluating role state model://perspectives.domains#CouchdbManagement$VersionedModelManifest$Translation$GenerateYaml: def:#h8oofz9qrs
+[TRACE] [STATE]         (AlreadyInRoleState) Role "def:#h8oofz9qrs" is already in state StateIdentifier model://perspectives.domains#CouchdbManagement$VersionedModelManifest$Translation$GenerateYaml
+[DEBUG] [STATE]         Exiting phase 2 for transaction 285.
+[DEBUG] [STATE]         Ending transaction 285
+[DEBUG] [STATE]         Starting non-sharing transaction 286
+[WARN] [RESOURCE] (RoleInstanceAlreadyHasPropertyValue) Role instance "pub:https://perspectives.domains/cw_perspectives_domains/#alice" already has value ["{\"key_ops\":[\"verify\"],\"ext\":true,\"kty\":\"EC\",\"x\":\"V2gluYDrbRCTn8NL5JdRH9GnA9rfwRbeaMTEBSvwX6lkMa3_vv11P48nQu4tuLw5\",\"y\":\"0lVl5LRGcp4ojutt15prYeoYDHZwO-Zo3O0pb71SpiwNEMbRS78TYzANZDCXoDsv\",\"crv\":\"P-384\"}"] for property model://perspectives.domains#System$Identifiable$PublicKey
+[WARN] [RESOURCE] (RoleInstanceAlreadyHasPropertyValue) Role instance "pub:https://perspectives.domains/cw_perspectives_domains/#alice" already has value ["{\"key_ops\":[\"encrypt\"],\"ext\":true,\"kty\":\"RSA\",\"n\":\"oqktnnMsgI2rmrGHrsEMdyVj6HTsfbHoTFR-fMWihfDQTOMqRmGlk8-nW3GHau-d6_OUBXlNagzO975j9ngPBXRGOJKNAGbCIYQ74ZUuuQA-f4PtzPsBaNbdxkLB98gnF77B4HR6SpuV_uYi-3Agfmbia0ED3HmsExzVKW5alSVvPKd7rZbwrZDtFVcgR0PyUtf5xqzJif5aFi7eQ2PordLkPiRpDaPCKliG_GZWpeDeCmsto5nBKZPW8_oprmpcS2wT8YVVxfV9O-kqXUExIPBPMuiuPIzcv95gUXvoSE4T1EA84FVlsPXegW6TCdAir3XtSGvoMAYGay2p4RD8vf2WxjpATUtD5AF8Ief5WTC4urewvkoG3aW35YU0ir_dKdtPmhq8Smq1H2hCzewCzkue3fLVVpQFARTU9TY7uIpyzGhTj76K16n-14_RatG7ZvH0B0Ebc1IiTjJAcqAc1tlmyQ9FDpdTP_oJbqogxvU65jOuzgr2qMarSnAhjfVwN46as6s8qDGH77EWAlt29IPiOpBgQSABYzi8A9YHAFW3TJL3RY5I8Ejzc4XkNO0DYrnTnTymxgoMqm8SbTo_msIfCRNohZItzGDV2YlyUY3zLao2NFGNFEMbcds2gMXCV_sgEjucP7FooavY9JAR8rZjHt0JYYXvQ9Pr2DGdomk\",\"e\":\"AQAB\",\"alg\":\"RSA-OAEP-256\"}"] for property model://perspectives.domains#System$Identifiable$TransportPublicKey
+[WARN] [RESOURCE] (RoleInstanceAlreadyHasPropertyValue) Role instance "pub:https://perspectives.domains/cw_perspectives_domains/#perspectives_domains-xyfxpg3lzq@12.4$External" already has value ["0"] for property model://perspectives.domains#System$VersionedModelManifest$External$Build
+[DEBUG] [RESOURCE] setProperty: set property model://perspectives.domains#System$VersionedModelManifest$External$Build to values ["1.0"]
+[DEBUG] [STATE]         Entering phase1 of transaction 286
+[DEBUG] [STATE]         Entering phase2 of transaction 286
+[DEBUG] [STATE]         run sharing transaction from nonsharing transaction 286
+[DEBUG] [STATE]           Starting embedded sharing transaction because it was necessary.
+[DEBUG] [STATE]           Starting sharing transaction 287
+[DEBUG] [STATE]           Evaluate states - processing 1 invertedQueryResults
+[DEBUG] [STATE]             computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#xyfxpg3lzq$purp0vollf$ghdhfh0c6p$h79vbyld0q ["pub:https://perspectives.domains/cw_perspectives_domains/#yohopvgfdb"])
+[DEBUG] [STATE]           ==========RUNNING 1 UNIQUE STATE EVALUATIONS============
+[TRACE] [STATE]           Evaluating role state model://perspectives.domains#CouchdbManagement$ModelManifest$Versions$ReadyToMake: pub:https://perspectives.domains/cw_perspectives_domains/#yohopvgfdb
+[TRACE] [STATE]           (RoleStateNotValid) Role "pub:https://perspectives.domains/cw_perspectives_domains/#yohopvgfdb" is not in state StateIdentifier model://perspectives.domains#CouchdbManagement$ModelManifest$Versions$ReadyToMake
+[DEBUG] [STATE]           Entering phase1 of transaction 287
+[DEBUG] [STATE]           Entering phase2 of transaction 287
+[DEBUG] [STATE]           Evaluate states - processing 0 invertedQueryResults
+[DEBUG] [STATE]           Exiting phase 2 for transaction 287.
+[DEBUG] [STATE]       Ending transaction that needed to be embedded.
+[DEBUG] [STATE]           Ending transaction 287
+[DEBUG] [STATE]     returning to nonsharing transaction 280 from sharing transaction.
+[DEBUG] [STATE]     Exiting phase 2 for transaction 280.
+[DEBUG] [STATE]     Ending transaction 280
+[DEBUG] [STATE]       Starting sharing transaction 288
+[DEBUG] [STATE]       Evaluate states - processing 0 invertedQueryResults
+[DEBUG] [STATE]       Entering phase1 of transaction 288
+[DEBUG] [STATE]       Entering phase2 of transaction 288
+[DEBUG] [STATE]       Evaluate states - processing 0 invertedQueryResults
+[DEBUG] [STATE]       Exiting phase 2 for transaction 288.
+[DEBUG] [STATE]           Ending transaction that needed to be embedded.
+[DEBUG] [STATE]       Ending transaction 288
+[DEBUG] [STATE]         returning to nonsharing transaction 283 from sharing transaction.
+[DEBUG] [STATE]         Exiting phase 2 for transaction 283.
+[DEBUG] [STATE]   Ending transaction that needed to be embedded.
+[DEBUG] [STATE]         Ending transaction 283
+[DEBUG] [STATE] Exiting phase 2 for transaction 267.
+[DEBUG] [STATE]           Ending transaction that needed to be embedded.
+[DEBUG] [STATE] Ending transaction 267
+[DEBUG] [STATE]         returning to nonsharing transaction 286 from sharing transaction.
+[DEBUG] [STATE]         Exiting phase 2 for transaction 286.
+[DEBUG] [STATE]     Ending transaction that needed to be embedded.
+[DEBUG] [STATE]         Ending transaction 286
+[DEBUG] [STATE]   Exiting phase 2 for transaction 268.
+[DEBUG] [STATE]         Ending transaction that needed to be embedded.
+[DEBUG] [STATE]   Ending transaction 268
+[DEBUG] [STATE]       Processing public role transaction for user "def:#rj316ykpr7" in transaction 281
+[INFO] [TEST] Creating test context
+[DEBUG] [STATE]   Starting embedded non-sharing transaction because it was necessary.
+[DEBUG] [STATE]   Starting sharing transaction 289
+[DEBUG] [RESOURCE] setProperty: set property model://joopringelberg.nl#RebootUniverse$Test$External$TestSucceeded to values ["true"]
+[DEBUG] [STATE]   Entering phase1 of transaction 289
+[DEBUG] [STATE]   Entering phase2 of transaction 289
+[DEBUG] [STATE]   Evaluate states - processing 0 invertedQueryResults
+[DEBUG] [STATE]   Exiting phase 2 for transaction 289.
+[DEBUG] [STATE]   Ending transaction 289

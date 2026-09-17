@@ -130,5 +130,32 @@ export default [
       '@typescript-eslint/no-unused-vars': 'off',
       'no-undef': 'warn'
     }
+  },
+  // perspectives-rabbitmq-service and perspectives-sharedfilestorage: standalone
+  // CommonJS Node.js services (not bundled/transpiled), integrated from separate repos.
+  {
+    files:
+      [ '**/packages/perspectives-rabbitmq-service/**/*.js'
+      , '**/packages/perspectives-sharedfilestorage/**/*.js'
+      ],
+    languageOptions: {
+      sourceType: 'commonjs',
+      globals: {
+        require: 'readonly',
+        module: 'readonly',
+        exports: 'writable',
+        process: 'readonly',
+        console: 'readonly',
+        Buffer: 'readonly',
+        setTimeout: 'readonly',
+        setInterval: 'readonly',
+        __dirname: 'readonly'
+      }
+    },
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
+      'no-unused-vars': 'warn',
+      '@typescript-eslint/no-unused-vars': 'warn'
+    }
   }
 ];

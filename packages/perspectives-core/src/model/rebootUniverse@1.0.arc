@@ -276,7 +276,7 @@ domain model://joopringelberg.nl#RebootUniverse@1.0
       state Success = YamlGenerated
         on entry
           -- This ensures that we mark the test as succeeded in the next transaction, hopefully after yaml translation is complete.
-          do for Tester after 20 Milliseconds
+          do for Tester after 500 Milliseconds
             TestSucceeded = true
 
     user Tester filledBy (sys:TheWorld$PerspectivesUsers)
@@ -509,7 +509,7 @@ domain model://joopringelberg.nl#RebootUniverse@1.0
   ---- HELPLIB
   ---- This case can be used as an aspect to create individual tests for concrete models.
   ------------------------------------------------------------------------------
-  case AddModel_Helplib
+  case AddModel_HelpLib
     aspect mm:AddModel
 
     user Tester
@@ -519,9 +519,9 @@ domain model://joopringelberg.nl#RebootUniverse@1.0
       action RunTest
         -- Set these in the specialised versions.
         NameSpace = "perspectives.domains" for extern
-        ModelName = "Helplib" for extern
+        ModelName = "HelpLib" for extern
         VersionNumber = "1.0" for extern
-        TestName = "Add the model Helplib" for extern
+        TestName = "Add the model HelpLib" for extern
 
         bind cm:MyCouchdbApp >> (filter CouchdbServers >> binding >> context >> Repositories with (Repositories$NameSpace == origin >> extern >> NameSpace)) >> binding >>= first to Repository
         StartTest = true for extern
@@ -620,7 +620,7 @@ domain model://joopringelberg.nl#RebootUniverse@1.0
         -- Set these in the specialised versions.
         NameSpace = "perspectives.domains" for extern
         ModelName = "BrokerServices" for extern
-        VersionNumber = "7.0" for extern
+        VersionNumber = "6.1" for extern
         TestName = "Add the model BrokerServices" for extern
 
         bind cm:MyCouchdbApp >> (filter CouchdbServers >> binding >> context >> Repositories with (Repositories$NameSpace == origin >> extern >> NameSpace)) >> binding >>= first to Repository
@@ -778,3 +778,13 @@ domain model://joopringelberg.nl#RebootUniverse@1.0
     aspect context mm:AddModel$Repository
     aspect context mm:AddModel$Manifest
     aspect context mm:AddModel$Version
+
+------------------------------------------------------------------------------
+  ---- PUBLIC PAGES
+  ---- 1. Create a public PublicPageCollections "System Pages" in hypercontext:HyperTextApp
+  ---- 2. Add a PublicPages instance to the "System Pages" collection and fill it with a new PublicPage. Set its Title property to "StartPagina".
+  ---- 3. Add a PublicPages instance to the "System Pages" collection and fill it with a new PublicPage. Set its Title property to "Instructions".
+  ---- 4. Add a single unconditional TextBlocks instance to Instructions. Fill its MD property with content.
+  ---- 5. Add three TextBlocks instances to Startpagina, each with a condition. Fill their MD properties with content.
+  ----    Fill their Condition properties with appropriate conditions.
+  ------------------------------------------------------------------------------

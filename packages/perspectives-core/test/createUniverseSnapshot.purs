@@ -81,7 +81,7 @@ userName = "alice"
 extraModels :: Array String
 extraModels =
   [ "model://perspectives.domains#RabbitMQ@2.0"
-  , "model://perspectives.domains#BrokerServices@7.0"
+  , "model://perspectives.domains#BrokerServices@6.1"
   , "model://perspectives.domains#HyperContext@1.0"
   , "model://perspectives.domains#Introduction@1.0"
   , "model://perspectives.domains#HelpProject@3.0"
