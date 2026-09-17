@@ -557,6 +557,8 @@ domain model://perspectives.domains#CouchdbManagement@12.4
       state NoNameSpace = not exists Repositories$NameSpace
 
     context BespokeDatabases (relational) filledBy BespokeDatabase
+      property EnteredDatabaseName (String)
+        pattern "^cw_[a-z]+/$" "The database name must start with 'cw_' followed by lowercase letters and end with a '/'"
     context MyBespokeDatabases = (filter BespokeDatabases with binding >> context >> Owner filledBy sys:Me) >> binding
     aspect thing sys:ContextWithNotification$Notifications
   -------------------------------------------------------------------------------
@@ -576,7 +578,7 @@ domain model://perspectives.domains#CouchdbManagement@12.4
       state CreateDb = Endorsed and (exists context >> Owner) and not exists DatabaseName
         on entry
           do for CBAdmin
-            DatabaseName = "cw_" + callExternal util:GenSym() returns String + "/" 
+            DatabaseName = EnteredDatabaseName orElse "cw_" + callExternal util:GenSym() returns String + "/" 
             callEffect cdb:CreateEntitiesDatabase( BaseUrl, DatabaseName, BaseUrl >> callExternal util:Replace( "https://", "") returns String )
             DatabaseLocation = BaseUrl + DatabaseName
             callEffect cdb:MakeAdminOfDb( BaseUrl, DatabaseName, context >> Owner >> UserName )
