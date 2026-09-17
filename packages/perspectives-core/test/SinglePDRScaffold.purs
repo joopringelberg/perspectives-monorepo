@@ -61,6 +61,7 @@ import Perspectives.Instances.Builders (createAndAddRoleInstance, constructConte
 import Perspectives.Logging (ansiRed, infoTest)
 import Perspectives.ModelDependencies (sysUser)
 import Perspectives.Names (lookupIndexedContext)
+import Perspectives.Persistent (saveMarkedResources)
 import Perspectives.PerspectivesState (defaultRuntimeOptions, disableAllLogging, setTopicLogLevel)
 import Perspectives.Query.UnsafeCompiler (getPropertyValues)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance(..), Value(..))
@@ -71,7 +72,6 @@ import Perspectives.Sidecar.ToStable (toStable)
 import Perspectives.TypePersistence.LoadArc (loadCompileAndStoreArcFile_)
 import Test.PDRInstance (SynchronisationResult, noBus, pollUntil, pollUntilTestFinishes, testPouchdbUser, withPDRCached)
 import Test.PDRInstance.Types (PDRInstance, runInPDR)
-
 
 type TopicLogLevelPair =
   { topic :: LogTopic
@@ -174,7 +174,11 @@ getSinglePDRResults cfg = do
                   lookupIndexedContext indexedTestContext'
             )
 
-          traverse (\testCase -> executeModelTest pdr testAppContext testCase.testContextTypeName testCase.logConfiguration cfg) cfg.tests
+          result <- traverse (\testCase -> executeModelTest pdr testAppContext testCase.testContextTypeName testCase.logConfiguration cfg) cfg.tests
+
+          runInPDR pdr $ saveMarkedResources
+
+          pure result
 
       liftEffect $ write (cached <> [ { cacheKey, results } ]) cachedSinglePDRResults
       pure results
