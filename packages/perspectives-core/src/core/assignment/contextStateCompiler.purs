@@ -52,6 +52,7 @@ import Perspectives.Assignment.SentenceCompiler (CompiledSentence, compileContex
 import Perspectives.Assignment.SerialiseAsDeltas (serialiseRoleInstancesAndProperties)
 import Perspectives.Assignment.StateCache (CompiledContextState, cacheCompiledContextState, retrieveCompiledContextState)
 import Perspectives.Assignment.Update (ConditionResult(..), isUndetermined, setActiveContextState, setInActiveContextState)
+import Perspectives.CompileActionEffect (compileActionEffectWith)
 import Perspectives.CompileAssignment (compileAssignment, withAuthoringRole)
 import Perspectives.CompileTimeFacets (addTimeFacets)
 import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), LogLevel(..), LogTopic(..), MP, MonadPerspectives, MonadPerspectivesTransaction, Updater, WithAssumptions, liftToInstanceLevel, runMonadPerspectivesQuery, (##=), (##>>))
@@ -116,7 +117,7 @@ compileState stateId = do
   where
   compileEffect :: Partial => AutomaticAction -> RoleType -> MP (Updater ContextInstance)
   compileEffect (ContextAction r@{ effect }) subject = do
-    compiledEffect <- compileAssignment effect
+    compiledEffect <- compileActionEffectWith compileAssignment effect subject (Just stateId)
     addTimeFacets compiledEffect r subject stateId
 
   compileNotification :: Partial => Notification -> RoleType -> MP (Updater ContextInstance)

@@ -83,9 +83,9 @@ import Perspectives.Query.ExpressionCompiler (compileAndDistributeStep, compileA
 import Perspectives.Query.Kinked (completeInversions, invert)
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), domain, domain2roleInContext, domain2roleType, mandatory, range, replaceContext, roleInContext2Role, roleRange, sumOfDomains, traverseQfd)
 import Perspectives.Query.QueryTypes (RoleInContext(..)) as QT
-import Perspectives.Query.StatementCompiler (compileStatement)
+import Perspectives.Query.StatementCompiler (compileActionEffect)
 import Perspectives.Representation.ADT (ADT(..), allLeavesInADT, equals_, transform)
-import Perspectives.Representation.Action (AutomaticAction(..), Action(..))
+import Perspectives.Representation.Action (AutomaticAction(..), Action(..), ActionEffect(..))
 import Perspectives.Representation.CNF (toConjunctiveNormalForm, traverseDPROD)
 import Perspectives.Representation.CalculatedProperty (CalculatedProperty(..))
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
@@ -782,7 +782,7 @@ handlePostponedStateQualifiedParts = do
     baseState <- resolveSingleState spec
     _ <- statesExist start end [ baseState ]
     let states = [ baseState ]
-    (sideEffect :: QueryFunctionDescription) <- compileStatement
+    (sideEffect :: ActionEffect) <- compileActionEffect
       originDomain
       currentcontextDomain
       qualifiedUsers
@@ -1043,7 +1043,7 @@ handlePostponedStateQualifiedParts = do
       )
     objectMustBeRole (Just compiledObject) start end
     -- The effect starts with the Perspective object, i.e. the syntacticObject.
-    (theAction :: QueryFunctionDescription) <- compileStatement
+    (theAction :: ActionEffect) <- compileActionEffect
       (range compiledObject)
       currentcontextDomain
       qualifiedUsers
@@ -1270,7 +1270,7 @@ handlePostponedStateQualifiedParts = do
       effect
     states <- stateSpec2States state >>= statesExist start end
     -- The effect starts with the Perspective object, i.e. the syntacticObject.
-    (theAction :: QueryFunctionDescription) <- compileStatement
+    (theAction :: ActionEffect) <- compileActionEffect
       currentcontextDomain
       currentcontextDomain
       qualifiedUsers

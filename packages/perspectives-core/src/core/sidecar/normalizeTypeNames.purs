@@ -66,7 +66,7 @@ import Perspectives.Persistent (modelDatabaseName)
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), RoleInContext(..), traverseQfd)
 import Perspectives.Query.UnsafeCompiler (getPropertyValues, getRoleInstances)
 import Perspectives.Representation.ADT (ADT)
-import Perspectives.Representation.Action (Action(..), AutomaticAction(..))
+import Perspectives.Representation.Action (Action(..), ActionEffect, AutomaticAction(..), traverseActionEffect)
 import Perspectives.Representation.CNF (traverseDPROD)
 import Perspectives.Representation.CalculatedProperty (CalculatedProperty(..))
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
@@ -417,7 +417,7 @@ normalizeActionsForState stateSpec obj = do
     pairs = OBJ.toUnfoldable obj :: Array (Tuple String Action)
   folded <- for pairs \(Tuple localName (Action { qfd, readable, id })) -> do
     id'@(ActionIdentifier actionName) <- normalize id
-    qfd' <- traverseQfd normalize qfd
+    qfd' <- normalize qfd
     pure $ Tuple actionName (Action { qfd: qfd', readable, id: id' })
   pure $ OBJ.fromFoldable folded
 
@@ -740,6 +740,9 @@ instance normalizeAutomaticActionInst :: Normalize AutomaticAction where
     effect' <- normalize effect
     currentContextCalculation' <- normalize currentContextCalculation
     pure $ RoleAction facets { effect = effect', currentContextCalculation = currentContextCalculation' }
+
+instance normalizeActionEffectInst :: Normalize ActionEffect where
+  normalize = traverseActionEffect normalize
 
 instance normalizeSeparateInvertedQueryInst :: Normalize SeparateInvertedQuery where
   normalize (RoleInvertedQuery enumeratedRoleType typeName invertedQuery) = do

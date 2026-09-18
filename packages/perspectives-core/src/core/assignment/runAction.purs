@@ -31,6 +31,7 @@ import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
 import Effect.Exception (error)
 import Partial.Unsafe (unsafePartial)
+import Perspectives.CompileActionEffect (compileActionEffectWith)
 import Perspectives.CompileAssignment (compileAssignment)
 import Perspectives.CompileRoleAssignment (compileAssignmentFromRole)
 import Perspectives.CoreTypes (MonadPerspectivesTransaction, (##>))
@@ -66,7 +67,7 @@ runContextAction user actionName context = do
       oldFrame <- lift $ pushFrame
       lift $ addBinding "currentcontext" [ context ]
       lift $ addBinding "currentactor" [ unwrap userInstance ]
-      updater <- lift $ compileAssignment action
+      updater <- lift $ compileActionEffectWith compileAssignment action userRoleType Nothing
       readableUserRoleType <- lift $ toReadable userRoleType
       lift $ debugState ("Executing context action '" <> actionName <> "' for user role type '" <> show readableUserRoleType <> "' in context '" <> context <> "'.")
       updater (ContextInstance context)
@@ -112,7 +113,7 @@ runAction authoringRole perspectiveId actionName context object = do
       oldFrame <- lift $ pushFrame
       lift $ addBinding "currentcontext" [ context ]
       lift $ addBinding "currentactor" [ unwrap author ]
-      updater <- lift $ compileAssignmentFromRole action
+      updater <- lift $ compileActionEffectWith compileAssignmentFromRole action authoringRole Nothing
       readableAuthoringRole <- lift $ toReadable authoringRole
       readableActionName <- lift $ translateType (ActionIdentifier actionName)
       lift $ debugState ("Executing perspective action '" <> readableActionName <> "' for authoring role type '" <> show readableAuthoringRole <> "' in context '" <> context <> "'.")
@@ -150,7 +151,7 @@ runActionForObject authoringRole actionName context object = do
       oldFrame <- lift $ pushFrame
       lift $ addBinding "currentcontext" [ context ]
       lift $ addBinding "currentactor" [ unwrap author ]
-      updater <- lift $ compileAssignmentFromRole action
+      updater <- lift $ compileActionEffectWith compileAssignmentFromRole action authoringRole Nothing
       readableAuthoringRole <- lift $ toReadable authoringRole
       readableActionName <- lift $ translateType (ActionIdentifier actionName)
       lift $ debugState ("Executing perspective action '" <> readableActionName <> "' for authoring role type '" <> show readableAuthoringRole <> "' in context '" <> context <> "' on object '" <> object <> "'.")

@@ -35,6 +35,7 @@ module Perspectives.CoreTypes
   , ConversationCache
   , ContextInstances
   , ContextPropertyValueGetter
+  , CapturedBindings
   , CryptoKey'
   , DbName
   , DeltaCache
@@ -169,6 +170,7 @@ import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistence.Types (PouchdbState, MonadPouchdb(..))
 import Perspectives.Persistent.ChangesFeed (EventSource)
 import Perspectives.Repetition (Duration)
+import Perspectives.Representation.Action (StartMoment)
 import Perspectives.Representation.Class.Identifiable (class Identifiable, identifier)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value)
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic)
@@ -205,6 +207,8 @@ type RoleInstanceDeltasCache = Cache (Array DeltaStoreRecord)
 type ConversationCache = Object Foreign
 
 type BrokerService = ConnectAndSubscriptionParameters (url :: String)
+
+type CapturedBindings = Array (Tuple String (Array String))
 
 type PerspectivesState = PouchdbState PerspectivesExtraState
 
@@ -395,7 +399,7 @@ data RepeatingTransaction
       , instanceId :: String
       , stateId :: StateIdentifier
       , authoringRole :: RoleType
-      , startMoment :: Maybe Duration
+      , startMoment :: StartMoment
       , endMoment :: Maybe Duration
       }
   | RepeatNtimes
@@ -405,7 +409,7 @@ data RepeatingTransaction
       , instanceId :: String
       , stateId :: StateIdentifier
       , authoringRole :: RoleType
-      , startMoment :: Maybe Duration
+      , startMoment :: StartMoment
       , endMoment :: Maybe Duration
       }
   | PostponedTransaction
@@ -414,6 +418,13 @@ data RepeatingTransaction
       , stateId :: StateIdentifier
       , authoringRole :: RoleType
       , startMoment :: Duration
+      }
+  | SettledTransaction
+      { transaction :: MonadPerspectivesTransaction Unit
+      , instanceId :: String
+      , stateId :: Maybe StateIdentifier
+      , authoringRole :: RoleType
+      , capturedBindings :: CapturedBindings
       }
 
 data JustInTimeModelLoad = LoadModel (ModelUri Stable) | ModelLoaded | LoadingFailed String | Stop | HotLine (AVar JustInTimeModelLoad)

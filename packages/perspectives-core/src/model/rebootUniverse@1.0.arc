@@ -5,6 +5,8 @@ domain model://joopringelberg.nl#RebootUniverse@1.0
   use cdb for model://perspectives.domains#Couchdb
   use cm for model://perspectives.domains#CouchdbManagement
   use p for model://perspectives.domains#Parsing
+  use hyp for model://perspectives.domains#HyperContext
+  use bs for model://perspectives.domains#BrokerServices
 
   -------------------------------------------------------------------------------
   ---- SETTING UP
@@ -50,6 +52,8 @@ domain model://joopringelberg.nl#RebootUniverse@1.0
     -- To execute any test, run the action RunTest in the first PDR.
     -- To check if a test has succeeded, retrieve the value of TestSucceeded in the second PDR.
     context Tests (relational) filledBy Test
+
+    user BespokeDatabaseOwner filledBy cm:BespokeDatabase$Owner
 
   case Test
     -- The automatic actions are contextualised in their specialisations,
@@ -780,6 +784,65 @@ domain model://joopringelberg.nl#RebootUniverse@1.0
     aspect context mm:AddModel$Version
 
 ------------------------------------------------------------------------------
+  ---- MANAGE BROKER SERVICE
+  ------------------------------------------------------------------------------
+  case ManageBrokerService
+    aspect mm:Test
+
+    external
+      state Success = exists bs:MyBrokers >> ManagedBrokers >> binding >> Name
+        on entry
+          do for Tester once settled
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+
+      perspective on bs:BrokerService$External
+        props (Url, Exchange, ManagementEndpoint, SelfRegisterEndpoint, Name) verbs (SetPropertyValue, Consult)
+
+      perspective on cm:CouchdbServer$BespokeDatabases
+        only (CreateAndFill)
+        props (Endorsed, Public) verbs (SetPropertyValue, Consult)
+
+      perspective on cm:BespokeDatabase$Owner
+        only (Create, Fill)
+
+      perspective on bs:BrokerServices$ManagedBrokers
+        only (Create)
+        props (StorageLocation) verbs (SetPropertyValue, Consult)
+
+      action RunTest
+        letA
+          -- Only when test ManageCouchdb has run, the PDR has a CouchdbServer available.
+          couchdbserver <- cm:MyCouchdbApp >> CouchdbServers  >> binding >> context >>= first
+          -- Create the BespokeDatabases role instance first and then set its EnteredDatabaseName property.
+          -- Then, create the actual context and fill the role with it.
+          -- All statements referring to publicbrokerservicedb should be postponed to the next transaction!
+          publicbrokerservicedb <- create context cm:BespokeDatabase bound to cm:CouchdbServer$BespokeDatabases in couchdbserver
+          owner <- create role cm:BespokeDatabase$Owner in publicbrokerservicedb >> binding >> context
+          brokerservice <- create role bs:BrokerServices$ManagedBrokers in bs:MyBrokers
+        in
+          TestName = "Managing BrokerServices." for extern
+          bind_ me to owner
+          Endorsed = true for publicbrokerservicedb
+          -- Now state BespokeDatabase$External$CreateDb runs, creating the actual database and setting DatabaseName.
+          
+          Public = true for publicbrokerservicedb
+          -- This sets the stage for BespokeDatabase$External$Publish to run, making the database public.
+          
+          once settled
+            StorageLocation = owner >> cm:BespokeDatabase$Owner$BespokeDatabaseUrl for brokerservice
+            -- This triggers State BrokerServices$ManagedBrokers$HasStorageLocation, which creates the BrokerService context.
+          
+          once settled
+            Url = "wss://mycontexts.com:15673/ws" for brokerservice
+            Exchange = "mycontexts" for brokerservice
+            ManagementEndpoint = "https://mycontexts.com/rbmq/" for brokerservice
+            SelfRegisterEndpoint = "https://mycontexts.com/rbsr/" for brokerservice
+            Name = "Big Bangs BrokerService" for brokerservice
+
+------------------------------------------------------------------------------
   ---- PUBLIC PAGES
   ---- 1. Create a public PublicPageCollections "System Pages" in hypercontext:HyperTextApp
   ---- 2. Add a PublicPages instance to the "System Pages" collection and fill it with a new PublicPage. Set its Title property to "StartPagina".
@@ -788,3 +851,34 @@ domain model://joopringelberg.nl#RebootUniverse@1.0
   ---- 5. Add three TextBlocks instances to Startpagina, each with a condition. Fill their MD properties with content.
   ----    Fill their Condition properties with appropriate conditions.
   ------------------------------------------------------------------------------
+  case Add_public_pages
+    aspect mm:Test
+
+    external
+
+      state Success = exists hyp:HyperTextApp >> hyp:HyperTexts$PublicPageCollections >> binding
+        on entry
+          do for Tester after 20 Milliseconds
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+
+      perspective on extern
+
+      perspective on hyp:HyperTexts$PublicPageCollections
+        only (CreateAndFill)
+        props (Name) verbs (SetPropertyValue, Consult)
+
+      perspective on hyp:PublicPageCollection$Author
+        only (Create, Fill)
+
+      action RunTest
+        letA
+          pagecollection <- create context hyp:PublicPageCollection bound to hyp:HyperTexts$PublicPageCollections in hyp:HyperTextApp
+        in
+          TestName = "Creating public pages." for extern
+          Name = "System Pages" for pagecollection
+          bind Owner >> binding to hyp:PublicPageCollection$Author in pagecollection >> binding >> context
+
+    user Owner = mm:RebootUniverseApp >> BespokeDatabaseOwner

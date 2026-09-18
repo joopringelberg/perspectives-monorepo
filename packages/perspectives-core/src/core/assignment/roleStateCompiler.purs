@@ -52,6 +52,7 @@ import Perspectives.Assignment.SentenceCompiler (CompiledSentence, compileRoleSe
 import Perspectives.Assignment.SerialiseAsDeltas (serialiseRoleInstancesAndProperties)
 import Perspectives.Assignment.StateCache (CompiledAutomaticAction, CompiledNotification, CompiledRoleState, CompiledStateDependentPerspective, cacheCompiledRoleState, retrieveCompiledRoleState)
 import Perspectives.Assignment.Update (ConditionResult(..), isUndetermined, setActiveRoleState, setInActiveRoleState)
+import Perspectives.CompileActionEffect (compileActionEffectWith)
 import Perspectives.CompileRoleAssignment (compileAssignmentFromRole, withAuthoringRole)
 import Perspectives.CompileTimeFacets (addTimeFacets)
 import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), LogLevel(..), LogTopic(..), MP, MonadPerspectives, MonadPerspectivesTransaction, Updater, WithAssumptions, liftToInstanceLevel, runMonadPerspectivesQuery, (##=), (##>>), (###>>))
@@ -117,7 +118,7 @@ compileState stateId = do
   compileEffect :: Partial => RoleType -> AutomaticAction -> MP CompiledAutomaticAction
   compileEffect subject (RoleAction r@{ effect, currentContextCalculation }) = do
     contextGetter <- role2context currentContextCalculation
-    updater' <- compileAssignmentFromRole effect >>= pure <<< withAuthoringRole subject
+    updater' <- compileActionEffectWith compileAssignmentFromRole effect subject (Just stateId) >>= pure <<< withAuthoringRole subject
     updater <- addTimeFacets updater' r subject stateId
     pure { updater, contextGetter }
 
@@ -141,7 +142,7 @@ evaluateRoleState :: RoleInstance -> StateIdentifier -> MonadPerspectivesTransac
 evaluateRoleState roleId stateId = do
   -- an extra guard: if the role is not in the parent state, then it cannot be in this state either.
   -- Make an exception for the root state, which has no parent state.
-  rType <- lift $ roleType_ roleId 
+  rType <- lift $ roleType_ roleId
   let (parentStateId :: StateIdentifier) = (over StateIdentifier typeUri2typeNameSpace_) stateId
   isInParentState <- lift $ isActive parentStateId roleId
   if unwrap stateId == unwrap rType || isInParentState then do

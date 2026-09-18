@@ -82,11 +82,12 @@ import Perspectives.Persistence.State (getSystemIdentifier, withCouchdbUrl)
 import Perspectives.Persistence.Types (Credential(..))
 import Perspectives.Persistent (entitiesDatabaseName, invertedQueryDatabaseName, postDatabaseName, saveMarkedResources)
 import Perspectives.Persistent.FromViews (getSafeViewOnDatabase)
-import Perspectives.PerspectivesState (defaultRuntimeOptions, disableAllLogging, disableTopicLogging, modelsDatabaseName, newPerspectivesState, pushMessage, removeMessage, resetCaches, setModelUris, setTopicLogLevel)
+import Perspectives.PerspectivesState (addBinding, defaultRuntimeOptions, disableAllLogging, disableTopicLogging, modelsDatabaseName, newPerspectivesState, pushFrame, pushMessage, removeMessage, resetCaches, restoreFrame, setModelUris, setTopicLogLevel)
 import Perspectives.Proxy (handleClientRequest, receivePDRStatusMessageChannel, pdrStatusMessageChannel, registerPutUserIntegrityChoice) as Proxy
 import Perspectives.Query.UnsafeCompiler (getPropertyFromTelescope, getPropertyFunction, getRoleFunction, getterFromPropertyType)
 import Perspectives.ReferentialIntegrity (fixReferences)
 import Perspectives.Repetition (Duration, fromDuration)
+import Perspectives.Representation.Action (StartMoment(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), StateIdentifier)
 import Perspectives.ResourceIdentifiers (takeGuid)
@@ -362,8 +363,9 @@ forkTimedTransactions repeatingTransactionAVar state = do
       f <- forkAff
         ( do
             case startMoment of
-              Nothing -> pure unit
-              Just d -> delay (fromDuration d)
+              Immediately -> pure unit
+              After d -> delay (fromDuration d)
+              OnceSettled -> pure unit
             -- Calculate the end moment on the clock and pass on to repeatUnlimited
             mendMoment <- computeEndMoment endMoment
             repeatUnlimited t mendMoment
@@ -374,15 +376,42 @@ forkTimedTransactions repeatingTransactionAVar state = do
       f <- forkAff
         ( do
             case startMoment of
-              Nothing -> pure unit
-              Just d -> delay (fromDuration d)
+              Immediately -> pure unit
+              After d -> delay (fromDuration d)
+              OnceSettled -> pure unit
             -- Calculate the end moment on the clock and pass on to repeatN
             mendMoment <- computeEndMoment endMoment
             repeatN t nrOfTimes mendMoment
         )
       registerTransactionFiber f instanceId stateId state
       forkTimedTransactions repeatingTransactionAVar state
+    (SettledTransaction { transaction, instanceId, stateId, authoringRole, capturedBindings }) -> do
+      f <- forkAff
+        ( do
+            case stateId of
+              Nothing -> pure unit
+              Just sid -> unregisterTransactionFiber instanceId sid state
+            _ <- runPerspectivesWithState (runSettledTransaction authoringRole capturedBindings transaction) state
+            pure unit
+        )
+      case stateId of
+        Nothing -> pure unit
+        Just sid -> registerTransactionFiber f instanceId sid state
+      forkTimedTransactions repeatingTransactionAVar state
   where
+  runSettledTransaction authoringRole capturedBindings transaction = do
+    oldFrame <- pushFrame
+    for_ capturedBindings \(Tuple name values) -> addBinding name values
+    catchError
+      ( do
+          r <- runMonadPerspectivesTransaction authoringRole transaction
+          restoreFrame oldFrame
+          pure r
+      )
+      \e -> do
+        restoreFrame oldFrame
+        throwError e
+
   repeatUnlimited
     :: forall f
      . { transaction :: MonadPerspectivesTransaction Unit, authoringRole :: RoleType, interval :: Duration | f }

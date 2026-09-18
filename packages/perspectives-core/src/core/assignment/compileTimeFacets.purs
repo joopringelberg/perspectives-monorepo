@@ -25,16 +25,42 @@ import Prelude
 
 import Control.Monad.AvarMonadAsk (gets)
 import Control.Monad.Trans.Class (lift)
+import Data.Array (mapMaybe)
 import Data.Maybe (Maybe(..))
+import Data.Traversable (traverse)
+import Data.Tuple (Tuple(..))
 import Effect.Aff.Class (liftAff)
 import Effect.AVar (AVar)
 import Effect.Aff (Fiber)
 import Effect.Aff.AVar (put)
-import Perspectives.CoreTypes (MP, RepeatingTransaction(..), Updater)
+import Perspectives.CoreTypes (CapturedBindings, MP, RepeatingTransaction(..), Updater)
+import Perspectives.PerspectivesState (lookupVariableBinding)
 import Perspectives.Repetition (Repeater(..))
-import Perspectives.Representation.Action (TimeFacets)
+import Perspectives.Representation.Action (StartMoment(..), TimeFacets)
 import Perspectives.Representation.TypeIdentifiers (RoleType, StateIdentifier)
 import Unsafe.Coerce (unsafeCoerce)
+
+captureBindings :: Array String -> MP CapturedBindings
+captureBindings names = mapMaybe identity <$> traverse capture names
+  where
+  capture name = do
+    mvalues <- lookupVariableBinding name
+    pure $ Tuple name <$> mvalues
+
+scheduleSettledTransaction :: forall a. Updater a -> RoleType -> Maybe StateIdentifier -> Array String -> Updater a
+scheduleSettledTransaction transaction authoringRole stateId capturedBindingNames a = do
+  (av :: AVar RepeatingTransaction) <- lift (gets _.transactionWithTiming :: MP (AVar RepeatingTransaction))
+  capturedBindings <- lift $ captureBindings capturedBindingNames
+  liftAff $ put
+    ( SettledTransaction
+        { transaction: transaction a
+        , instanceId: unsafeUnwrapResource a
+        , stateId
+        , authoringRole
+        , capturedBindings
+        }
+    )
+    av
 
 addTimeFacets :: forall a f. Partial => Updater a -> TimeFacets f -> RoleType -> StateIdentifier -> MP (Updater a)
 addTimeFacets updater { startMoment, endMoment, repeats } authoringRole stateId = do
@@ -42,8 +68,8 @@ addTimeFacets updater { startMoment, endMoment, repeats } authoringRole stateId 
   where
   repeat :: Repeater -> Updater a -> Updater a
   repeat Never u = case startMoment of
-    Nothing -> u
-    Just s -> \a -> do
+    Immediately -> u
+    After s -> \a -> do
       (av :: AVar RepeatingTransaction) <- lift (gets _.transactionWithTiming :: MP (AVar RepeatingTransaction))
       liftAff $ put
         ( PostponedTransaction
@@ -55,6 +81,7 @@ addTimeFacets updater { startMoment, endMoment, repeats } authoringRole stateId 
             }
         )
         av
+    OnceSettled -> scheduleSettledTransaction u authoringRole (Just stateId) []
   repeat (Forever duration) u = \a -> do
     (av :: AVar RepeatingTransaction) <- lift (gets _.transactionWithTiming :: MP (AVar RepeatingTransaction))
     liftAff $ put
@@ -88,5 +115,5 @@ addTimeFacets updater { startMoment, endMoment, repeats } authoringRole stateId 
   returnFiber :: Fiber Unit -> Unit
   returnFiber f = unit
 
-  unsafeUnwrapResource :: a -> String
-  unsafeUnwrapResource = unsafeCoerce
+unsafeUnwrapResource :: forall a. a -> String
+unsafeUnwrapResource = unsafeCoerce

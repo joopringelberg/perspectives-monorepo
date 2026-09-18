@@ -25,11 +25,16 @@ module Perspectives.Representation.Action where
 import Prelude
 
 import Control.Alt ((<|>))
+import Data.Array (intercalate, uncons)
 import Data.Eq.Generic (genericEq)
+import Data.Foldable (foldl)
 import Data.Generic.Rep (class Generic)
-import Data.Maybe (Maybe)
+import Data.Maybe (Maybe(..))
 import Data.Newtype (class Newtype, unwrap)
 import Data.Show.Generic (genericShow)
+import Data.Traversable (traverse)
+import Foreign (F, isNull, isUndefined)
+import Partial.Unsafe (unsafePartial)
 import Perspectives.Identifiers (typeUri2LocalName_)
 import Perspectives.Query.QueryTypes (QueryFunctionDescription(..), domain, functional, range)
 import Perspectives.Repetition (Duration, Repeater)
@@ -38,28 +43,97 @@ import Perspectives.Representation.ThreeValuedLogic as THREE
 import Perspectives.Representation.TypeIdentifiers (ActionIdentifier(..))
 import Simple.JSON (class ReadForeign, class WriteForeign, read', writeImpl)
 
+data StartMoment = Immediately | After Duration | OnceSettled
+
+derive instance genericStartMoment :: Generic StartMoment _
+instance showStartMoment :: Show StartMoment where
+  show = genericShow
+
+instance eqStartMoment :: Eq StartMoment where
+  eq = genericEq
+
+instance WriteForeign StartMoment where
+  writeImpl Immediately = writeImpl "Immediately"
+  writeImpl (After duration) = writeImpl { after: duration }
+  writeImpl OnceSettled = writeImpl "OnceSettled"
+
+-- Transitional reader: accepts legacy DomeinFiles compiled with `Maybe Duration`.
+-- Remove after the repository has been regenerated and installations reboot from canonical shapes.
+instance ReadForeign StartMoment where
+  readImpl f
+    | isNull f || isUndefined f = pure Immediately
+    | otherwise =
+        do
+          constructor <- read' f :: F String
+          unsafePartial case constructor of
+            "Immediately" -> pure Immediately
+            "OnceSettled" -> pure OnceSettled
+          <|> After <<< _.after <$> (read' f :: F { after :: Duration })
+          <|> After <$> (read' f :: F Duration)
+
+newtype ActionEffect = ActionEffect
+  { bindings :: Array QueryFunctionDescription
+  , stages :: Array QueryFunctionDescription
+  , capturedBindingNames :: Array String
+  }
+
+derive instance genericActionEffect :: Generic ActionEffect _
+derive instance newtypeActionEffect :: Newtype ActionEffect _
+instance showActionEffect :: Show ActionEffect where
+  show = genericShow
+
+instance eqActionEffect :: Eq ActionEffect where
+  eq = genericEq
+
+instance WriteForeign ActionEffect where
+  writeImpl (ActionEffect r) = writeImpl r
+
+-- Transitional reader: accepts legacy single-QFD action effects and the short-lived `{ stages }` shape.
+-- Remove after the repository has been regenerated and installations reboot from canonical shapes.
+instance ReadForeign ActionEffect where
+  readImpl f =
+    ActionEffect <$> (read' f :: F { bindings :: Array QueryFunctionDescription, stages :: Array QueryFunctionDescription, capturedBindingNames :: Array String })
+      <|> (\{ stages } -> ActionEffect { bindings: [], stages, capturedBindingNames: [] }) <$> (read' f :: F { stages :: Array QueryFunctionDescription })
+      <|> (\qfd -> ActionEffect { bindings: [], stages: [ qfd ], capturedBindingNames: [] }) <$> (read' f :: F QueryFunctionDescription)
+
+traverseActionEffect :: forall m. Applicative m => (QueryFunctionDescription -> m QueryFunctionDescription) -> ActionEffect -> m ActionEffect
+traverseActionEffect f (ActionEffect { bindings, stages, capturedBindingNames }) =
+  (\bindings' stages' -> ActionEffect { bindings: bindings', stages: stages', capturedBindingNames })
+    <$> traverse f bindings
+    <*> traverse f stages
+
+actionEffectSignature :: (QueryFunctionDescription -> String) -> ActionEffect -> String
+actionEffectSignature f (ActionEffect { bindings, stages }) = intercalate "|" (f <$> (bindings <> stages))
+
+queryFunctionDescriptionOfActionEffect :: ActionEffect -> QueryFunctionDescription
+queryFunctionDescriptionOfActionEffect (ActionEffect { bindings, stages }) = unsafePartial case uncons (bindings <> stages) of
+  Just { head, tail } -> foldl makeSequence head tail
+  where
+  makeSequence :: QueryFunctionDescription -> QueryFunctionDescription -> QueryFunctionDescription
+  makeSequence left right = BQD (domain left) (BinaryCombinator SequenceF) left right (range right) (THREE.and (functional left) (functional right)) (THREE.or (functional left) (functional right))
+
 data AutomaticAction
   = ContextAction
       ( TimeFacets
-          (effect :: QueryFunctionDescription)
+          (effect :: ActionEffect)
       )
   | RoleAction
       ( TimeFacets
           ( currentContextCalculation :: QueryFunctionDescription
-          , effect :: QueryFunctionDescription
+          , effect :: ActionEffect
           )
       )
 
 type TimeFacets f =
-  { startMoment :: Maybe Duration
+  { startMoment :: StartMoment
   , endMoment :: Maybe Duration
   , repeats :: Repeater
   | f
   }
 
 effectOfAction :: AutomaticAction -> QueryFunctionDescription
-effectOfAction (ContextAction { effect }) = effect
-effectOfAction (RoleAction action) = action.effect
+effectOfAction (ContextAction { effect }) = queryFunctionDescriptionOfActionEffect effect
+effectOfAction (RoleAction action) = queryFunctionDescriptionOfActionEffect action.effect
 
 derive instance genericAutomaticAction :: Generic AutomaticAction _
 instance showAutomaticAction :: Show AutomaticAction where
@@ -76,14 +150,14 @@ instance ReadForeign AutomaticAction where
   readImpl f =
     -- order matters here!
     do
-      { r } :: { r :: TimeFacets (effect :: QueryFunctionDescription, currentContextCalculation :: QueryFunctionDescription) } <- read' f
+      { r } :: { r :: TimeFacets (effect :: ActionEffect, currentContextCalculation :: QueryFunctionDescription) } <- read' f
       pure $ RoleAction r
       <|>
         do
-          { r } :: { r :: TimeFacets (effect :: QueryFunctionDescription) } <- read' f
+          { r } :: { r :: TimeFacets (effect :: ActionEffect) } <- read' f
           pure $ ContextAction r
 
-newtype Action = Action { qfd :: QueryFunctionDescription, readable :: String, id :: ActionIdentifier }
+newtype Action = Action { qfd :: ActionEffect, readable :: String, id :: ActionIdentifier }
 
 derive instance genericAction :: Generic Action _
 derive instance newtypeAction :: Newtype Action _
@@ -104,5 +178,5 @@ instance Semigroup Action where
     , id: ActionIdentifier (unwrap id1 <> "_" <> typeUri2LocalName_ (unwrap id2))
     }
     where
-    makeSequence :: QueryFunctionDescription -> QueryFunctionDescription -> QueryFunctionDescription
-    makeSequence left right = BQD (domain left) (BinaryCombinator SequenceF) left right (range right) (THREE.and (functional left) (functional right)) (THREE.or (functional left) (functional right))
+    makeSequence :: ActionEffect -> ActionEffect -> ActionEffect
+    makeSequence (ActionEffect left) (ActionEffect right) = ActionEffect (left <> right)

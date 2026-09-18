@@ -23,7 +23,8 @@
 -- | From the syntax tree that describes a Statement, we construct a QueryFunctionDescription.
 
 module Perspectives.Query.StatementCompiler
-  ( compileStatement
+  ( compileActionEffect
+  , compileStatement
   ) where
 
 import Control.Monad.State.Class (gets)
@@ -51,6 +52,7 @@ import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Query.ExpressionCompiler (compileExpression, makeSequence)
 import Perspectives.Query.QueryTypes (Domain(..), QueryFunctionDescription(..), RoleInContext, adtContext2AdtRoleInContext, domain2contextType, domain2roleType, functional, mandatory, range, roleInContext2Context, roleInContext2Role, roleRange)
 import Perspectives.Query.QueryTypes (RoleInContext(..)) as QT
+import Perspectives.Representation.Action (ActionEffect(..), queryFunctionDescriptionOfActionEffect)
 import Perspectives.Representation.ADT (ADT(..), allLeavesInADT, equalsOrSpecialises_)
 import Perspectives.Representation.CNF (CNF, traverseDPROD)
 import Perspectives.Representation.Class.Identifiable (identifier)
@@ -84,24 +86,31 @@ compileStatement
   -> Statements
   -> PhaseThree QueryFunctionDescription
 compileStatement originDomain currentcontextDomain userRoleTypes statements =
+  queryFunctionDescriptionOfActionEffect <$> compileActionEffect originDomain currentcontextDomain userRoleTypes statements
+
+compileActionEffect
+  :: Domain
+  -> Domain
+  -> Array RoleType
+  -> Statements
+  -> PhaseThree ActionEffect
+compileActionEffect originDomain currentcontextDomain userRoleTypes statements =
   case statements of
-    -- Compile a series of Assignments into a QueryDescription.
-    Statements assignments -> sequenceOfAssignments userRoleTypes assignments
-    -- Compile the LetStep into a QueryDescription.
-    Let letstep -> do
-      let_ <- compileLetStep letstep
-      pure (UQD originDomain QF.WithFrame let_ (range let_) (functional let_) (mandatory let_))
+    Statements assignments -> do
+      stage <- sequenceOfAssignments userRoleTypes assignments
+      pure $ ActionEffect { bindings: [], stages: [ stage ], capturedBindingNames: [] }
+    Let letstep -> compileLetStep letstep
   where
 
-  compileLetStep :: LetStep -> PhaseThree QueryFunctionDescription
-  compileLetStep (LetStep { bindings, assignments }) = withFrame
-    case uncons bindings of
-      -- no bindings at all. Just the body. This will probably never occur as the parser breaks on it.
-      Nothing -> sequenceOfAssignments userRoleTypes assignments
-      (Just { head: bnd, tail }) -> do
-        -- compileVarBinding also adds a variable binding to the compile time environment.
-        head_ <- compileVarBinding bnd
-        makeSequence <$> foldM addVarBindingToSequence head_ tail <*> sequenceOfAssignments userRoleTypes assignments
+  compileLetStep :: LetStep -> PhaseThree ActionEffect
+  compileLetStep (LetStep { bindings, stages }) = withFrame do
+    bindingDescriptions <- traverse compileVarBinding bindings
+    stageDescriptions <- traverse (sequenceOfAssignments userRoleTypes) stages
+    pure $ ActionEffect
+      { bindings: bindingDescriptions
+      , stages: stageDescriptions
+      , capturedBindingNames: bindingName <$> bindings
+      }
     where
     -- Inverts the result as well.
     compileVarBinding :: LetABinding -> PhaseThree QueryFunctionDescription
@@ -115,10 +124,9 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
       addBinding varName assignmentDescription
       pure $ UQD originDomain (QF.BindResultFromCreatingAssignment varName) assignmentDescription (range assignmentDescription) (functional assignmentDescription) (mandatory assignmentDescription)
 
-    -- The range of a sequence equals that of its second term.
-    -- The fold is left associative: ((binding1 *> binding2) *> binding3). The compiler handles that ok.
-    addVarBindingToSequence :: QueryFunctionDescription -> LetABinding -> FD
-    addVarBindingToSequence seq v = makeSequence <$> pure seq <*> (compileVarBinding v)
+    bindingName :: LetABinding -> String
+    bindingName (Expr (VarBinding varName _)) = varName
+    bindingName (Stat varName _) = varName
 
   -- This will return a QueryFunctionDescription that describes either a single assignment, or
   -- a BQD with QueryFunction equal to (BinaryCombinator SequenceF)

@@ -24,7 +24,7 @@ module Perspectives.Parsing.Arc.Statement where
 
 import Control.Alt ((<|>))
 import Data.Array (fromFoldable)
-import Data.List (List(..))
+import Data.List (List(..), many)
 import Data.Maybe (Maybe(..), isJust)
 import Data.String.Regex (Regex, match)
 import Data.String.Regex.Flags (noFlags)
@@ -37,7 +37,7 @@ import Perspectives.Parsing.Arc.Expression (parseLetVariableName, step)
 import Perspectives.Parsing.Arc.Expression.AST (VarBinding(..))
 import Perspectives.Parsing.Arc.Identifiers (arcIdentifier, reserved)
 import Perspectives.Parsing.Arc.IndentParser (IP, getPosition, outdented', sameOrOutdented')
-import Perspectives.Parsing.Arc.Statement.AST (Assignment(..), AssignmentOperator(..), LetABinding(..), LetStep(..))
+import Perspectives.Parsing.Arc.Statement.AST (Assignment(..), AssignmentOperator(..), LetABinding(..), LetStep(..), StatementStage)
 import Perspectives.Parsing.Arc.Token (reservedIdentifier, token)
 import Prelude (bind, discard, pure, ($), (*>), (<$>), (<*), (<*>), (<>), (>>=))
 
@@ -344,10 +344,18 @@ letWithAssignment = withPos do
   start <- getPosition
   -- bindings <- reserved "letA" *> nestedBlock letABinding
   bindings <- reserved "letA" *> withPos (manyTill letABinding outdented')
-  -- assignments <- reserved "in" *> nestedBlock assignment
-  assignments <- reserved "in" *> withPos (manyTill assignment outdented')
+  stages <- reserved "in" *> stagedAssignments
   end <- getPosition
-  pure $ LetStep { start, end, bindings: fromFoldable bindings, assignments: fromFoldable assignments }
+  pure $ LetStep { start, end, bindings: fromFoldable bindings, stages }
+
+stagedAssignments :: IP (Array StatementStage)
+stagedAssignments = do
+  firstStage <- assignmentStage
+  rest <- many (reserved "once" *> reserved "settled" *> indented' *> assignmentStage)
+  pure $ fromFoldable (Cons firstStage rest)
+
+assignmentStage :: IP StatementStage
+assignmentStage = fromFoldable <$> withPos (manyTill assignment (lookAhead (reserved "once" *> reserved "settled") <|> outdented'))
 
 letABinding :: IP LetABinding
 letABinding = do

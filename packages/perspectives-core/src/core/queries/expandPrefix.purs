@@ -115,10 +115,10 @@ instance ScanSymbols FilledByAttribute where
   scan (FilledByAttribute s ct) = FilledByAttribute <$> f s <*> (ContextType <$> f (unwrap ct))
 
 instance containsPrefixesLetStep :: ScanSymbols LetStep where
-  scan (LetStep r@{ bindings, assignments }) = do
+  scan (LetStep r@{ bindings, stages }) = do
     ebindings <- traverse scan bindings
-    eassignments <- traverse scan assignments
-    pure $ LetStep r { bindings = ebindings, assignments = eassignments }
+    estages <- traverse (traverse scan) stages
+    pure $ LetStep r { bindings = ebindings, stages = estages }
 
 instance containsPrefixesLetABinding :: ScanSymbols LetABinding where
   scan (Expr varbinding) = Expr <$> scan varbinding
