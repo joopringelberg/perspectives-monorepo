@@ -106,6 +106,8 @@ domain model://joopringelberg.nl#RebootUniverse@1.0
           callEffect cdb:DeleteCouchdbDatabase( url, "cw_perspectives_domains" )
           -- Remove models_perspectives_domains
           callEffect cdb:DeleteCouchdbDatabase( url, "models_perspectives_domains" )
+          -- Remove the Bespoke database of Big Bang.
+          callEffect cdb:DeleteCouchdbDatabase( url, "cw_bigbangsdatabase" )
           TestName = "Cleanup - remove the databases created on the previous run." for extern
           Finished = true for extern
 
@@ -803,7 +805,7 @@ domain model://joopringelberg.nl#RebootUniverse@1.0
 
       perspective on cm:CouchdbServer$BespokeDatabases
         only (CreateAndFill)
-        props (Endorsed, Public) verbs (SetPropertyValue, Consult)
+        props (Endorsed, Public, EnteredDatabaseName) verbs (SetPropertyValue, Consult)
 
       perspective on cm:BespokeDatabase$Owner
         only (Create, Fill)
@@ -825,6 +827,7 @@ domain model://joopringelberg.nl#RebootUniverse@1.0
         in
           TestName = "Managing BrokerServices." for extern
           bind_ me to owner
+          EnteredDatabaseName = "cw_bigbangsdatabase/" for publicbrokerservicedb
           Endorsed = true for publicbrokerservicedb
           -- Now state BespokeDatabase$External$CreateDb runs, creating the actual database and setting DatabaseName.
           

@@ -266,7 +266,7 @@ domain model://perspectives.domains#CouchdbManagement@12.4
       perspective on BespokeDatabases
         all roleverbs
         props (OwnerName, Description) verbs (Consult)
-        props (Endorsed) verbs (SetPropertyValue)
+        props (Endorsed, EnteredDatabaseName) verbs (SetPropertyValue)
       
       perspective on Admin
         props (FirstName, UserName) verbs (Consult)
@@ -397,7 +397,7 @@ domain model://perspectives.domains#CouchdbManagement@12.4
       -- NOTICE a flaw in this design: each Accounts instance has full control over all BespokeDatabases - including those owned by other Accounts!
       perspective on BespokeDatabases
         only (CreateAndFill, RemoveContext)
-        props (Description) verbs (Consult, SetPropertyValue)
+        props (Description, EnteredDatabaseName) verbs (Consult, SetPropertyValue)
       
       perspective on BespokeDatabases >> binding >> context >> Owner
         only (Fill)
@@ -446,7 +446,7 @@ domain model://perspectives.domains#CouchdbManagement@12.4
                         >
               props (Name) verbs (Consult)
             detail
-              props (Name, Description) verbs (Consult)
+              props (Name, Description, EnteredDatabaseName) verbs (Consult)
 
     -- The instance of CouchdbServer is published in the cw_servers_and_repositories database.
     -- TODO: als omkering van filtered queries volledig is, beperk dan het perspectief van Visitor tot PublicRepositories.
@@ -558,7 +558,8 @@ domain model://perspectives.domains#CouchdbManagement@12.4
 
     context BespokeDatabases (relational) filledBy BespokeDatabase
       property EnteredDatabaseName (String)
-        pattern "^cw_[a-z]+/$" "The database name must start with 'cw_' followed by lowercase letters and end with a '/'"
+        pattern = "^cw_[a-z]+/$" "The database name must start with 'cw_' followed by lowercase letters and end with a '/'"
+    
     context MyBespokeDatabases = (filter BespokeDatabases with binding >> context >> Owner filledBy sys:Me) >> binding
     aspect thing sys:ContextWithNotification$Notifications
   -------------------------------------------------------------------------------
@@ -578,7 +579,7 @@ domain model://perspectives.domains#CouchdbManagement@12.4
       state CreateDb = Endorsed and (exists context >> Owner) and not exists DatabaseName
         on entry
           do for CBAdmin
-            DatabaseName = EnteredDatabaseName orElse "cw_" + callExternal util:GenSym() returns String + "/" 
+            DatabaseName = (binder BespokeDatabases >> EnteredDatabaseName >>= first) orElse ("cw_" + callExternal util:GenSym() returns String + "/")
             callEffect cdb:CreateEntitiesDatabase( BaseUrl, DatabaseName, BaseUrl >> callExternal util:Replace( "https://", "") returns String )
             DatabaseLocation = BaseUrl + DatabaseName
             callEffect cdb:MakeAdminOfDb( BaseUrl, DatabaseName, context >> Owner >> UserName )
