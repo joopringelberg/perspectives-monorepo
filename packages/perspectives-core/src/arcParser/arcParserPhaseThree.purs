@@ -53,7 +53,7 @@ import Perspectives.Data.EncodableMap (EncodableMap, empty, insert, lookup, keys
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
 import Perspectives.DomeinCache (modifyEnumeratedRoleInDomeinFile, removeDomeinFileFromCache, storeDomeinFileInCache)
 import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, UpstreamAutomaticEffect(..), UpstreamStateNotification(..), addUpstreamAutomaticEffect, addUpstreamNotification)
-import Perspectives.Error.Pretty (renderPerspectivesError)
+import Perspectives.Error.Pretty (humanizePerspectivesError, renderPerspectivesError)
 import Perspectives.HumanReadableType (translateType)
 import Perspectives.Identifiers (Namespace, concatenateSegments, isTypeUri, qualifyWith, startsWithSegments, typeUri2LocalName_, typeUri2ModelUri_, typeUri2typeNameSpace)
 import Perspectives.Instances.ObjectGetters (contextType_, roleType_)
@@ -83,9 +83,9 @@ import Perspectives.Query.ExpressionCompiler (compileAndDistributeStep, compileA
 import Perspectives.Query.Kinked (completeInversions, invert)
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), domain, domain2roleInContext, domain2roleType, mandatory, range, replaceContext, roleInContext2Role, roleRange, sumOfDomains, traverseQfd)
 import Perspectives.Query.QueryTypes (RoleInContext(..)) as QT
-import Perspectives.Query.StatementCompiler (compileStatement)
+import Perspectives.Query.StatementCompiler (compileActionEffect)
 import Perspectives.Representation.ADT (ADT(..), allLeavesInADT, equals_, transform)
-import Perspectives.Representation.Action (AutomaticAction(..), Action(..))
+import Perspectives.Representation.Action (AutomaticAction(..), Action(..), ActionEffect(..))
 import Perspectives.Representation.CNF (toConjunctiveNormalForm, traverseDPROD)
 import Perspectives.Representation.CalculatedProperty (CalculatedProperty(..))
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
@@ -618,7 +618,7 @@ handlePostponedStateQualifiedParts = do
   collectRoleInContexts (ImplicitRole ctxt s) = compileExpression (CDOM (UET ctxt)) s >>= \qfd ->
     case range qfd of
       RDOM adt -> pure adt
-      otherwise -> throwError $ NotARoleDomain otherwise (startOf s) (endOf s)
+      otherwise -> (lift2 $ humanizePerspectivesError $ NotARoleDomain otherwise (startOf s) (endOf s)) >>= throwError
 
   makeTypeTimeOnlyRoleBinding :: String -> RoleIdentification -> ADT QT.RoleInContext -> ArcPosition -> PhaseThree VarBinding
   makeTypeTimeOnlyRoleBinding varName roleIdentification usersInContext pos = case roleIdentification of
@@ -637,14 +637,17 @@ handlePostponedStateQualifiedParts = do
   collectStates mpath r = collectRoles r >>= \roles -> do
     -- Don't include aspects.
     roles' <- nub <$> lift2 (roles ###= (forceTypeArray >=> f >=> ArrayT <<< pure <<< allLeavesInADT))
+    -- roleADTOfRoleType may return Stable role identifiers for roles from already compiled (imported) models.
+    -- Normalise to Readable so we can safely append a Readable local state path segment below.
+    (readableRoles' :: Array EnumeratedRoleType) <- lift2 $ traverse toReadable roles'
     case mpath of
       -- For a Calculated role, we should now take the range of its calculation.
       -- This is because a Calculated role has no instances that have state.
       -- It calculates Enumerated role instances - and those have state!
-      Nothing -> pure (StateIdentifier <<< unwrap <$> roles')
+      Nothing -> pure (StateIdentifier <<< unwrap <$> readableRoles')
       Just p ->
         if isTypeUri p then pure [ StateIdentifier p ]
-        else pure (StateIdentifier <<< flip append p <<< flip append "$" <<< unwrap <$> roles')
+        else pure (StateIdentifier <<< flip append p <<< flip append "$" <<< unwrap <$> readableRoles')
 
     where
     f :: RoleType ~~~> ADT EnumeratedRoleType
@@ -656,7 +659,7 @@ handlePostponedStateQualifiedParts = do
   statesExist :: ArcPosition -> ArcPosition -> Array StateIdentifier -> PhaseThree (Array StateIdentifier)
   statesExist start end states = do
     for_ states \stateId -> (lift2 $ tryGetPerspectType stateId) >>= case _ of
-      Nothing -> throwError $ (StateDoesNotExist stateId start end)
+      Nothing -> (lift2 $ humanizePerspectivesError $ (StateDoesNotExist stateId start end)) >>= throwError
       Just _ -> pure unit
     pure states
 
@@ -711,7 +714,10 @@ handlePostponedStateQualifiedParts = do
       rolesADT <- collectRoles rident
       -- Expand to enumerated leaves (as collectStates does), but enforce singleton.
       roles' <- nub <$> lift2 (rolesADT ###= (forceTypeArray >=> f >=> ArrayT <<< pure <<< allLeavesInADT))
-      case roles' of
+      -- roleADTOfRoleType may return Stable role identifiers for roles from already compiled (imported) models.
+      -- Normalise to Readable so we can safely append a Readable local state path segment below.
+      (readableRoles' :: Array EnumeratedRoleType) <- lift2 $ traverse toReadable roles'
+      case readableRoles' of
         [] -> throwError (Custom ("No enumerated " <> label <> " role resolves for this state specification; make it explicit."))
         [ one ] -> pure $ StateIdentifier $
           case mpath of
@@ -776,7 +782,7 @@ handlePostponedStateQualifiedParts = do
     baseState <- resolveSingleState spec
     _ <- statesExist start end [ baseState ]
     let states = [ baseState ]
-    (sideEffect :: QueryFunctionDescription) <- compileStatement
+    (sideEffect :: ActionEffect) <- compileActionEffect
       originDomain
       currentcontextDomain
       qualifiedUsers
@@ -1037,7 +1043,7 @@ handlePostponedStateQualifiedParts = do
       )
     objectMustBeRole (Just compiledObject) start end
     -- The effect starts with the Perspective object, i.e. the syntacticObject.
-    (theAction :: QueryFunctionDescription) <- compileStatement
+    (theAction :: ActionEffect) <- compileActionEffect
       (range compiledObject)
       currentcontextDomain
       qualifiedUsers
@@ -1264,7 +1270,7 @@ handlePostponedStateQualifiedParts = do
       effect
     states <- stateSpec2States state >>= statesExist start end
     -- The effect starts with the Perspective object, i.e. the syntacticObject.
-    (theAction :: QueryFunctionDescription) <- compileStatement
+    (theAction :: ActionEffect) <- compileActionEffect
       currentcontextDomain
       currentcontextDomain
       qualifiedUsers
@@ -1500,7 +1506,7 @@ handlePostponedStateQualifiedParts = do
                   []
               )
             modifyDF \drf@{ states } -> drf { states = insert (unwrap stateId) state' states }
-          else throwError $ StateDoesNotExist stateId start end
+          else (lift2 $ humanizePerspectivesError $ StateDoesNotExist stateId start end) >>= throwError
       Just (State sr) -> do
         -- modify the state
         state' <- State <$> (modifyState sr)
@@ -1545,7 +1551,7 @@ objectMustBeRole :: Maybe QueryFunctionDescription -> ArcPosition -> ArcPosition
 objectMustBeRole qfd start end = case range <$> qfd of
   Just (RDOM _) -> pure unit
   Nothing -> pure unit
-  (Just r) -> throwError (NotARoleDomain r start end)
+  (Just r) -> (lift2 $ humanizePerspectivesError (NotARoleDomain r start end)) >>= throwError
 
 addUserRoleGraph :: PhaseThree Unit
 addUserRoleGraph = do

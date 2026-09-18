@@ -64,7 +64,7 @@ import Perspectives.Error.Pretty (humanizePerspectivesWarning)
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..))
 import Perspectives.Instances.ObjectGetters (binding_, contextType_, roleType_)
 import Perspectives.Logging (debugSync, errorDelta, logWhen)
-import Perspectives.ModelDependencies (perspectivesUsersPublicKey, sysUser)
+import Perspectives.ModelDependencies (perspectivesUsersPublicKey, perspectivesUsersTransportPublicKey, sysUser)
 import Perspectives.Names (getMySystem, getUserIdentifier)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseTwoState, runPhaseTwo_')
 import Perspectives.Parsing.Arc.Position (ArcPosition)
@@ -251,8 +251,8 @@ serialiseRoleInstancesAndProperties cid users object properties selfOnly isPersp
     if isPerspectiveOnSelf
     -- To ensure that the receiving user of a self-perspective actually receives the full role telescope, we add
     -- the following property. In terms of communication it will be neutral as the receiver obviously has access to his own 
-    -- PublicKey.
-    then pure $ ARR.cons (ENP $ EnumeratedPropertyType perspectivesUsersPublicKey) properties
+    -- PublicKey and TransportPublicKey.
+    then pure $ ARR.cons (ENP $ EnumeratedPropertyType perspectivesUsersPublicKey) $ ARR.cons (ENP $ EnumeratedPropertyType perspectivesUsersTransportPublicKey) properties
     else pure properties
   -- All instances of this RoleType (object) the user may see in this context.
   -- In general, these may be instances of several role types, as the perspective object is expressed as a query.
@@ -357,6 +357,9 @@ serialiseDependency users mpreviousDependency currentDependency = do
   case mpreviousDependency, currentDependency of
     Just first@(R roleId1), (R roleId2) -> do
       if isInPublicScheme (unwrap roleId1) || isInPublicScheme (unwrap roleId2) then pure unit
+      -- Composing dependency paths may repeat the role at their shared boundary.
+      -- Preserve a genuine self-binding delta, but do not warn when this is only path overlap.
+      else if roleId1 == roleId2 then void $ lift $ addBindingDelta roleId1 roleId2
       else
         lift $ addBindingDelta roleId1 roleId2 >>=
           if _ then pure unit

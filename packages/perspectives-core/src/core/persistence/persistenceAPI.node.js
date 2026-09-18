@@ -98,9 +98,17 @@ function convertPouchError( originalE )
     return new Error( JSON.stringify(
       { status: originalE.status
       , name: originalE.constructor.name
-      , message: originalE.message || originalE.statusText
+      , message: originalE.message || originalE.reason || originalE.statusText || "Unknown PouchDB error"
       , error: originalE.error || originalE.statusText}));
   }
+}
+
+export function basicAuthenticationHeader(username)
+{
+  return function(password)
+  {
+    return "Basic " + Buffer.from(username + ":" + password, "utf8").toString("base64");
+  };
 }
 
 // In the Node.js context there are no CORS restrictions, so we do not override
@@ -112,18 +120,28 @@ function convertPouchError( originalE )
 // "https://perspectives.domains/cw_perspectives_domains".
 // For all other names (plain identifiers) we use the in-memory adapter, which is
 // appropriate for unit/integration tests that should not touch the filesystem.
-export function createDatabaseImpl( databaseName )
+export function createDatabaseImpl( databaseName, username, password )
 {
   if (databaseName.startsWith('http://') || databaseName.startsWith('https://'))
   {
-    return new PouchDB( databaseName, { fetch: retryingFetch } );
+    var options = { fetch: retryingFetch, skip_setup: true };
+    if (username != null && password != null)
+    {
+      options.auth = { username: username, password: password };
+    }
+    return new PouchDB( databaseName, options );
   }
   return new PouchDB( databaseName, { adapter: 'memory' } );
 }
 
-export function createRemoteDatabaseImpl( databaseName, couchdbUrl )
+export function createRemoteDatabaseImpl( databaseName, couchdbUrl, username, password )
 {
-  var P = PouchDB.defaults({ prefix: couchdbUrl, fetch: retryingFetch });
+  var options = { prefix: couchdbUrl, fetch: retryingFetch, skip_setup: true };
+  if (username != null && password != null)
+  {
+    options.auth = { username: username, password: password };
+  }
+  var P = PouchDB.defaults(options);
   return new P(databaseName);
 }
 
@@ -171,9 +189,14 @@ export function databaseInfoImpl ( database ) {
   return function (onError, onSuccess) {
     database.info( function(err, response)
       {
-        if (err != null)
+        if (err != null || (response != null && response.error != null))
         {
-          onError( convertPouchError(err) );
+          var databaseError = err || response;
+          if (databaseError.status == null && databaseError.error === "not_found")
+          {
+            databaseError.status = 404;
+          }
+          onError( convertPouchError(databaseError) );
         }
         else
         {
@@ -266,6 +289,26 @@ export function replicateOnce (origin, recovery, last_seq) {
         onError(convertPouchError(err));
       });
       
+    return function(cancelError, cancelerError, cancelerSuccess) {
+      cancelerSuccess();
+    };
+  };
+}
+
+export function replicateDatabaseImpl (sourceDbName, targetDbName) {
+  return function(onError, onSuccess) {
+    const sourceDb = createDatabaseImpl(sourceDbName);
+    const targetDb = createDatabaseImpl(targetDbName);
+    targetDb.replicate.from(sourceDb, { live: false })
+      .on('complete', function() {
+        console.log(`replicateDatabase: replicated ${sourceDbName} to ${targetDbName}.`);
+        onSuccess(undefined);
+      })
+      .on('error', function(err) {
+        console.error(`replicateDatabase: error replicating ${sourceDbName} to ${targetDbName}:`, err);
+        onError(convertPouchError(err));
+      });
+
     return function(cancelError, cancelerError, cancelerSuccess) {
       cancelerSuccess();
     };

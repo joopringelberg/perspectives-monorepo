@@ -1,0 +1,6 @@
+# Local start scripts containing real credentials must never be committed.
+startService.sh
+startService_private.sh
+*.log
+error.log
+combined.log

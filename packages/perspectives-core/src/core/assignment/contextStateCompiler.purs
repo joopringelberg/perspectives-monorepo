@@ -52,6 +52,7 @@ import Perspectives.Assignment.SentenceCompiler (CompiledSentence, compileContex
 import Perspectives.Assignment.SerialiseAsDeltas (serialiseRoleInstancesAndProperties)
 import Perspectives.Assignment.StateCache (CompiledContextState, cacheCompiledContextState, retrieveCompiledContextState)
 import Perspectives.Assignment.Update (ConditionResult(..), isUndetermined, setActiveContextState, setInActiveContextState)
+import Perspectives.CompileActionEffect (compileActionEffectWith)
 import Perspectives.CompileAssignment (compileAssignment, withAuthoringRole)
 import Perspectives.CompileTimeFacets (addTimeFacets)
 import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), LogLevel(..), LogTopic(..), MP, MonadPerspectives, MonadPerspectivesTransaction, Updater, WithAssumptions, liftToInstanceLevel, runMonadPerspectivesQuery, (##=), (##>>))
@@ -60,6 +61,7 @@ import Perspectives.Instances.Builders (createAndAddRoleInstance)
 import Perspectives.Instances.Combinators (filter, not') as COMB
 import Perspectives.Instances.Me (isMe)
 import Perspectives.Instances.ObjectGetters (Filled_(..), Filler_(..), contextType, filledBy, getActiveStates_)
+import Perspectives.Identifiers (typeUri2typeNameSpace_)
 import Perspectives.Logging (debugState, logWhen, traceState)
 import Perspectives.ModelDependencies (contextWithNotification, notificationMessage, notifications)
 import Perspectives.Names (getMySystem)
@@ -70,7 +72,7 @@ import Perspectives.Representation.Action (AutomaticAction(..))
 import Perspectives.Representation.Class.PersistentType (getState)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance, Value(..), externalRole, perspectivesUser2RoleInstance)
 import Perspectives.Representation.State (Notification(..), State(..), StateDependentPerspective(..))
-import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedRoleType(..), PropertyType, RoleType, StateIdentifier)
+import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedRoleType(..), PropertyType, RoleType, StateIdentifier(..))
 import Perspectives.ScheduledAssignment (StateEvaluation(..))
 import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.Sync.Transaction (Transaction(..))
@@ -115,7 +117,7 @@ compileState stateId = do
   where
   compileEffect :: Partial => AutomaticAction -> RoleType -> MP (Updater ContextInstance)
   compileEffect (ContextAction r@{ effect }) subject = do
-    compiledEffect <- compileAssignment effect
+    compiledEffect <- compileActionEffectWith compileAssignment effect subject (Just stateId)
     addTimeFacets compiledEffect r subject stateId
 
   compileNotification :: Partial => Notification -> RoleType -> MP (Updater ContextInstance)
@@ -129,30 +131,35 @@ compileState stateId = do
 -- | Put an error boundary around this function.
 evaluateContextState :: ContextInstance -> StateIdentifier -> MonadPerspectivesTransaction Unit
 evaluateContextState contextId stateId = do
-  contextIsInState' <- conditionSatisfied contextId stateId
-  case contextIsInState' of
-    Determined contextIsInState ->
-      if contextIsInState then do
-        contextWasInState <- lift $ isActive stateId contextId
-        if contextWasInState then do
-          padding <- lift transactionLevel
-          lift $ logWhen Trace STATE
-            ((<>) padding <$> (show <$> (humanizePerspectivesWarning $ AlreadyInContextState contextId stateId)))
-          subStates <- lift $ subStates_ stateId
-          for_ subStates (evaluateContextState contextId)
-        else enteringState contextId stateId
-      else do
-        contextWasInState <- lift $ isActive stateId contextId
-        if contextWasInState then exitingState contextId stateId
+  cType <- lift $ (contextId ##>> contextType)
+  let (parentStateId :: StateIdentifier) = (over StateIdentifier typeUri2typeNameSpace_) stateId
+  isInParentState <- lift $ isActive parentStateId contextId
+  if unwrap stateId == unwrap cType || isInParentState then do
+    contextIsInState' <- conditionSatisfied contextId stateId
+    case contextIsInState' of
+      Determined contextIsInState ->
+        if contextIsInState then do
+          contextWasInState <- lift $ isActive stateId contextId
+          if contextWasInState then do
+            padding <- lift transactionLevel
+            lift $ logWhen Trace STATE
+              ((<>) padding <$> (show <$> (humanizePerspectivesWarning $ AlreadyInContextState contextId stateId)))
+            subStates <- lift $ subStates_ stateId
+            for_ subStates (evaluateContextState contextId)
+          else enteringState contextId stateId
         else do
-          padding <- lift transactionLevel
-          lift $ logWhen Trace STATE
-            ((<>) padding <$> (show <$> (humanizePerspectivesWarning $ ContextStateNotValid contextId stateId)))
-    Undetermined -> modify
-      ( \t -> over Transaction
-          (\tr -> tr { postponedStateEvaluations = cons (ContextStateEvaluation stateId contextId) tr.postponedStateEvaluations })
-          t
-      )
+          contextWasInState <- lift $ isActive stateId contextId
+          if contextWasInState then exitingState contextId stateId
+          else do
+            padding <- lift transactionLevel
+            lift $ logWhen Trace STATE
+              ((<>) padding <$> (show <$> (humanizePerspectivesWarning $ ContextStateNotValid contextId stateId)))
+      Undetermined -> modify
+        ( \t -> over Transaction
+            (\tr -> tr { postponedStateEvaluations = cons (ContextStateEvaluation stateId contextId) tr.postponedStateEvaluations })
+            t
+        )
+  else pure unit
 
 -- | This function is only called (and should only be called) on states whose condition is valid.
 -- | On entering a state, we register that state with the context instance and trigger client query updates.

@@ -46,8 +46,10 @@ export interface SignedDelta {
 }
 
 export interface PublicKeyInfo {
-  /** Serialised JWK public key */
+  /** Serialised JWK signing public key */
   key: string;
+  /** Serialised JWK RSA-OAEP transport public key */
+  transportKey: string;
   /** The signed deltas that prove ownership of this key */
   deltas: SignedDelta[];
 }

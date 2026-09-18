@@ -60,10 +60,10 @@ import Perspectives.Parsing.Arc.Statement.AST (Statements(..))
 import Perspectives.Parsing.Arc.Token (reservedIdentifier, token)
 import Perspectives.Persistent.PublicStore (PublicStore(..))
 import Perspectives.Repetition (Duration(..), Repeater(..))
+import Perspectives.Representation.Action (StartMoment(..))
 import Perspectives.Representation.Context (ContextKind(..))
 import Perspectives.Representation.ExplicitSet (ExplicitSet(..))
 import Perspectives.Representation.Range (Range(..))
-import Perspectives.Representation.State (NotificationLevel(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedRoleType(..), RoleKind(..), RoleType(..))
 import Perspectives.Representation.Verbs (RoleVerb(..), PropertyVerb(..), RoleVerbList(..))
 import Prelude (bind, discard, flip, not, pure, show, ($), (&&), (*>), (<$>), (<*), (<*>), (<<<), (<>), (==), (>>=), (||), (/=), (+))
@@ -1117,7 +1117,7 @@ automaticEffectE = do
   reserved "do"
   -- User role either specified here or taken from state.
   usr <- optionMaybe (reserved "for" *> arcIdentifier)
-  startMoment <- optionMaybe (reserved "after" *> duration)
+  startMoment <- startMomentE
   endMoment <- optionMaybe (reserved "until" *> duration)
   repeats <- repeatsE
   case endMoment, repeats of
@@ -1233,7 +1233,7 @@ notificationE = do
         , transition
         , message
         , object
-        , startMoment: Nothing
+        , startMoment: Immediately
         , endMoment: Nothing
         , repeats: Never
         , start
@@ -1244,7 +1244,7 @@ notificationE = do
         , transition
         , message
         , object
-        , startMoment: Nothing
+        , startMoment: Immediately
         , endMoment: Nothing
         , repeats: Never
         , start
@@ -1261,7 +1261,7 @@ notificationE = do
         , transition
         , message
         , object
-        , startMoment: Nothing
+        , startMoment: Immediately
         , endMoment: Nothing
         , repeats: Never
         , start
@@ -1272,7 +1272,7 @@ notificationE = do
         , transition
         , message
         , object
-        , startMoment: Nothing
+        , startMoment: Immediately
         , endMoment: Nothing
         , repeats: Never
         , start
@@ -1281,13 +1281,11 @@ notificationE = do
       Nothing, Nothing -> fail "A state transition is required, "
       _, _ -> fail "State transition inside state transition is not allowed, "
 
-  where
-  notificationLevel :: IP NotificationLevel
-  notificationLevel = do
-    v <- token.identifier
-    case v of
-      "Alert" -> pure Alert
-      _ -> fail "Not a notification levelm "
+startMomentE :: IP StartMoment
+startMomentE =
+  (After <$> (reserved "after" *> duration))
+    <|> (reserved "once" *> reserved "settled" *> pure OnceSettled)
+    <|> pure Immediately
 
 roleAndPropertyDefaults :: IP (List StateQualifiedPart)
 roleAndPropertyDefaults = do

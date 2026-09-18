@@ -38,6 +38,9 @@ perspectivesUsersCancelled = "model://perspectives.domains#tiodn6tcyc$xku8d2dtb7
 perspectivesUsersPublicKey :: String
 perspectivesUsersPublicKey = "model://perspectives.domains#tiodn6tcyc$xku8d2dtb7$atijsr67hl"
 
+perspectivesUsersTransportPublicKey :: String
+perspectivesUsersTransportPublicKey = "model://perspectives.domains#tiodn6tcyc$xku8d2dtb7$l6efjjgjpi"
+
 modelDataUpgrade :: String
 modelDataUpgrade = "model://perspectives.domains#tiodn6tcyc$s9ayjqlfrd"
 
@@ -232,9 +235,6 @@ domeinFileNameOnVersionedModelManifest = "model://perspectives.domains#tiodn6tcy
 domeinFileNameWithVersion :: String
 domeinFileNameWithVersion = "model://perspectives.domains#tiodn6tcyc$mo66to1n9c$External$vm82xl40mj"
 
-versionedModelManifestModelCuid :: String
-versionedModelManifestModelCuid = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$External$k8068785f1"
-
 patch :: String
 patch = "model://perspectives.domains#tiodn6tcyc$mo66to1n9c$External$ijlb1ixfjo"
 
@@ -246,6 +246,12 @@ installedPatch = "model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$ikjc543of4$
 
 installedBuild :: String
 installedBuild = "model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$ikjc543of4$g3nqpdejmj"
+
+localModelNameProperty :: String
+localModelNameProperty = "model://perspectives.domains#tiodn6tcyc$ude5ocuk4n$u8fu3p5asn$gdyohe743u"
+
+modelCuidProperty :: String
+modelCuidProperty = "model://perspectives.domains#tiodn6tcyc$huw4rt0uj8$External$z58i6r2enz"
 
 ------------------------------------------------------------------------------------
 -- COUCHDBMANAGEMENT
@@ -263,25 +269,31 @@ versionedModelURI :: String
 versionedModelURI = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$External$hp8fq71nqg"
 
 conversationSources :: String
-conversationSources = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$gstdhav9bc"
+conversationSources = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$t93c222nct"
 
 conversationSourceDocumentName :: String
-conversationSourceDocumentName = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$gstdhav9bc$f7lhxrisqv"
+conversationSourceDocumentName = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$t93c222nct$qhdqfn7sff"
 
 conversationSourceDocumentKind :: String
-conversationSourceDocumentKind = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$gstdhav9bc$s49jllbgwo"
+conversationSourceDocumentKind = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$t93c222nct$x8hxas4o7w"
 
 conversationSourceContextType :: String
-conversationSourceContextType = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$gstdhav9bc$t9oe0xjjbc"
+conversationSourceContextType = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$t93c222nct$wfu03odqxe"
 
 conversationSourceYaml :: String
-conversationSourceYaml = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$gstdhav9bc$s6ryax0sl4"
+conversationSourceYaml = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$t93c222nct$j3nnom60iw"
 
 conversationSourceLastYamlChangeDT :: String
-conversationSourceLastYamlChangeDT = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$gstdhav9bc$k399teudmc"
+conversationSourceLastYamlChangeDT = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$t93c222nct$ee6ccgs91b"
 
 modelURIReadable :: String
 modelURIReadable = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$External$b8y8q4gqqz"
+
+versionedModelManifestModelCuid :: String
+versionedModelManifestModelCuid = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$External$k8068785f1"
+
+manifestsRole :: String
+manifestsRole = "model://perspectives.domains#xyfxpg3lzq$r6cizdyven$murhlatx75"
 
 ------------------------------------------------------------------------------------
 -- INVITATION

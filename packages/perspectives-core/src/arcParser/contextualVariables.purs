@@ -26,7 +26,7 @@
 
 module Perspectives.Parsing.Arc.ContextualVariables where
 
-import Data.Array (catMaybes, filter, foldMap, head, last, null)
+import Data.Array (catMaybes, concat, filter, foldMap, head, last, null)
 import Data.Maybe (Maybe(..), fromJust, maybe)
 import Data.Monoid.Disj (Disj(..))
 import Data.Newtype (ala, unwrap)
@@ -71,8 +71,8 @@ stepContainsVariableReference _ _ = false
 --------------------------------------------------------------------------
 -- | True only if the Statement contains a reference to the named variable.
 statementContainsVariableReference :: String -> Statements -> Boolean
-statementContainsVariableReference varName (Let (LetStep { bindings, assignments })) =
-  ala Disj foldMap (assignmentContainsReference varName <$> assignments)
+statementContainsVariableReference varName (Let (LetStep { bindings, stages })) =
+  ala Disj foldMap (assignmentContainsReference varName <$> concat stages)
     ||
       ala Disj foldMap
         (catMaybes $ recur <$> bindings)
@@ -206,7 +206,7 @@ addContextualBindingsToExpression extraBindings step =
 -- | removes them).
 addContextualBindingsToStatements :: Array VarBinding -> Statements -> Statements
 addContextualBindingsToStatements extraBindings stmts = case stmts of
-  Let (LetStep r@{ bindings, assignments }) -> do
+  Let (LetStep r@{ bindings }) -> do
     Let (LetStep r { bindings = (Expr <$> extraBindings) <> bindings })
   Statements stmtArray -> do
     Let
@@ -214,7 +214,7 @@ addContextualBindingsToStatements extraBindings stmts = case stmts of
           { start: unsafePartial $ startOfStatements stmts
           , end: unsafePartial $ endOfStatements stmts
           , bindings: Expr <$> extraBindings
-          , assignments: stmtArray
+          , stages: [ stmtArray ]
           }
       )
   where

@@ -76,6 +76,14 @@ function captureFetch(url, opts)
   return fetch(url, opts);
 }
 
+export function basicAuthenticationHeader(username)
+{
+  return function(_password)
+  {
+    return null;
+  };
+}
+
 export function createDatabaseImpl( databaseName )
 {
   return new PouchDB( 
@@ -83,7 +91,7 @@ export function createDatabaseImpl( databaseName )
     // NOTE. We have to decide in coding time whether to include the browser or the Node version.
     // Node doesn't know fetch.
     // Outcomment when running Node!
-    , {fetch: captureFetch} 
+    , {fetch: captureFetch}
     );
 }
 

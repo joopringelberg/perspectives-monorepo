@@ -98,6 +98,7 @@ module Perspectives.Logging
   , warnAuth
   , warnBroker
   , warnDelta
+  , warnInstall
   , warnModel
   , warnOther
   , warnPersistence
@@ -304,6 +305,9 @@ infoInstall = pdrLog INSTALL Info
 
 traceInstall :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 traceInstall = pdrLog INSTALL Trace
+
+warnInstall :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
+warnInstall = pdrLog INSTALL Warn
 
 -----------------------------------------------------------
 -- OTHER

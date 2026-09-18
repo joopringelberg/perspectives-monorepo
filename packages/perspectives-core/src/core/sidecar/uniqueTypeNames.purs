@@ -74,7 +74,7 @@ import Perspectives.DomeinFile (DomeinFileRecord)
 import Perspectives.ExecuteInTopologicalOrder (sortTopologicallyEither)
 import Perspectives.Identifiers (isModelUri, typeUri2LocalName_, typeUri2typeNameSpace_, modelUri2SchemeAndAuthority)
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), range)
-import Perspectives.Representation.Action (Action(..))
+import Perspectives.Representation.Action (Action(..), actionEffectSignature)
 import Perspectives.Representation.CalculatedProperty (CalculatedProperty(..))
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
 import Perspectives.Representation.Class.Context (enumeratedRoles)
@@ -638,7 +638,7 @@ extractKeysFromDfr dfr@{ contexts, enumeratedRoles: eroles, calculatedRoles: cro
                         let
                           local = typeUri2LocalName_ nm
                           fqn = roleFqn <> "$" <> local
-                          qh = qfdSignature act.qfd
+                          qh = actionEffectSignature qfdSignature act.qfd
                         in
                           Tuple fqn { fqn, declaringRoleFqn: roleFqn, localName: local, qfdHash: qh }
                     in
@@ -675,7 +675,7 @@ extractKeysFromDfr dfr@{ contexts, enumeratedRoles: eroles, calculatedRoles: cro
                         let
                           local = typeUri2LocalName_ nm
                           fqn = roleFqn <> "$" <> local
-                          qh = qfdSignature act.qfd
+                          qh = actionEffectSignature qfdSignature act.qfd
                         in
                           Tuple fqn { fqn, declaringRoleFqn: roleFqn, localName: local, qfdHash: qh }
                     in

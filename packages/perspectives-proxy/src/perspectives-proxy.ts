@@ -1877,6 +1877,7 @@ export class PerspectivesProxy
       });
   }
 
+  // OBSOLETE (NOT USED)
   evaluateRoleState( rolinstance : RoleInstanceT) : Promise<[]>
   {
     const proxy = this;

@@ -11,8 +11,8 @@ import PouchDBMemoryAdapter from 'pouchdb-adapter-memory';
 // Ensure the memory adapter is registered (idempotent — safe to call multiple times).
 PouchDB.plugin(PouchDBMemoryAdapter);
 
-// Generates a fresh ECDSA P-384 keypair and stores both keys in the IDB stub
-// under <guid>_privateKey and <guid>_publicKey.
+// Generates a fresh ECDSA P-384 signing keypair and RSA-OAEP transport keypair
+// and stores them in the IDB stub.
 //
 // Generating fresh keys each test run guarantees that sign + verify use a
 // matching pair, without any dependency on a stored keypair file.
@@ -24,8 +24,20 @@ export function loadKeypairImpl(guid) {
         true,
         ['sign', 'verify']
       );
+      const transportKeyPair = await crypto.subtle.generateKey(
+        {
+          name: 'RSA-OAEP',
+          modulusLength: 4096,
+          publicExponent: new Uint8Array([1, 0, 1]),
+          hash: 'SHA-256'
+        },
+        true,
+        ['encrypt', 'decrypt']
+      );
       await idbSet(guid + '_privateKey', keyPair.privateKey);
       await idbSet(guid + '_publicKey', keyPair.publicKey);
+      await idbSet(guid + '_transportPrivateKey', transportKeyPair.privateKey);
+      await idbSet(guid + '_transportPublicKey', transportKeyPair.publicKey);
     })();
   };
 }
@@ -79,15 +91,19 @@ export function snapshotPDRImpl(systemIdentifier) {
             );
           }
 
-          // Export the ECDSA keypair as JWK so it survives process restarts.
+          // Export the installation keypairs as JWK so they survive process restarts.
           const privateKey = await idbGet(perspectivesUser + '_privateKey');
           const publicKey = await idbGet(perspectivesUser + '_publicKey');
-          if (privateKey && publicKey) {
+          const transportPrivateKey = await idbGet(perspectivesUser + '_transportPrivateKey');
+          const transportPublicKey = await idbGet(perspectivesUser + '_transportPublicKey');
+          if (privateKey && publicKey && transportPrivateKey && transportPublicKey) {
             const privateJwk = await crypto.subtle.exportKey('jwk', privateKey);
             const publicJwk = await crypto.subtle.exportKey('jwk', publicKey);
+            const transportPrivateJwk = await crypto.subtle.exportKey('jwk', transportPrivateKey);
+            const transportPublicJwk = await crypto.subtle.exportKey('jwk', transportPublicKey);
             await writeFile(
               `${snapshotDir}/keypair.json`,
-              JSON.stringify({ privateJwk, publicJwk }, null, 2),
+              JSON.stringify({ privateJwk, publicJwk, transportPrivateJwk, transportPublicJwk }, null, 2),
               'utf8'
             );
             // Write sentinel last so that a partial snapshot is never treated as complete.
@@ -135,7 +151,7 @@ export function restoreSnapshotImpl(systemIdentifier) {
           const keypairJson = JSON.parse(
             await readFile(`${snapshotDir}/keypair.json`, 'utf8')
           );
-          const { privateJwk, publicJwk } = keypairJson;
+          const { privateJwk, publicJwk, transportPrivateJwk, transportPublicJwk } = keypairJson;
           const privateKey = await crypto.subtle.importKey(
             'jwk', privateJwk,
             { name: 'ECDSA', namedCurve: 'P-384' },
@@ -146,8 +162,20 @@ export function restoreSnapshotImpl(systemIdentifier) {
             { name: 'ECDSA', namedCurve: 'P-384' },
             true, ['verify']
           );
+          const transportPrivateKey = await crypto.subtle.importKey(
+            'jwk', transportPrivateJwk,
+            { name: 'RSA-OAEP', hash: 'SHA-256' },
+            true, ['decrypt']
+          );
+          const transportPublicKey = await crypto.subtle.importKey(
+            'jwk', transportPublicJwk,
+            { name: 'RSA-OAEP', hash: 'SHA-256' },
+            true, ['encrypt']
+          );
           await idbSet(perspectivesUser + '_privateKey', privateKey);
           await idbSet(perspectivesUser + '_publicKey', publicKey);
+          await idbSet(perspectivesUser + '_transportPrivateKey', transportPrivateKey);
+          await idbSet(perspectivesUser + '_transportPublicKey', transportPublicKey);
         })();
       };
     };
