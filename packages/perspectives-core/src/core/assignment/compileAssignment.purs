@@ -454,6 +454,7 @@ compileContextAssignment (UQD _ (QF.CreateContext qualifiedContextTypeIdentifier
           contextCreationResult <- runExceptT $ constructContext Nothing
             ( ContextSerialization defaultContextSerializationRecord
                 { ctype = unwrap qualifiedContextTypeIdentifier
+                , id = localName
                 }
             )
           case contextCreationResult of
@@ -482,6 +483,7 @@ compileContextAssignment (UQD _ (QF.CreateContext qualifiedContextTypeIdentifier
               contextCreationResult <- runExceptT $ constructContext (Just $ ENR roleTypeToCreate)
                 ( ContextSerialization defaultContextSerializationRecord
                     { ctype = unwrap contextTypeToCreate
+                    , id = localName
                     }
                 )
               case contextCreationResult of
@@ -639,6 +641,7 @@ compileContextCreatingAssignments (UQD _ (QF.CreateContext qualifiedContextTypeI
             Nothing
             ( ContextSerialization defaultContextSerializationRecord
                 { ctype = unwrap qualifiedContextTypeIdentifier
+                , id = localName
                 }
             )
           case r of
@@ -668,6 +671,7 @@ compileContextCreatingAssignments (UQD _ (QF.CreateContext qualifiedContextTypeI
               r <- runExceptT $ constructContext (Just $ ENR roleTypeToCreate)
                 ( ContextSerialization defaultContextSerializationRecord
                     { ctype = unwrap contextTypeToCreate
+                    , id = localName
                     }
                 )
               case r of

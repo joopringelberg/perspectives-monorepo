@@ -72,8 +72,8 @@ import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), Rol
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
 import Perspectives.Representation.QueryFunction (QueryFunction(..)) as QF
 import Perspectives.Representation.ThreeValuedLogic (pessimistic)
-import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), ResourceType(..), RoleType(..))
-import Perspectives.ResourceIdentifiers (createResourceIdentifier, databaseLocation, resourceIdentifier2DocLocator)
+import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), RoleType(..))
+import Perspectives.ResourceIdentifiers (databaseLocation, resourceIdentifier2DocLocator)
 import Perspectives.SaveUserData (removeBinding, scheduleContextRemoval, scheduleRoleRemoval, setBinding, setFirstBinding, synchronise)
 import Perspectives.ScheduledAssignment (ScheduledAssignment(..))
 import Perspectives.Sync.Transaction (Transaction(..))
@@ -442,6 +442,7 @@ compileContextAssignmentFromRole (UQD _ (QF.CreateContext qualifiedContextTypeId
           contextCreationResult <- runExceptT $ constructContext (Just qualifiedRoleIdentifier)
             ( ContextSerialization defaultContextSerializationRecord
                 { ctype = unwrap qualifiedContextTypeIdentifier
+                , id = localName
                 }
             )
           case contextCreationResult of
@@ -469,23 +470,22 @@ compileContextAssignmentFromRole (UQD _ (QF.CreateContext qualifiedContextTypeId
               if length contextTypesToCreate > 1 then pure $ filter ((notEq) qualifiedContextTypeIdentifier) contextTypesToCreate
               else pure contextTypesToCreate
             for contextTypesToCreate' \contextTypeToCreate -> void do
-              contextIdentifier <- createResourceIdentifier (CType contextTypeToCreate)
               r <- runExceptT $ constructContext (Just $ ENR roleTypeToCreate)
                 ( ContextSerialization defaultContextSerializationRecord
-                    { id = Just contextIdentifier
-                    , ctype = unwrap contextTypeToCreate
+                    { ctype = unwrap contextTypeToCreate
+                    , id = localName
                     }
                 )
               case r of
                 Left e -> do
                   lift (renderPerspectivesError e >>= errorCompiler)
                   pure $ Left e
-                Right (ContextInstance newContext) -> do
+                Right (ContextInstance contextIdentifier) -> do
                   void $ createAndAddRoleInstance roleTypeToCreate (unwrap ctxt)
                     ( RolSerialization
                         { id: Nothing
                         , properties: PropertySerialization empty
-                        , binding: Just $ buitenRol newContext
+                        , binding: Just $ buitenRol contextIdentifier
                         }
                     )
                   pure $ Right contextIdentifier
@@ -658,6 +658,7 @@ compileContextCreatingAssignments (UQD _ (QF.CreateContext qualifiedContextTypeI
               r <- runExceptT $ constructContext (Just $ ENR roleTypeToCreate)
                 ( ContextSerialization defaultContextSerializationRecord
                     { ctype = unwrap contextTypeToCreate
+                    , id = localName
                     }
                 )
               case r of
