@@ -183,26 +183,11 @@ uploadToRepository_ :: { repositoryUrl :: String, documentName :: String } -> Do
 uploadToRepository_ splitName (DomeinFile df) invertedQueries mapping = do
   -- Get the attachment info
   (mremoteDf :: Maybe DocWithAttachmentInfo) <- tryGetDocument_ splitName.repositoryUrl splitName.documentName
-  attachments <- case mremoteDf of
-    Nothing -> defaultAttachments empty
-    Just (DocWithAttachmentInfo { _attachments }) -> case _attachments of
-      Nothing -> defaultAttachments empty
-      Just atts -> do
-        mappingFile <- liftEffect $ toFile "stableIdMapping.json" "application/json" (unsafeToForeign $ writeJSON mapping)
-        queryFile <- liftEffect $ toFile "storedQueries.json" "application/json" (unsafeToForeign $ writeJSON invertedQueries)
-        attachments' <- traverseWithIndex
-          (\attName { content_type } -> Tuple (MediaType content_type) <$> getAttachment splitName.repositoryUrl splitName.documentName attName)
-          atts
-        -- Now add or overwrite the inverted queries and the stable mapping, assuming translations are present.
-        pure $ insert
-          "storedQueries.json"
-          (Tuple (MediaType "application/json") (Just $ unsafeCoerce queryFile))
-          ( insert
-              "stableIdMapping.json"
-              (Tuple (MediaType "application/json") (Just $ unsafeCoerce mappingFile))
-              attachments'
-          )
-  -- Get the revision (if any) from the remote database, so we can overwrite.
+  case mremoteDf of
+    Just _ -> throwError $ error ("Refusing to overwrite published model release " <> splitName.documentName <> ". Publish a new version instead.")
+    Nothing -> pure unit
+  attachments <- defaultAttachments empty
+  -- Get the revision (if any) from the remote database.
   (mVersion :: Maybe String) <- retrieveDocumentVersion splitName.repositoryUrl splitName.documentName
   -- The _id of df will be a versionless identifier. If we don't set it to the versioned name, the document
   -- will be stored under the versionless name.
@@ -216,22 +201,27 @@ uploadToRepository_ splitName (DomeinFile df) invertedQueries mapping = do
   defaultAttachments attachments = do
     -- Add an empty translations file.
     translationsFile <- liftEffect $ unsafeCoerce toFile "translationtable.json" "application/json" (unsafeToForeign $ writeJSON MT.emptyTranslationTable)
+    dependenciesFile <- liftEffect $ toFile "modelDependencies.json" "application/json" (unsafeToForeign $ writeJSON df.modelDependencies)
     -- Add a skeleton stableIdMapping sidecar.
     mappingFile <- liftEffect $ toFile "stableIdMapping.json" "application/json" (unsafeToForeign $ writeJSON mapping)
     queryFile <- liftEffect $ toFile "storedQueries.json" "application/json" (unsafeToForeign $ writeJSON invertedQueries)
     pure $ insert
-      "stableIdMapping.json"
-      (Tuple (MediaType "application/json") (Just $ unsafeCoerce mappingFile))
+      "modelDependencies.json"
+      (Tuple (MediaType "application/json") (Just $ unsafeCoerce dependenciesFile))
       ( insert
-          "translationtable.json"
-          (Tuple (MediaType "application/json") (Just $ unsafeCoerce translationsFile))
+          "stableIdMapping.json"
+          (Tuple (MediaType "application/json") (Just $ unsafeCoerce mappingFile))
           ( insert
-              "storedQueries.json"
-              ( Tuple
-                  (MediaType "application/json")
-                  (Just $ unsafeCoerce queryFile)
+              "translationtable.json"
+              (Tuple (MediaType "application/json") (Just $ unsafeCoerce translationsFile))
+              ( insert
+                  "storedQueries.json"
+                  ( Tuple
+                      (MediaType "application/json")
+                      (Just $ unsafeCoerce queryFile)
+                  )
+                  attachments
               )
-              attachments
           )
       )
 

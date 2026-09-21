@@ -239,6 +239,11 @@ Every published compiled `DomeinFile` should record the exact direct dependency
 releases against which it was compiled. Because each dependency records its own
 lock, the transitive dependency environment can be reconstructed.
 
+Parsing and compilation are not themselves publication. Modellers may iterate on
+unpublished source and compiled artefacts freely. Release immutability begins
+only at the explicit publish step that writes a versioned release artifact to a
+repository.
+
 Conceptually:
 
 ```purescript
@@ -276,6 +281,12 @@ The same distinction should be preserved at runtime: a model-import requirement 
 an authored statement about the dependency package; a type-level compatibility
 report is derived metadata about the actual compiled usage against a resolved
 release.
+
+For resolver input, the dependency contract should be retrievable without having
+to inspect human-oriented repository state. It should therefore live in the
+published compiled `DomeinFile` and may additionally be exposed through a
+machine-oriented sidecar attachment. Mirroring it into `VersionedModelManifest`
+remains a later UX/coherence improvement rather than a prerequisite for phase 2.
 
 ### 6.3 Installation and update resolution
 
@@ -1006,6 +1017,7 @@ releases or reject older incompatible deltas.
 | Ordering identity | Keep operation key separate from exact delta identity. |
 | DeltaStore key | Include a delta-id suffix in the local storage key to retain same-author equivocations. |
 | Rollout | Capture irreversible provenance during reboot; implement deeper checking in later phases. |
+| Release immutability | Compilation may iterate freely; only explicit publication seals a versioned release artifact. |
 
 ## 15. Remaining Non-Blocking Questions
 

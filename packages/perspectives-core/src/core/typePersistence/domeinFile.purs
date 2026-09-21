@@ -23,7 +23,7 @@
 module Perspectives.DomeinFile where
 
 import Control.Monad.State (State, execState, modify)
-import Data.Array (cons)
+import Data.Array (cons, zipWith)
 import Data.Eq.Generic (genericEq)
 import Data.Foldable (for_)
 import Data.Generic.Rep (class Generic)
@@ -37,7 +37,7 @@ import Perspectives.Couchdb (AttachmentInfo)
 import Perspectives.Couchdb.Revision (class Revision)
 import Perspectives.Data.EncodableMap (EncodableMap, addAll, removeAll)
 import Perspectives.Data.EncodableMap (empty) as EM
-import Perspectives.Identifiers (typeUri2ModelUri)
+import Perspectives.Identifiers (modelUriVersion, typeUri2ModelUri, unversionedModelUri)
 import Perspectives.InvertedQuery (InvertedQuery)
 import Perspectives.Persistence.Types (PouchbdDocumentFields)
 import Perspectives.Representation.Action (AutomaticAction)
@@ -52,11 +52,18 @@ import Perspectives.Representation.State (State(..), Notification) as PEState
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType, CalculatedRoleType, ContextType, EnumeratedPropertyType, EnumeratedRoleType, IndexedContext, IndexedRole, RoleType, StateIdentifier(..), ViewType)
 import Perspectives.Representation.UserGraph (UserGraph(..))
 import Perspectives.Representation.View (View(..))
-import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable)
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable, Stable)
 import Prelude (class Eq, class Show, Unit, bind, eq, pure, unit, void, ($), (<$>), (<<<))
 import Simple.JSON (class ReadForeign, class WriteForeign, read', readJSON', writeImpl, writeJSON)
 
 newtype DomeinFile f = DomeinFile (DomeinFileRecord f)
+
+type ModelDependency =
+  { modelId :: ModelUri Stable
+  , declaredRequirement :: Maybe String
+  , resolvedModel :: Maybe (ModelUri Stable)
+  , resolvedVersion :: Maybe String
+  }
 
 -- NOTE: the qualification of the identifiers is in terms of the scheme "model:", 
 -- two forward slashes and an internet namespace, followed by a hash sign.
@@ -73,6 +80,7 @@ type DomeinFileRecord f = PouchbdDocumentFields
   , states :: Object PEState.State
   , arc :: String
   , referredModels :: Array (ModelUri f)
+  , modelDependencies :: Maybe (Array ModelDependency)
   -- Keys are DomeinFileIds.
   , invertedQueriesInOtherDomains :: Object (Array SeparateInvertedQuery)
   , upstreamStateNotifications :: Object (Array UpstreamStateNotification)
@@ -235,6 +243,7 @@ defaultDomeinFileRecord =
   , states: empty
   , arc: ""
   , referredModels: []
+  , modelDependencies: Nothing
   , invertedQueriesInOtherDomains: empty
   , upstreamStateNotifications: empty
   , upstreamAutomaticEffects: empty
@@ -255,6 +264,19 @@ defaultDomeinFileRecord =
 
 defaultDomeinFile :: forall f. (DomeinFile f)
 defaultDomeinFile = DomeinFile defaultDomeinFileRecord
+
+deriveModelDependencies :: Array (ModelUri Readable) -> Array (ModelUri Stable) -> Array ModelDependency
+deriveModelDependencies declared resolved =
+  zipWith
+    ( \(ModelUri declaredModel) (ModelUri resolvedModel) ->
+        { modelId: ModelUri $ unversionedModelUri resolvedModel
+        , declaredRequirement: modelUriVersion declaredModel
+        , resolvedModel: Just (ModelUri resolvedModel)
+        , resolvedVersion: modelUriVersion resolvedModel
+        }
+    )
+    declared
+    resolved
 
 stampDomeinFileTypeVersion :: forall f. String -> DomeinFile f -> DomeinFile f
 stampDomeinFileTypeVersion version = over DomeinFile \dfr ->

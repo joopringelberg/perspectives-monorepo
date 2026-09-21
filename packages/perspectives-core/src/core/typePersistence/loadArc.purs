@@ -47,7 +47,7 @@ import Parsing (ParseError(..))
 import Perspectives.Checking.PerspectivesTypeChecker (checkDomeinFile)
 import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction)
 import Perspectives.DomeinCache (retrieveDomeinFile, storeDomeinFileInCache)
-import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, defaultDomeinFileRecord, stampDomeinFileTypeVersion)
+import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, defaultDomeinFileRecord, deriveModelDependencies, stampDomeinFileTypeVersion)
 import Perspectives.Extern.Couchdb (installModelLocally)
 import Perspectives.Identifiers (modelUriVersion, unversionedModelUri)
 import Perspectives.InvertedQuery.Storable (StoredQueries)
@@ -202,10 +202,13 @@ loadAndCompileArcFileWithSidecar_ dfid@(ModelUri stableModelUri) rawText saveInC
                   , _id = takeGuid $ unwrap id
                   }
                 -- Now replace the readable name given by the modeller with a cuid, in FQNs:
-                normalizedDf <- lift $ normalizeTypes df mapping2
+                normalizedDf@(DomeinFile normalizedDfr) <- lift $ normalizeTypes df mapping2
+                let
+                  dfWithDependencies = DomeinFile normalizedDfr
+                    { modelDependencies = Just $ deriveModelDependencies referredModels normalizedDfr.referredModels }
                 stampedDf <- pure $ case mversion of
-                  Nothing -> normalizedDf
-                  Just version -> stampDomeinFileTypeVersion version normalizedDf
+                  Nothing -> dfWithDependencies
+                  Just version -> stampDomeinFileTypeVersion version dfWithDependencies
 
                 if saveInCache then void $ lift $ storeDomeinFileInCache (toStableModelUri id) stampedDf else pure unit
 
