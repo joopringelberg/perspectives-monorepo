@@ -54,6 +54,7 @@ newtype EnumeratedRole = EnumeratedRole EnumeratedRoleRecord
 type EnumeratedRoleRecord =
   { id :: EnumeratedRoleType
   , _rev :: Revision_
+  , typeVersion :: Maybe String
   , displayName :: String
   , readableName :: EnumeratedRoleType
   , kindOfRole :: RoleKind
@@ -89,6 +90,7 @@ defaultEnumeratedRole :: String -> String -> RoleKind -> String -> ArcPosition -
 defaultEnumeratedRole qname dname kindOfRole context pos = EnumeratedRole
   { id: EnumeratedRoleType qname
   , _rev: Nothing
+  , typeVersion: Nothing
   , displayName: dname
   , readableName: EnumeratedRoleType qname
   , kindOfRole: kindOfRole

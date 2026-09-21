@@ -47,7 +47,7 @@ import Parsing (ParseError(..))
 import Perspectives.Checking.PerspectivesTypeChecker (checkDomeinFile)
 import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction)
 import Perspectives.DomeinCache (retrieveDomeinFile, storeDomeinFileInCache)
-import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, defaultDomeinFileRecord)
+import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, defaultDomeinFileRecord, stampDomeinFileTypeVersion)
 import Perspectives.Extern.Couchdb (installModelLocally)
 import Perspectives.Identifiers (modelUriVersion, unversionedModelUri)
 import Perspectives.InvertedQuery.Storable (StoredQueries)
@@ -203,12 +203,15 @@ loadAndCompileArcFileWithSidecar_ dfid@(ModelUri stableModelUri) rawText saveInC
                   }
                 -- Now replace the readable name given by the modeller with a cuid, in FQNs:
                 normalizedDf <- lift $ normalizeTypes df mapping2
+                stampedDf <- pure $ case mversion of
+                  Nothing -> normalizedDf
+                  Just version -> stampDomeinFileTypeVersion version normalizedDf
 
-                if saveInCache then void $ lift $ storeDomeinFileInCache (toStableModelUri id) normalizedDf else pure unit
+                if saveInCache then void $ lift $ storeDomeinFileInCache (toStableModelUri id) stampedDf else pure unit
 
                 normalizedInvertedQueries <- lift $ normalizeInvertedQueries df mapping2 invertedQueries
 
-                pure $ Right $ Tuple normalizedDf (Tuple normalizedInvertedQueries mapping2)
+                pure $ Right $ Tuple stampedDf (Tuple normalizedInvertedQueries mapping2)
               else
                 pure $ Left typeCheckErrors
     else

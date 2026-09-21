@@ -55,7 +55,7 @@ import Perspectives.StrippedDelta (addResourceSchemes)
 import Perspectives.Sync.HandleTransaction (executeContextDelta, executeRoleBindingDelta, executeRolePropertyDelta, executeUniverseContextDelta, executeUniverseRoleDelta)
 import Perspectives.Sync.SignedDelta (SignedDelta)
 import Perspectives.TypesForDeltas (ContextDelta(..))
-import Simple.JSON (readJSON')
+import Perspectives.Sync.VersionedDelta (DeltaEnvelope(..), parseIncomingDelta)
 
 -- | Restore a missing resource from the DeltaStore.
 -- | For a missing role, re-applies all creation and modification deltas.
@@ -181,9 +181,9 @@ extractRoleInstanceId (DeltaStoreRecord { signedDelta }) =
   let
     encDelta = (unwrap signedDelta).encryptedDelta
   in
-    case runExcept $ readJSON' encDelta of
-      Right (ContextDelta { roleInstance }) -> Just (unwrap roleInstance)
-      Left _ -> Nothing
+    case parseIncomingDelta encDelta of
+      Right (ContextEnvelope (ContextDelta { roleInstance })) -> Just (unwrap roleInstance)
+      _ -> Nothing
 
 -- | Apply a signed delta by dispatching to the appropriate execute function.
 -- | Tries to parse the encrypted delta as each known delta type in turn.
@@ -194,16 +194,12 @@ applyDelta s (Just stringifiedDelta) = do
   padding <- lift transactionLevel
   storageSchemes <- lift $ gets _.typeToStorage
   catchError
-    ( case runExcept $ readJSON' stringifiedDelta of
-        Right d1 -> lift (addResourceSchemes storageSchemes d1) >>= flip executeRolePropertyDelta s
-        Left _ -> case runExcept $ readJSON' stringifiedDelta of
-          Right d2 -> lift (addResourceSchemes storageSchemes d2) >>= flip executeRoleBindingDelta s
-          Left _ -> case runExcept $ readJSON' stringifiedDelta of
-            Right d3 -> lift (addResourceSchemes storageSchemes d3) >>= flip executeContextDelta s
-            Left _ -> case runExcept $ readJSON' stringifiedDelta of
-              Right d4 -> lift (addResourceSchemes storageSchemes d4) >>= flip executeUniverseRoleDelta s
-              Left _ -> case runExcept $ readJSON' stringifiedDelta of
-                Right d5 -> lift (addResourceSchemes storageSchemes d5) >>= flip executeUniverseContextDelta s
-                Left _ -> log (padding <> "Failed to parse delta for resource restoration: " <> stringifiedDelta)
+    ( case parseIncomingDelta stringifiedDelta of
+        Right (RolePropertyEnvelope d1) -> lift (addResourceSchemes storageSchemes d1) >>= flip executeRolePropertyDelta s
+        Right (RoleBindingEnvelope d2) -> lift (addResourceSchemes storageSchemes d2) >>= flip executeRoleBindingDelta s
+        Right (ContextEnvelope d3) -> lift (addResourceSchemes storageSchemes d3) >>= flip executeContextDelta s
+        Right (UniverseRoleEnvelope d4) -> lift (addResourceSchemes storageSchemes d4) >>= flip executeUniverseRoleDelta s
+        Right (UniverseContextEnvelope d5) -> lift (addResourceSchemes storageSchemes d5) >>= flip executeUniverseContextDelta s
+        Left _ -> log (padding <> "Failed to parse delta for resource restoration: " <> stringifiedDelta)
     )
     (\e -> liftEffect $ log (padding <> show e))

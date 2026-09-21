@@ -30,7 +30,7 @@ import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe(..), fromJust)
 import Data.Newtype (class Newtype, over, unwrap)
 import Data.Show.Generic (genericShow)
-import Foreign.Object (Object, empty, insert, lookup)
+import Foreign.Object (Object, empty, insert, lookup, mapWithKey)
 import Partial.Unsafe (unsafePartial)
 import Persistence.Attachment (class Attachment)
 import Perspectives.Couchdb (AttachmentInfo)
@@ -41,17 +41,17 @@ import Perspectives.Identifiers (typeUri2ModelUri)
 import Perspectives.InvertedQuery (InvertedQuery)
 import Perspectives.Persistence.Types (PouchbdDocumentFields)
 import Perspectives.Representation.Action (AutomaticAction)
-import Perspectives.Representation.CalculatedProperty (CalculatedProperty)
-import Perspectives.Representation.CalculatedRole (CalculatedRole)
+import Perspectives.Representation.CalculatedProperty (CalculatedProperty(..))
+import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
 import Perspectives.Representation.Class.Identifiable (class Identifiable)
 import Perspectives.Representation.Context (Context(..))
-import Perspectives.Representation.EnumeratedProperty (EnumeratedProperty)
+import Perspectives.Representation.EnumeratedProperty (EnumeratedProperty(..))
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..), InvertedQueryKey)
 import Perspectives.Representation.ScreenDefinition (ScreenDefinition, ScreenKey)
 import Perspectives.Representation.State (State(..), Notification) as PEState
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType, CalculatedRoleType, ContextType, EnumeratedPropertyType, EnumeratedRoleType, IndexedContext, IndexedRole, RoleType, StateIdentifier(..), ViewType)
 import Perspectives.Representation.UserGraph (UserGraph(..))
-import Perspectives.Representation.View (View)
+import Perspectives.Representation.View (View(..))
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable)
 import Prelude (class Eq, class Show, Unit, bind, eq, pure, unit, void, ($), (<$>), (<<<))
 import Simple.JSON (class ReadForeign, class WriteForeign, read', readJSON', writeImpl, writeJSON)
@@ -256,6 +256,18 @@ defaultDomeinFileRecord =
 defaultDomeinFile :: forall f. (DomeinFile f)
 defaultDomeinFile = DomeinFile defaultDomeinFileRecord
 
+stampDomeinFileTypeVersion :: forall f. String -> DomeinFile f -> DomeinFile f
+stampDomeinFileTypeVersion version = over DomeinFile \dfr ->
+  dfr
+    { contexts = mapWithKey (\_ (Context ctx) -> Context (ctx { typeVersion = Just version })) dfr.contexts
+    , enumeratedRoles = mapWithKey (\_ (EnumeratedRole role) -> EnumeratedRole (role { typeVersion = Just version })) dfr.enumeratedRoles
+    , calculatedRoles = mapWithKey (\_ (CalculatedRole role) -> CalculatedRole (role { typeVersion = Just version })) dfr.calculatedRoles
+    , enumeratedProperties = mapWithKey (\_ (EnumeratedProperty prop) -> EnumeratedProperty (prop { typeVersion = Just version })) dfr.enumeratedProperties
+    , calculatedProperties = mapWithKey (\_ (CalculatedProperty prop) -> CalculatedProperty (prop { typeVersion = Just version })) dfr.calculatedProperties
+    , views = mapWithKey (\_ (View view) -> View (view { typeVersion = Just version })) dfr.views
+    , states = mapWithKey (\_ (PEState.State state) -> PEState.State (state { typeVersion = Just version })) dfr.states
+    }
+
 type DomeinFileEnumeratedRoles = Object EnumeratedRole
 
 setRevision :: forall f. String -> (DomeinFile f) -> (DomeinFile f)
@@ -340,4 +352,3 @@ modifyDownstreamAutomaticEffect add (UpstreamAutomaticEffect { stateId, isOnEntr
       else PEState.State sr { automaticOnEntry = removeAll automaticAction automaticOnEntry qualifiedUsers }
     else if add then PEState.State sr { automaticOnExit = addAll automaticAction automaticOnExit qualifiedUsers }
     else PEState.State sr { automaticOnExit = removeAll automaticAction automaticOnExit qualifiedUsers }
-

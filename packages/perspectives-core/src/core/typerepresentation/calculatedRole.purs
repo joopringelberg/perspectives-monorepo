@@ -47,6 +47,7 @@ newtype CalculatedRole = CalculatedRole CalculatedRoleRecord
 type CalculatedRoleRecord =
   { id :: CalculatedRoleType
   , _rev :: Revision_
+  , typeVersion :: Maybe String
   , displayName :: String
   , readableName :: CalculatedRoleType
   , kindOfRole :: RoleKind
@@ -66,6 +67,7 @@ defaultCalculatedRole :: String -> String -> RoleKind -> String -> ArcPosition -
 defaultCalculatedRole qname dname kindOfRole context pos = CalculatedRole
   { id: CalculatedRoleType qname
   , _rev: Nothing
+  , typeVersion: Nothing
   , displayName: dname
   , readableName: CalculatedRoleType qname
   , kindOfRole: kindOfRole

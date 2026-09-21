@@ -186,9 +186,11 @@ migrateContextDeltas { id: contextId, universeContextDelta } = do
     , resourceKey: safeKey resourceKey
     , resourceVersion: 0
     , author
+    , deltaId: Nothing
     , signedDelta: universeContextDelta
     , deltaType
     , applied: true
+    , disposition: Just "Applied"
     , contextKey: Nothing
     }
   setResourceVersion resourceKey 0
@@ -214,9 +216,11 @@ migrateRolDeltas { id: roleId, universeRoleDelta, contextDelta, bindingDelta, pr
     , resourceKey: safeKey resourceKey
     , resourceVersion: 0
     , author: urd.author
+    , deltaId: Nothing
     , signedDelta: universeRoleDelta
     , deltaType: extractDeltaType urd.encryptedDelta
     , applied: true
+    , disposition: Just "Applied"
     , contextKey: Nothing
     }
 
@@ -229,9 +233,11 @@ migrateRolDeltas { id: roleId, universeRoleDelta, contextDelta, bindingDelta, pr
       , resourceKey: safeKey resourceKey
       , resourceVersion: 1
       , author: cd.author
+      , deltaId: Nothing
       , signedDelta: contextDelta
       , deltaType: extractDeltaType cd.encryptedDelta
       , applied: true
+      , disposition: Just "Applied"
       , contextKey: Nothing
       }
 
@@ -252,9 +258,11 @@ migrateRolDeltas { id: roleId, universeRoleDelta, contextDelta, bindingDelta, pr
         , resourceKey: safeKey bindingResourceKey
         , resourceVersion: 0
         , author: bdr.author
+        , deltaId: Nothing
         , signedDelta: bd
         , deltaType: extractDeltaType bdr.encryptedDelta
         , applied: true
+        , disposition: Just "Applied"
         , contextKey: Nothing
         }
       setResourceVersion bindingResourceKey 0
@@ -284,9 +292,11 @@ migratePropertyDeltas propResourceKey deltas = do
         , resourceKey: safeKey propResourceKey
         , resourceVersion: version
         , author
+        , deltaId: Nothing
         , signedDelta: sd
         , deltaType: extractDeltaType encryptedDelta
         , applied: true
+        , disposition: Just "Applied"
         , contextKey: Nothing
         }
   let maxVersion = if length deltas > 0 then length deltas - 1 else 0
