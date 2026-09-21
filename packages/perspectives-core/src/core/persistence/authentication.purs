@@ -32,15 +32,15 @@ import Control.Monad.AvarMonadAsk (gets, modify)
 import Control.Monad.Except (catchJust)
 import Data.Either (Either(..))
 import Data.HTTP.Method (Method(..))
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), maybe)
 import Effect.Aff (Error, error, throwError)
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
 import Effect.Class.Console (warn)
-import Foreign.Object (insert, lookup)
+import Foreign.Object (Object, insert, lookup)
 import Perspectives.Couchdb (onAccepted_, toJson)
 import Perspectives.Identifiers (url2Authority)
-import Perspectives.Persistence.Types (Credential(..), MonadPouchdb, Password, Url, UserName)
+import Perspectives.Persistence.Types (Credential(..), MonadPouchdb, Password, PouchdbDatabase, Url, UserName)
 import Perspectives.ResourceIdentifiers (databaseLocation)
 
 -----------------------------------------------------------
@@ -123,4 +123,9 @@ getCredentials authority = do
   pure $ lookup authority credentials
 
 addCredentials :: forall f. Url -> UserName -> Password -> MonadPouchdb f Unit
-addCredentials url username password = modify \s@{ couchdbCredentials } -> s { couchdbCredentials = insert url (Credential username password) couchdbCredentials }
+addCredentials url username password = modify \s@{ couchdbCredentials, couchdbUrl, databases } -> s
+  { couchdbCredentials = insert url (Credential username password) couchdbCredentials
+  , databases = invalidateDatabaseConnectors url (maybe "" identity couchdbUrl) databases
+  }
+
+foreign import invalidateDatabaseConnectors :: Url -> Url -> Object PouchdbDatabase -> Object PouchdbDatabase

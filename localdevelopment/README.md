@@ -152,8 +152,9 @@ https://mycontexts.com/www/
 
 The root URL `https://mycontexts.com/` redirects temporarily to `/www/`.
 Requests under `https://mycontexts.com/models/` are read-only proxies to the
-local CouchDB `models` database. RabbitMQ, repository replication, and the
-other production-only proxy endpoints are deliberately not configured.
+local CouchDB `models` database. Repository replication is still not
+configured for local development. RabbitMQ and its two relay services
+(`/rbmq/`, `/rbsr`, `/ppsfs`) are configured; see the next section.
 
 ## 4. Switch to local services
 
@@ -195,12 +196,101 @@ It can be used explicitly with:
   https://perspectives.domains/_up
 ```
 
+### Node.js tests
+
+Node.js does not use the macOS Keychain trust store by default. Supply the
+mkcert root CA before starting a Node-based test that accesses the local HTTPS
+domains:
+
+```bash
+NODE_EXTRA_CA_CERTS="$(mkcert -CAROOT)/rootCA.pem" pnpm run test:rebootUniverse
+```
+
+The environment variable is read when Node starts, so setting it from inside a
+running test is too late. It augments Node's normal public CA set; it does not
+replace it.
+
 Browsers may continue to use an older service-worker cache after rebuilding
 MyContexts. For test runs that must use the latest executable, clear the site
 data or unregister the service worker for `mycontexts.com` in the browser's
 developer tools before reloading.
 
-## 5. Switch back to remote services
+## 5. RabbitMQ and local relay services
+
+RabbitMQ and its two Node relay services can be run locally instead of relying
+on the remote `mycontexts.com` server. This mirrors the production setup
+documented in the RabbitMQ install notes (see the wiki page on the UpCloud
+server configuration).
+
+### Install and configure RabbitMQ
+
+```bash
+brew install rabbitmq
+brew services start rabbitmq
+rabbitmq-plugins enable rabbitmq_management rabbitmq_web_stomp
+```
+
+Create the `mycontexts` virtual host and an administrator account:
+
+```bash
+rabbitmqctl add_vhost mycontexts
+rabbitmqctl add_user joopring <password>
+rabbitmqctl set_permissions -p / joopring ".*" ".*" ".*"
+rabbitmqctl set_permissions -p mycontexts joopring ".*" ".*" ".*"
+rabbitmqctl set_user_tags joopring administrator
+```
+
+The management API listens on `127.0.0.1:15672` by default, matching the
+`/rbmq/` proxy in `apacheconfigs/mycontexts.com.conf`.
+
+### Start the relay services
+
+Both relay services now live in this monorepo:
+
+- [`packages/perspectives-rabbitmq-service`](../packages/perspectives-rabbitmq-service)
+  registers new RabbitMQ users on behalf of MyContexts clients, and is proxied
+  at `/rbsr` (default port `5988`).
+- [`packages/perspectives-sharedfilestorage`](../packages/perspectives-sharedfilestorage)
+  relays shared media file uploads to Mega.nz, and is proxied at `/ppsfs`
+  (default port `15680`).
+
+For each package, copy `startService.example.sh` to `startService.sh` (both
+are gitignored) and fill in real credentials, then run it:
+
+```bash
+cd packages/perspectives-rabbitmq-service
+cp startService.example.sh startService.sh   # fill in RabbitMQ admin credentials
+./startService.sh
+```
+
+```bash
+cd packages/perspectives-sharedfilestorage
+cp startService.example.sh startService.sh   # fill in Mega.nz credentials
+cp providedkeys.example.json providedkeys.json
+./startService.sh
+```
+
+Verify with:
+
+```bash
+/usr/bin/curl -u joopring:<password> https://mycontexts.com/rbmq/api/overview
+/usr/bin/curl -X POST https://mycontexts.com/rbsr -d '{"userName":"aap","password":"noot","queueName":"mies"}'
+```
+
+## 6. Check the current mode
+
+The hosts file is the persistent source of truth. Check it from the repository
+root with:
+
+```bash
+./localdevelopment/servefromwhere
+```
+
+The command prints `local` when all six managed hostnames resolve to loopback,
+`remote` when none are overridden, and `mixed` when the hosts file contains a
+partial or conflicting configuration.
+
+## 7. Switch back to remote services
 
 Run:
 
@@ -208,7 +298,7 @@ Run:
 ./localdevelopment/servefromremote
 ```
 
-This removes the marked block and any older manual mappings for the four
+This removes the marked block and any older manual mappings for the six
 managed hostnames, then flushes the macOS DNS caches. It does not stop Apache or
 CouchDB; public DNS simply becomes authoritative again.
 

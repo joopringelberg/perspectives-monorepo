@@ -266,7 +266,7 @@ domain model://perspectives.domains#CouchdbManagement@12.4
       perspective on BespokeDatabases
         all roleverbs
         props (OwnerName, Description) verbs (Consult)
-        props (Endorsed) verbs (SetPropertyValue)
+        props (Endorsed, EnteredDatabaseName) verbs (SetPropertyValue)
       
       perspective on Admin
         props (FirstName, UserName) verbs (Consult)
@@ -397,7 +397,7 @@ domain model://perspectives.domains#CouchdbManagement@12.4
       -- NOTICE a flaw in this design: each Accounts instance has full control over all BespokeDatabases - including those owned by other Accounts!
       perspective on BespokeDatabases
         only (CreateAndFill, RemoveContext)
-        props (Description) verbs (Consult, SetPropertyValue)
+        props (Description, EnteredDatabaseName) verbs (Consult, SetPropertyValue)
       
       perspective on BespokeDatabases >> binding >> context >> Owner
         only (Fill)
@@ -446,7 +446,7 @@ domain model://perspectives.domains#CouchdbManagement@12.4
                         >
               props (Name) verbs (Consult)
             detail
-              props (Name, Description) verbs (Consult)
+              props (Name, Description, EnteredDatabaseName) verbs (Consult)
 
     -- The instance of CouchdbServer is published in the cw_servers_and_repositories database.
     -- TODO: als omkering van filtered queries volledig is, beperk dan het perspectief van Visitor tot PublicRepositories.
@@ -508,6 +508,15 @@ domain model://perspectives.domains#CouchdbManagement@12.4
               -- Copy the namespace to the Repository, but replace dots with underscores.
               NameSpace_ = reponame for origin >> binding
 
+        -- Ad Admin may exist already if the Repository is created by Accounts.
+        -- By nesting NoAdmin in CreateDatabases we know that the Repository has been created.
+        state NoAdmin = AdminEndorses and not exists binding >> context >> Repository$Admin
+          on entry
+            do for Admin
+              -- create role Admin in binding >> context
+              bind context >> Admin to Admin in binding >> context
+
+
       state CreateDatabases = (not HasDatabases) and (exists NameSpace_) and AdminEndorses and exists context >> Admin >> Password
         on entry
           do for Admin
@@ -526,6 +535,7 @@ domain model://perspectives.domains#CouchdbManagement@12.4
               callEffect cdb:MakeDatabasePublic( baseurl, readinstances )
               callEffect cdb:MakeDatabaseWriteProtected( baseurl, readinstances )
               HasDatabases = true
+
       on exit
         do for Admin
           letA
@@ -546,14 +556,10 @@ domain model://perspectives.domains#CouchdbManagement@12.4
 
       state NoNameSpace = not exists Repositories$NameSpace
 
-      -- Ad Admin may exist already if the Repository is created by Accounts.
-      state NoAdmin = AdminEndorses and not exists binding >> context >> Repository$Admin
-        on entry
-          do for Admin
-            -- create role Admin in binding >> context
-            bind context >> Admin to Admin in binding >> context
-
     context BespokeDatabases (relational) filledBy BespokeDatabase
+      property EnteredDatabaseName (String)
+        pattern = "^cw_[a-z]+/$" "The database name must start with 'cw_' followed by lowercase letters and end with a '/'"
+    
     context MyBespokeDatabases = (filter BespokeDatabases with binding >> context >> Owner filledBy sys:Me) >> binding
     aspect thing sys:ContextWithNotification$Notifications
   -------------------------------------------------------------------------------
@@ -573,7 +579,7 @@ domain model://perspectives.domains#CouchdbManagement@12.4
       state CreateDb = Endorsed and (exists context >> Owner) and not exists DatabaseName
         on entry
           do for CBAdmin
-            DatabaseName = "cw_" + callExternal util:GenSym() returns String + "/" 
+            DatabaseName = (binder BespokeDatabases >> EnteredDatabaseName >>= first) orElse ("cw_" + callExternal util:GenSym() returns String + "/")
             callEffect cdb:CreateEntitiesDatabase( BaseUrl, DatabaseName, BaseUrl >> callExternal util:Replace( "https://", "") returns String )
             DatabaseLocation = BaseUrl + DatabaseName
             callEffect cdb:MakeAdminOfDb( BaseUrl, DatabaseName, context >> Owner >> UserName )
@@ -723,13 +729,16 @@ domain model://perspectives.domains#CouchdbManagement@12.4
       -- to both the cw_servers_and_repositories and to the Repository database.
       perspective on Manifests
         only (Create, Fill, Delete, Remove, RemoveContext, DeleteContext, CreateAndFill)
-        props (DomeinFileName, LocalModelName) verbs (SetPropertyValue, Consult)
+        props (DomeinFileName, LocalModelName, EnteredModelCuid) verbs (SetPropertyValue, Consult)
         props (Description, ModelCuid) verbs (Consult)
         in object state ReadyToMake
           props (ModelCuid) verbs (SetPropertyValue)
       
       action CreateManifest
-        create role Manifests
+        letA
+          manifest <- create role Manifests
+        in
+          EnteredModelCuid = callExternal util:GenSym() returns String for manifest
       
       perspective on Manifests >> binding >> context >> Author
         only (Create, Fill)
@@ -807,12 +816,15 @@ domain model://perspectives.domains#CouchdbManagement@12.4
 
       perspective on Manifests
         only (Create, Fill, Delete, Remove, RemoveContext, DeleteContext, CreateAndFill)
-        props (LocalModelName, DomeinFileName) verbs (SetPropertyValue, DeleteProperty, Consult)
+        props (LocalModelName, DomeinFileName, EnteredModelCuid) verbs (SetPropertyValue, DeleteProperty, Consult)
         props (Description, ModelCuid) verbs (Consult)
         in object state NoLocalModelName
           props (ModelCuid) verbs (SetPropertyValue)
       action CreateManifest
-        create role Manifests
+        letA
+          manifest <- create role Manifests
+        in
+          EnteredModelCuid = callExternal util:GenSym() returns String for manifest
       
       perspective on Manifests >> binding >> context >> Author
         only (Create, Fill)
@@ -895,34 +907,31 @@ domain model://perspectives.domains#CouchdbManagement@12.4
     -- are stored in this Repository.
     context Manifests (relational) filledBy ModelManifest
       aspect sys:ManifestCollection$Manifests
+      property EnteredModelCuid (String)
       -- LocalModelName
       -- ModelCuid
       state NoLocalModelName = not exists LocalModelName
-      state ReadyToMake = (not exists binding)
+      state ReadyToMake = (not exists binding) and (exists EnteredModelCuid)
         on entry
           do for Admin
             letA 
-              -- TODO: temporary workaround to avoid generating a new cuid each time.
-              -- Comment out once we're in a Stable universe.
-              cuid <- callExternal util:GenSym() returns String
-              manifestname <- (context >> extern >> NameSpace_ + "-" + cuid)
+              manifestname <- (context >> extern >> NameSpace_ + "-" + EnteredModelCuid)
             in
               -- As the PDR derives this name from the modelURI, we have to name the ModelManifest with its LocalModelName.
               create_ context ModelManifest named manifestname bound to origin
               bind currentactor to Author in origin >> binding >> context
               DomeinFileName = manifestname + ".json" for origin >> binding
-              ModelCuid = cuid for origin >> binding
+              ModelCuid = EnteredModelCuid for origin >> binding
 
           do for Authors
             letA 
-              cuid <- callExternal util:GenSym() returns String
-              manifestname <- (context >> extern >> NameSpace_ + "-" + cuid)
+              manifestname <- (context >> extern >> NameSpace_ + "-" + EnteredModelCuid)
             in
               -- As the PDR derives this name from the modelURI, we have to name the ModelManifest with its LocalModelName.
               create_ context ModelManifest named manifestname bound to origin
               bind currentactor to Author in origin >> binding >> context
               DomeinFileName = manifestname + ".json" for origin >> binding
-              ModelCuid = cuid for origin >> binding
+              ModelCuid = EnteredModelCuid for origin >> binding
 
     aspect thing sys:ContextWithNotification$Notifications
 

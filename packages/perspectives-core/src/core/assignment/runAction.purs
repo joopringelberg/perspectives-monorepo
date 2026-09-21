@@ -31,6 +31,7 @@ import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
 import Effect.Exception (error)
 import Partial.Unsafe (unsafePartial)
+import Perspectives.CompileActionEffect (compileActionEffectWith)
 import Perspectives.CompileAssignment (compileAssignment)
 import Perspectives.CompileRoleAssignment (compileAssignmentFromRole)
 import Perspectives.CoreTypes (MonadPerspectivesTransaction, (##>))
@@ -66,16 +67,25 @@ runContextAction user actionName context = do
       oldFrame <- lift $ pushFrame
       lift $ addBinding "currentcontext" [ context ]
       lift $ addBinding "currentactor" [ unwrap userInstance ]
-      updater <- lift $ compileAssignment action
+      updater <- lift $ compileActionEffectWith compileAssignment action userRoleType Nothing
       readableUserRoleType <- lift $ toReadable userRoleType
       lift $ debugState ("Executing context action '" <> actionName <> "' for user role type '" <> show readableUserRoleType <> "' in context '" <> context <> "'.")
       updater (ContextInstance context)
       lift $ restoreFrame oldFrame
-    _, _ -> throwError $ error
-      $ "cannot identify Action with role type '" <> show userRoleType
-          <> "' and action name '"
-          <> actionName
-          <> "'."
+    Nothing, _ -> do
+      readableUserRoleType <- lift $ toReadable userRoleType
+      throwError $ error
+        $ "cannot find instance of user role type '" <> show readableUserRoleType
+            <> "' when executing action with name '"
+            <> actionName
+            <> "'."
+    _, _ -> do
+      readableUserRoleType <- lift $ toReadable userRoleType
+      throwError $ error
+        $ "cannot identify Action with role type '" <> show readableUserRoleType
+            <> "' and action name '"
+            <> actionName
+            <> "'."
 
 -- | Execute a perspective action on behalf of an authoring role in a context instance.
 -- | Parameters:
@@ -103,19 +113,21 @@ runAction authoringRole perspectiveId actionName context object = do
       oldFrame <- lift $ pushFrame
       lift $ addBinding "currentcontext" [ context ]
       lift $ addBinding "currentactor" [ unwrap author ]
-      updater <- lift $ compileAssignmentFromRole action
+      updater <- lift $ compileActionEffectWith compileAssignmentFromRole action authoringRole Nothing
       readableAuthoringRole <- lift $ toReadable authoringRole
       readableActionName <- lift $ translateType (ActionIdentifier actionName)
       lift $ debugState ("Executing perspective action '" <> readableActionName <> "' for authoring role type '" <> show readableAuthoringRole <> "' in context '" <> context <> "'.")
       updater (RoleInstance object)
       lift $ restoreFrame oldFrame
-    _, _ -> throwError $ error
-      $ "cannot identify Action with role type '" <> show authoringRole
-          <> "', perspectiveId '"
-          <> perspectiveId
-          <> "' and action name '"
-          <> actionName
-          <> "'."
+    _, _ -> do
+      readableAuthoringRole <- lift $ toReadable authoringRole
+      throwError $ error
+        $ "cannot identify Action with role type '" <> show readableAuthoringRole
+            <> "', perspectiveId '"
+            <> perspectiveId
+            <> "' and action name '"
+            <> actionName
+            <> "'."
 
 -- | Execute a perspective action on behalf of an authoring role in a context instance,
 -- | finding the perspective by matching the object role type instead of by perspective id.
@@ -139,16 +151,18 @@ runActionForObject authoringRole actionName context object = do
       oldFrame <- lift $ pushFrame
       lift $ addBinding "currentcontext" [ context ]
       lift $ addBinding "currentactor" [ unwrap author ]
-      updater <- lift $ compileAssignmentFromRole action
+      updater <- lift $ compileActionEffectWith compileAssignmentFromRole action authoringRole Nothing
       readableAuthoringRole <- lift $ toReadable authoringRole
       readableActionName <- lift $ translateType (ActionIdentifier actionName)
       lift $ debugState ("Executing perspective action '" <> readableActionName <> "' for authoring role type '" <> show readableAuthoringRole <> "' in context '" <> context <> "' on object '" <> object <> "'.")
       updater (RoleInstance object)
       lift $ restoreFrame oldFrame
-    _, _ -> throwError $ error
-      $ "cannot identify Action with role type '" <> show authoringRole
-          <> "' and action name '"
-          <> actionName
-          <> "' for object '"
-          <> object
-          <> "'."
+    _, _ -> do
+      readableAuthoringRole <- lift $ toReadable authoringRole
+      throwError $ error
+        $ "cannot identify Action with role type '" <> show readableAuthoringRole
+            <> "' and action name '"
+            <> actionName
+            <> "' for object '"
+            <> object
+            <> "'."

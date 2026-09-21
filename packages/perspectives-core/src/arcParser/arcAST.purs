@@ -39,6 +39,7 @@ import Perspectives.Parsing.Arc.Position (ArcPosition)
 import Perspectives.Parsing.Arc.Statement.AST (Statements)
 import Perspectives.Persistent.PublicStore (PublicStore)
 import Perspectives.Repetition (Duration, Repeater)
+import Perspectives.Representation.Action (StartMoment)
 import Perspectives.Representation.Class.EnumReadForeign (enumReadForeign)
 import Perspectives.Representation.Context (ContextKind)
 import Perspectives.Representation.ExplicitSet (ExplicitSet)
@@ -345,7 +346,7 @@ newtype NotificationE = NotificationE
   , message :: SentenceE
   -- , level :: NotificationLevel
   , object :: Maybe RoleIdentification
-  , startMoment :: Maybe Duration
+  , startMoment :: StartMoment
   , endMoment :: Maybe Duration
   , repeats :: Repeater
   , start :: ArcPosition
@@ -369,7 +370,7 @@ newtype AutomaticEffectE = AutomaticEffectE
   , object :: Maybe RoleIdentification
   , transition :: StateTransitionE
   , effect :: Statements
-  , startMoment :: Maybe Duration
+  , startMoment :: StartMoment
   , endMoment :: Maybe Duration
   , repeats :: Repeater
   , start :: ArcPosition

@@ -35,9 +35,13 @@ import Perspectives.Parsing.Arc.Expression.AST (Step, VarBinding)
 import Perspectives.Parsing.Arc.Position (ArcPosition)
 import Perspectives.Utilities (class PrettyPrint, prettyPrint')
 
-data Statements = Let LetStep | Statements (Array Assignment)
+type StatementStage = Array Assignment
 
-newtype LetStep = LetStep { start :: ArcPosition, end :: ArcPosition, bindings :: Array LetABinding, assignments :: Array Assignment }
+type StatementPlan = Array StatementStage
+
+data Statements = Let LetStep | Statements StatementStage
+
+newtype LetStep = LetStep { start :: ArcPosition, end :: ArcPosition, bindings :: Array LetABinding, stages :: StatementPlan }
 
 data LetABinding = Expr VarBinding | Stat String Assignment
 
@@ -127,7 +131,9 @@ instance eqLetStep :: Eq LetStep where
 
 derive instance ordLetStap :: Ord LetStep
 instance prettyPrintLetStep :: PrettyPrint LetStep where
-  prettyPrint' t (LetStep { bindings, assignments }) = "LetStep\n" <> intercalate (t <> "\n") (prettyPrint' (t <> "  ") <$> bindings) <> "\n" <> t <> "in\n" <> intercalate (t <> "\n") (prettyPrint' (t <> "  ") <$> assignments)
+  prettyPrint' t (LetStep { bindings, stages }) = "LetStep\n" <> intercalate (t <> "\n") (prettyPrint' (t <> "  ") <$> bindings) <> "\n" <> t <> "in\n" <> intercalate ("\n" <> t <> "once settled\n") (prettyPrintStage <$> stages)
+    where
+    prettyPrintStage assignments = intercalate (t <> "\n") (prettyPrint' (t <> "  ") <$> assignments)
 
 derive instance genericLetABinding :: Generic LetABinding _
 instance showLetABinding :: Show LetABinding where

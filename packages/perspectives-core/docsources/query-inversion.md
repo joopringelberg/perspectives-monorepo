@@ -117,7 +117,33 @@ The final entry (backwards goes all the way to the start, forwards is Nothing) i
 
 #### Internal Representation: `QueryWithAKink_`
 
-Internally, during inversion, the backwards part is represented as an array of separate steps `ZQ_ (Array QueryFunctionDescription) (Maybe QueryFunctionDescription)`. The `h` function in `invert` folds these into a right-associative composition.
+Internally, during inversion, the backwards part is represented as an array of separate steps. Each candidate also carries an `InversionTarget`:
+
+```purescript
+data InversionTarget
+  = FilterInput
+  | QueryOrigin
+  | IndependentResource
+
+data QueryWithAKink_ = ZQ_
+  (Array QueryFunctionDescription)
+  (Maybe QueryFunctionDescription)
+  InversionTarget
+```
+
+`InversionTarget` records what a candidate semantically returns:
+
+- `FilterInput` identifies the item being tested by a filter criterion.
+- `QueryOrigin` identifies the lexical origin of the complete query.
+- `IndependentResource` identifies a resource found independently, for example by an external database query or an individual query.
+
+This distinction cannot be recovered reliably from domains alone. The filter input and query
+origin may have the same domain while still requiring different composition behaviour.
+
+The metadata exists only while `invert_` constructs and combines candidates. The public `invert`
+function discards it while folding the backwards-step array into the right-associative
+`QueryWithAKink` composition. Consequently, `InversionTarget` is not part of stored inverted
+queries and requires no persistence or runtime format change.
 
 #### Inverting Individual Steps: `invertFunction` (module `Perspectives.Query.Inversion`)
 
@@ -140,15 +166,13 @@ For `Calculated Role` getters and `Calculated Property` getters, `invertFunction
 
 The `invert_` function handles recursive cases:
 
-- **Composition** (`s1 >> s2`): kinks are produced both at `s1` and at `s2`, with appropriate combinations. The `comprehend` function generates all valid pairs of (backwards steps from the right sub-query) cross (backwards steps from the left sub-query), concatenating them in reversed order.
+- **Composition** (`s1 >> s2`): kinks are produced both at `s1` and at `s2`, with appropriate combinations. The `comprehend` function generates all valid pairs of (backwards steps from the right sub-query) cross (backwards steps from the left sub-query), concatenating them in reversed order. A `QueryOrigin` candidate from the right sub-query is not recomposed through the left/source path: it already reaches the lexical query origin and must bypass those source steps.
 - **Union / Intersection** (`q1 | q2`, `q1 & q2`): inverted as the union of inversions of `q1` and `q2`.
-- **Filter** (`filter source with criterium`): the criterium is inverted and a `FilterF` step is
-  appended. For **regular perspective queries** the filter is later *removed* when storing the
-  inverted query (see §1.5), because at runtime we want to detect the change even when the filter
-  now evaluates to false (the user may have just *lost* visibility of an item).
-  For **Calculated User role detection queries** (see §1.9) the filter is *kept* in both the
-  backwards and forwards slots of the stored `QueryWithAKink` — see §1.9 for the full rationale.
-- **Let\* (WithFrame / BindVariable)**: variable bindings are stored and substituted when the variable is later referenced.
+- **Filter** (`filter source with criterium`): the criterion is inverted. For an origin-independent
+  criterion, a `FilterF` step is appended and the storage rules below determine which filtered and
+  unfiltered variants are retained. If any criterion candidate targets `QueryOrigin`, no candidate
+  receives the `FilterF`; see §1.4.2.
+- **Let\* (WithFrame / BindVariable)**: ordinary variable bindings are stored and substituted when the variable is later referenced. `origin` is handled specially because it denotes the lexical query origin rather than an ordinary expression binding.
 - **Calculated Role** (`RolGetter (CR r)`): the calculation of the role is retrieved and inverted recursively.
 
 ### 1.4 Storing Inverted Queries: `storeInvertedQuery` (module `StoreInvertedQueries`)
@@ -213,16 +237,55 @@ subsystem combines two semantics:
 
 In `invert_`:
 
-- A `FilterF` step is appended to inverted criterium paths.
+- Binary operands whose syntax starts with `origin` are marked `QueryOrigin`. Direct
+  `VariableLookup "origin"` cases receive the same target.
+- A `QueryOrigin` candidate is kept separate from the filter source during composition. It is not
+  recomposed through source navigation merely because its endpoint domain equals the source or
+  filter-input domain.
+- For an origin-independent criterion, a `FilterF` step is appended to matching inverted
+  criterion paths.
+- If any criterion candidate has target `QueryOrigin`, the criterion is origin-dependent and no
+  candidate receives the `FilterF` step. The individual criterion inversions are retained so that
+  changes to either operand can still trigger affected-context or affected-user processing.
 - In `ComposeF`, `hasFilter` suppresses one family of extra forward-augmented
   variants and keeps the comprehension variants.
 
-This produces candidate `QueryWithAKink` values where filter structure is still present,
-but final runtime trigger behaviour is decided later during storage.
+For origin-independent criteria this produces candidate `QueryWithAKink` values where filter
+structure is still present, but final runtime trigger behaviour is decided later during storage.
+For origin-dependent criteria the filter has already been omitted before the public `invert`
+function erases `InversionTarget`.
+
+#### Why origin-dependent filters are not persisted
+
+Consider the state condition:
+
+```arc
+state ManifestIsConstructed =
+  exists
+    (filter Repository >> binding >> context >> Manifests
+      with (LocalModelName == origin >> extern >> ModelName))
+    >> binding
+```
+
+The criterion compares a property of each `Manifests` candidate with a property reached from the
+context in which the state is defined. During normal evaluation, `origin` is bound to that state
+context. However, an inverted query is persisted and may be executed later while another state or
+automatic action has installed a different variable-binding frame.
+
+Persisting the original criterion as a `FilterF` would leave `VariableLookup "origin"` free. At
+runtime it would resolve against the ambient frame rather than the frame in which the criterion
+was written. For example, if the ambient origin is already the external role of the state context,
+`origin >> extern` applies `extern` a second time and attempts to use that role identifier as a
+context identifier.
+
+The inversion therefore preserves the separate trigger paths for `LocalModelName` and
+`ModelName`, but does not embed the complete origin-dependent criterion in those paths. When a
+trigger causes the state or perspective to be reconsidered, the original forward condition is
+evaluated in its proper lexical context, where `origin` has the intended value.
 
 #### Storage-time rewrite behaviour
 
-In `storeInvertedQuery'`, when the backward shape is recognised as:
+For origin-independent criteria, `storeInvertedQuery'` recognises the backward shape:
 
 - `{first source step} << filter << {last criterium step}`
 
@@ -241,8 +304,9 @@ two different policies are applied.
    - Do **not** store the second recursive variant. This avoids runtime shape errors
      where property values would be treated as role instances.
 
-Semantically, this means filters are both preserved and bypassed, depending on the
-purpose of the stored query.
+Semantically, this means origin-independent filters are both preserved and bypassed, depending on
+the purpose of the stored query. Origin-dependent filters never reach this storage rewrite: only
+their operand inversion paths are stored.
 
 #### Why `preprendToCriterium` is needed
 
@@ -260,9 +324,24 @@ rewrites of the inversion path.
 
 - Filters are **not** globally ignored.
 - Filters are **not** globally enforced as hard gates either.
+- Filters that close over lexical `origin` are **not persisted**, because executing them in a later
+  ambient variable frame is unsound.
 - The runtime sees a deliberately mixed set of stored inversions that together preserve
   correctness for both visibility-loss and visibility-gain transitions, while keeping
   calculated-user detection type-correct.
+
+#### Regression coverage
+
+`test/setAffectedContextCalculations.arc` and
+`test/setAffectedContextCalculations.purs` cover three origin-sensitive shapes:
+
+1. A filter operand reached through `origin >> extern` produces a direct inverse to the state
+  context, without applying the candidate filter.
+2. A filter input and `origin` with the same domain remain semantically distinct; domain equality
+  does not cause the origin path to be recomposed through the filter source.
+3. An AddModel-shaped query with a navigated source retains inversions for both compared
+  properties, makes every state inversion return the state context, and stores no runtime
+  `FilterF` for the origin-dependent criterion.
 
 Each stored inverted query is a `StorableInvertedQuery`:
 

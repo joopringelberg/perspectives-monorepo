@@ -121,6 +121,8 @@ defaultRuntimeOptions =
   , useSystemVersion: null
   , privateKey: Nothing
   , publicKey: Nothing
+  , transportPrivateKey: Nothing
+  , transportPublicKey: Nothing
   , myContextsVersion: "1.0.0"
   }
 
@@ -317,6 +319,7 @@ getModelUnderCompilation = gets _.modelUnderCompilation
 setModelUnderCompilation :: Maybe (ModelUri Readable) -> MonadPerspectives Unit
 setModelUnderCompilation mu = modify \s -> s { modelUnderCompilation = mu }
 
+-- | Returns the readable-to-stable model URI map loaded from the local models database during startup.
 getModelUris :: MonadPerspectives (Map.Map (ModelUri Readable) (ModelUri Stable))
 getModelUris = gets _.modelUris
 

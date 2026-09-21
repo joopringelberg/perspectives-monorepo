@@ -53,7 +53,6 @@ import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), Role
 import Perspectives.RunMonadPerspectivesTransaction (doNotShareWithPeers, runEmbeddedIfNecessary)
 import Perspectives.StrippedDelta (addResourceSchemes)
 import Perspectives.Sync.HandleTransaction (executeContextDelta, executeRoleBindingDelta, executeRolePropertyDelta, executeUniverseContextDelta, executeUniverseRoleDelta)
-import Perspectives.Sync.LegacyDeltas (toContextDelta, toRoleBindingDelta, toRolePropertyDelta, toUniverseContextDelta, toUniverseRoleDelta)
 import Perspectives.Sync.SignedDelta (SignedDelta)
 import Perspectives.TypesForDeltas (ContextDelta(..))
 import Simple.JSON (readJSON')
@@ -205,17 +204,6 @@ applyDelta s (Just stringifiedDelta) = do
               Right d4 -> lift (addResourceSchemes storageSchemes d4) >>= flip executeUniverseRoleDelta s
               Left _ -> case runExcept $ readJSON' stringifiedDelta of
                 Right d5 -> lift (addResourceSchemes storageSchemes d5) >>= flip executeUniverseContextDelta s
-                -- Fallback: try legacy delta formats.
-                Left _ -> case runExcept $ readJSON' stringifiedDelta of
-                  Right ld1 -> lift (addResourceSchemes storageSchemes (toRolePropertyDelta ld1)) >>= flip executeRolePropertyDelta s
-                  Left _ -> case runExcept $ readJSON' stringifiedDelta of
-                    Right ld2 -> lift (addResourceSchemes storageSchemes (toRoleBindingDelta ld2)) >>= flip executeRoleBindingDelta s
-                    Left _ -> case runExcept $ readJSON' stringifiedDelta of
-                      Right ld3 -> lift (addResourceSchemes storageSchemes (toContextDelta ld3)) >>= flip executeContextDelta s
-                      Left _ -> case runExcept $ readJSON' stringifiedDelta of
-                        Right ld4 -> lift (addResourceSchemes storageSchemes (toUniverseRoleDelta ld4)) >>= flip executeUniverseRoleDelta s
-                        Left _ -> case runExcept $ readJSON' stringifiedDelta of
-                          Right ld5 -> lift (addResourceSchemes storageSchemes (toUniverseContextDelta ld5)) >>= flip executeUniverseContextDelta s
-                          Left _ -> log (padding <> "Failed to parse delta for resource restoration: " <> stringifiedDelta)
+                Left _ -> log (padding <> "Failed to parse delta for resource restoration: " <> stringifiedDelta)
     )
     (\e -> liftEffect $ log (padding <> show e))

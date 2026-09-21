@@ -167,6 +167,8 @@ perspectDef = LanguageDef
       , "action"
       , "object"
       , "subject"
+      , "once"
+      , "settled"
 
       -- Repeating
       , "every"

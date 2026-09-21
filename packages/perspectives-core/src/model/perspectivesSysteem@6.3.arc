@@ -143,6 +143,8 @@ domain model://perspectives.domains#System@6.3
       -- the private key is never available in Perspectives data, only as an object in IndexedDB.
       -- PDRDEPENDENCY
       property PublicKey (String)
+      -- PDRDEPENDENCY
+      property TransportPublicKey (String)
 
   user Addressable
     property Street (String)
@@ -204,7 +206,7 @@ domain model://perspectives.domains#System@6.3
     user Initializer = me
       perspective on PerspectivesUsers
         only (Create)
-        props (Identifiable$PublicKey, SharedFileServerKey, HasKey) verbs (SetPropertyValue, AddPropertyValue)
+        props (Identifiable$PublicKey, Identifiable$TransportPublicKey, SharedFileServerKey, HasKey) verbs (SetPropertyValue, AddPropertyValue)
       -- Legacy: this perspective was necessary because Initializer created the Persons instance on installation of the PDR.
       perspective on sys:MySocialEnvironment >> Persons
         only (Create, Fill)
@@ -249,7 +251,7 @@ domain model://perspectives.domains#System@6.3
             create file ("identity_of_" + context >> Me >> LastName + ".json") as "text/json" in MyIdentity
               text
       perspective on Me
-        props (Cancelled, LastName, FirstName, PublicKey) verbs (Consult, SetPropertyValue)
+        props (Cancelled, LastName, FirstName, PublicKey, TransportPublicKey) verbs (Consult, SetPropertyValue)
         action Cancel
           Cancelled = true
       perspective on Persons
@@ -261,7 +263,7 @@ domain model://perspectives.domains#System@6.3
         props (FirstName, LastName) verbs (Consult, SetPropertyValue)
       perspective on Peers
         props (FirstName, LastName) verbs (Consult)
-        props (Cancelled) verbs (Consult, SetPropertyValue)
+        props (Cancelled, TransportPublicKey) verbs (Consult, SetPropertyValue)
       perspective on sys:TheWorld >> Onlookers
         only (Create, Remove)
         props (FirstName, LastName) verbs (Consult, SetPropertyValue)
@@ -327,7 +329,7 @@ domain model://perspectives.domains#System@6.3
       -- that previously was filled by a NonPerspectivesUsers instance.
       perspective on sys:TheWorld >> PerspectivesUsers
         props (FirstName, LastName) verbs (Consult)
-        props (Cancelled) verbs (SetPropertyValue)
+        props (Cancelled, TransportPublicKey) verbs (SetPropertyValue, Consult)
   
   -- PDRDEPENDENCY
   case PerspectivesSystem

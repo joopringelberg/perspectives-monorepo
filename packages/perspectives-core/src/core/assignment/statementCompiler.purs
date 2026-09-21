@@ -23,7 +23,8 @@
 -- | From the syntax tree that describes a Statement, we construct a QueryFunctionDescription.
 
 module Perspectives.Query.StatementCompiler
-  ( compileStatement
+  ( compileActionEffect
+  , compileStatement
   ) where
 
 import Control.Monad.State.Class (gets)
@@ -51,6 +52,7 @@ import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Query.ExpressionCompiler (compileExpression, makeSequence)
 import Perspectives.Query.QueryTypes (Domain(..), QueryFunctionDescription(..), RoleInContext, adtContext2AdtRoleInContext, domain2contextType, domain2roleType, functional, mandatory, range, roleInContext2Context, roleInContext2Role, roleRange)
 import Perspectives.Query.QueryTypes (RoleInContext(..)) as QT
+import Perspectives.Representation.Action (ActionEffect(..), queryFunctionDescriptionOfActionEffect)
 import Perspectives.Representation.ADT (ADT(..), allLeavesInADT, equalsOrSpecialises_)
 import Perspectives.Representation.CNF (CNF, traverseDPROD)
 import Perspectives.Representation.Class.Identifiable (identifier)
@@ -84,24 +86,31 @@ compileStatement
   -> Statements
   -> PhaseThree QueryFunctionDescription
 compileStatement originDomain currentcontextDomain userRoleTypes statements =
+  queryFunctionDescriptionOfActionEffect <$> compileActionEffect originDomain currentcontextDomain userRoleTypes statements
+
+compileActionEffect
+  :: Domain
+  -> Domain
+  -> Array RoleType
+  -> Statements
+  -> PhaseThree ActionEffect
+compileActionEffect originDomain currentcontextDomain userRoleTypes statements =
   case statements of
-    -- Compile a series of Assignments into a QueryDescription.
-    Statements assignments -> sequenceOfAssignments userRoleTypes assignments
-    -- Compile the LetStep into a QueryDescription.
-    Let letstep -> do
-      let_ <- compileLetStep letstep
-      pure (UQD originDomain QF.WithFrame let_ (range let_) (functional let_) (mandatory let_))
+    Statements assignments -> do
+      stage <- sequenceOfAssignments userRoleTypes assignments
+      pure $ ActionEffect { bindings: [], stages: [ stage ], capturedBindingNames: [] }
+    Let letstep -> compileLetStep letstep
   where
 
-  compileLetStep :: LetStep -> PhaseThree QueryFunctionDescription
-  compileLetStep (LetStep { bindings, assignments }) = withFrame
-    case uncons bindings of
-      -- no bindings at all. Just the body. This will probably never occur as the parser breaks on it.
-      Nothing -> sequenceOfAssignments userRoleTypes assignments
-      (Just { head: bnd, tail }) -> do
-        -- compileVarBinding also adds a variable binding to the compile time environment.
-        head_ <- compileVarBinding bnd
-        makeSequence <$> foldM addVarBindingToSequence head_ tail <*> sequenceOfAssignments userRoleTypes assignments
+  compileLetStep :: LetStep -> PhaseThree ActionEffect
+  compileLetStep (LetStep { bindings, stages }) = withFrame do
+    bindingDescriptions <- traverse compileVarBinding bindings
+    stageDescriptions <- traverse (sequenceOfAssignments userRoleTypes) stages
+    pure $ ActionEffect
+      { bindings: bindingDescriptions
+      , stages: stageDescriptions
+      , capturedBindingNames: bindingName <$> bindings
+      }
     where
     -- Inverts the result as well.
     compileVarBinding :: LetABinding -> PhaseThree QueryFunctionDescription
@@ -115,10 +124,9 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
       addBinding varName assignmentDescription
       pure $ UQD originDomain (QF.BindResultFromCreatingAssignment varName) assignmentDescription (range assignmentDescription) (functional assignmentDescription) (mandatory assignmentDescription)
 
-    -- The range of a sequence equals that of its second term.
-    -- The fold is left associative: ((binding1 *> binding2) *> binding3). The compiler handles that ok.
-    addVarBindingToSequence :: QueryFunctionDescription -> LetABinding -> FD
-    addVarBindingToSequence seq v = makeSequence <$> pure seq <*> (compileVarBinding v)
+    bindingName :: LetABinding -> String
+    bindingName (Expr (VarBinding varName _)) = varName
+    bindingName (Stat varName _) = varName
 
   -- This will return a QueryFunctionDescription that describes either a single assignment, or
   -- a BQD with QueryFunction equal to (BinaryCombinator SequenceF)
@@ -438,7 +446,7 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
           qfd <- compileExpression originDomain e
           case range qfd of
             (RDOM _) -> pure qfd
-            otherwise -> throwError $ NotARoleDomain (range qfd) (startOf e) (endOf e)
+            otherwise -> (lift2 $ humanizePerspectivesError $ NotARoleDomain (range qfd) (startOf e) (endOf e)) >>= throwError
 
       (qualifiedProperty :: EnumeratedPropertyType) <- qualifyPropertyWithRespectTo propertyIdentifier roleQfd f.start f.end
       -- Compile the value expression to a QueryFunctionDescription. Its range must comply with the range of the qualifiedProperty. It is compiled relative to the current context; not relative to the object!
@@ -481,7 +489,7 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
             (RDOM _) ->
               if pessimistic $ functional qfd then pure qfd
               else throwError $ NotFunctional (startOf e) (endOf e) e
-            otherwise -> throwError $ NotARoleDomain (range qfd) (startOf e) (endOf e)
+            otherwise -> (lift2 $ humanizePerspectivesError $ NotARoleDomain (range qfd) (startOf e) (endOf e)) >>= throwError
       (qualifiedProperty :: EnumeratedPropertyType) <- qualifyPropertyWithRespectTo propertyIdentifier roleQfd f.start f.end
       pure $ MQD originDomain (QF.CreateFileF mimeType qualifiedProperty) [ filenameQfd, contentQfd, roleQfd ] originDomain True False
 
@@ -540,7 +548,7 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
     qualifyWithRespectTo roleIdentifier contextFunctionDescription start end = do
       (ct :: ADT ContextType) <- case range contextFunctionDescription of
         (CDOM ct') -> pure ct'
-        otherwise -> throwError $ NotAContextDomain contextFunctionDescription otherwise start end
+        otherwise -> (lift2 $ humanizePerspectivesError $ NotAContextDomain contextFunctionDescription otherwise start end) >>= throwError
       rtarr <-
         if isTypeUri roleIdentifier then
           if isExternalRole roleIdentifier then pure [ ENR $ EnumeratedRoleType roleIdentifier ]
@@ -570,11 +578,11 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
     qualifyPropertyWithRespectTo propertyIdentifier roleQfd start end = do
       (rt :: ADT EnumeratedRoleType) <- case range roleQfd of
         (RDOM rt') -> pure $ roleInContext2Role <$> rt'
-        otherwise -> throwError $ NotARoleDomain otherwise start end
+        otherwise -> (lift2 $ humanizePerspectivesError $ NotARoleDomain otherwise start end) >>= throwError
       (candidates :: Array PropertyType) <- filter isEnumeratedProperty <$> (lookForUnqualifiedPropertyType propertyIdentifier) rt
       case head candidates of
         Just (ENP et) | length candidates == 1 -> pure et
-        otherwise -> throwError $ RoleHasNoEnumeratedProperty rt propertyIdentifier start end
+        otherwise -> (lift2 $ humanizePerspectivesError (RoleHasNoEnumeratedProperty rt propertyIdentifier start end)) >>= throwError
 
     -- | If the name is already qualified, use it as-is; otherwise look for an EnumeratedRole with matching
     -- | local name in the Domain.
@@ -597,7 +605,7 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
       qfd <- compileExpression originDomain stp
       case range qfd of
         (CDOM _) -> pure qfd
-        otherwise -> throwError $ NotAContextDomain qfd (range qfd) (startOf stp) (endOf stp)
+        otherwise -> (lift2 $ humanizePerspectivesError $ NotAContextDomain qfd (range qfd) (startOf stp) (endOf stp)) >>= throwError
 
     ensureStringValue :: Maybe Step -> PhaseThree (Maybe QueryFunctionDescription)
     ensureStringValue mstp = case mstp of
@@ -605,7 +613,7 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
         qfd <- compileExpression originDomain stp
         case range qfd of
           (VDOM PString _) -> pure $ Just qfd
-          otherwise -> throwError $ NotAStringDomain qfd (startOf stp) (endOf stp)
+          otherwise -> (lift2 $ humanizePerspectivesError $ NotAStringDomain qfd (startOf stp) (endOf stp)) >>= throwError
       Nothing -> pure Nothing
 
     -- Compiles the Step and inverts it as well.
@@ -616,7 +624,7 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
       qfd <- compileExpression originDomain stp
       case range qfd of
         (RDOM _) -> pure qfd
-        otherwise -> throwError $ NotARoleDomain (range qfd) (startOf stp) (endOf stp)
+        otherwise -> (lift2 $ humanizePerspectivesError $ NotARoleDomain (range qfd) (startOf stp) (endOf stp)) >>= throwError
 
     ensureFunctional :: Step -> QueryFunctionDescription -> PhaseThree QueryFunctionDescription
     ensureFunctional stp qfd = case functional qfd of

@@ -44,13 +44,13 @@ import Effect.Class (liftEffect)
 import Effect.Class.Console (log)
 import Foreign (Foreign, unsafeToForeign)
 import Foreign.Object (Object, empty, insert)
-import Main.RecompileBasicModels (recompileModelsAtUrl)
+import Main.RecompileBasicModels (UninterpretedDomeinFile(..), recompileModelsAtUrl)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (type (~~>), MonadPerspectives, MonadPerspectivesTransaction, mkLibEffect1, mkLibEffect2, mkLibEffect3, mkLibFunc1, mkLibFunc2, mkLibFunc3, (##>))
 import Perspectives.Couchdb (DeleteCouchdbDocument(..), DocWithAttachmentInfo(..))
 import Perspectives.Couchdb.Revision (Revision_, changeRevision)
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
-import Perspectives.DomeinCache (AttachmentFiles)
+import Perspectives.DomeinCache (AttachmentFiles, lookupStableModelUri_)
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.Error.Boundaries (handleExternalFunctionError, handleExternalStatementError)
 import Perspectives.Error.Pretty (renderMultiplePerspectivesErrors, renderPerspectivesError)
@@ -58,21 +58,22 @@ import Perspectives.ErrorLogging (logPerspectivesError)
 import Perspectives.Extern.Couchdb (retrieveModelFromLocalStore, updateModel)
 import Perspectives.Extern.Files (getPFileTextValue)
 import Perspectives.External.HiddenFunctionCache (HiddenFunctionDescription)
-import Perspectives.Identifiers (ModelUriString, isModelUri, modelUri2ModelUrl, unversionedModelUri)
+import Perspectives.Identifiers (ModelUriString, isModelUri, modelUri2LocalName, modelUri2ModelUrl, unversionedModelUri)
 import Perspectives.InvertedQuery.Storable (StoredQueries)
 import Perspectives.ModelDependencies (modelURIReadable, sysUser, versionedModelManifestModelCuid) as MD
 import Perspectives.ModelTranslation (augmentModelTranslation, emptyTranslationTable, generateFirstTranslation, generateTranslationTable, parseTranslation_pass1, parseTranslation_pass2, writeReadableTranslationYaml, writeTranslationYaml) as MT
 import Perspectives.ModelTranslation.Representation (ModelTranslation(..))
 import Perspectives.Parsing.Arc.PhaseTwoDefs (withStableDomeinFile)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
-import Perspectives.Persistence.API (addAttachment, addDocument, deleteDocument, fromBlob, getAttachment, getDocument, retrieveDocumentVersion, toFile, tryGetDocument_)
-import Perspectives.PerspectivesState (addWarning, getModelUris, getWarnings, resetWarnings, setModelUri, setModelUris, setWarnings)
+import Perspectives.Persistence.API (addAttachment, addDocument, deleteDocument, fromBlob, getAttachment, getDocument, getDocument_, retrieveDocumentVersion, toFile, tryGetDocument_)
+import Perspectives.PerspectivesState (addWarning, getModelUris, getWarnings, modelsDatabaseName, resetWarnings, setModelUri, setModelUris, setWarnings)
 import Perspectives.Query.UnsafeCompiler (getPropertyValues)
 import Perspectives.Representation.Class.Cacheable (cacheEntity, tryReadEntiteitFromCache)
 import Perspectives.Representation.InstanceIdentifiers (RoleInstance, Value(..))
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..))
 import Perspectives.RunMonadPerspectivesTransaction (runEmbeddedTransaction)
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.Sidecar.StableIdMapping (ModelUri(..), StableIdMapping, loadStableMapping, Stable) as Sidecar
 import Perspectives.Sidecar.StableIdMapping (fromRepository)
 import Perspectives.TCP.Configuration (buildTCPConfiguration) as TCP
@@ -489,6 +490,39 @@ augmentModelTranslation translation_ modelUri_ _ = case head translation_, head 
               Left e -> pure $ Value modelTranslationString
               Right translationTable -> pure $ Value $ writeJSON (MT.augmentModelTranslation translationTable modelTranslation)
 
+getLocalArcSource :: Array ModelUriString -> (RoleInstance ~~> Value)
+getLocalArcSource modelUris _ = case head modelUris of
+  Nothing -> handleExternalFunctionError "model://perspectives.domains#Parsing$GetLocalArcSource"
+    (Left (error "No model URI provided."))
+  Just modelUri -> do
+    mstableModelUri <- lift $ lift $ lookupStableModelUri_ (ModelUri modelUri)
+    case mstableModelUri of
+      Nothing -> handleExternalFunctionError "model://perspectives.domains#Parsing$GetLocalArcSource"
+        (Left $ error ("Cannot find stable model URI for model URI: " <> modelUri))
+      Just (ModelUri stableModelUri) -> do
+        { documentName } <- pure $ unsafePartial modelUri2ModelUrl stableModelUri
+        modelsdb <- lift $ lift $ modelsDatabaseName
+        UninterpretedDomeinFile udf <- lift $ lift $ getDocument_ modelsdb documentName
+        pure $ Value udf.arc
+
+-- Hoe krijg je de Cuid gegeven de Readable LocalModelName en de namespace?
+-- 	- Je kunt ModelURIReadable berekenen als de Repository er is en de LocalModelName
+-- 	- ik geef ModelURIReadable nu mee aan GetLocalModelCuid
+-- 	- met lookupStableModelUri_ kun je de stable identifier opzoeken en daar zit de CUID in.
+-- 	- met modelUri2LocalName haal je uit de stable identifier de CUID.
+getLocalModelCuid :: Array ModelUriString -> (RoleInstance ~~> Value)
+getLocalModelCuid modelUris _ = case head modelUris of
+  Nothing -> handleExternalFunctionError "model://perspectives.domains#Parsing$GetLocalModelCuid"
+    (Left (error "No model URI provided."))
+  Just modelUri -> do
+    mstableModelUri <- lift $ lift $ lookupStableModelUri_ (ModelUri modelUri)
+    case mstableModelUri of
+      Nothing -> handleExternalFunctionError "model://perspectives.domains#Parsing$GetLocalModelCuid"
+        (Left $ error ("Cannot find stable model URI for model URI: " <> modelUri))
+      Just (ModelUri stableModelUri) -> do
+        let cuid = unsafePartial $ modelUri2LocalName stableModelUri
+        pure $ Value cuid
+
 -- | An Array of External functions. Each External function is inserted into the ExternalFunctionCache and can be retrieved
 -- | with `Perspectives.External.HiddenFunctionCache.lookupHiddenFunction`.
 externalFunctions :: Array (Tuple String HiddenFunctionDescription)
@@ -506,4 +540,6 @@ externalFunctions =
   , mkLibEffect2 "model://perspectives.domains#Parsing$GenerateTranslationTable" True generateTranslationTable
   , mkLibFunc2 "model://perspectives.domains#Parsing$AugmentModelTranslation" True augmentModelTranslation
   , mkLibFunc1 "model://perspectives.domains#Parsing$GenerateTCPConfiguration" True generateTCPConfiguration
+  , mkLibFunc1 "model://perspectives.domains#Parsing$GetLocalArcSource" True getLocalArcSource
+  , mkLibFunc1 "model://perspectives.domains#Parsing$GetLocalModelCuid" True getLocalModelCuid
   ]

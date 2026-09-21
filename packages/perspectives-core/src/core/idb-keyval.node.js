@@ -58,6 +58,12 @@ export function set(key, value) {
   return Promise.resolve();
 }
 
+export function del(key) {
+  store.delete(key);
+  save();
+  return Promise.resolve();
+}
+
 export function clear() {
   store.clear();
   save();
