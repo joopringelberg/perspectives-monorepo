@@ -98,9 +98,10 @@ loadAndCompileArcFile_ filePath = catchError
                   { referredModels = delete id refModels
                   , arc = text
                   }
-                let stampedDf = case modelUriVersion (unwrap id) of
-                      Nothing -> df
-                      Just version -> stampDomeinFileTypeVersion version df
+                let
+                  stampedDf = case modelUriVersion (unwrap id) of
+                    Nothing -> df
+                    Just version -> stampDomeinFileTypeVersion version df
                 pure $ Right $ Tuple stampedDf invertedQueries
   \e -> pure $ Left [ Custom (show e) ]
 
