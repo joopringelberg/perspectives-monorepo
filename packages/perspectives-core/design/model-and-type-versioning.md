@@ -253,6 +253,30 @@ The existing `referredModels` field only records model references. It should be
 supplemented or replaced by dependency records that preserve requirements and
 resolved versions.
 
+Recommendation: the author-facing contract is model-level, not type-level. A
+modeller should declare import constraints in terms of imported model releases,
+for example:
+
+```text
+Sales requires Persons >= 2.1 and < 3.0
+```
+
+The PDR records the declared requirement together with the exact `resolvedVersion`
+that was used for compilation. This is the canonical dependency contract in the
+`DomeinFile`.
+
+The runtime may derive a stronger, more specific compatibility contract from the
+compiled model and the exact dependency lock, for example in terms of the types
+used from that model and their revision history. That derived contract is useful
+for installation planning, validation, and authoring tools. It is not the primary
+source of truth. The source of truth remains the import requirement declared at
+model level.
+
+The same distinction should be preserved at runtime: a model-import requirement is
+an authored statement about the dependency package; a type-level compatibility
+report is derived metadata about the actual compiled usage against a resolved
+release.
+
 ### 6.3 Installation and update resolution
 
 Models are installation and update units. Individual types are not installed
@@ -306,9 +330,21 @@ type TypeVersionMetadata =
   }
 ```
 
-A live type has `removedIn = Nothing`. Removal history belongs in a model
-manifest or sidecar because a removed type is no longer present in the current
+A live type has `removedIn = Nothing`. Removal history belongs in a release
+metadata sidecar because a removed type is no longer present in the current
 `DomeinFile` type collections.
+
+In this design, one immutable sidecar per published model release stores all
+release-scoped metadata that is derived from comparing types over time,
+including:
+
+- tombstones for stable type identifiers that were removed;
+- the transition classification matrix for type evolution between releases;
+- derived compatibility metadata used by runtime validation and authoring tools.
+
+This is a single sidecar rather than three separate attachments. The active
+`DomeinFile` remains a compact live representation of the current compiled model
+state; historical and derived compatibility metadata belong in the sidecar.
 
 ### 7.2 Computing the revision
 
@@ -341,8 +377,14 @@ A tombstone records that a stable type identifier existed and was removed in a
 particular model version. It distinguishes an unknown type from a deliberately
 removed type and supports decisions about older incoming deltas.
 
-Tombstones should be retained in model history metadata even though full old
-model releases need not be installed locally.
+Tombstones and transition classifications are release metadata, not part of the
+active runtime model. They should be retained in the release sidecar even though
+full old model releases need not be installed locally.
+
+The transition classification matrix records results such as `unchanged`,
+`new`, `removed`, `compatible-change`, `migration-required` or `incompatible`
+for a type as it moves from one release to another. This material is derived
+metadata and belongs alongside tombstones in the same sidecar.
 
 ## 8. Permanent Signed Delta Shape
 
@@ -643,18 +685,93 @@ Two deltas with the same resource key, resource version and author but different
 payload identities are not duplicates. They indicate author equivocation,
 corruption or a serialization defect.
 
-The store must not silently overwrite one with the other. A future store key may
-therefore include a delta-id suffix while retaining indexed operation-key
+The store must not silently overwrite one with the other. The DeltaStore key
+should therefore include a delta-id suffix while retaining indexed operation-key
 fields:
 
 ```text
 <operation-key>|<short-delta-id>
 ```
 
-Both signed records can then be retained as evidence and handled by an explicit
-conflict policy.
+This does not change the signed wire format; it only changes the local storage
+key used to index and retain distinct signed payloads. Both signed records can
+then be retained as evidence and handled by an explicit conflict policy.
 
-## 12. Storage Considerations
+This is part of the reboot release because it preserves same-author equivocations
+without altering the authenticated payload semantics.
+
+## 12. Canonical Serialization and Signing Contract
+
+Canonical serialization is part of the permanent reboot contract. It is not a
+later engineering convenience. Changes in canonical bytes change both the
+signature and the `deltaId`; therefore this contract must be implemented in
+exactly the same way in both the PureScript and JavaScript runtimes.
+
+### 12.1 Canonical JSON rules
+
+The signed payload is a canonical JSON encoding of a structured value.
+The canonical serializer must satisfy all of the following rules:
+
+1. The encoded value is UTF-8 JSON text.
+2. Object keys are sorted lexicographically by their Unicode scalar value.
+   This means the same logical object always yields the same key order.
+3. Arrays preserve original element order.
+4. `null`, booleans, numbers and strings are encoded using JSON syntax only.
+5. Strings are encoded with standard JSON escaping, without surrounding spaces
+   and without any non-JSON custom encoding.
+6. Numbers are canonicalized to the shortest decimal form that round-trips to
+   the same numeric value, with no exponent notation used in the signed payloads
+   unless the value cannot be expressed otherwise.
+7. The serializer must not produce multiple equivalent spellings for the same
+   value. For example, `1`, `1.0`, `1e0` and `01` are not equivalent canonical
+   forms and must not be emitted by the canonical serializer.
+8. The serializer must reject non-finite values such as `NaN`, `Infinity` and
+   `-Infinity` before they are signed.
+
+The canonical serializer is defined over the runtime data structure, not over a
+randomized object insertion order. The signed bytes are the exact UTF-8 bytes of
+that canonical JSON string.
+
+### 12.2 Signed bytes
+
+A locally authored delta must be serialized once using the canonical serializer,
+then those exact bytes are signed. A receiving PDR must preserve the exact signed
+bytes when storing or forwarding the delta; it must not deserialize and then
+re-serialize before persistence.
+
+Conceptually:
+
+```text
+canonical-json(delta-object) -> UTF-8 bytes
+sign(canonical-json-bytes) -> signature
+store/signing payload = canonical-json-bytes
+```
+
+The signature covers the canonical payload bytes, not a re-encoded or pre-JSON
+stringified form produced later by another runtime.
+
+### 12.3 Cross-language tests
+
+The canonical serialization contract must be tested across both PureScript and
+JavaScript implementations using the same golden fixtures.
+
+A passing implementation must satisfy all of the following:
+
+1. For the same logical value, both runtimes produce identical canonical JSON
+   bytes.
+2. The output is byte-for-byte identical to the stored golden fixture for each
+   test case.
+3. The canonical bytes are stable across repeated runs on the same input.
+4. A JSON parse followed by the same canonical serializer yields the same output
+   for every test fixture.
+5. `deltaId` is computed from the exact canonical signed payload bytes, not from
+   a re-serialized variant.
+
+This contract is intentionally strict. Differences in whitespace, key ordering,
+number formatting or UTF-8 escaping are not acceptable even if the semantic JSON
+value is the same.
+
+### 12.4 Storage Considerations
 
 The delta history may become extremely large. Permanent per-delta overhead must
 therefore be justified.
@@ -673,12 +790,88 @@ Further compression or binary encoding can be considered later, but the
 canonical signed representation must remain deterministic. A change in
 serialization bytes changes both signatures and `deltaId` values.
 
-A PDR should serialize a locally authored delta once, sign those exact bytes,
-and reuse the resulting `SignedDelta` for storage and transport. Receiving PDRs
-should preserve the exact signed payload bytes rather than deserialize and
-reserialize before storage.
+## 13. Phased Delivery and Implementation Contract
 
-## 13. Phased Delivery
+The work is intentionally split so the universe can reboot before complete
+compatibility reasoning exists.
+
+### Phase 0: Freeze the permanent contracts
+
+This phase is the handoff target for the cloud agent. Before rebooting, the
+implementation must complete all of the following:
+
+1. Define the delta format version mechanism and dispatch rules.
+2. Define the compact revisioned type-reference syntax:
+   `stable-type-identifier@MAJOR.MINOR`.
+3. Reserve `@` as the version separator for revisioned payload references and
+   reject it in stable identifiers for this format version.
+4. Include revision provenance for every explicit type reference in every delta
+   family that contains one.
+5. Define canonical serialization exactly and test it cross-language.
+6. Define `deltaId` derivation from author and exact signed payload bytes.
+7. Retain operation-key fields for deterministic ordering and conflict control.
+8. Define how old and future delta formats are dispatched without guesswork.
+
+No phase-0 implementation is accepted if it changes the signed payload format
+after publication or if the PureScript and JavaScript encoders disagree on the
+canonical bytes for the same value.
+
+### Phase 1: Capture provenance without enforcing compatibility
+
+For the reboot release, the implementation must:
+
+1. Add type revisions to compiled type representations.
+2. Stamp every compiled type in a release with the release's model version when
+   semantic last-change tracking is not yet implemented.
+3. Serialize type revisions into every newly authored delta.
+4. Deserialize revisioned references while continuing existing execution
+   behaviour.
+5. Persist and index `deltaId`.
+6. Add efficient exact-duplicate receipt handling.
+7. Store explicit processing dispositions where practical.
+8. Keep the runtime behaviour conservative: do not claim full compatibility
+   merely because a delta is older, newer or equal.
+
+This phase captures historical evidence and preserves irreversible provenance.
+It does not yet require new model downloads, dependency lock enforcement or
+full compatibility rejection logic.
+
+### Phase 2: Model dependency administration
+
+1. Add explicit import version constraints.
+2. Record exact resolved dependency locks in compiled models.
+3. Enforce immutability of published model releases.
+4. Add dependency-graph conflict detection for installation and update.
+5. Make installed model generations reproducible and atomically activatable.
+
+### Phase 3: Type history
+
+1. Compare compiled types with predecessor releases.
+2. Retain the predecessor revision for unchanged types.
+3. Record tombstones for removed types.
+4. Produce human-readable model/type difference reports.
+5. Classify straightforward structural changes.
+
+### Phase 4: Runtime compatibility checks
+
+1. Compare incoming and installed type revisions.
+2. Quarantine deltas requiring unavailable newer model knowledge.
+3. Implement current-range and facet validation.
+4. Implement role-filling validation.
+5. Implement cardinality and membership validation.
+6. Integrate model update and migration policy.
+7. Cache only compatibility results that are genuinely unconditional.
+
+### Phase 5: Authoring and release tooling
+
+1. Check lower and upper dependency bounds in CI.
+2. Warn about unversioned published imports.
+3. Require modeller declarations for behavioural compatibility or migrations
+   that cannot be inferred.
+4. Present dependency and migration consequences before publishing or
+   installing updates.
+
+## 14. Decisions
 
 The work is intentionally split so the universe can reboot before complete
 compatibility reasoning exists.
@@ -767,29 +960,22 @@ releases or reject older incompatible deltas.
 | Compatibility scope | Automate structural and authorization checks; do not claim general behavioural equivalence. |
 | Duplicate identity | Derive `deltaId` from author and exact signed payload bytes. |
 | Ordering identity | Keep operation key separate from exact delta identity. |
+| DeltaStore key | Include a delta-id suffix in the local storage key to retain same-author equivocations. |
 | Rollout | Capture irreversible provenance during reboot; implement deeper checking in later phases. |
 
-## 15. Open Questions
+## 15. Remaining Non-Blocking Questions
 
-The following choices remain to be specified before implementation or before
-the phase that needs them. For phase 0, the `MAJOR.MINOR` model-version syntax
-and the final-`@` revisioned-type separator are now fixed.
+The permanently binding reboot contracts are now fixed. The questions below do
+not block phase 0 or phase 1 implementation; they are policy and tooling items
+for later phases.
 
 1. Which compiled fields count as semantic when deciding whether a type revision
    advances?
-2. How are dependency constraints expressed in ARC source and represented in a
-   `DomeinFile`?
-3. Where are tombstones and transition classifications published: in the
-   `DomeinFile`, a sidecar, or the model manifest?
-4. Which model updates may be installed automatically and which require user
+2. Which model updates may be installed automatically and which require user
    consent?
-5. How should unresolved deltas be retained, retried and communicated to peers?
-6. Should the DeltaStore document id eventually include a `deltaId` suffix to
-   preserve same-author equivocations?
-7. Which processing dispositions are terminal and which should be retried after
+3. How should unresolved deltas be retained, retried and communicated to peers?
+4. Which processing dispositions are terminal and which should be retried after
    a model, data or predecessor update?
-8. How is canonical serialization specified and tested across PureScript and
-   JavaScript implementations?
 
 ## 16. Strategic Conclusion
 
