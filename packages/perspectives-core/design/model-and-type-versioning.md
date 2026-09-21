@@ -54,6 +54,16 @@ model version:   3.2
 model release:   model://example.org#Sales@3.2
 ```
 
+For this rollout, model versions use only the `MAJOR.MINOR` subset of SemVer:
+
+```text
+MAJOR.MINOR
+```
+
+Both components are decimal non-negative integers. Patch numbers,
+pre-release labels and build metadata are intentionally out of scope for this
+delta format version.
+
 Published model releases must be immutable:
 
 ```text
@@ -69,6 +79,11 @@ content identity.
 A stable type identifier identifies a conceptual type across model versions.
 It contains the stable identifier of its owning model. The owning model does
 not therefore need to be repeated in a versioned type reference.
+
+In delta format version 2, stable model and type identifiers are carried
+unescaped and must therefore not themselves contain `@`. The final `@` in a
+revisioned reference separates the stable identifier from its `MAJOR.MINOR`
+revision suffix.
 
 ### 2.3 Type revision
 
@@ -317,8 +332,8 @@ perspectives or actions. In that case the compiled role semantics changed and
 its revision may need to advance.
 
 A conservative first implementation may stamp every type with the current model
-version. This is noisy but safe. Semantic last-change detection can be added
-later without changing the delta format.
+version of the release being compiled. This is noisy but safe. Semantic
+last-change detection can be added later without changing the delta format.
 
 ### 7.3 Tombstones
 
@@ -403,9 +418,19 @@ The deserializer splits the final version suffix and reconstructs
 `RevisionedType`. Normal runtime type lookup continues to use the stable,
 unversioned type identifier.
 
-The exact grammar and `SemVer` representation must be specified before
-implementation. It must be unambiguous for all valid stable type identifiers
-and future version syntax.
+For delta format version 2, the syntax is fixed as:
+
+```text
+revisioned-type-reference := <stable-type-identifier> "@" <major> "." <minor>
+major                    := DIGIT+
+minor                    := DIGIT+
+```
+
+Readers split on the final `@` and validate the suffix as `MAJOR.MINOR`.
+Because `@` is reserved as the separator, no escaping scheme is required in
+this format version. If a future rollout needs richer version syntax or `@`
+inside stable identifiers, that requires a new delta format version rather than
+reinterpretation of version 2 payloads.
 
 This representation is preferred over a separate `typeRevisions` array because
 it:
@@ -423,6 +448,15 @@ provides an explicit decoder dispatch point for future delta evolution.
 Readers should dispatch by format version rather than infer a format from
 missing fields. Multiple historical formats can then remain readable without
 rewriting signed payloads.
+
+For this rollout:
+
+- legacy deltas without an explicit `deltaFormatVersion` are treated as format
+  1;
+- reboot-era deltas with revisioned type references use `deltaFormatVersion =
+  2`;
+- readers dispatch explicitly on that version and must not guess a newer format
+  from missing or extra fields.
 
 ## 9. Runtime Policy for Version Differences
 
@@ -526,7 +560,7 @@ and conflict resolution. It does not prove that two payloads are identical.
 Introduce a content-derived delta identifier:
 
 ```text
-deltaId = SHA-256(author || exact signed payload bytes)
+deltaId = SHA-256(author || exact UTF-8 bytes of the signed payload string)
 ```
 
 The signature need not be included. Signing the same exact payload twice should
@@ -668,8 +702,8 @@ These are difficult or impossible to retrofit into signed history.
 For the reboot release:
 
 1. Add type revisions to compiled type representations.
-2. Initially stamp types conservatively if last-change calculation is not yet
-   implemented.
+2. Initially stamp every compiled type in a release with that release's own
+   model version if semantic last-change calculation is not yet implemented.
 3. Serialize type revisions into every newly authored delta.
 4. Deserialize revisioned references while continuing existing execution
    behaviour.
@@ -738,27 +772,24 @@ releases or reject older incompatible deltas.
 ## 15. Open Questions
 
 The following choices remain to be specified before implementation or before
-the phase that needs them:
+the phase that needs them. For phase 0, the `MAJOR.MINOR` model-version syntax
+and the final-`@` revisioned-type separator are now fixed.
 
-1. What exact `SemVer` grammar will model releases support beyond the current
-   major/minor form?
-2. What separator and escaping rules make compact revisioned type references
-   permanently unambiguous?
-3. Which compiled fields count as semantic when deciding whether a type revision
+1. Which compiled fields count as semantic when deciding whether a type revision
    advances?
-4. How are dependency constraints expressed in ARC source and represented in a
+2. How are dependency constraints expressed in ARC source and represented in a
    `DomeinFile`?
-5. Where are tombstones and transition classifications published: in the
+3. Where are tombstones and transition classifications published: in the
    `DomeinFile`, a sidecar, or the model manifest?
-6. Which model updates may be installed automatically and which require user
+4. Which model updates may be installed automatically and which require user
    consent?
-7. How should unresolved deltas be retained, retried and communicated to peers?
-8. Should the DeltaStore document id eventually include a `deltaId` suffix to
+5. How should unresolved deltas be retained, retried and communicated to peers?
+6. Should the DeltaStore document id eventually include a `deltaId` suffix to
    preserve same-author equivocations?
-9. Which processing dispositions are terminal and which should be retried after
+7. Which processing dispositions are terminal and which should be retried after
    a model, data or predecessor update?
-10. How is canonical serialization specified and tested across PureScript and
-    JavaScript implementations?
+8. How is canonical serialization specified and tested across PureScript and
+   JavaScript implementations?
 
 ## 16. Strategic Conclusion
 
