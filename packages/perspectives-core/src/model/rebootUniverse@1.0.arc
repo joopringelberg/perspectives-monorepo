@@ -868,7 +868,7 @@ domain model://joopringelberg.nl#RebootUniverse@1.0
           do for Tester
             letA 
               pagecollection <- hyp:HyperTextApp >> hyp:HyperTexts$PublicPageCollections >> binding >> context
-              page <- create context hyp:PublicPage bound to hyp:PublicPageCollection$PublicPages in pagecollection
+              page <- create context hyp:PublicPage named "StartPage" bound to hyp:PublicPageCollection$PublicPages in pagecollection
               -- Now state PublicPages$PageAvailable is triggered, creating the Page$Author in the public page.
               block1 <- create role hyp:Page$TextBlocks in page >> binding >> context
               block2 <- create role hyp:Page$TextBlocks in page >> binding >> context
@@ -895,7 +895,7 @@ domain model://joopringelberg.nl#RebootUniverse@1.0
           do for Tester
             letA 
               pagecollection <- hyp:HyperTextApp >> hyp:HyperTexts$PublicPageCollections >> binding >> context
-              page <- create context hyp:PublicPage bound to hyp:PublicPageCollection$PublicPages in pagecollection
+              page <- create context hyp:PublicPage named "Instructions" bound to hyp:PublicPageCollection$PublicPages in pagecollection
               block1 <- create role hyp:Page$TextBlocks in page >> binding >> context
             in
               Title = "Instructions" for page
