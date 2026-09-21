@@ -16,6 +16,7 @@ This index provides an overview of the technical documentation in `packages/pers
 | [PDR → Frontend Messaging](pdr-messaging.md) | The two mechanisms the PDR uses to push messages to the browser frontend: the status-message channel (`setPDRStatus`) and the reactive warning queue, plus how a developer wires up each one. |
 | [PDR Client Data Structures](pdr-client-data-structures.md) | All data structures the PDR serialises and sends to its clients (`mycontexts` / `perspectives-react`). Starting from `ScreenDefinition` the document descends into `Perspective`, `Roleinstancewithprops`, and every referenced type, including the developer-tool types `InspectableContext` and `InspectableRole`. |
 | [Structured Logging](structured-logging.md) | The runtime-configurable logging layer: `LogLevel`, `LogTopic`, and `LogConfig` types; the `pdrLog` entry point and its pre-bound convenience aliases; `MonadPerspectives` helpers for changing thresholds at runtime; and three JavaScript-callable functions (`setLogLevelForTopic`, `disableLogTopic`, `disableLogging`) that allow reconfiguring the log from the browser DevTools console without restarting. Also includes a migration guide for replacing legacy `log`/`logPerspectivesError` call sites and instructions for adding new topics. |
+| [Database Backend Options](database-backend-options.md) | Research note for issue #497: inventory of current persistence capabilities used by `Perspectives.Couchdb`, `Perspectives.Couchdb.Revision`, `Perspectives.Persistence.CouchdbFunctions`, and `Perspectives.Persistence.API`; candidate non-CouchDB backend options; and an incremental migration plan. |
 
 ### Query System
 
@@ -62,6 +63,8 @@ The table below lists every PureScript module that is referenced in at least one
 | `Perspectives.CollectAffectedContexts` | [Query Inversion](query-inversion.md), [Role-Binding Query Analysis](role-binding-query-analysis.md) |
 | `Perspectives.ContextStateCompiler` | [Transaction Execution Process](transaction-execution.md) |
 | `Perspectives.CoreTypes` | [The Query Subsystem](query-subsystem.md), [Structured Logging](structured-logging.md) |
+| `Perspectives.Couchdb` | [Database Backend Options](database-backend-options.md) |
+| `Perspectives.Couchdb.Revision` | [Database Backend Options](database-backend-options.md) |
 | `Perspectives.Conversations.Parser` | [Conversation Text Format and Parser](conversation-text-format.md) |
 | `Perspectives.Conversations.Renderer` | [Conversation Text Format and Parser](conversation-text-format.md) |
 | `Perspectives.ErrorLogging` | [PDR → Frontend Messaging](pdr-messaging.md) |
@@ -78,6 +81,8 @@ The table below lists every PureScript module that is referenced in at least one
 | `Perspectives.Parsing.Arc.Expression.AST` | [The Query Subsystem](query-subsystem.md) |
 | `Perspectives.Parsing.Arc.PhaseThree` | [Type Comparison](type-comparison.md) |
 | `Perspectives.Persistence.DeltaStore` | [Delta Ordering and Conflict Resolution](delta-ordering.md) |
+| `Perspectives.Persistence.CouchdbFunctions` | [Database Backend Options](database-backend-options.md) |
+| `Perspectives.Persistence.API` | [Database Backend Options](database-backend-options.md) |
 | `Perspectives.Persistence.PendingTransactionStore` | [Delta Ordering and Conflict Resolution](delta-ordering.md) |
 | `Perspectives.Persistence.ResourceVersionStore` | [Delta Ordering and Conflict Resolution](delta-ordering.md) |
 | `Perspectives.PerspectivesState` | [PDR → Frontend Messaging](pdr-messaging.md), [Structured Logging](structured-logging.md) |
