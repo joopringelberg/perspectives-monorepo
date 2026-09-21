@@ -795,6 +795,25 @@ serialization bytes changes both signatures and `deltaId` values.
 The work is intentionally split so the universe can reboot before complete
 compatibility reasoning exists.
 
+The phase-0/phase-1 implementation contract is:
+
+- `deltaFormatVersion` is explicit and reader dispatch is by version.
+- Revisioned type references use `stable-type-identifier@MAJOR.MINOR`.
+- `@` is reserved as the separator in delta format version 2.
+- Every explicit type reference in a delta carries provenance, including the
+  subject.
+- Canonical serialization is part of the permanent signed-data contract and must
+  produce identical UTF-8 bytes in PureScript and JavaScript.
+- `deltaId` is derived from `author || exact signed payload bytes`, not from a
+  re-serialized value.
+- Ordering uses the operation key, while exact duplicate detection uses
+  `deltaId`.
+- Same-author equivocations are retained distinctly in the DeltaStore by adding
+  a local storage-key suffix such as `operationKey|shortDeltaId`.
+- Local storage preserves the exact signed payload bytes; re-serialization
+  before persistence is not allowed.
+- Legacy deltas remain readable under their legacy decoding rules.
+
 ### Phase 0: Freeze the permanent contracts
 
 This phase is the handoff target for the cloud agent. Before rebooting, the
@@ -835,6 +854,31 @@ For the reboot release, the implementation must:
 This phase captures historical evidence and preserves irreversible provenance.
 It does not yet require new model downloads, dependency lock enforcement or
 full compatibility rejection logic.
+
+### Acceptance criteria for the reboot work
+
+Phase 0 and phase 1 are accepted only when all of the following are true:
+
+1. The same logical delta serializes to the same canonical bytes in both
+   runtimes.
+2. Golden fixtures for canonical JSON are byte-for-byte identical across
+   implementations.
+3. `deltaId` matches the exact signed payload bytes.
+4. Same-author equivocations remain distinct in the DeltaStore.
+5. Old deltas still decode under legacy format rules.
+6. The runtime preserves provenance without claiming semantic compatibility
+   guarantees that belong to later phases.
+
+### Delivery order for implementation
+
+Implement the reboot work in this order:
+
+1. Canonical serializer plus cross-language golden tests.
+2. Format-version parser and serializer.
+3. Revisioned type references in delta payloads.
+4. `deltaId` computation and exact duplicate detection.
+5. DeltaStore key update for same-author equivocation retention.
+6. Phase-1 metadata and disposition tracking.
 
 ### Phase 2: Model dependency administration
 
