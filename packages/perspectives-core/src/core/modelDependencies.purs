@@ -292,6 +292,21 @@ modelURIReadable = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$External$
 versionedModelManifestModelCuid :: String
 versionedModelManifestModelCuid = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$External$k8068785f1"
 
+modelDependency :: String
+modelDependency = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$ModelDependency"
+
+modelDependencyModelId :: String
+modelDependencyModelId = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$ModelDependency$ModelId"
+
+modelDependencyDeclaredRequirement :: String
+modelDependencyDeclaredRequirement = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$ModelDependency$DeclaredRequirement"
+
+modelDependencyResolvedModel :: String
+modelDependencyResolvedModel = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$ModelDependency$ResolvedModel"
+
+modelDependencyResolvedVersion :: String
+modelDependencyResolvedVersion = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$ModelDependency$ResolvedVersion"
+
 manifestsRole :: String
 manifestsRole = "model://perspectives.domains#xyfxpg3lzq$r6cizdyven$murhlatx75"
 

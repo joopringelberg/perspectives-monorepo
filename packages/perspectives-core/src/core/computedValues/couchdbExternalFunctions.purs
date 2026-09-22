@@ -62,19 +62,20 @@ import Perspectives.Assignment.StateCache (clearModelStates)
 import Perspectives.Assignment.Update (withAuthoringRole)
 import Perspectives.Authenticate (getMyPublicKey, getMyTransportPublicKey)
 import Perspectives.ContextAndRole (changeRol_isMe, context_id, rol_id)
-import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), InformedAssumption(..), MonadPerspectives, MonadPerspectivesTransaction, mkLibEffect1, mkLibEffect2, mkLibEffect3, mkLibFunc2)
+import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), InformedAssumption(..), MonadPerspectives, MonadPerspectivesTransaction, mkLibEffect1, mkLibEffect2, mkLibEffect3, mkLibFunc2, (##>>))
 import Perspectives.Couchdb (DatabaseName, SecurityDocument(..))
 import Perspectives.Couchdb.Revision (Revision_)
 import Perspectives.Deltas (addCreatedContextToTransaction)
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
 import Perspectives.DomeinCache (AttachmentFiles, addAttachments, fetchTranslations, getPatchAndBuild, getVersionToInstall, saveCachedDomeinFile, storeDomeinFileInCouchdbPreservingAttachments)
-import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, addDownStreamAutomaticEffect, addDownStreamNotification, removeDownStreamAutomaticEffect, removeDownStreamNotification)
+import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, ModelDependency, addDownStreamAutomaticEffect, addDownStreamNotification, removeDownStreamAutomaticEffect, removeDownStreamNotification)
 import Perspectives.Error.Boundaries (handleDomeinFileError, handleExternalFunctionError, handleExternalStatementError)
 import Perspectives.External.HiddenFunctionCache (HiddenFunctionDescription)
 import Perspectives.Identifiers (Namespace, getFirstMatch, isModelUri, modelUri2ManifestUrl, modelUri2ModelUrl, modelUriVersion, unversionedModelUri, url2Authority)
 import Perspectives.Instances.Builders (constructContext, createAndAddRoleInstance, createAndAddRoleInstance_)
 import Perspectives.Instances.CreateContext (constructEmptyContext)
 import Perspectives.Instances.Me (computeMe_)
+import Perspectives.Instances.ObjectGetters (context)
 import Perspectives.InvertedQuery.Storable (StoredQueries, clearInvertedQueriesDatabase, getInvertedQueriesOfModel, removeInvertedQueriesContributedByModel, saveInvertedQueries)
 import Perspectives.Logging (debugInstall, errorInstall, infoInstall, traceInstall, warnInstall)
 import Perspectives.ModelDependencies as DEP
@@ -413,7 +414,7 @@ installModelLocally (Tuple dfrecord@{ id, namespace, referredModels, invertedQue
   lift (saveInvertedQueries storedQueries)
 
   if isInitialLoad' then do
-    createInitialInstances unversionedModelname versionedModelName patch build versionedModelManifest
+    createInitialInstances unversionedModelname versionedModelName patch build versionedModelManifest dfrecord.modelDependencies
     -- Add new dependencies.
     for_ referredModels \dfid' -> do
       mmodel <- lift $ tryGetPerspectEntiteit dfid'
@@ -449,8 +450,8 @@ installModelLocally (Tuple dfrecord@{ id, namespace, referredModels, invertedQue
   -- Now uncache the DomeinFile, as it no longer holds the right revision, neither has the attachments.
   lift $ decache id
 
-createInitialInstances :: String -> String -> String -> String -> Maybe RoleInstance -> MonadPerspectivesTransaction Unit
-createInitialInstances unversionedModelname versionedModelName patch build versionedModelManifest = do
+createInitialInstances :: String -> String -> String -> String -> Maybe RoleInstance -> Maybe (Array ModelDependency) -> MonadPerspectivesTransaction Unit
+createInitialInstances unversionedModelname versionedModelName patch build versionedModelManifest modelDependencies = do
   lift $ traceInstall ("Entering `createInitialInstances` for " <> versionedModelName)
   -- If and only if the model we load is model:System, create both the system context and the system user.
   -- This is part of the installation routine.
@@ -497,7 +498,7 @@ createInitialInstances unversionedModelname versionedModelName patch build versi
     -- Create a role instance filled with the VersionedModelManifest.
     -- Add the versionedModelName as the value of the property ModelToRemove.
     -- Set the property InstalledPatch.
-    void $ createAndAddRoleInstance (EnumeratedRoleType DEP.modelsInUse) mySystem
+    _ <- createAndAddRoleInstance (EnumeratedRoleType DEP.modelsInUse) mySystem
       ( RolSerialization
           { id: Nothing
           , properties: PropertySerialization
@@ -510,6 +511,30 @@ createInitialInstances unversionedModelname versionedModelName patch build versi
           , binding: unwrap <$> versionedModelManifest
           }
       )
+    case versionedModelManifest, modelDependencies of
+      _, Nothing -> pure unit
+      Nothing, _ -> pure unit
+      Just manifestExternal, Just dependencies -> do
+        manifestContext <- lift (manifestExternal ##>> context)
+        for_ dependencies $ createVersionedModelManifestDependency manifestContext
+
+createVersionedModelManifestDependency :: ContextInstance -> ModelDependency -> MonadPerspectivesTransaction Unit
+createVersionedModelManifestDependency manifestContext dependency =
+  void $ createAndAddRoleInstance (EnumeratedRoleType DEP.modelDependency) (unwrap manifestContext)
+    ( RolSerialization
+        { id: Nothing
+        , properties: PropertySerialization (fromFoldable $ modelDependencyPropertiesForManifest dependency)
+        , binding: Nothing
+        }
+    )
+
+modelDependencyPropertiesForManifest :: ModelDependency -> Array (Tuple String (Array String))
+modelDependencyPropertiesForManifest dependency =
+  [ Tuple DEP.modelDependencyModelId [ unwrap (dependency.modelId) ]
+  , Tuple DEP.modelDependencyResolvedModel [ unwrap (dependency.modelId) ]
+  ]
+    <> maybe [] (\requirement -> [ Tuple DEP.modelDependencyDeclaredRequirement [ requirement ] ]) dependency.declaredRequirement
+    <> maybe [] (\version -> [ Tuple DEP.modelDependencyResolvedVersion [ version ] ]) dependency.resolvedVersion
 
 -- | Creates instances in a transaction where the authoring role is PerspectivesSystem$User (the 'subject' of the delta: the role that must have the right perspective), of:
 -- |    * PerspectivesSystem

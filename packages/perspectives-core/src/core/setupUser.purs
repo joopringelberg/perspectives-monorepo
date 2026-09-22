@@ -95,6 +95,6 @@ reSetupUser = do
   -- INSTALLATION / MODEL DEPENDENCY HERE: we assume these models will have been installed.
   void $ runMonadPerspectivesTransaction (ENR $ EnumeratedRoleType sysUser)
     do
-      createInitialInstances systemModelName systemModelName "0" "0" Nothing
-      createInitialInstances bodiesWithAccountsModelName bodiesWithAccountsModelName "0" "0" Nothing
-      createInitialInstances couchdbManagementModelName couchdbManagementModelName "0" "0" Nothing
+      createInitialInstances systemModelName systemModelName "0" "0" Nothing Nothing
+      createInitialInstances bodiesWithAccountsModelName bodiesWithAccountsModelName "0" "0" Nothing Nothing
+      createInitialInstances couchdbManagementModelName couchdbManagementModelName "0" "0" Nothing Nothing

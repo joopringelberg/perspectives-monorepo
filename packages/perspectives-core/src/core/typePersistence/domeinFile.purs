@@ -61,7 +61,6 @@ newtype DomeinFile f = DomeinFile (DomeinFileRecord f)
 type ModelDependency =
   { modelId :: ModelUri Stable
   , declaredRequirement :: Maybe String
-  , resolvedModel :: Maybe (ModelUri Stable)
   , resolvedVersion :: Maybe String
   }
 
@@ -271,7 +270,6 @@ deriveModelDependencies declared resolved =
     ( \(ModelUri declaredModel) (ModelUri resolvedModel) ->
         { modelId: ModelUri $ unversionedModelUri resolvedModel
         , declaredRequirement: modelUriVersion declaredModel
-        , resolvedModel: Just (ModelUri resolvedModel)
         , resolvedVersion: modelUriVersion resolvedModel
         }
     )
