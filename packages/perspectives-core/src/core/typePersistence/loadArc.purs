@@ -111,9 +111,12 @@ loadAndCompileArcFile_ dfid text saveInCache modelCuid modelUriReadable mbasedOn
 -- | 2. the inverted queries in the local inverted-query database,
 -- | 3. the stable-id mapping as `stableIdMapping.json` attachment on the local model document.
 -- | If compilation fails, returns the compilation errors unchanged.
--- | NOTE: this function is only used from module Test.SinglePDRScaffold
-loadCompileAndStoreArcFile_ :: ModelUri Stable -> Source -> Boolean -> String -> String -> Maybe String -> MonadPerspectivesTransaction (Either (Array PerspectivesError) (Tuple (DomeinFile Stable) (Tuple StoredQueries StableIdMapping)))
-loadCompileAndStoreArcFile_ dfid text saveInCache modelCuid modelUriReadable _mbasedOnVersion = do
+-- | `mExistingMapping`, if given, is reused as the basis for stable-id assignment (e.g. the mapping
+-- | produced by a previous compilation of the same source elsewhere), so no new CUIDs are coined for
+-- | the types and individuals it already covers.
+-- | NOTE: this function is only used from module Test.SinglePDRScaffold and Test.Layer3Scaffold
+loadCompileAndStoreArcFile_ :: ModelUri Stable -> Source -> Boolean -> String -> String -> Maybe String -> Maybe StableIdMapping -> MonadPerspectivesTransaction (Either (Array PerspectivesError) (Tuple (DomeinFile Stable) (Tuple StoredQueries StableIdMapping)))
+loadCompileAndStoreArcFile_ dfid text saveInCache modelCuid modelUriReadable _mbasedOnVersion mExistingMapping = do
   version <- case modelUriVersion (unwrap dfid) of
     Nothing -> throwError $ error ("ModelUri " <> show dfid <> " is expected to be versioned.")
     Just v -> pure v
@@ -121,7 +124,7 @@ loadCompileAndStoreArcFile_ dfid text saveInCache modelCuid modelUriReadable _mb
     (over ModelUri unversionedModelUri dfid)
     text
     saveInCache
-    Nothing
+    mExistingMapping
     modelCuid
     modelUriReadable
     (Just version)

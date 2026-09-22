@@ -161,6 +161,7 @@ getSinglePDRResults cfg = do
                       (unsafePartial modelUri2LocalName $ unversionedModelUri cfg.testModel)
                       modelUriReadable
                       basedOnVersion
+                      Nothing
                   )
                 case compilationResult of
                   Left errs -> throwError $ error ("Failed to compile and store test model: " <> show errs)

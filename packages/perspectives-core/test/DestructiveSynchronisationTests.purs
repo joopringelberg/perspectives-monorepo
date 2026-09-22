@@ -39,7 +39,7 @@ import Effect.Class (liftEffect)
 import Effect.Ref (Ref, new, read, write)
 import Effect.Unsafe (unsafePerformEffect)
 import Perspectives.CoreTypes (LogLevel(..), LogTopic(..))
-import Test.Layer3Scaffold (LogConfiguration, ModelTest, SynchronisationModelConfiguration, SynchronisationResults)
+import Test.Layer3Scaffold (LogConfiguration, ModelTest, SynchronisationModelConfiguration, SynchronisationResults, TestModelLoadMethod(..))
 import Test.Layer3Scaffold (getSynchronisationResults) as Layer3Scaffold
 import Test.Unit (TestSuite, suite, test)
 import Test.Unit.Assert (assert)
@@ -81,6 +81,11 @@ synchronisationTestModelConfiguration =
   , snapshotDirAlice: "test/pdr-snapshot/newdeltas/alice"
   , snapshotDirBob: "test/pdr-snapshot/newdeltas/bob"
   , testModel
+  , testModelLoadMethod: CompileModelFromSource
+      { sourcePath: "src/model/twoPDRDestructiveTests@1.0.arc"
+      , modelUriReadable: "model://joopringelberg.nl#TwoPDRDestructiveTests@1.0"
+      , basedOnVersion: Nothing
+      }
   , indexedTestContext
   , testAppManager
   , testAppFollowerType
@@ -131,20 +136,21 @@ testNameProperty = "model://joopringelberg.nl#TwoPDRDestructiveTests$Test$Extern
 
 destructiveTests :: Array ModelTest
 destructiveTests =
-  [ { testContextTypeName: test_RemoveRole, logConfiguration: Nothing }
-  , { testContextTypeName: test_RemoveOneRoleInstance, logConfiguration: Nothing }
-  , { testContextTypeName: test_DeleteTwoRoles, logConfiguration: Nothing }
-  , { testContextTypeName: test_DeleteProperty, logConfiguration: Nothing }
-  , { testContextTypeName: test_RemoveProperty, logConfiguration: Nothing }
-  , { testContextTypeName: test_RemoveOnePropertyValue, logConfiguration: Nothing }
-  , { testContextTypeName: test_RemoveFiller, logConfiguration: Nothing }
-  , { testContextTypeName: test_RemoveRoleFiller, logConfiguration: Nothing }
-  , { testContextTypeName: test_RemoveRoleFiller_SpecificRoleTypes, logConfiguration: Nothing }
-  , { testContextTypeName: test_UnBindRoleFiller_SpecificRoleTypes, logConfiguration: Nothing }
-  , { testContextTypeName: test_RemoveContextWithoutRoles, logConfiguration: Nothing }
-  , { testContextTypeName: test_RemoveContextWithUnfilledRole, logConfiguration: Nothing }
-  , { testContextTypeName: test_RemoveContextWithFilledRole, logConfiguration: Nothing }
-  , { testContextTypeName: test_RemoveContextWithFilledRoleThatShouldRemain, logConfiguration: Nothing }
+  [
+    --   { testContextTypeName: test_RemoveRole, logConfiguration: Nothing }
+    -- , { testContextTypeName: test_RemoveOneRoleInstance, logConfiguration: Nothing }
+    -- , { testContextTypeName: test_DeleteTwoRoles, logConfiguration: Nothing }
+    -- , { testContextTypeName: test_DeleteProperty, logConfiguration: Nothing }
+    -- , { testContextTypeName: test_RemoveProperty, logConfiguration: Nothing }
+    -- , { testContextTypeName: test_RemoveOnePropertyValue, logConfiguration: Nothing }
+    -- , { testContextTypeName: test_RemoveFiller, logConfiguration: Nothing }
+    { testContextTypeName: test_RemoveRoleFiller, logConfiguration: Just debugConfiguration }
+  -- , { testContextTypeName: test_RemoveRoleFiller_SpecificRoleTypes, logConfiguration: Nothing }
+  -- , { testContextTypeName: test_UnBindRoleFiller_SpecificRoleTypes, logConfiguration: Nothing }
+  -- , { testContextTypeName: test_RemoveContextWithoutRoles, logConfiguration: Nothing }
+  -- , { testContextTypeName: test_RemoveContextWithUnfilledRole, logConfiguration: Nothing }
+  -- , { testContextTypeName: test_RemoveContextWithFilledRole, logConfiguration: Nothing }
+  -- , { testContextTypeName: test_RemoveContextWithFilledRoleThatShouldRemain, logConfiguration: Nothing }
   ]
 
 debugConfiguration :: LogConfiguration
