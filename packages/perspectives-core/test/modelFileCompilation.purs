@@ -36,7 +36,7 @@
 -- | any are present.
 -- |
 -- | Run with:
--- |   pnpm run test:modelfiles
+-- |   pnpm run test:compileModelsFromFile
 
 module Test.ModelFileCompilation where
 
@@ -112,7 +112,7 @@ main = launchAff_ do
 -- |   ]
 modelFilePaths :: Array String
 modelFilePaths =
-  ["/Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/src/model/testState@1.0.arc"]
+  [ "/Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/src/model/couchdbManagement@12.4.arc" ]
 
 -- | Directory where the PDR snapshot is cached between test runs.
 -- | Delete this directory to force a full PDR rebuild on the next run.

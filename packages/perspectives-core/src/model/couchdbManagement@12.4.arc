@@ -1348,6 +1348,10 @@ domain model://perspectives.domains#CouchdbManagement@12.4
       perspective on BasedOnVersion
         only (Create, Fill, Remove, CreateAndFill)
         props (VersionName, ModelURI) verbs (Consult)
+
+      perspective on ModelDependency
+        only (Create, Remove, Delete)
+        props (ModelId, DeclaredRequirement, ResolvedVersion, ResolvedModel) verbs (Consult, SetPropertyValue, DeleteProperty)
       
       action GenerateFirstHelp
         callEffect help:InitializeConversations( extern >> VersionedModelURI, extern )
@@ -1457,3 +1461,14 @@ domain model://perspectives.domains#CouchdbManagement@12.4
     aspect thing sys:ContextWithNotification$Notifications
     -- We need this in order to fetch the sidecar file with mappings from readable to stable identifiers.
     context BasedOnVersion filledBy VersionedModelManifest
+    -- PDRDEPENDENCY
+    -- Recording model import provenance. These role instances will be created by the PDR automatically during the import process.
+    thing ModelDependency (relational)
+      -- The ModelUri Stable
+      property ModelId (String)
+      -- At least a MAJOR.MINOR version.
+      property DeclaredRequirement (String)
+      -- The ModelUri that the requirement resolved to (notice: this should in general match the ModelId.)
+      property ResolvedModel (String)
+      -- The version of the model that satisfies the declared requirement.
+      property ResolvedVersion (String)
