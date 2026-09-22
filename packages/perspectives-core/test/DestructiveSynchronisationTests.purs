@@ -136,21 +136,20 @@ testNameProperty = "model://joopringelberg.nl#TwoPDRDestructiveTests$Test$Extern
 
 destructiveTests :: Array ModelTest
 destructiveTests =
-  [
-    --   { testContextTypeName: test_RemoveRole, logConfiguration: Nothing }
-    -- , { testContextTypeName: test_RemoveOneRoleInstance, logConfiguration: Nothing }
-    -- , { testContextTypeName: test_DeleteTwoRoles, logConfiguration: Nothing }
-    -- , { testContextTypeName: test_DeleteProperty, logConfiguration: Nothing }
-    -- , { testContextTypeName: test_RemoveProperty, logConfiguration: Nothing }
-    -- , { testContextTypeName: test_RemoveOnePropertyValue, logConfiguration: Nothing }
-    -- , { testContextTypeName: test_RemoveFiller, logConfiguration: Nothing }
-    { testContextTypeName: test_RemoveRoleFiller, logConfiguration: Just debugConfiguration }
-  -- , { testContextTypeName: test_RemoveRoleFiller_SpecificRoleTypes, logConfiguration: Nothing }
-  -- , { testContextTypeName: test_UnBindRoleFiller_SpecificRoleTypes, logConfiguration: Nothing }
-  -- , { testContextTypeName: test_RemoveContextWithoutRoles, logConfiguration: Nothing }
-  -- , { testContextTypeName: test_RemoveContextWithUnfilledRole, logConfiguration: Nothing }
-  -- , { testContextTypeName: test_RemoveContextWithFilledRole, logConfiguration: Nothing }
-  -- , { testContextTypeName: test_RemoveContextWithFilledRoleThatShouldRemain, logConfiguration: Nothing }
+  [ { testContextTypeName: test_RemoveRole, logConfiguration: Nothing }
+  , { testContextTypeName: test_RemoveOneRoleInstance, logConfiguration: Nothing }
+  , { testContextTypeName: test_DeleteTwoRoles, logConfiguration: Nothing }
+  , { testContextTypeName: test_DeleteProperty, logConfiguration: Nothing }
+  , { testContextTypeName: test_RemoveProperty, logConfiguration: Nothing }
+  , { testContextTypeName: test_RemoveOnePropertyValue, logConfiguration: Nothing }
+  , { testContextTypeName: test_RemoveFiller, logConfiguration: Nothing }
+  , { testContextTypeName: test_RemoveRoleFiller, logConfiguration: Nothing }
+  , { testContextTypeName: test_RemoveRoleFiller_SpecificRoleTypes, logConfiguration: Nothing }
+  , { testContextTypeName: test_UnBindRoleFiller_SpecificRoleTypes, logConfiguration: Nothing }
+  , { testContextTypeName: test_RemoveContextWithoutRoles, logConfiguration: Nothing }
+  , { testContextTypeName: test_RemoveContextWithUnfilledRole, logConfiguration: Nothing }
+  , { testContextTypeName: test_RemoveContextWithFilledRole, logConfiguration: Nothing }
+  , { testContextTypeName: test_RemoveContextWithFilledRoleThatShouldRemain, logConfiguration: Nothing }
   ]
 
 debugConfiguration :: LogConfiguration

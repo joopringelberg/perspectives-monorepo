@@ -527,7 +527,7 @@ domain model://joopringelberg.nl#TwoPDRDestructiveTests@1.0
     user Follower filledBy (sys:TheWorld$PerspectivesUsers)
       aspect mm:Test$Follower
       perspective on extern
-        props (TestSucceeded) verbs (Consult)
+        props (TestSucceeded, TestFinished) verbs (Consult)
       perspective on TestRole10
         props (P) verbs (Consult)
       perspective on TestRole11
@@ -587,7 +587,7 @@ domain model://joopringelberg.nl#TwoPDRDestructiveTests@1.0
     user Follower filledBy (sys:TheWorld$PerspectivesUsers)
       aspect mm:Test$Follower
       perspective on extern
-        props (TestSucceeded) verbs (Consult)
+        props (TestSucceeded, TestFinished) verbs (Consult)
       perspective on TestRole12
         props (P) verbs (Consult)
       perspective on TestRole13
