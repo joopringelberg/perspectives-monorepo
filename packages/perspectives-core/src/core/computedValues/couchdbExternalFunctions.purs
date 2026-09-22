@@ -416,7 +416,7 @@ installModelLocally (Tuple dfrecord@{ id, namespace, referredModels, invertedQue
   lift (saveInvertedQueries storedQueries)
 
   if isInitialLoad' then do
-    createInitialInstances unversionedModelname versionedModelName patch build versionedModelManifest dfrecord.modelDependencies
+    createInitialInstances unversionedModelname versionedModelName patch build versionedModelManifest
     -- Add new dependencies.
     for_ referredModels \dfid' -> do
       mmodel <- lift $ tryGetPerspectEntiteit dfid'
@@ -452,8 +452,8 @@ installModelLocally (Tuple dfrecord@{ id, namespace, referredModels, invertedQue
   -- Now uncache the DomeinFile, as it no longer holds the right revision, neither has the attachments.
   lift $ decache id
 
-createInitialInstances :: String -> String -> String -> String -> Maybe RoleInstance -> Maybe (Array ModelDependency) -> MonadPerspectivesTransaction Unit
-createInitialInstances unversionedModelname versionedModelName patch build versionedModelManifest modelDependencies = do
+createInitialInstances :: String -> String -> String -> String -> Maybe RoleInstance -> MonadPerspectivesTransaction Unit
+createInitialInstances unversionedModelname versionedModelName patch build versionedModelManifest = do
   lift $ traceInstall ("Entering `createInitialInstances` for " <> versionedModelName)
   -- If and only if the model we load is model:System, create both the system context and the system user.
   -- This is part of the installation routine.
@@ -500,7 +500,7 @@ createInitialInstances unversionedModelname versionedModelName patch build versi
     -- Create a role instance filled with the VersionedModelManifest.
     -- Add the versionedModelName as the value of the property ModelToRemove.
     -- Set the property InstalledPatch.
-    _ <- createAndAddRoleInstance (EnumeratedRoleType DEP.modelsInUse) mySystem
+    void $ createAndAddRoleInstance (EnumeratedRoleType DEP.modelsInUse) mySystem
       ( RolSerialization
           { id: Nothing
           , properties: PropertySerialization
@@ -513,12 +513,6 @@ createInitialInstances unversionedModelname versionedModelName patch build versi
           , binding: unwrap <$> versionedModelManifest
           }
       )
-    case versionedModelManifest, modelDependencies of
-      _, Nothing -> pure unit
-      Nothing, _ -> pure unit
-      Just manifestExternal, Just dependencies -> do
-        manifestContext <- lift (manifestExternal ##>> context)
-        for_ dependencies $ createVersionedModelManifestDependency manifestContext
 
 createVersionedModelManifestDependency :: ContextInstance -> ModelDependency -> MonadPerspectivesTransaction Unit
 createVersionedModelManifestDependency manifestContext dependency =

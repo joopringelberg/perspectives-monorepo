@@ -31,6 +31,7 @@ import Control.Monad.State (StateT, execStateT, get, put)
 import Control.Monad.Trans.Class (lift)
 import Data.Array (head)
 import Data.Either (Either(..))
+import Data.Foldable (for_)
 import Data.FoldableWithIndex (forWithIndex_)
 import Data.Maybe (Maybe(..))
 import Data.MediaType (MediaType(..))
@@ -46,19 +47,20 @@ import Foreign (Foreign, unsafeToForeign)
 import Foreign.Object (Object, empty, insert)
 import Main.RecompileBasicModels (UninterpretedDomeinFile(..), recompileModelsAtUrl)
 import Partial.Unsafe (unsafePartial)
-import Perspectives.CoreTypes (type (~~>), MonadPerspectives, MonadPerspectivesTransaction, mkLibEffect1, mkLibEffect2, mkLibEffect3, mkLibFunc1, mkLibFunc2, mkLibFunc3, (##>))
+import Perspectives.CoreTypes (type (~~>), MonadPerspectives, MonadPerspectivesTransaction, mkLibEffect1, mkLibEffect2, mkLibEffect3, mkLibFunc1, mkLibFunc2, mkLibFunc3, (##>), (##>>))
 import Perspectives.Couchdb (DeleteCouchdbDocument(..), DocWithAttachmentInfo(..))
 import Perspectives.Couchdb.Revision (Revision_, changeRevision)
+import Perspectives.Extern.Couchdb (createVersionedModelManifestDependency, retrieveModelFromLocalStore, updateModel)
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
 import Perspectives.DomeinCache (AttachmentFiles, lookupStableModelUri_)
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.Error.Boundaries (handleExternalFunctionError, handleExternalStatementError)
 import Perspectives.Error.Pretty (renderMultiplePerspectivesErrors, renderPerspectivesError)
 import Perspectives.ErrorLogging (logPerspectivesError)
-import Perspectives.Extern.Couchdb (retrieveModelFromLocalStore, updateModel)
 import Perspectives.Extern.Files (getPFileTextValue)
 import Perspectives.External.HiddenFunctionCache (HiddenFunctionDescription)
 import Perspectives.Identifiers (ModelUriString, isModelUri, modelUri2LocalName, modelUri2ModelUrl, unversionedModelUri)
+import Perspectives.Instances.ObjectGetters (context)
 import Perspectives.InvertedQuery.Storable (StoredQueries)
 import Perspectives.ModelDependencies (modelURIReadable, sysUser, versionedModelManifestModelCuid) as MD
 import Perspectives.ModelTranslation (augmentModelTranslation, emptyTranslationTable, generateFirstTranslation, generateTranslationTable, parseTranslation_pass1, parseTranslation_pass2, writeReadableTranslationYaml, writeTranslationYaml) as MT
@@ -169,7 +171,7 @@ uploadToRepository modelUri_ arcSource_ basedOnVersion_ versionedModelManifest =
                   logPerspectivesError $ Custom ("uploadToRepository: " <> rendered)
                 -- Here we will have a tuple of the DomeinFile and an instance of StoredQueries plus the updated mapping.
                 Right (Tuple df@(DomeinFile { id, namespace }) (Tuple invertedQueries mapping')) -> do
-                  lift $ void $ uploadToRepository_ split df invertedQueries mapping'
+                  void $ uploadToRepository_ split df invertedQueries mapping' (Just versionedModelManifest)
         _, _, _ -> logPerspectivesError $ Custom ("uploadToRepository lacks arguments")
     )
     >>= handleExternalStatementError "model://perspectives.domains#Parsing$UploadToRepository"
@@ -179,20 +181,25 @@ type URL = String
 -- | As uploadToRepository, but provide the DomeinFile as argument.
 -- | Adds an empty TranslationTable if the DomeinFile did not yet exist in the Repository.
 -- TODO: retrieve the mapping sidecar from the repository in this function, save its updated value to the repository here too.
-uploadToRepository_ :: { repositoryUrl :: String, documentName :: String } -> DomeinFile Sidecar.Stable -> StoredQueries -> Sidecar.StableIdMapping -> MonadPerspectives Unit
-uploadToRepository_ splitName (DomeinFile df) invertedQueries mapping = do
+uploadToRepository_ :: { repositoryUrl :: String, documentName :: String } -> DomeinFile Sidecar.Stable -> StoredQueries -> Sidecar.StableIdMapping -> Maybe RoleInstance -> MonadPerspectivesTransaction Unit
+uploadToRepository_ splitName (DomeinFile df) invertedQueries mapping versionedModelManifest = do
   -- Get the attachment info
-  (mremoteDf :: Maybe DocWithAttachmentInfo) <- tryGetDocument_ splitName.repositoryUrl splitName.documentName
+  (mremoteDf :: Maybe DocWithAttachmentInfo) <- lift $ tryGetDocument_ splitName.repositoryUrl splitName.documentName
   case mremoteDf of
     Just _ -> throwError $ error ("Refusing to overwrite published model release " <> splitName.documentName <> ". Publish a new version instead.")
     Nothing -> pure unit
-  attachments <- defaultAttachments empty
+  attachments <- lift $ defaultAttachments empty
   -- Get the revision (if any) from the remote database.
-  (mVersion :: Maybe String) <- retrieveDocumentVersion splitName.repositoryUrl splitName.documentName
+  (mVersion :: Maybe String) <- lift $ retrieveDocumentVersion splitName.repositoryUrl splitName.documentName
   -- The _id of df will be a versionless identifier. If we don't set it to the versioned name, the document
   -- will be stored under the versionless name.
-  (newRev :: Revision_) <- addDocument splitName.repositoryUrl (changeRevision mVersion (DomeinFile df { _id = splitName.documentName })) splitName.documentName
-  void $ execStateT (go splitName.repositoryUrl splitName.documentName attachments) newRev
+  (newRev :: Revision_) <- lift $ addDocument splitName.repositoryUrl (changeRevision mVersion (DomeinFile df { _id = splitName.documentName })) splitName.documentName
+  void $ lift $ execStateT (go splitName.repositoryUrl splitName.documentName attachments) newRev
+  case versionedModelManifest, df.modelDependencies of
+    Just manifestExternal, Just dependencies -> do
+      manifestContext <- lift (manifestExternal ##>> context)
+      for_ dependencies $ createVersionedModelManifestDependency manifestContext
+    _, _ -> pure unit
 
   where
   -- Default attachments are built from the mapping and inverted queries that are passed in as arguments, 
