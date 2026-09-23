@@ -65,7 +65,7 @@ import Perspectives.SideCar.PhantomTypedNewtypes (Readable)
 import Perspectives.Sidecar.NormalizeTypeNames (StableIdMappingForModel, getinstalledModelCuids, normalizeInvertedQueries, normalizeTypes)
 import Perspectives.Sidecar.StableIdMapping (ContextUri(..), ModelUri(..), Stable, StableIdMapping, fromLocalModels, fromRepository, idUriForContext, loadStableMapping)
 import Perspectives.Sidecar.UniqueTypeNames as UTN
-import Prelude (bind, discard, pure, show, ($), (/=), (<<<), (<>), (==), (>=>))
+import Prelude (bind, discard, pure, show, ($), (/=), (<<<), (<>), (==), (>=>), (<$>))
 import Simple.JSON (writeJSON)
 
 -- | The functions in this module load Arc files and parse and compile them to DomeinFiles.
@@ -185,7 +185,9 @@ loadAndCompileArcFileWithSidecar_ dfid@(ModelUri stableModelUri) rawText saveInC
           -- We should load referred models if they are missing (but not the model we're compiling!).
           -- Throw an error if a referred model is not installed. It will show up in the arc feedback.
           installedModelCuids <- lift $ getinstalledModelCuids fromLocalModels
-          for_ referredModels (lift <<< (toStable installedModelCuids >=> retrieveDomeinFile))
+          -- At this point, the referredModels are qualified with a version. We should use the unversioned ModelUri 
+          -- before making sure they are installed.
+          for_ (over ModelUri unversionedModelUri <$> referredModels) (lift <<< (toStable installedModelCuids >=> retrieveDomeinFile))
 
           (x' :: Either MultiplePerspectivesErrors (Tuple (DomeinFileRecord Readable) StoredQueries)) <-
             lift $ phaseThree dr'' state.postponedStateQualifiedParts state.screens
