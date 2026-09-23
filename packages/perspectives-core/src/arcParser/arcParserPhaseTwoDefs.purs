@@ -41,6 +41,7 @@ import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, defaultDomeinF
 import Perspectives.Instances.Environment (Environment, _pushFrame)
 import Perspectives.Instances.Environment (addVariable, empty, lookup) as ENV
 import Perspectives.InvertedQuery.Storable (StoredQueries, StorableInvertedQuery)
+import Perspectives.Identifiers (unversionedModelUri)
 import Perspectives.Names (defaultReadableNamespaces, expandNamespaces)
 import Perspectives.Parsing.Arc.AST (ContextPart(..), ScreenE, StateQualifiedPart)
 import Perspectives.Parsing.Arc.Expression.AST (Step)
@@ -229,11 +230,20 @@ withNamespaces pairs pt = do
         )
         pairs
     )
+  unversionedNamespaces <- pure $ OBJ.fromFoldable $ map
+    (unsafePartial \(PREFIX pre mod) -> Tuple pre (unversionedModelUri mod))
+    ( filter
+        ( case _ of
+            (PREFIX _ _) -> true
+            otherwise -> false
+        )
+        pairs
+    )
   -- x <- pure $ OBJ.fromFoldable $ map (\(PREFIX pre mod) -> Tuple pre mod) pairs
   ns <- lift $ gets _.namespaces
   -- replace keys in ns with values found in x.
   void $ modify \(s@{ namespaces, referredModels }) -> s
-    { namespaces = x `OBJ.union` namespaces
+    { namespaces = unversionedNamespaces `OBJ.union` namespaces
     , referredModels = referredModels `union` (ModelUri <$> values x)
     }
   ctxt <- pt

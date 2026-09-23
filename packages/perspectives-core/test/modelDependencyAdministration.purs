@@ -43,7 +43,7 @@ theSuite = suite "Model dependency administration phase 2" do
         Assert.equal (Just "2.6") dependency.resolvedVersion
       _ -> Assert.assert "one direct dependency should yield one dependency record" false
 
-  test "manifest dependency properties mirror the stable model id into ResolvedModel" do
+  test "manifest dependency properties omit ResolvedModel" do
     let
       dependencies = deriveModelDependencies
         [ ModelUri "model://example.org#Persons@2.4" ]
@@ -52,7 +52,6 @@ theSuite = suite "Model dependency administration phase 2" do
       [ dependency ] ->
         Assert.equal
           [ Tuple DEP.modelDependencyModelId [ "model://example.org#abcpersons" ]
-          , Tuple DEP.modelDependencyResolvedModel [ "model://example.org#abcpersons" ]
           , Tuple DEP.modelDependencyDeclaredRequirement [ "2.4" ]
           , Tuple DEP.modelDependencyResolvedVersion [ "2.4" ]
           ]
