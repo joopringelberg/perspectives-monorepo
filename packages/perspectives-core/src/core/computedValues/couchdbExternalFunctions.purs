@@ -552,9 +552,52 @@ type DependentModelConflict =
   , requiredVersionedModel :: String
   }
 
+type DirectDependencyResolution =
+  { dependencyModelId :: String
+  , requestedVersionedModel :: String
+  , installedVersionedModel :: Maybe String
+  , disposition :: String
+  }
+
+type DependencyResolutionPlan =
+  { targetVersionedModel :: String
+  , directDependencies :: Array DirectDependencyResolution
+  , directConflicts :: Array DirectDependencyConflict
+  , dependentConflicts :: Array DependentModelConflict
+  }
+
 resolvedDependencyVersionedModelUri :: ModelDependency -> Maybe String
 resolvedDependencyVersionedModelUri dependency =
   (\version -> unwrap dependency.modelId <> "@" <> version) <$> dependency.resolvedVersion
+
+planDirectDependencyResolutions :: Array InstalledModelVersion -> Array ModelDependency -> Array DirectDependencyResolution
+planDirectDependencyResolutions installed dependencies =
+  catMaybes $
+    ( \dependency -> do
+        requestedVersionedModel <- resolvedDependencyVersionedModelUri dependency
+        let matchingInstalled = find (\installedModel -> installedModel.modelId == unwrap dependency.modelId) installed
+        pure
+          { dependencyModelId: unwrap dependency.modelId
+          , requestedVersionedModel
+          , installedVersionedModel: _.versionedModelUri <$> matchingInstalled
+          , disposition: case matchingInstalled of
+              Nothing -> "install"
+              Just installedModel | installedModel.versionedModelUri == requestedVersionedModel -> "keep"
+              Just _ -> "update"
+          }
+    ) <$> dependencies
+
+planDependencyResolution :: String -> Array InstalledModelVersion -> Array InstalledDependencyRequirement -> Array ModelDependency -> DependencyResolutionPlan
+planDependencyResolution targetVersionedModel installedModels installedRequirements modelDependencies =
+  { targetVersionedModel
+  , directDependencies
+  , directConflicts
+  , dependentConflicts
+  }
+  where
+  directDependencies = planDirectDependencyResolutions installedModels modelDependencies
+  directConflicts = findDirectDependencyVersionConflicts installedModels modelDependencies
+  dependentConflicts = findDependentModelConflicts (unversionedModelUri targetVersionedModel) targetVersionedModel installedRequirements
 
 findDirectDependencyVersionConflicts :: Array InstalledModelVersion -> Array ModelDependency -> Array DirectDependencyConflict
 findDirectDependencyVersionConflicts installed dependencies =
@@ -585,24 +628,40 @@ findDependentModelConflicts targetModelId targetVersionedModelUri installedRequi
 assertNoDependencyConflicts :: String -> String -> Maybe (Array ModelDependency) -> MonadPerspectivesTransaction Unit
 assertNoDependencyConflicts _ _ Nothing =
   pure unit
-assertNoDependencyConflicts unversionedModelname versionedModelName (Just modelDependencies) = do
+assertNoDependencyConflicts _ versionedModelName (Just modelDependencies) = do
   installedModels <- lift readInstalledModelVersions
   installedRequirements <- lift readInstalledDependencyRequirements
-  let directConflicts = findDirectDependencyVersionConflicts installedModels modelDependencies
-  let dependentConflicts = findDependentModelConflicts unversionedModelname versionedModelName installedRequirements
-  case directConflicts, dependentConflicts of
+  let plan = planDependencyResolution versionedModelName installedModels installedRequirements modelDependencies
+  case plan.directConflicts, plan.dependentConflicts of
     [], [] -> pure unit
     _, _ ->
-      throwError $ error $ renderDependencyConflicts versionedModelName directConflicts dependentConflicts
+      throwError $ error $ renderDependencyResolutionPlan plan
 
-renderDependencyConflicts :: String -> Array DirectDependencyConflict -> Array DependentModelConflict -> String
-renderDependencyConflicts versionedModelName directConflicts dependentConflicts =
+renderDependencyResolutionPlan :: DependencyResolutionPlan -> String
+renderDependencyResolutionPlan { targetVersionedModel, directDependencies, directConflicts, dependentConflicts } =
   "Dependency conflict while activating "
-    <> versionedModelName
+    <> targetVersionedModel
     <> ". "
+    <> renderDirectDependencyPlan directDependencies
     <> renderDirectConflicts directConflicts
     <> renderDependentConflicts dependentConflicts
   where
+  renderDirectDependencyPlan [] = ""
+  renderDirectDependencyPlan plannedDependencies =
+    "Requested direct dependency plan: "
+      <> show
+        ( ( \plannedDependency ->
+              plannedDependency.dependencyModelId
+                <> " -> "
+                <> plannedDependency.requestedVersionedModel
+                <> " ("
+                <> plannedDependency.disposition
+                <> maybe "" (\installedVersionedModel -> ", installed " <> installedVersionedModel) plannedDependency.installedVersionedModel
+                <> ")"
+          ) <$> plannedDependencies
+        )
+      <> ". "
+
   renderDirectConflicts [] = ""
   renderDirectConflicts conflicts =
     "Installed dependency versions conflict with the requested release: "
