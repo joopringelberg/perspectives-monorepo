@@ -527,7 +527,6 @@ createVersionedModelManifestDependency manifestContext dependency =
 modelDependencyPropertiesForManifest :: ModelDependency -> Array (Tuple String (Array String))
 modelDependencyPropertiesForManifest dependency =
   [ Tuple DEP.modelDependencyModelId [ unwrap (dependency.modelId) ]
-  , Tuple DEP.modelDependencyResolvedModel [ unwrap (dependency.modelId) ]
   ]
     <> maybe [] (\requirement -> [ Tuple DEP.modelDependencyDeclaredRequirement [ requirement ] ]) dependency.declaredRequirement
     <> maybe [] (\version -> [ Tuple DEP.modelDependencyResolvedVersion [ version ] ]) dependency.resolvedVersion
