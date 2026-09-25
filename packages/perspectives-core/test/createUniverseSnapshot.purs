@@ -49,6 +49,8 @@ import Effect.Class.Console (log)
 import Foreign.Object (Object, fromFoldable, lookup)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (LogLevel(..), LogTopic(..), MonadPerspectives, (##=), (##>))
+import Perspectives.DataUpgrade.PatchModels (patchModels)
+import Perspectives.DataUpgrade.RecompileLocalModels (recompileLocalModel)
 import Perspectives.Extern.Couchdb (addModelToLocalStore_)
 import Perspectives.Identifiers (modelUri2LocalName, modelUri2SchemeAndAuthority, modelUriVersion, unversionedModelUri)
 import Perspectives.Instances.ObjectGetters (getEnumeratedRoleInstances)
@@ -60,6 +62,7 @@ import Perspectives.Query.UnsafeCompiler (getPropertyFromTelescope)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..))
 import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..), EnumeratedRoleType(..), RoleType(..))
 import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransaction', shareWithPeers)
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Test.PDRInstance (noBus, snapshotPDR, startPDRInstance, testPouchdbUser)
 import Test.PDRInstance.Types (runInPDR)
 
@@ -81,7 +84,7 @@ userName = "alice"
 extraModels :: Array String
 extraModels =
   [ "model://perspectives.domains#RabbitMQ@2.0"
-  , "model://perspectives.domains#BrokerServices@6.1"
+  , "model://perspectives.domains#BrokerServices@7.0"
   , "model://perspectives.domains#HyperContext@1.0"
   , "model://perspectives.domains#Introduction@1.0"
   , "model://perspectives.domains#HelpProject@3.0"
@@ -158,7 +161,16 @@ main = launchAff_ do
           runMonadPerspectivesTransaction' shareWithPeers (ENR $ EnumeratedRoleType sysUser)
             (addModelToLocalStore_ [ modelUri ] (RoleInstance "Ignored"))
 
+      -- Now patch CouchdbManagement and recompile locally.
+      runInPDR pdr do
+        patchModels $ fromFoldable
+          [ Tuple "model://perspectives.domains#CouchdbManagement" couchdbmanagement
+          ]
+        void $ recompileLocalModel (ModelUri "model://perspectives.domains#CouchdbManagement")
+
       runInPDR pdr saveMarkedResources
 
       snapshotPDR (testPouchdbUser userName).systemIdentifier (testPouchdbUser userName).perspectivesUser snapshotDirectory
       log ("Snapshot written to " <> snapshotDirectory)
+
+foreign import couchdbmanagement :: String
