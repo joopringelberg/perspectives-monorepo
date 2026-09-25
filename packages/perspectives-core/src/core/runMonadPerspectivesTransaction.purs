@@ -37,11 +37,13 @@ import Data.Tuple (Tuple(..))
 import Data.Unfoldable (replicate)
 import Effect.Aff.AVar (new, put, take, tryRead)
 import Effect.Aff.Class (liftAff)
+import Effect.AVar (AVar)
+import Effect.Class (liftEffect)
 import Effect.Exception (error)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CollectAffectedContexts (reEvaluatePublicFillerChanges)
 import Perspectives.ContextStateCompiler (enteringState, evaluateContextState, exitingState)
-import Perspectives.CoreTypes (MPT, MonadPerspectives, MonadPerspectivesTransaction, liftToInstanceLevel, (##=), (##>), (##>>))
+import Perspectives.CoreTypes (MPT, MonadPerspectives, MonadPerspectivesTransaction, PendingSettledStack, RepeatingTransaction, liftToInstanceLevel, popPendingSettledFrame, pushPendingSettledFrame, (##=), (##>), (##>>))
 import Perspectives.Deltas (TransactionPerUser, distributeTransaction)
 import Perspectives.DependencyTracking.Dependency (lookupActiveSupportedEffect)
 import Perspectives.Error.Pretty (humanizePerspectivesWarning)
@@ -111,19 +113,39 @@ runMonadPerspectivesTransaction' share authoringRole a = (liftAff $ createTransa
     AA.modify \trns -> over Transaction (\tr -> tr { transactionNumber = transactionNumber }) trns
     padding <- lift transactionLevel
     lift $ debugState (padding <> "Starting " <> (if share then "" else "non-") <> "sharing transaction " <> show transactionNumber)
+    -- Push a fresh frame: "once settled" continuations scheduled during this transaction (including
+    -- anything it triggers, nested embedded transactions included) are collected here instead of being
+    -- dispatched immediately. See PendingSettledStack in coreTypes.purs.
+    (pendingSettledStack :: PendingSettledStack) <- lift (AA.gets _.pendingSettledTransactions :: MonadPerspectives PendingSettledStack)
+    lift $ liftEffect $ pushPendingSettledFrame pendingSettledStack
     catchError
       do
         -- Execute the value that accumulates Deltas in a Transaction.
         r <- a >>= phase1 share authoringRole
+        -- Only now that this transaction (and everything it triggered) has fully settled, hand the
+        -- continuations scheduled during it over to transactionWithTiming for dispatch.
+        dispatchSettledFrame pendingSettledStack
         -- 5. Raise the flag
         _ <- lift $ liftAff $ put true t
         lift $ debugState (padding <> "Ending transaction " <> show transactionNumber)
         pure r
       \e -> do
+        -- The transaction failed: discard any continuations it scheduled, but still pop the frame to
+        -- keep the stack balanced.
+        _ <- lift $ liftEffect $ popPendingSettledFrame pendingSettledStack
         -- 5. Raise the flag
         _ <- lift $ liftAff $ put true t
         lift $ debugState (padding <> "Ending transaction " <> show transactionNumber)
         throwError e
+
+  -- | Pops the current top frame and hands each of its entries over to transactionWithTiming,
+  -- | for forkTimedTransactions (in Main.purs) to actually run. Called only once this transaction's
+  -- | own phase1/phase2 (and everything nested inside it) have fully completed.
+  dispatchSettledFrame :: PendingSettledStack -> MonadPerspectivesTransaction Unit
+  dispatchSettledFrame pendingSettledStack = do
+    (frame :: Array RepeatingTransaction) <- lift $ liftEffect $ popPendingSettledFrame pendingSettledStack
+    (timingAVar :: AVar RepeatingTransaction) <- lift (AA.gets _.transactionWithTiming :: MonadPerspectives (AVar RepeatingTransaction))
+    for_ frame \rt -> lift $ liftAff $ put rt timingAVar
 
 -- | In phase1 we handle:
 -- | createdContexts, createdRoles, rolesToExit and ScheduledAssignments that are a ContextRemoval, a RoleUnbinding or a ExecuteDestructiveEffect.

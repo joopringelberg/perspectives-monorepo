@@ -61,6 +61,7 @@ module Perspectives.CoreTypes
   , MonadPerspectivesTransaction
   , ObjectsGetter
   , OrderedDelta(..)
+  , PendingSettledStack
   , PerspectivesExtraState
   , PerspectivesState
   , PropertyValueGetter
@@ -111,6 +112,10 @@ module Perspectives.CoreTypes
   , mkLibFunc4
   , mkLibFunc5
   , modifyPS
+  , newPendingSettledStack
+  , pushPendingSettledFrame
+  , appendPendingSettled
+  , popPendingSettledFrame
   , perspectivesState
   , removeInternally
   , representInternally
@@ -136,6 +141,7 @@ import Control.Monad.Except (ExceptT)
 import Control.Monad.Reader (ReaderT, ask, lift, runReaderT)
 import Control.Monad.Writer (WriterT, runWriterT)
 import Data.Array (cons, foldMap, foldl, foldr, head, union)
+import Data.Array (uncons) as Array
 import Data.Eq.Generic (genericEq)
 import Data.Foldable (class Foldable)
 import Data.Generic.Rep (class Generic)
@@ -152,6 +158,9 @@ import Effect.Aff.AVar (AVar, empty, put, read, take)
 import Effect.Aff.Class (class MonadAff, liftAff)
 import Effect.Class (class MonadEffect, liftEffect)
 import Effect.Exception (Error, error)
+import Effect.Ref (Ref)
+import Effect.Ref (new, modify_, read, write) as Ref
+import Effect.Unsafe (unsafePerformEffect)
 import Foreign (Foreign)
 import Foreign.Object (Object)
 import Foreign.Object as F
@@ -178,7 +187,7 @@ import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedPrope
 import Perspectives.ResourceIdentifiers.Parser (pouchdbDatabaseName)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri, Readable, Stable)
 import Perspectives.Sync.Transaction (Transaction)
-import Prelude (class Eq, class Monad, class Monoid, class Ord, class Semigroup, class Show, Unit, bind, compare, eq, pure, show, unit, ($), (<<<), (<>), (>>=))
+import Prelude (class Eq, class Monad, class Monoid, class Ord, class Semigroup, class Show, Unit, bind, compare, eq, pure, show, unit, ($), (<$>), (<<<), (<>), (*>), (>>=))
 import Simple.JSON (class ReadForeign, class WriteForeign)
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -314,6 +323,12 @@ type PerspectivesExtraState =
   -- | Optional ANSI color escape prefix used to color full log messages for this PDR instance.
   -- | Use `Nothing` for uncolored output.
   , logColor :: Maybe String
+
+  -- | A stack of frames, one per currently open (nested) runMonadPerspectivesTransaction' call.
+  -- | `scheduleSettledTransaction` appends to the top frame instead of dispatching immediately, so that
+  -- | a "once settled" continuation is only handed to `transactionWithTiming` after the transaction that
+  -- | scheduled it (including everything it triggered) has actually finished. See transaction-execution.md.
+  , pendingSettledTransactions :: PendingSettledStack
   )
 
 type Warning = { message :: String, error :: String, externalRoleId :: String, contextName :: String }
@@ -426,6 +441,41 @@ data RepeatingTransaction
       , authoringRole :: RoleType
       , capturedBindings :: CapturedBindings
       }
+
+-----------------------------------------------------------
+-- PENDINGSETTLEDSTACK
+-----------------------------------------------------------
+-- | A mutable stack of frames of not-yet-dispatched `SettledTransaction`s.
+-- | Each `runMonadPerspectivesTransaction'` call (top-level or embedded) pushes a fresh, empty frame
+-- | before running its action, and pops (and drains) its own frame right before it finally raises the
+-- | transaction flag again. `scheduleSettledTransaction` appends to the top frame instead of dispatching
+-- | to `transactionWithTiming` right away. This nests correctly because embedded transactions push and
+-- | pop their own frame around their own execution, so an outer frame is only drained after every
+-- | frame nested inside it (including cascading automatic-action sub-transactions) has been drained first.
+newtype PendingSettledStack = PendingSettledStack (Ref (Array (Array RepeatingTransaction)))
+
+-- | Creates a new, empty stack. Takes a dummy argument to prevent the CAF from being shared.
+newPendingSettledStack :: Unit -> PendingSettledStack
+newPendingSettledStack _ = unsafePerformEffect (PendingSettledStack <$> Ref.new [])
+
+pushPendingSettledFrame :: PendingSettledStack -> Effect Unit
+pushPendingSettledFrame (PendingSettledStack ref) = Ref.modify_ (\stack -> [] `cons` stack) ref
+
+appendPendingSettled :: PendingSettledStack -> RepeatingTransaction -> Effect Unit
+appendPendingSettled (PendingSettledStack ref) rt = Ref.modify_ appendToTop ref
+  where
+  appendToTop :: Array (Array RepeatingTransaction) -> Array (Array RepeatingTransaction)
+  appendToTop stack = case Array.uncons stack of
+    Nothing -> [ [ rt ] ]
+    Just { head: frame, tail } -> (frame <> [ rt ]) `cons` tail
+
+-- | Pops the top frame off the stack, returning its (possibly empty) contents.
+popPendingSettledFrame :: PendingSettledStack -> Effect (Array RepeatingTransaction)
+popPendingSettledFrame (PendingSettledStack ref) = do
+  stack <- Ref.read ref
+  case Array.uncons stack of
+    Nothing -> pure []
+    Just { head: frame, tail } -> Ref.write tail ref *> pure frame
 
 data JustInTimeModelLoad = LoadModel (ModelUri Stable) | ModelLoaded | LoadingFailed String | Stop | HotLine (AVar JustInTimeModelLoad)
 

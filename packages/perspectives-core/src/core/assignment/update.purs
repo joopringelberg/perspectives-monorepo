@@ -525,7 +525,7 @@ setProperty rids propertyName mdelta values =
                 (lift $ findPropertyRequests rid propertyName) >>= addCorrelationIdentifiersToTransactie
                 (lift $ findPropertyRequests rid replacementProperty) >>= addCorrelationIdentifiersToTransactie
                 readablePropertyName <- lift $ toReadable propertyName
-                lift $ debugResource ("setProperty: set property " <> unwrap readablePropertyName <> " to values " <> show values)
+                lift $ debugResource ("setProperty: set property " <> unwrap readablePropertyName <> " on role instance " <> unwrap rid <> " to values " <> show values)
 
 -----------------------------------------------------------
 -- SAVEFILE
