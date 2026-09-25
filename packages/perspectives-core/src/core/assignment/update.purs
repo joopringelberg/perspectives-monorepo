@@ -41,7 +41,7 @@ import Control.Monad.AvarMonadAsk (get, gets, modify)
 import Control.Monad.Error.Class (catchError, throwError, try)
 import Control.Monad.State (StateT, evalStateT, put, get) as ST
 import Control.Monad.Trans.Class (lift)
-import Data.Array (concat, cons, difference, elemIndex, filter, filterA, find, foldM, foldMap, nub, null, snoc)
+import Data.Array (concat, difference, elemIndex, filter, filterA, foldMap, nub, null, snoc)
 import Data.Array (head) as ARR
 import Data.Either (Either(..))
 import Data.Foldable (for_)
@@ -57,9 +57,8 @@ import Foreign (Foreign)
 import Foreign.Object (empty, lookup)
 import Partial.Unsafe (unsafePartial)
 import Persistence.Attachment (class Attachment)
-import Perspectives.Authenticate (signDelta)
 import Perspectives.CollectAffectedContexts (aisInPropertyDelta, usersWithPerspectiveOnRoleInstance)
-import Perspectives.ContextAndRole (addRol_property, changeContext_me, changeContext_preferredUserRoleType, context_pspType, context_rolInContext, deleteRol_property, modifyContext_rolInContext, popContext_state, popRol_state, pushContext_state, pushRol_state, removeRol_property, rol_context, rol_isMe, rol_pspType, setRol_property)
+import Perspectives.ContextAndRole (addRol_property, changeContext_me, changeContext_preferredUserRoleType, context_pspType, context_rolInContext, deleteRol_property, modifyContext_rolInContext, popContext_state, popRol_state, pushContext_state, pushRol_state, removeRol_property, rol_context, rol_pspType, setRol_property)
 import Perspectives.CoreTypes (class Persistent, InformedAssumption(..), LogLevel(..), LogTopic(..), MonadPerspectives, MonadPerspectivesTransaction, Updater, (###=), (##=), (##>), (##>>))
 import Perspectives.Deltas (addCorrelationIdentifiersToTransactie, addDelta)
 import Perspectives.DependencyTracking.Array.Trans (runArrayT)
@@ -88,11 +87,12 @@ import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.StrippedDelta (stripResourceSchemes)
 import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
 import Perspectives.Sync.SignedDelta (SignedDelta)
+import Perspectives.Sync.VersionedDelta (signVersionedDelta)
 import Perspectives.Sync.Transaction (Transaction(..))
 import Perspectives.Types.ObjectGetters (getRoleAspectSpecialisations, hasPerspectiveOnRole, isUnlinked_, propertyAliases)
-import Perspectives.TypesForDeltas (ContextDelta(..), ContextDeltaType(..), RolePropertyDelta(..), RolePropertyDeltaType(..), UniverseRoleDelta(..), UniverseRoleDeltaType(..))
+import Perspectives.TypesForDeltas (ContextDelta(..), ContextDeltaType(..), RolePropertyDelta(..), RolePropertyDeltaType(..))
 import Perspectives.Warning (PerspectivesWarning(..))
-import Simple.JSON (class WriteForeign, writeJSON)
+import Simple.JSON (class WriteForeign)
 
 -----------------------------------------------------------
 -- UPDATE A CONTEXT (SET THE PREFERRED USER ROLE TYPE)
@@ -172,8 +172,8 @@ addRoleInstanceToContext contextId rolName (Tuple roleId receivedDelta) = do
       _ -> do
         let rkey = unwrap id
         rversion <- lift $ incrementResourceVersion rkey
-        signDelta
-          ( writeJSON $ stripResourceSchemes $ ContextDelta
+        signVersionedDelta
+          ( stripResourceSchemes $ ContextDelta
               { contextInstance: contextId
               , contextType: context_pspType pe
               , roleType: rolName
@@ -299,7 +299,7 @@ addProperty rids propertyName valuesAndDeltas = case ARR.head rids of
                     , resourceKey: rkey
                     , resourceVersion: rversion
                     }
-                  signDelta (writeJSON $ stripResourceSchemes delta)
+                  signVersionedDelta (stripResourceSchemes delta)
                 Just signedDelta -> pure signedDelta
               pure (Tuple (unwrap value) delta)
             -- Save the property values in the role instance. Do this now because it will affect computing the users.
@@ -383,8 +383,8 @@ removeProperty rids propertyName mdelta values = case ARR.head rids of
                 Nothing -> do
                   let rkey = unwrap rid <> "#" <> unwrap replacementProperty
                   rversion <- lift $ incrementResourceVersion rkey
-                  signDelta
-                    ( writeJSON $ stripResourceSchemes
+                  signVersionedDelta
+                    ( stripResourceSchemes
                         ( RolePropertyDelta
                             { id: rid
                             , roleType: rol_pspType pe
@@ -435,8 +435,8 @@ deleteProperty rids propertyName mdelta = case ARR.head rids of
                 Nothing -> do
                   let rkey = unwrap rid <> "#" <> unwrap replacementProperty
                   rversion <- lift $ incrementResourceVersion rkey
-                  signDelta
-                    ( writeJSON $ stripResourceSchemes
+                  signVersionedDelta
+                    ( stripResourceSchemes
                         ( RolePropertyDelta
                             { id: rid
                             , roleType: pspType
@@ -504,8 +504,8 @@ setProperty rids propertyName mdelta values =
                   Nothing -> do
                     let rkey = unwrap rid <> "#" <> unwrap replacementProperty
                     rversion <- lift $ incrementResourceVersion rkey
-                    signDelta
-                      ( writeJSON $ stripResourceSchemes
+                    signVersionedDelta
+                      ( stripResourceSchemes
                           ( RolePropertyDelta
                               { id: rid
                               , roleType: pspType
@@ -525,7 +525,7 @@ setProperty rids propertyName mdelta values =
                 (lift $ findPropertyRequests rid propertyName) >>= addCorrelationIdentifiersToTransactie
                 (lift $ findPropertyRequests rid replacementProperty) >>= addCorrelationIdentifiersToTransactie
                 readablePropertyName <- lift $ toReadable propertyName
-                lift $ debugResource ("setProperty: set property " <> unwrap readablePropertyName <> " to values " <> show values)
+                lift $ debugResource ("setProperty: set property " <> unwrap readablePropertyName <> " on role instance " <> unwrap rid <> " to values " <> show values)
 
 -----------------------------------------------------------
 -- SAVEFILE
@@ -587,7 +587,7 @@ saveFile r property arrayBuf mimeType fileName = do
           , resourceKey: rkey
           , resourceVersion: rversion
           }
-        signedDelta <- signDelta (writeJSON $ stripResourceSchemes delta)
+        signedDelta <- signVersionedDelta (stripResourceSchemes delta)
         setProperty [ rid ] replacementProperty Nothing [ Value usedVal ]
         -- Compute the users for this role. As a side effect, contexts are added to the transaction.
         users <- aisInPropertyDelta r rid property replacementProperty (rol_pspType roleInstance)

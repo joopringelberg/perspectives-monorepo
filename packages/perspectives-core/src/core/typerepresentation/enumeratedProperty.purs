@@ -45,6 +45,7 @@ newtype EnumeratedProperty = EnumeratedProperty EnumeratedPropertyRecord
 type EnumeratedPropertyRecord =
   { id :: EnumeratedPropertyType
   , _rev :: Revision_
+  , typeVersion :: Maybe String
   , displayName :: String
   , readableName :: EnumeratedPropertyType
 
@@ -67,6 +68,7 @@ defaultEnumeratedProperty :: String -> String -> String -> Range -> ArcPosition 
 defaultEnumeratedProperty id dn role range pos = EnumeratedProperty
   { id: EnumeratedPropertyType id
   , _rev: Nothing
+  , typeVersion: Nothing
   , displayName: dn
   , readableName: EnumeratedPropertyType id
   , role: EnumeratedRoleType role

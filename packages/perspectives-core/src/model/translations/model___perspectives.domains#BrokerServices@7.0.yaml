@@ -1,5 +1,5 @@
 model://perspectives.domains#zjuzxbqpgc:
-  version: "6.1"
+  version: "7.0"
   contexts:
     BrokerServices:
       translations:
@@ -168,6 +168,14 @@ model://perspectives.domains#zjuzxbqpgc:
             en: Managed brokers
             nl: Beheerde brokers
           properties:
+            ActualIdentifier:
+              translations:
+                nl: Gebruikte identifier
+                en: Actual identifier
+            GivenIdentifier:
+              translations:
+                nl: Gegeven identifier
+                en: Given identifier
             StorageLocation:
               translations:
                 en: Storage location
@@ -432,42 +440,15 @@ model://perspectives.domains#zjuzxbqpgc:
         en: Broker contract
         nl: Broker contract
       external:
-        notifications:
-          0:
-            translations:
-              orig: Your lease of the BrokerService has ended. Within $0 days, you will no longer be able to receive information from peers.
-              nl: Je lease van de BrokerService is beëindigd. Binnen $0 dagen kun je geen informatie meer ontvangen van andere gebruikers.
-              en: Your lease of the BrokerService has ended. Within $0 days, you will no longer be able to receive information from peers.
-          1:
-            translations:
-              orig: You now have an account at the BrokerService $0
-              nl: Je hebt nu een account bij de BrokerService $0
-              en: You now have an account at the BrokerService $0
         properties:
           ContractTerminated:
             translations:
-              en: Contract terminated
               nl: Contract beëindigd
-          TerminatesOn:
-            translations:
-              en: Contract end date
-              nl: Einddatum contract
-          GracePeriodExpiresOn:
-            translations:
-              en: Grace period end date
-              nl: Coulance periode einddatum
-          UseExpiresOn:
-            translations:
-              en: Usage ends on
-              nl: Gebruik eindigt op
-          IsInUse:
-            translations:
-              nl: In gebruik
-              en: In use
+              en: Contract terminated
           Registered:
             translations:
-              en: Registered
               nl: Geregistreerd
+              en: Registered
           CurrentQueueName:
             translations:
               en: Queue name
@@ -502,6 +483,11 @@ model://perspectives.domains#zjuzxbqpgc:
               nl: URL
       notifications:
         0:
+          translations:
+            orig: You now have an account at the BrokerService $0
+            nl: Je hebt nu een account bij de BrokerService $0
+            en: You now have an account at the BrokerService $0
+        1:
           translations:
             orig: Your account at the BrokerService $0 has been terminated.
             nl: Je account bij de BrokerService $0 is beëindigd.
@@ -562,7 +548,7 @@ model://perspectives.domains#zjuzxbqpgc:
                 en: Account name
                 nl: Lidmaatschap naam
           actions:
-            model://perspectives.domains#BrokerServices$BrokerContract$External$Active:
+            model://perspectives.domains#BrokerServices$BrokerContract$Active:
               TerminateContract:
                 translations:
                   nl: Beëindig contract

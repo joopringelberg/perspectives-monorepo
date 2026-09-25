@@ -460,6 +460,7 @@ traverseViewE (ViewE { id, viewParts, pos }) rtype = do
   view <- pure $ VIEW.View
     { id: ViewType viewName
     , _rev: Nothing
+    , typeVersion: Nothing
     , displayName: id
     , readableName: ViewType viewName
     , propertyReferences: expandedPropertyReferences

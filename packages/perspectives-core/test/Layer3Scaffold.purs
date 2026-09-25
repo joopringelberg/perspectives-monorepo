@@ -28,6 +28,7 @@ module Test.Layer3Scaffold
   , ModelTest
   , SynchronisationResults
   , SynchronisationModelConfiguration
+  , TestModelLoadMethod(..)
   , getSynchronisationResults
   , getSynchronisationResultsOverAMQP
   , executeModelTest
@@ -46,17 +47,21 @@ import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
 import Data.Time.Duration (Milliseconds(..))
 import Data.Traversable (for_, traverse)
+import Data.Tuple (Tuple(..))
 import Effect (Effect)
 import Effect.Aff (Aff, attempt, bracket, error, launchAff_, message)
 import Effect.Class (liftEffect)
 import Effect.Class.Console (log)
 import Effect.Ref (Ref, read, write)
 import Foreign.Object (empty) as OBJ
+import Node.Encoding (Encoding(..))
+import Node.FS.Aff (readTextFile)
+import Partial.Unsafe (unsafePartial)
 import Perspectives.ApiTypes (ContextSerialization(..), PropertySerialization(..), RolSerialization(..))
 import Perspectives.Assignment.RunAction (runContextAction)
 import Perspectives.CoreTypes (LogLevel(..), LogTopic(..), RuntimeOptions, (##=), (##>))
 import Perspectives.Extern.Couchdb (addModelToLocalStore_)
-import Perspectives.Identifiers (buitenRol)
+import Perspectives.Identifiers (buitenRol, modelUri2LocalName, unversionedModelUri)
 import Perspectives.Instances.Builders (createAndAddRoleInstance, constructContext)
 import Perspectives.Instances.ObjectGetters (binding, getEnumeratedRoleInstances)
 import Perspectives.Logging (ansiMagenta, ansiRed, infoTest)
@@ -69,7 +74,9 @@ import Perspectives.Query.UnsafeCompiler (getPropertyValues)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, PerspectivesUser, RoleInstance(..), Value(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), IndexedContext(..), PropertyType(..), RoleType(..))
 import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransaction', shareWithPeers)
+import Perspectives.Sidecar.StableIdMapping (ModelUri(..), Stable)
 import Perspectives.Sidecar.ToStable (toStable)
+import Perspectives.TypePersistence.LoadArc (loadCompileAndStoreArcFile_)
 import Test.PDRInstance (SynchronisationResult, connectPDRs, pollUntil, pollUntilTestFinishes, snapshotPDR, testPouchdbUser, withTwoPDRsCached, withTwoPDRsCachedNoBus)
 import Test.PDRInstance.Types (PDRInstance, runInPDR)
 import Test.Unit (TestSuite, suite, test)
@@ -99,11 +106,22 @@ type ModelTest =
 
 type SynchronisationResults = Array SynchronisationResult
 
+-- | LoadModelFromRepository fetches the model as published; CompileModelFromSource compiles
+-- | it anew, independently, in both Alice's and Bob's PDR (compilation is not synchronised).
+data TestModelLoadMethod
+  = LoadModelFromRepository
+  | CompileModelFromSource
+      { sourcePath :: String
+      , modelUriReadable :: String
+      , basedOnVersion :: Maybe String
+      }
+
 type SynchronisationModelConfiguration =
   { suiteName :: String
   , snapshotDirAlice :: String
   , snapshotDirBob :: String
   , testModel :: String
+  , testModelLoadMethod :: TestModelLoadMethod
   , indexedTestContext :: String
   , testAppManager :: String
   , testAppFollowerType :: String
@@ -221,11 +239,47 @@ getSynchronisationResultsInternal withTwoPDRsFn connectPeers cacheRef cfg = do
             alice <- runInPDR pdrA getPerspectivesUser
             bob <- runInPDR pdrB getPerspectivesUser
 
-            runInPDR pdrA do
-              infoTest "Alice loads test model in PDRA"
-              runMonadPerspectivesTransaction' shareWithPeers (ENR $ EnumeratedRoleType sysUser)
-                $
-                  addModelToLocalStore_ [ cfg.testModel ] (RoleInstance "Ignored")
+            case cfg.testModelLoadMethod of
+              LoadModelFromRepository -> runInPDR pdrA do
+                infoTest "Alice loads test model in PDRA"
+                runMonadPerspectivesTransaction' shareWithPeers (ENR $ EnumeratedRoleType sysUser)
+                  $
+                    addModelToLocalStore_ [ cfg.testModel ] (RoleInstance "Ignored")
+              CompileModelFromSource { sourcePath, modelUriReadable, basedOnVersion } -> do
+                source <- readTextFile UTF8 sourcePath
+                -- Alice compiles first and coins the stable ids; Bob reuses Alice's mapping so both
+                -- PDRs end up with the same CUIDs for the model's types and individuals.
+                aliceMapping <- runInPDR pdrA do
+                  infoTest "Alice compiles and stores test model from source"
+                  compilationResult <- runMonadPerspectivesTransaction' shareWithPeers (ENR $ EnumeratedRoleType sysUser)
+                    ( loadCompileAndStoreArcFile_
+                        (ModelUri cfg.testModel :: ModelUri Stable)
+                        source
+                        true
+                        (unsafePartial modelUri2LocalName $ unversionedModelUri cfg.testModel)
+                        modelUriReadable
+                        basedOnVersion
+                        Nothing
+                    )
+                  case compilationResult of
+                    Left errs -> throwError $ error ("Failed to compile and store test model: " <> show errs)
+                    Right (Tuple _ (Tuple _ mapping)) -> pure mapping
+
+                runInPDR pdrB do
+                  infoTest "Bob compiles and stores test model from source, reusing Alice's stable-id mapping"
+                  compilationResult <- runMonadPerspectivesTransaction' shareWithPeers (ENR $ EnumeratedRoleType sysUser)
+                    ( loadCompileAndStoreArcFile_
+                        (ModelUri cfg.testModel :: ModelUri Stable)
+                        source
+                        true
+                        (unsafePartial modelUri2LocalName $ unversionedModelUri cfg.testModel)
+                        modelUriReadable
+                        basedOnVersion
+                        (Just aliceMapping)
+                    )
+                  case compilationResult of
+                    Left errs -> throwError $ error ("Failed to compile and store test model: " <> show errs)
+                    Right _ -> pure unit
 
             testAppContextA <- pollUntil 100 (Milliseconds 100.0)
               "Indexed test context to appear in pdrA after loading test model"

@@ -31,6 +31,7 @@ import Prelude
 
 import Data.Either (Either(..))
 import Data.Foldable (for_)
+import Data.Maybe (Maybe(..))
 import Effect (Effect)
 import Effect.Aff (launchAff_)
 import Effect.Class (liftEffect)
@@ -61,6 +62,7 @@ singlePDRDestructiveTestModelConfiguration :: SinglePDRModelConfiguration
 singlePDRDestructiveTestModelConfiguration =
   { suiteName: "Single-PDR destructive tests"
   , snapshotDirectory: destructiveSnapshotDirectory
+  , outputSnapshotDirectory: Nothing
   , testModel: destructiveTestModel
   , testModelLoadMethod: LoadModelFromRepository
   , indexedTestContext: destructiveIndexedTestContext
@@ -100,9 +102,8 @@ destructiveSnapshotDirectory :: String
 destructiveSnapshotDirectory = "test/pdr-snapshot/layer3-clean/alice"
 
 destructiveTests :: Array ModelTest
-destructiveTests = 
-  [ 
-    { testContextTypeName: test_RemoveRole, logConfiguration: emptyLogConfiguration }
+destructiveTests =
+  [ { testContextTypeName: test_RemoveRole, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_RemoveOneRoleInstance, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_DeleteTwoRoles, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_DeleteProperty, logConfiguration: emptyLogConfiguration }

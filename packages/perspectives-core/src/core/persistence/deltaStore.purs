@@ -23,7 +23,7 @@
 -- | A persistent store for all deltas (locally created and received).
 -- | Replaces the current practice of embedding deltas in resource representations
 -- | (PerspectContext and PerspectRol). Each delta is stored as a separate document
--- | with a deterministic ID: <resourceKey>_<resourceVersion>_<author>.
+-- | with a deterministic ID: <resourceKey>_<resourceVersion>_<author>|<shortDeltaId>.
 -- | See design/deterministic-delta-ordering.md for details.
 module Perspectives.Persistence.DeltaStore
   ( storeDelta
@@ -38,6 +38,8 @@ module Perspectives.Persistence.DeltaStore
   , extractDeltaInfo
   , deltaStoreDatabaseName
   , deltaStoreDocId
+  , deltaStoreDocIdWithDeltaId
+  , findDeltaByDeltaId
   , safeKey
   ) where
 
@@ -51,6 +53,7 @@ import Data.Foldable (traverse_)
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Newtype (unwrap)
 import Data.String (Pattern(..), drop, indexOf, lastIndexOf, length, split, take) as Str
+import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
 import Foreign (Foreign)
 import LRUCache (defaultGetOptions, delete, get, set) as LRU
@@ -61,6 +64,7 @@ import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistence.Types (MonadPouchdb)
 import Perspectives.Representation.InstanceIdentifiers (PerspectivesUser)
 import Perspectives.ResourceIdentifiers (takeGuid)
+import Perspectives.Sync.CanonicalJson (computeDeltaId, shortDeltaId)
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
 import Simple.JSON (read', readJSON')
 
@@ -136,6 +140,10 @@ shortenPropertyType propType =
 deltaStoreDocId :: String -> Int -> PerspectivesUser -> String
 deltaStoreDocId resourceKey resourceVersion author =
   safeKey resourceKey <> "_v" <> show resourceVersion <> "_" <> takeGuid (unwrap author)
+
+deltaStoreDocIdWithDeltaId :: String -> Int -> PerspectivesUser -> String -> String
+deltaStoreDocIdWithDeltaId resourceKey resourceVersion author deltaId =
+  deltaStoreDocId resourceKey resourceVersion author <> "|" <> shortDeltaId deltaId
 
 -----------------------------------------------------------
 -- CACHE HELPERS
@@ -283,6 +291,18 @@ getDeltasForResource resourceKey = do
     Left _ -> Nothing
   decodeDoc _ = Nothing
 
+findDeltaByDeltaId :: String -> MonadPerspectives (Maybe DeltaStoreRecord)
+findDeltaByDeltaId targetDeltaId = do
+  dbName <- deltaStoreDatabaseName
+  result <- documentsInRange dbName "" "\xFFFF"
+  pure $ Arr.head $ Arr.catMaybes $ map (decodeDoc targetDeltaId) result.rows
+  where
+  decodeDoc :: String -> { id :: String, value :: { rev :: String }, doc :: Maybe Foreign } -> Maybe DeltaStoreRecord
+  decodeDoc expected { doc: Just foreignDoc } = case runExcept $ read' foreignDoc of
+    Right rec@(DeltaStoreRecord { deltaId: Just actual }) | actual == expected -> Just rec
+    _ -> Nothing
+  decodeDoc _ _ = Nothing
+
 -- | Retrieve all deltas for a given resource-key, filtered by deltaType.
 -- | Useful for finding e.g. only property deltas or only binding deltas.
 getDeltasForResourceByDeltaType :: String -> String -> MonadPerspectives (Array DeltaStoreRecord)
@@ -422,7 +442,8 @@ storeDeltaFromSignedDelta signedDelta@(SignedDelta { author, encryptedDelta }) =
   case extractDeltaInfo encryptedDelta of
     Nothing -> pure unit -- Cannot extract ordering info, skip storage
     Just { resourceKey, resourceVersion, deltaType, contextInstance } -> do
-      let docId = deltaStoreDocId resourceKey resourceVersion author
+      deltaId <- liftAff $ computeDeltaId (unwrap author) encryptedDelta
+      let docId = deltaStoreDocIdWithDeltaId resourceKey resourceVersion author deltaId
       let contextKey = map safeKey contextInstance
       storeDelta $ DeltaStoreRecord
         { _id: docId
@@ -430,8 +451,10 @@ storeDeltaFromSignedDelta signedDelta@(SignedDelta { author, encryptedDelta }) =
         , resourceKey: safeKey resourceKey
         , resourceVersion
         , author
+        , deltaId: Just deltaId
         , signedDelta
         , deltaType
         , applied: true -- Locally-created deltas are applied immediately
+        , disposition: Just "Applied"
         , contextKey
         }

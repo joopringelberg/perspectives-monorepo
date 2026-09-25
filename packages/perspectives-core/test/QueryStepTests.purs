@@ -30,6 +30,7 @@ import Prelude
 
 import Data.Either (Either(..))
 import Data.Foldable (for_)
+import Data.Maybe (Maybe(..))
 import Perspectives.CoreTypes (LogLevel(..), LogTopic(..))
 import Test.SinglePDRScaffold (ModelTest, SinglePDRModelConfiguration, SinglePDRResults, TestModelLoadMethod(..), emptyLogConfiguration)
 import Test.Unit (TestSuite, suite, test)
@@ -50,6 +51,7 @@ queryStepTestModelConfiguration :: SinglePDRModelConfiguration
 queryStepTestModelConfiguration =
   { suiteName: "Query step tests"
   , snapshotDirectory: snapshotDirectory
+  , outputSnapshotDirectory: Nothing
   , testModel
   , testModelLoadMethod: LoadModelFromRepository
   , indexedTestContext
@@ -86,7 +88,7 @@ testNameProperty = "model://joopringelberg.nl#StateTestModel$Test$External$TestN
 
 snapshotDirectory :: String
 snapshotDirectory = "test/pdr-snapshot/layer3-clean/alice"
-  
+
 allTests :: Array ModelTest
 allTests =
   [ { testContextTypeName: test_ContextState_RoleStep, logConfiguration: emptyLogConfiguration }

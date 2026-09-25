@@ -31,7 +31,7 @@ import Control.Monad.Except (runExceptT)
 import Control.Monad.State (execState, execStateT)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Writer (tell)
-import Data.Array (catMaybes, cons, filter, head, union)
+import Data.Array (catMaybes, concat, cons, filter, find, head, union)
 import Data.Array (union, delete) as ARR
 import Data.Either (Either(..))
 import Data.Foldable (for_)
@@ -62,19 +62,20 @@ import Perspectives.Assignment.StateCache (clearModelStates)
 import Perspectives.Assignment.Update (withAuthoringRole)
 import Perspectives.Authenticate (getMyPublicKey, getMyTransportPublicKey)
 import Perspectives.ContextAndRole (changeRol_isMe, context_id, rol_id)
-import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), InformedAssumption(..), MonadPerspectives, MonadPerspectivesTransaction, mkLibEffect1, mkLibEffect2, mkLibEffect3, mkLibFunc2)
+import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), InformedAssumption(..), MonadPerspectives, MonadPerspectivesTransaction, mkLibEffect1, mkLibEffect2, mkLibEffect3, mkLibFunc2, (##=), (##>), (##>>))
 import Perspectives.Couchdb (DatabaseName, SecurityDocument(..))
 import Perspectives.Couchdb.Revision (Revision_)
 import Perspectives.Deltas (addCreatedContextToTransaction)
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
 import Perspectives.DomeinCache (AttachmentFiles, addAttachments, fetchTranslations, getPatchAndBuild, getVersionToInstall, saveCachedDomeinFile, storeDomeinFileInCouchdbPreservingAttachments)
-import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, addDownStreamAutomaticEffect, addDownStreamNotification, removeDownStreamAutomaticEffect, removeDownStreamNotification)
+import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, ModelDependency, addDownStreamAutomaticEffect, addDownStreamNotification, removeDownStreamAutomaticEffect, removeDownStreamNotification)
 import Perspectives.Error.Boundaries (handleDomeinFileError, handleExternalFunctionError, handleExternalStatementError)
 import Perspectives.External.HiddenFunctionCache (HiddenFunctionDescription)
 import Perspectives.Identifiers (Namespace, getFirstMatch, isModelUri, modelUri2ManifestUrl, modelUri2ModelUrl, modelUriVersion, unversionedModelUri, url2Authority)
 import Perspectives.Instances.Builders (constructContext, createAndAddRoleInstance, createAndAddRoleInstance_)
 import Perspectives.Instances.CreateContext (constructEmptyContext)
 import Perspectives.Instances.Me (computeMe_)
+import Perspectives.Instances.ObjectGetters (binding, context, getEnumeratedRoleInstances)
 import Perspectives.InvertedQuery.Storable (StoredQueries, clearInvertedQueriesDatabase, getInvertedQueriesOfModel, removeInvertedQueriesContributedByModel, saveInvertedQueries)
 import Perspectives.Logging (debugInstall, errorInstall, infoInstall, traceInstall, warnInstall)
 import Perspectives.ModelDependencies as DEP
@@ -90,11 +91,12 @@ import Perspectives.Persistence.Types (Credential(..), UserName, Password)
 import Perspectives.Persistent (entitiesDatabaseName, forceSaveDomeinFile, getDomeinFile, getPerspectRol, saveEntiteit, saveEntiteit_, saveMarkedResources, tryGetPerspectContext, tryGetPerspectEntiteit)
 import Perspectives.Persistent.FromViews (getSafeViewOnDatabase)
 import Perspectives.PerspectivesState (clearQueryCache, contextCache, conversationCacheDelete, getCurrentLanguage, getPerspectivesUser, getTranslationTable, isInstalledModel, lookupModelUri, modelsDatabaseName, removeTranslationTable, roleCache, setModelUri)
+import Perspectives.Query.UnsafeCompiler (getPropertyValues, getRoleInstances)
 import Perspectives.Representation.Class.Cacheable (CalculatedRoleType(..), ContextType(..), EnumeratedRoleType(..), cacheEntity)
 import Perspectives.Representation.Class.Identifiable (identifier)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser(..), RoleInstance, Value(..), perspectivesUser2RoleInstance)
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
-import Perspectives.Representation.TypeIdentifiers (RoleType(..))
+import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), EnumeratedPropertyType(..), PropertyType(..), RoleType(..))
 import Perspectives.ResourceIdentifiers (createDefaultIdentifier, resourceIdentifier2DocLocator, resourceIdentifier2WriteDocLocator, takeGuid)
 import Perspectives.RoleAssignment (roleIsMe)
 import Perspectives.SaveUserData (scheduleContextRemoval, setFirstBinding)
@@ -103,7 +105,7 @@ import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable, Stable
 import Perspectives.Sidecar.ToStable (toStable)
 import Perspectives.Sync.HandleTransaction (executeTransaction)
 import Perspectives.Sync.Transaction (Transaction(..), UninterpretedTransactionForPeer(..))
-import Prelude (Unit, bind, const, discard, eq, flip, pure, show, unit, void, ($), (*>), (<$>), (<<<), (<>), (==), (>>=))
+import Prelude (Unit, bind, const, discard, eq, flip, pure, show, unit, void, ($), (&&), (*>), (<$>), (/=), (<<<), (<>), (==), (>>=))
 import Simple.JSON (read_, write, writeJSON)
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -403,6 +405,7 @@ installModelLocally (Tuple dfrecord@{ id, namespace, referredModels, invertedQue
       , unversionedModelname: unversionedModelUri $ unwrap id
       , versionedModelManifest: Nothing
       }
+  assertNoDependencyConflicts unversionedModelname versionedModelName dfrecord.modelDependencies
   -- Store the model in Couchdb, that is: in the local store of models.
   -- Save it with the revision of the local version that we have, if any (do not use the repository version).
   { documentName: unversionedDocumentName } <- lift $ resourceIdentifier2WriteDocLocator unversionedModelname
@@ -510,6 +513,248 @@ createInitialInstances unversionedModelname versionedModelName patch build versi
           , binding: unwrap <$> versionedModelManifest
           }
       )
+
+createVersionedModelManifestDependency :: ContextInstance -> ModelDependency -> MonadPerspectivesTransaction Unit
+createVersionedModelManifestDependency manifestContext dependency =
+  void $ createAndAddRoleInstance (EnumeratedRoleType DEP.modelDependency) (unwrap manifestContext)
+    ( RolSerialization
+        { id: Nothing
+        , properties: PropertySerialization (fromFoldable $ modelDependencyPropertiesForManifest dependency)
+        , binding: Nothing
+        }
+    )
+
+modelDependencyPropertiesForManifest :: ModelDependency -> Array (Tuple String (Array String))
+modelDependencyPropertiesForManifest dependency =
+  [ Tuple DEP.modelDependencyModelId [ unwrap (dependency.modelId) ]
+  ]
+    <> maybe [] (\requirement -> [ Tuple DEP.modelDependencyDeclaredRequirement [ requirement ] ]) dependency.declaredRequirement
+    <> maybe [] (\version -> [ Tuple DEP.modelDependencyResolvedVersion [ version ] ]) dependency.resolvedVersion
+
+type InstalledModelVersion =
+  { modelId :: String
+  , versionedModelUri :: String
+  }
+
+type InstalledDependencyRequirement =
+  { dependentVersionedModelUri :: String
+  , dependency :: ModelDependency
+  }
+
+type DirectDependencyConflict =
+  { dependencyModelId :: String
+  , expectedVersionedModel :: String
+  , installedVersionedModel :: String
+  }
+
+type DependentModelConflict =
+  { dependentVersionedModelUri :: String
+  , requiredVersionedModel :: String
+  }
+
+type DirectDependencyResolution =
+  { dependencyModelId :: String
+  , requestedVersionedModel :: String
+  , installedVersionedModel :: Maybe String
+  , disposition :: String
+  }
+
+type DependencyResolutionPlan =
+  { targetVersionedModel :: String
+  , directDependencies :: Array DirectDependencyResolution
+  , directConflicts :: Array DirectDependencyConflict
+  , dependentConflicts :: Array DependentModelConflict
+  }
+
+resolvedDependencyVersionedModelUri :: ModelDependency -> Maybe String
+resolvedDependencyVersionedModelUri dependency =
+  (\version -> unwrap dependency.modelId <> "@" <> version) <$> dependency.resolvedVersion
+
+planDirectDependencyResolutions :: Array InstalledModelVersion -> Array ModelDependency -> Array DirectDependencyResolution
+planDirectDependencyResolutions installed dependencies =
+  catMaybes $
+    ( \dependency -> do
+        requestedVersionedModel <- resolvedDependencyVersionedModelUri dependency
+        let matchingInstalled = find (\installedModel -> installedModel.modelId == unwrap dependency.modelId) installed
+        pure
+          { dependencyModelId: unwrap dependency.modelId
+          , requestedVersionedModel
+          , installedVersionedModel: _.versionedModelUri <$> matchingInstalled
+          , disposition: case matchingInstalled of
+              Nothing -> "install"
+              Just installedModel | installedModel.versionedModelUri == requestedVersionedModel -> "keep"
+              Just _ -> "update"
+          }
+    ) <$> dependencies
+
+planDependencyResolution :: String -> Array InstalledModelVersion -> Array InstalledDependencyRequirement -> Array ModelDependency -> DependencyResolutionPlan
+planDependencyResolution targetVersionedModel installedModels installedRequirements modelDependencies =
+  { targetVersionedModel
+  , directDependencies
+  , directConflicts
+  , dependentConflicts
+  }
+  where
+  directDependencies = planDirectDependencyResolutions installedModels modelDependencies
+  directConflicts = findDirectDependencyVersionConflicts installedModels modelDependencies
+  dependentConflicts = findDependentModelConflicts (unversionedModelUri targetVersionedModel) targetVersionedModel installedRequirements
+
+findDirectDependencyVersionConflicts :: Array InstalledModelVersion -> Array ModelDependency -> Array DirectDependencyConflict
+findDirectDependencyVersionConflicts installed dependencies =
+  catMaybes $
+    ( \dependency -> do
+        expectedVersionedModel <- resolvedDependencyVersionedModelUri dependency
+        conflictingInstalled <- find
+          (\installedModel -> installedModel.modelId == unwrap dependency.modelId && installedModel.versionedModelUri /= expectedVersionedModel)
+          installed
+        pure
+          { dependencyModelId: unwrap dependency.modelId
+          , expectedVersionedModel
+          , installedVersionedModel: conflictingInstalled.versionedModelUri
+          }
+    ) <$> dependencies
+
+findDependentModelConflicts :: String -> String -> Array InstalledDependencyRequirement -> Array DependentModelConflict
+findDependentModelConflicts targetModelId targetVersionedModelUri installedRequirements =
+  catMaybes $
+    ( \{ dependentVersionedModelUri, dependency } -> do
+        requiredVersionedModel <- resolvedDependencyVersionedModelUri dependency
+        if unwrap dependency.modelId == targetModelId && requiredVersionedModel /= targetVersionedModelUri then
+          pure { dependentVersionedModelUri, requiredVersionedModel }
+        else
+          Nothing
+    ) <$> installedRequirements
+
+assertNoDependencyConflicts :: String -> String -> Maybe (Array ModelDependency) -> MonadPerspectivesTransaction Unit
+assertNoDependencyConflicts _ _ Nothing =
+  pure unit
+assertNoDependencyConflicts _ versionedModelName (Just modelDependencies) = do
+  installedModels <- lift readInstalledModelVersions
+  installedRequirements <- lift readInstalledDependencyRequirements
+  let plan = planDependencyResolution versionedModelName installedModels installedRequirements modelDependencies
+  case plan.directConflicts, plan.dependentConflicts of
+    [], [] -> pure unit
+    _, _ ->
+      throwError $ error $ renderDependencyResolutionPlan plan
+
+renderDependencyResolutionPlan :: DependencyResolutionPlan -> String
+renderDependencyResolutionPlan { targetVersionedModel, directDependencies, directConflicts, dependentConflicts } =
+  "Dependency conflict while activating "
+    <> targetVersionedModel
+    <> ". "
+    <> renderDirectDependencyPlan directDependencies
+    <> renderDirectConflicts directConflicts
+    <> renderDependentConflicts dependentConflicts
+  where
+  renderDirectDependencyPlan [] = ""
+  renderDirectDependencyPlan plannedDependencies =
+    "Requested direct dependency plan: "
+      <> show
+        ( ( \plannedDependency ->
+              plannedDependency.dependencyModelId
+                <> " -> "
+                <> plannedDependency.requestedVersionedModel
+                <> " ("
+                <> plannedDependency.disposition
+                <> maybe "" (\installedVersionedModel -> ", installed " <> installedVersionedModel) plannedDependency.installedVersionedModel
+                <> ")"
+          ) <$> plannedDependencies
+        )
+      <> ". "
+
+  renderDirectConflicts [] = ""
+  renderDirectConflicts conflicts =
+    "Installed dependency versions conflict with the requested release: "
+      <> show
+        ( ( \conflict ->
+              conflict.dependencyModelId
+                <> " requires "
+                <> conflict.expectedVersionedModel
+                <> " but "
+                <> conflict.installedVersionedModel
+                <> " is installed"
+          ) <$> conflicts
+        )
+      <> ". "
+
+  renderDependentConflicts [] = ""
+  renderDependentConflicts conflicts =
+    "Installed dependents require another release: "
+      <> show
+        ( ( \conflict ->
+              conflict.dependentVersionedModelUri
+                <> " requires "
+                <> conflict.requiredVersionedModel
+          ) <$> conflicts
+        )
+      <> "."
+
+readInstalledModelVersions :: MonadPerspectives (Array InstalledModelVersion)
+readInstalledModelVersions = catchError
+  do
+    manifestExternals <- getInstalledManifestExternals
+    catMaybes <$> traverse installedVersion manifestExternals
+  \_ -> pure []
+  where
+  installedVersion :: RoleInstance -> MonadPerspectives (Maybe InstalledModelVersion)
+  installedVersion manifestExternal = do
+    mversionedModelUri <- manifestExternal ##> getPropertyValues (CP $ CalculatedPropertyType DEP.versionedModelURI)
+    pure case mversionedModelUri of
+      Just (Value versionedModelUri) ->
+        Just
+          { modelId: unversionedModelUri versionedModelUri
+          , versionedModelUri
+          }
+      _ -> Nothing
+
+readInstalledDependencyRequirements :: MonadPerspectives (Array InstalledDependencyRequirement)
+readInstalledDependencyRequirements = catchError
+  do
+    manifestExternals <- getInstalledManifestExternals
+    concat <$> traverse dependenciesForManifest manifestExternals
+  \_ -> pure []
+  where
+  dependenciesForManifest :: RoleInstance -> MonadPerspectives (Array InstalledDependencyRequirement)
+  dependenciesForManifest manifestExternal = do
+    mversionedModelUri <- manifestExternal ##> getPropertyValues (CP $ CalculatedPropertyType DEP.versionedModelURI)
+    dependencies <- readManifestDependencies manifestExternal
+    pure case mversionedModelUri of
+      Just (Value versionedModelUri) ->
+        ( \dependency ->
+            { dependentVersionedModelUri: versionedModelUri
+            , dependency
+            }
+        ) <$> dependencies
+      _ -> []
+
+getInstalledManifestExternals :: MonadPerspectives (Array RoleInstance)
+getInstalledManifestExternals = do
+  system <- getMySystem
+  modelRoles <- (ContextInstance system) ##= getRoleInstances (ENR $ EnumeratedRoleType DEP.modelsInUse)
+  catMaybes <$> traverse (\modelRole -> modelRole ##> binding) modelRoles
+
+readManifestDependencies :: RoleInstance -> MonadPerspectives (Array ModelDependency)
+readManifestDependencies manifestExternal = do
+  manifestContext <- manifestExternal ##>> context
+  dependencyRoles <- manifestContext ##= getEnumeratedRoleInstances (EnumeratedRoleType DEP.modelDependency)
+  catMaybes <$> traverse dependencyFromRole dependencyRoles
+  where
+  dependencyFromRole :: RoleInstance -> MonadPerspectives (Maybe ModelDependency)
+  dependencyFromRole dependencyRole = do
+    mmodelId <- dependencyRole ##> getPropertyValues (ENP $ EnumeratedPropertyType DEP.modelDependencyModelId)
+    mdeclaredRequirement <- dependencyRole ##> getPropertyValues (ENP $ EnumeratedPropertyType DEP.modelDependencyDeclaredRequirement)
+    mresolvedVersion <- dependencyRole ##> getPropertyValues (ENP $ EnumeratedPropertyType DEP.modelDependencyResolvedVersion)
+    pure case mmodelId of
+      Just (Value modelId) ->
+        Just
+          { modelId: ModelUri modelId
+          , declaredRequirement: unwrapValue <$> mdeclaredRequirement
+          , resolvedVersion: unwrapValue <$> mresolvedVersion
+          }
+      _ -> Nothing
+
+  unwrapValue :: Value -> String
+  unwrapValue (Value value) = value
 
 -- | Creates instances in a transaction where the authoring role is PerspectivesSystem$User (the 'subject' of the delta: the role that must have the right perspective), of:
 -- |    * PerspectivesSystem

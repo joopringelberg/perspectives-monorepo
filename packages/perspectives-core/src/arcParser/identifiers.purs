@@ -84,7 +84,7 @@ qualifiedName = try do
 semver :: IP String
 semver = try do
   chars <- many (satisfy (not <<< isSpace <<< codePointFromChar))
-  if (test semverRegExp (fromCharArray chars)) then whiteSpace *> pure (fromCharArray chars)
+  if (test semverRegExp (fromCharArray chars)) then token.whiteSpace *> pure (fromCharArray chars)
   else fail "Not a valid semantic number. Use format X.Y where X and Y are integers. "
   where
   -- See: https://regexlib.com/REDetails.aspx?regexp_id=26.

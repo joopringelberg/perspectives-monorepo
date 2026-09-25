@@ -58,10 +58,13 @@ domain model://perspectives.domains#BrokerServices@7.0
     context ManagedBrokers (relational) filledBy BrokerService
       property StorageLocation (String)
         pattern = "^https://.*" "A url with the https scheme"
+      property GivenIdentifier (String) 
+        pattern = "^[a-zA-Z0-9_-]+$" "An identifier consisting of alphanumeric characters, underscores, or hyphens"
+      property ActualIdentifier = GivenIdentifier orElse callExternal util:GenSym() returns String
       state HasStorageLocation = exists StorageLocation
         on entry
           do for Manager
-            create_ context BrokerService bound to origin
+            create_ context BrokerService named ActualIdentifier bound to origin
     
     context PublicBrokers (relational) filledBy BrokerService
       state NoContract = not exists (filter binding >> context >> Accounts with binding >> context >> AccountHolder >> binding == me)
@@ -79,7 +82,7 @@ domain model://perspectives.domains#BrokerServices@7.0
       perspective on ManagedBrokers
         only (Create, Fill, CreateAndFill, Remove)
         props (Name) verbs (Consult)
-        props (StorageLocation) verbs (Consult, SetPropertyValue)
+        props (StorageLocation, GivenIdentifier) verbs (Consult, SetPropertyValue)
       action AddNewBroker
         create role ManagedBrokers
       perspective on Contracts

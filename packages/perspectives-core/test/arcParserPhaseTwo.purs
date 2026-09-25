@@ -7,6 +7,7 @@ import Data.Array (elemIndex, head)
 import Data.Either (Either(..))
 import Data.List (List(..))
 import Data.Maybe (Maybe(..), fromJust, isJust)
+import Data.Tuple (Tuple(..))
 import Effect (Effect)
 import Effect.Aff (Aff)
 import Effect.Class (liftEffect)
@@ -23,7 +24,8 @@ import Perspectives.Parsing.Arc.AST (ContextE(..), ContextPart(..))
 import Perspectives.Parsing.Arc.Expression.AST (BinaryStep(..), ComputationStep(..), ComputedType(..), Operator(..), Step(..))
 import Perspectives.Parsing.Arc.IndentParser (runIndentParser)
 import Perspectives.Parsing.Arc.PhaseTwo (traverseDomain)
-import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseTwo, evalPhaseTwo', expandNamespace, withNamespaces)
+import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseTwo, evalPhaseTwo', expandNamespace, runPhaseTwo', withNamespaces)
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.Parsing.Arc.Position (ArcPosition(..))
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), RoleInContext(..))
@@ -516,6 +518,17 @@ theSuite = suite "Perspectives.Parsing.Arc.PhaseTwo" do
       case _ of
         (Right eu) -> assert "The expansion of 'sys:User' should be 'model:System$System$User'" (eu == "model:System$System$User")
         (Left e) -> assert (show e) false
+
+  test "versioned imports expand prefixed names against unversioned model URIs while preserving dependency versions" do
+    result <- runPhaseTwo'
+      ( unsafePartial $ withNamespaces (Cons (PREFIX "cdb" "model://perspectives.domains#Couchdb@4.0") Nil)
+          (expandNamespace "cdb:Queries")
+      )
+    case result of
+      Tuple (Right expandedName) state -> do
+        assert "The expansion of 'cdb:Queries' should use the unversioned imported model URI." (expandedName == "model://perspectives.domains#Couchdb$Queries")
+        assert "Versioned imports should still be tracked as referred models." (state.referredModels == [ ModelUri "model://perspectives.domains#Couchdb@4.0" ])
+      Tuple (Left e) _ -> assert (show e) false
 
   test "Context with Aspect" do
     (r :: Either ParseError ContextE) <- {-pure $ unwrap $-}  runIndentParser "domain Feest\n  aspect model:MyAspectModel$MyAspect" ARC.domain

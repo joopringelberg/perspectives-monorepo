@@ -70,7 +70,7 @@ import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransac
 import Perspectives.Sidecar.StableIdMapping (ModelUri(..), Stable)
 import Perspectives.Sidecar.ToStable (toStable)
 import Perspectives.TypePersistence.LoadArc (loadCompileAndStoreArcFile_)
-import Test.PDRInstance (SynchronisationResult, noBus, pollUntil, pollUntilTestFinishes, testPouchdbUser, withPDRCached)
+import Test.PDRInstance (SynchronisationResult, noBus, pollUntil, pollUntilTestFinishes, snapshotPDR, testPouchdbUser, withPDRCached)
 import Test.PDRInstance.Types (PDRInstance, runInPDR)
 
 type TopicLogLevelPair =
@@ -105,6 +105,7 @@ data TestModelLoadMethod
 type SinglePDRModelConfiguration =
   { suiteName :: String
   , snapshotDirectory :: String
+  , outputSnapshotDirectory :: Maybe String
   , testModel :: String
   , testModelLoadMethod :: TestModelLoadMethod
   , indexedTestContext :: String
@@ -127,12 +128,13 @@ cachedSinglePDRResults = unsafePerformEffect $ new []
 getSinglePDRResults :: SinglePDRModelConfiguration -> Aff SinglePDRResults
 getSinglePDRResults cfg = do
   let cacheKey = singlePDRCacheKey cfg
+  let pouchdbUser = testPouchdbUser "alice"
   cached <- liftEffect $ read cachedSinglePDRResults
   case find (\result -> result.cacheKey == cacheKey) cached of
     Just { results } -> pure results
     Nothing -> do
       results <- withPDRCached
-        (testPouchdbUser "alice")
+        pouchdbUser
         defaultRuntimeOptions
         (Just ansiRed)
         noBus
@@ -161,6 +163,7 @@ getSinglePDRResults cfg = do
                       (unsafePartial modelUri2LocalName $ unversionedModelUri cfg.testModel)
                       modelUriReadable
                       basedOnVersion
+                      Nothing
                   )
                 case compilationResult of
                   Left errs -> throwError $ error ("Failed to compile and store test model: " <> show errs)
@@ -178,6 +181,11 @@ getSinglePDRResults cfg = do
 
           runInPDR pdr $ saveMarkedResources
 
+          case cfg.outputSnapshotDirectory of
+            Just outputSnapshotDirectory ->
+              snapshotPDR pouchdbUser.systemIdentifier pouchdbUser.perspectivesUser outputSnapshotDirectory
+            Nothing -> pure unit
+
           pure result
 
       liftEffect $ write (cached <> [ { cacheKey, results } ]) cachedSinglePDRResults
@@ -189,8 +197,11 @@ singlePDRCacheKey cfg =
     loadMethodKey = case cfg.testModelLoadMethod of
       LoadModelFromRepository -> "repository"
       CompileModelFromSource { sourcePath } -> "compile:" <> sourcePath
+    outputSnapshotKey = case cfg.outputSnapshotDirectory of
+      Just outputSnapshotDirectory -> outputSnapshotDirectory
+      Nothing -> "no-output-snapshot"
   in
-    cfg.suiteName <> "|" <> loadMethodKey
+    cfg.suiteName <> "|" <> loadMethodKey <> "|" <> outputSnapshotKey
 
 executeModelTest
   :: PDRInstance

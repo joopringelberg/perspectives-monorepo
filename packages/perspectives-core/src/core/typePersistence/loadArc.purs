@@ -47,7 +47,7 @@ import Parsing (ParseError(..))
 import Perspectives.Checking.PerspectivesTypeChecker (checkDomeinFile)
 import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction)
 import Perspectives.DomeinCache (retrieveDomeinFile, storeDomeinFileInCache)
-import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, defaultDomeinFileRecord)
+import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, defaultDomeinFileRecord, deriveModelDependencies, stampDomeinFileTypeVersion)
 import Perspectives.Extern.Couchdb (installModelLocally)
 import Perspectives.Identifiers (modelUriVersion, unversionedModelUri)
 import Perspectives.InvertedQuery.Storable (StoredQueries)
@@ -65,7 +65,7 @@ import Perspectives.SideCar.PhantomTypedNewtypes (Readable)
 import Perspectives.Sidecar.NormalizeTypeNames (StableIdMappingForModel, getinstalledModelCuids, normalizeInvertedQueries, normalizeTypes)
 import Perspectives.Sidecar.StableIdMapping (ContextUri(..), ModelUri(..), Stable, StableIdMapping, fromLocalModels, fromRepository, idUriForContext, loadStableMapping)
 import Perspectives.Sidecar.UniqueTypeNames as UTN
-import Prelude (bind, discard, pure, show, ($), (/=), (<<<), (<>), (==), (>=>))
+import Prelude (bind, discard, pure, show, ($), (/=), (<<<), (<>), (==), (>=>), (<$>))
 import Simple.JSON (writeJSON)
 
 -- | The functions in this module load Arc files and parse and compile them to DomeinFiles.
@@ -111,9 +111,12 @@ loadAndCompileArcFile_ dfid text saveInCache modelCuid modelUriReadable mbasedOn
 -- | 2. the inverted queries in the local inverted-query database,
 -- | 3. the stable-id mapping as `stableIdMapping.json` attachment on the local model document.
 -- | If compilation fails, returns the compilation errors unchanged.
--- | NOTE: this function is only used from module Test.SinglePDRScaffold
-loadCompileAndStoreArcFile_ :: ModelUri Stable -> Source -> Boolean -> String -> String -> Maybe String -> MonadPerspectivesTransaction (Either (Array PerspectivesError) (Tuple (DomeinFile Stable) (Tuple StoredQueries StableIdMapping)))
-loadCompileAndStoreArcFile_ dfid text saveInCache modelCuid modelUriReadable _mbasedOnVersion = do
+-- | `mExistingMapping`, if given, is reused as the basis for stable-id assignment (e.g. the mapping
+-- | produced by a previous compilation of the same source elsewhere), so no new CUIDs are coined for
+-- | the types and individuals it already covers.
+-- | NOTE: this function is only used from module Test.SinglePDRScaffold and Test.Layer3Scaffold
+loadCompileAndStoreArcFile_ :: ModelUri Stable -> Source -> Boolean -> String -> String -> Maybe String -> Maybe StableIdMapping -> MonadPerspectivesTransaction (Either (Array PerspectivesError) (Tuple (DomeinFile Stable) (Tuple StoredQueries StableIdMapping)))
+loadCompileAndStoreArcFile_ dfid text saveInCache modelCuid modelUriReadable _mbasedOnVersion mExistingMapping = do
   version <- case modelUriVersion (unwrap dfid) of
     Nothing -> throwError $ error ("ModelUri " <> show dfid <> " is expected to be versioned.")
     Just v -> pure v
@@ -121,7 +124,7 @@ loadCompileAndStoreArcFile_ dfid text saveInCache modelCuid modelUriReadable _mb
     (over ModelUri unversionedModelUri dfid)
     text
     saveInCache
-    Nothing
+    mExistingMapping
     modelCuid
     modelUriReadable
     (Just version)
@@ -182,7 +185,9 @@ loadAndCompileArcFileWithSidecar_ dfid@(ModelUri stableModelUri) rawText saveInC
           -- We should load referred models if they are missing (but not the model we're compiling!).
           -- Throw an error if a referred model is not installed. It will show up in the arc feedback.
           installedModelCuids <- lift $ getinstalledModelCuids fromLocalModels
-          for_ referredModels (lift <<< (toStable installedModelCuids >=> retrieveDomeinFile))
+          -- At this point, the referredModels are qualified with a version. We should use the unversioned ModelUri 
+          -- before making sure they are installed.
+          for_ (over ModelUri unversionedModelUri <$> referredModels) (lift <<< (toStable installedModelCuids >=> retrieveDomeinFile))
 
           (x' :: Either MultiplePerspectivesErrors (Tuple (DomeinFileRecord Readable) StoredQueries)) <-
             lift $ phaseThree dr'' state.postponedStateQualifiedParts state.screens
@@ -202,13 +207,19 @@ loadAndCompileArcFileWithSidecar_ dfid@(ModelUri stableModelUri) rawText saveInC
                   , _id = takeGuid $ unwrap id
                   }
                 -- Now replace the readable name given by the modeller with a cuid, in FQNs:
-                normalizedDf <- lift $ normalizeTypes df mapping2
+                normalizedDf@(DomeinFile normalizedDfr) <- lift $ normalizeTypes df mapping2
+                let
+                  dfWithDependencies = DomeinFile normalizedDfr
+                    { modelDependencies = Just $ deriveModelDependencies referredModels normalizedDfr.referredModels }
+                stampedDf <- pure $ case mversion of
+                  Nothing -> dfWithDependencies
+                  Just version -> stampDomeinFileTypeVersion version dfWithDependencies
 
-                if saveInCache then void $ lift $ storeDomeinFileInCache (toStableModelUri id) normalizedDf else pure unit
+                if saveInCache then void $ lift $ storeDomeinFileInCache (toStableModelUri id) stampedDf else pure unit
 
                 normalizedInvertedQueries <- lift $ normalizeInvertedQueries df mapping2 invertedQueries
 
-                pure $ Right $ Tuple normalizedDf (Tuple normalizedInvertedQueries mapping2)
+                pure $ Right $ Tuple stampedDf (Tuple normalizedInvertedQueries mapping2)
               else
                 pure $ Left typeCheckErrors
     else

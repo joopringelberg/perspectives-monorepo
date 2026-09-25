@@ -73,10 +73,12 @@ After the non-sharing transaction finishes, `detectPublicStateChanges` is called
 1. Create a fresh `Transaction` with the given `authoringRole` and an empty record.
 2. **Lower the transaction flag** — an `AVar Boolean` that serialises concurrent transactions. Taking the value (lowering the flag) means "a transaction is now running". Callers block until the flag is available.
 3. Assign a unique, monotonically increasing `transactionNumber` (for logging).
-4. Execute the action (either the user action or `executeTransaction`), then immediately enter `phase1`.
-5. **Raise the flag** again on success or failure (guaranteed by an error boundary).
+4. **Push a fresh frame** onto the `PendingSettledStack` (see [§9](#9-once-settled-staged-actions-the-pendingsettledstack)).
+5. Execute the action (either the user action or `executeTransaction`), then immediately enter `phase1`.
+6. **Pop the frame** and, on success, hand its contents to `transactionWithTiming` for dispatch; on failure, discard it.
+7. **Raise the flag** again on success or failure (guaranteed by an error boundary).
 
-Nested ("embedded") transactions are supported via `runEmbeddedTransaction` / `runEmbeddedIfNecessary`. These explicitly raise the flag so that `runMonadPerspectivesTransaction'` can take it again. A nesting depth counter (`transactionLevel`) is maintained for log indentation.
+Nested ("embedded") transactions are supported via `runEmbeddedTransaction` / `runEmbeddedIfNecessary`. These explicitly raise the flag so that `runMonadPerspectivesTransaction'` can take it again. A nesting depth counter (`transactionLevel`) is maintained for log indentation. Because they go through the same `runMonadPerspectivesTransaction'` entry point, they push and pop their own `PendingSettledStack` frame too — see §9 for why this matters.
 
 ---
 
@@ -350,3 +352,38 @@ Client query subscriptions (`correlationIdentifiers`) are run at the very end of
 
 ### 8. `detectPublicStateChanges` runs outside the main transaction
 `detectPublicStateChanges` starts fresh non-sharing transactions after the main incoming-post transaction has completed. This means public-role state changes are processed asynchronously with respect to the peer transaction that caused them. If a peer transaction causes public roles to be loaded, and those roles affect local state conditions, those conditions will only be evaluated after the main transaction is fully committed. This is generally correct (the public data is now stable), but it means there can be a brief window between the peer transaction finishing and the public-state-triggered reactions completing.
+
+### 9. `once settled` staged actions: the `PendingSettledStack`
+
+An ARC `letA` action body can split its statements into stages separated by `once settled`:
+
+```arc
+letA
+  version <- create role cm:ModelManifest$Versions in ...
+in
+  Versions$Version = VersionNumber for version
+
+  once settled
+    Store = "Repository" for version >> binding
+
+  once settled
+    AutoUpload = true for version >> binding
+```
+
+Each stage is compiled into a separate `Updater` (`Perspectives.Representation.Action.ActionEffect`, see `Perspectives.Query.StatementCompiler.compileActionEffect`). At run time (`Perspectives.CompileActionEffect.compileActionEffectWith`), the first stage runs synchronously as part of the current transaction; every later stage is handed to `scheduleSettledTransaction` (`Perspectives.CompileTimeFacets`), which is supposed to run it only once the current logical transaction — including everything it triggers — has *settled*.
+
+**The bug (fixed 2026-09-24).** `scheduleSettledTransaction` used to `put` a `SettledTransaction` directly onto the global `transactionWithTiming` AVar the moment a stage finished, mid-action, before `phase1`/`phase2` of the *enclosing* transaction had even run. `forkTimedTransactions` (Main.purs) picks such entries up and runs them as an ordinary new `runMonadPerspectivesTransaction`, which serialises against every other transaction via `transactionFlag`. That looks race-free — except `runEmbeddedTransaction` (used whenever an automatic-action cascade needs an embedded *sharing* sub-transaction, e.g. to re-broadcast an own-user reaction while processing an incoming peer transaction) **momentarily raises `transactionFlag`** so it can take it down again itself. That raise is visible on the *global* AVar, not just to its own nested call — so a queued `SettledTransaction` sitting in `forkTimedTransactions`, waiting on the same flag, could slip through that window and run *before* the outer transaction's own cascade (e.g. a `ReadyToMake` state creating and binding the very role the settled stage targets) had finished. This surfaced as an intermittent `(NoRoleInstanceToSetProperty)` warning for properties set in a `once settled` stage that depends on a binding created earlier in the same automatic action.
+
+**The fix.** `scheduleSettledTransaction` no longer dispatches immediately. `PerspectivesState` now holds a `pendingSettledTransactions :: PendingSettledStack` (`Perspectives.CoreTypes`) — a mutable stack of frames, each an `Array RepeatingTransaction` of not-yet-dispatched `SettledTransaction`s (backed by an `Effect.Ref`, created via the same "pure factory + `unsafePerformEffect`" pattern already used for `LRUCache`). `scheduleSettledTransaction` appends to the *top* frame instead of touching the AVar.
+
+`runMonadPerspectivesTransaction'` (`whenFlagIsDown`) pushes a new, empty frame right after taking the transaction flag down, and pops it right before raising the flag again:
+- on success, *after* `phase1`/`phase2` have fully run, the popped frame's entries are `put` onto `transactionWithTiming` one by one (this is the only place that AVar is written to for settled stages now);
+- on failure, the popped frame is discarded (a failed transaction's staged continuations do not run).
+
+Because every `runMonadPerspectivesTransaction'` call — top-level *or* embedded — creates its own fresh `Transaction` record but shares the *same* `PendingSettledStack`, the push/pop pairs nest exactly like a call stack:
+- a stage scheduled while an **embedded** sub-transaction is running is appended to *that* sub-transaction's own frame, and is dispatched when *that* embedded call finishes (before it returns control to its caller) — well before the outer transaction's own frame is even considered for draining;
+- a stage scheduled by the **outer** action is only dispatched once phase1/phase2 of the *entire* outer transaction — including every embedded sub-transaction it triggered — has completed.
+
+In other words, `once settled` continuations are now both **chained** (stage *n+1* is only constructed once stage *n* has run) and **stacked** (an outer frame is only drained once every frame nested inside it has been drained first) — matching what the name always implied, rather than racing a global semaphore against unrelated flag-raise windows opened for a different purpose.
+
+See `Perspectives.CoreTypes` (`PendingSettledStack`, `newPendingSettledStack`, `pushPendingSettledFrame`, `popPendingSettledFrame`, `appendPendingSettled`), `Perspectives.CompileTimeFacets.scheduleSettledTransaction`, and `Perspectives.RunMonadPerspectivesTransaction.whenFlagIsDown`.
