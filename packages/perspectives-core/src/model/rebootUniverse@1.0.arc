@@ -220,11 +220,6 @@ domain model://joopringelberg.nl#RebootUniverse@1.0
             do for Tester
               bind (Manifest >> binding >> context >> Versions >> binding) >>= first to Version
 
-          -- state YamlGenerated = exists Version >> binding >> context >> Translation >> LastYamlChangeDT
-          --   on entry
-          --     do for Tester
-          --       TestSucceeded = true for extern
-
     external
       property NameSpace (String)
       property ModelName (String)
@@ -256,36 +251,13 @@ domain model://joopringelberg.nl#RebootUniverse@1.0
               -- Setting the version number triggers state ReadyToMake and creates the VersionedModelManifest context.
               Versions$Version = VersionNumber for version
 
-              -- once settled
-              --   create file "whatever" as "text/arc" in ArcFile for version >> binding
-              --     callExternal util:ApplyModelVersions( ModelVersions, callExternal p:GetLocalArcSource( version >> ModelURIReadable ) returns String ) returns String
-              --   Store = "Repository" for version >> binding
-              --   AutoUpload = true for version >> binding
-              
-              -- once settled
-              --   callEffect cdb:UploadOldTranslation( context >> Version >> binding >> VersionedModelURI )
-              --   -- LET OP: dit gebeurt ook in UploadToRepository!
-              --   GenerateYaml = true for version >> binding >> context >> Translation
-                
-      
-      state CompileModel = exists context >> Version >> binding
-        on entry
-          do for Tester
-            letA
-              version <- context >> Version >> binding
-            in
-              create file "whatever" as "text/arc" in ArcFile for version
-                callExternal util:ApplyModelVersions( ModelVersions, callExternal p:GetLocalArcSource( version >> ModelURIReadable ) returns String ) returns String
-              Store = "Repository" for version
-              StartParsing = true
+              once settled
+                create file "whatever" as "text/arc" in ArcFile for version >> binding
+                  callExternal util:ApplyModelVersions( ModelVersions, callExternal p:GetLocalArcSource( version >> ModelURIReadable ) returns String ) returns String
+                Store = "Repository" for version >> binding
 
-      state StartParsing = StartParsing
-        on entry
-          do for Tester once settled
-            letA
-              version <- context >> Version >> binding
-            in
-              AutoUpload = true for version
+              once settled
+                AutoUpload = true for version >> binding
       
       state AugmentYaml = exists context >> Version >> binding >> context >> Translation >> TranslationYaml
         on entry
@@ -296,13 +268,9 @@ domain model://joopringelberg.nl#RebootUniverse@1.0
               callEffect cdb:UploadOldTranslation( context >> Version >> binding >> VersionedModelURI )
               -- LET OP: dit gebeurt ook in UploadToRepository!
               GenerateYaml = true for version >> context >> Translation
-              YamlGenerated = true
-      
-      state Success = YamlGenerated
-        on entry
-          -- This ensures that we mark the test as succeeded in the next transaction, hopefully after yaml translation is complete.
-          do for Tester once settled
-            TestSucceeded = true
+
+              once settled
+                TestSucceeded = true
 
     user Tester filledBy (sys:TheWorld$PerspectivesUsers)
       aspect mm:Test$Tester
