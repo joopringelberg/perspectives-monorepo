@@ -366,6 +366,7 @@ data LogLevel = Trace | Debug | Info | Warn | Error | Silent
 
 derive instance eqLogLevel :: Eq LogLevel
 
+-- Ord is derived from the order of the constructors, so Trace < Debug < Info < Warn < Error < Silent
 derive instance ordLogLevel :: Ord LogLevel
 
 instance showLogLevel :: Show LogLevel where

@@ -61,6 +61,7 @@ import Perspectives.Instances.Combinators (conjunction, intersection, orElse) as
 import Perspectives.Instances.Environment (_pushFrame)
 import Perspectives.Instances.ObjectGetters (binding, binding_, completeRuntimeType, context, contextModelName, contextType, contextType_, externalRole, filledByCombinator, filledByOperator, fillsCombinator, fillsOperator, getActiveRoleStates_, getActiveStates_, getEnumeratedRoleInstances, getFilledRoles, getProperty, getRecursivelyFilledRoles', getUnlinkedRoleInstances, indexedContextName, indexedRoleName, roleModelName, roleType, roleType_)
 import Perspectives.Instances.Values (parseBool, parseNumber)
+import Perspectives.Logging (errorCompiler)
 import Perspectives.ModelDependencies (roleWithId, socialEnvironment, socialEnvironmentPersons)
 import Perspectives.Names (expandDefaultNamespaces, lookupIndexedContext, lookupIndexedRole)
 import Perspectives.ObjectGetterLookup (lookupPropertyValueGetterByName, lookupRoleGetterByName, propertyGetterCacheInsert)
@@ -245,7 +246,12 @@ compileMQD :: Partial => QueryFunctionDescription -> MP (String ~~> String)
 
 compileMQD (MQD _ (ExternalCoreContextGetter functionName) _ ran _ _) = do
   (f :: HiddenFunction) <- pure $ unsafeCoerce $ unsafePartial $ fromJust $ lookupHiddenFunction functionName
-  pure $ unsafeCoerce f [ ctype ran ]
+  pure $ \r -> catchError
+    ((unsafeCoerce f [ ctype ran ]) r)
+    ( \e -> do
+        lift $ lift $ errorCompiler $ "Error for ExternalCoreContextGetter " <> functionName <> ": " <> show e
+        ArrayT $ pure []
+    )
   where
   ctype :: Domain -> String
   ctype d = unsafePartial $ case domain2contextType d of
@@ -256,98 +262,110 @@ compileMQD (MQD dom (ExternalCoreRoleGetter functionName) args _ _ _) = do
   (f :: HiddenFunction) <- pure $ unsafeCoerce $ unsafePartial $ fromJust $ lookupHiddenFunction functionName
   (argFunctions) <- traverse compileFunction args
   pure
-    ( \c -> do
-        (values :: Array (Array String)) <- lift $ traverse (\g -> runArrayT $ g c) argFunctions
-        (nrOfParameters :: Int) <- pure $ unsafePartial (fromJust $ lookupHiddenFunctionNArgs functionName)
-        -- Notice that the number of parameters given ignores the default argument (context or role) that the function is applied to anyway.
-        -- If we do have an extra argument value, supply it as the last argument instead of r.
-        (lastArgument :: String) <- case index values nrOfParameters of
-          Nothing -> pure c
-          Just v -> pure $ unsafePartial (unsafeIndex v 0)
-        case unsafePartial $ fromJust $ lookupHiddenFunctionNArgs functionName of
-          0 -> (unsafeCoerce f :: (String -> MPQ String)) lastArgument
-          1 -> (unsafeCoerce f :: (Array String -> String -> MPQ String))
-            (unsafePartial (unsafeIndex values 0))
-            lastArgument
-          2 -> (unsafeCoerce f :: (Array String -> Array String -> String -> MPQ String))
-            (unsafePartial (unsafeIndex values 0))
-            (unsafePartial (unsafeIndex values 1))
-            lastArgument
-          3 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> String -> MPQ String))
-            (unsafePartial (unsafeIndex values 0))
-            (unsafePartial (unsafeIndex values 1))
-            (unsafePartial (unsafeIndex values 2))
-            lastArgument
-          4 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> Array String -> String -> MPQ String))
-            (unsafePartial (unsafeIndex values 0))
-            (unsafePartial (unsafeIndex values 1))
-            (unsafePartial (unsafeIndex values 2))
-            (unsafePartial (unsafeIndex values 3))
-            lastArgument
-          5 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> Array String -> Array String -> String -> MPQ String))
-            (unsafePartial (unsafeIndex values 0))
-            (unsafePartial (unsafeIndex values 1))
-            (unsafePartial (unsafeIndex values 2))
-            (unsafePartial (unsafeIndex values 3))
-            (unsafePartial (unsafeIndex values 4))
-            lastArgument
-          6 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> Array String -> Array String -> Array String -> String -> MPQ String))
-            (unsafePartial (unsafeIndex values 0))
-            (unsafePartial (unsafeIndex values 1))
-            (unsafePartial (unsafeIndex values 2))
-            (unsafePartial (unsafeIndex values 3))
-            (unsafePartial (unsafeIndex values 4))
-            (unsafePartial (unsafeIndex values 5))
-            lastArgument
-          _ -> throwError (error "Too many arguments for external core module: maximum is 6")
+    ( \c -> catchError
+        ( do
+            (values :: Array (Array String)) <- lift $ traverse (\g -> runArrayT $ g c) argFunctions
+            (nrOfParameters :: Int) <- pure $ unsafePartial (fromJust $ lookupHiddenFunctionNArgs functionName)
+            -- Notice that the number of parameters given ignores the default argument (context or role) that the function is applied to anyway.
+            -- If we do have an extra argument value, supply it as the last argument instead of r.
+            (lastArgument :: String) <- case index values nrOfParameters of
+              Nothing -> pure c
+              Just v -> pure $ unsafePartial (unsafeIndex v 0)
+            case unsafePartial $ fromJust $ lookupHiddenFunctionNArgs functionName of
+              0 -> (unsafeCoerce f :: (String -> MPQ String)) lastArgument
+              1 -> (unsafeCoerce f :: (Array String -> String -> MPQ String))
+                (unsafePartial (unsafeIndex values 0))
+                lastArgument
+              2 -> (unsafeCoerce f :: (Array String -> Array String -> String -> MPQ String))
+                (unsafePartial (unsafeIndex values 0))
+                (unsafePartial (unsafeIndex values 1))
+                lastArgument
+              3 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> String -> MPQ String))
+                (unsafePartial (unsafeIndex values 0))
+                (unsafePartial (unsafeIndex values 1))
+                (unsafePartial (unsafeIndex values 2))
+                lastArgument
+              4 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> Array String -> String -> MPQ String))
+                (unsafePartial (unsafeIndex values 0))
+                (unsafePartial (unsafeIndex values 1))
+                (unsafePartial (unsafeIndex values 2))
+                (unsafePartial (unsafeIndex values 3))
+                lastArgument
+              5 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> Array String -> Array String -> String -> MPQ String))
+                (unsafePartial (unsafeIndex values 0))
+                (unsafePartial (unsafeIndex values 1))
+                (unsafePartial (unsafeIndex values 2))
+                (unsafePartial (unsafeIndex values 3))
+                (unsafePartial (unsafeIndex values 4))
+                lastArgument
+              6 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> Array String -> Array String -> Array String -> String -> MPQ String))
+                (unsafePartial (unsafeIndex values 0))
+                (unsafePartial (unsafeIndex values 1))
+                (unsafePartial (unsafeIndex values 2))
+                (unsafePartial (unsafeIndex values 3))
+                (unsafePartial (unsafeIndex values 4))
+                (unsafePartial (unsafeIndex values 5))
+                lastArgument
+              _ -> throwError (error "Too many arguments for external core module: maximum is 6")
+        )
+        ( \e -> do
+            lift $ lift $ errorCompiler $ "Error for ExternalCoreRoleGetter " <> functionName <> ": " <> show e
+            ArrayT $ pure []
+        )
     )
 
 compileMQD (MQD dom (ExternalCorePropertyGetter functionName) args _ _ _) = do
   (f :: HiddenFunction) <- pure $ unsafePartial $ fromJust $ lookupHiddenFunction functionName
   (argFunctions :: Array (String ~~> String)) <- traverse compileFunction args
   pure
-    ( \r -> do
-        (values :: Array (Array String)) <- lift $ traverse (\g -> runArrayT $ g r) argFunctions
-        (nrOfParameters :: Int) <- pure $ unsafePartial (fromJust $ lookupHiddenFunctionNArgs functionName)
-        -- Notice that the number of parameters given ignores the default argument (context or role) that the function is applied to anyway.
-        -- If we do have an extra argument value, supply it as the last argument instead of r.
-        (lastArgument :: String) <- case index values nrOfParameters of
-          Nothing -> pure r
-          Just v -> pure $ unsafePartial (unsafeIndex v 0)
-        case nrOfParameters of
-          0 -> (unsafeCoerce f :: (String -> MPQ String)) lastArgument
-          1 -> (unsafeCoerce f :: (Array String -> String -> MPQ String)) (unsafePartial (unsafeIndex values 0)) lastArgument
-          2 -> (unsafeCoerce f :: (Array String -> Array String -> String -> MPQ String))
-            (unsafePartial (unsafeIndex values 0))
-            (unsafePartial (unsafeIndex values 1))
-            lastArgument
-          3 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> String -> MPQ String))
-            (unsafePartial (unsafeIndex values 0))
-            (unsafePartial (unsafeIndex values 1))
-            (unsafePartial (unsafeIndex values 2))
-            lastArgument
-          4 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> Array String -> String -> MPQ String))
-            (unsafePartial (unsafeIndex values 0))
-            (unsafePartial (unsafeIndex values 1))
-            (unsafePartial (unsafeIndex values 2))
-            (unsafePartial (unsafeIndex values 3))
-            lastArgument
-          5 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> Array String -> Array String -> String -> MPQ String))
-            (unsafePartial (unsafeIndex values 0))
-            (unsafePartial (unsafeIndex values 1))
-            (unsafePartial (unsafeIndex values 2))
-            (unsafePartial (unsafeIndex values 3))
-            (unsafePartial (unsafeIndex values 4))
-            lastArgument
-          6 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> Array String -> Array String -> Array String -> String -> MPQ String))
-            (unsafePartial (unsafeIndex values 0))
-            (unsafePartial (unsafeIndex values 1))
-            (unsafePartial (unsafeIndex values 2))
-            (unsafePartial (unsafeIndex values 3))
-            (unsafePartial (unsafeIndex values 4))
-            (unsafePartial (unsafeIndex values 5))
-            lastArgument
-          _ -> throwError (error "Too many arguments for external core module: maximum is 6")
+    ( \r -> catchError
+        ( do
+            (values :: Array (Array String)) <- lift $ traverse (\g -> runArrayT $ g r) argFunctions
+            (nrOfParameters :: Int) <- pure $ unsafePartial (fromJust $ lookupHiddenFunctionNArgs functionName)
+            -- Notice that the number of parameters given ignores the default argument (context or role) that the function is applied to anyway.
+            -- If we do have an extra argument value, supply it as the last argument instead of r.
+            (lastArgument :: String) <- case index values nrOfParameters of
+              Nothing -> pure r
+              Just v -> pure $ unsafePartial (unsafeIndex v 0)
+            case nrOfParameters of
+              0 -> (unsafeCoerce f :: (String -> MPQ String)) lastArgument
+              1 -> (unsafeCoerce f :: (Array String -> String -> MPQ String)) (unsafePartial (unsafeIndex values 0)) lastArgument
+              2 -> (unsafeCoerce f :: (Array String -> Array String -> String -> MPQ String))
+                (unsafePartial (unsafeIndex values 0))
+                (unsafePartial (unsafeIndex values 1))
+                lastArgument
+              3 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> String -> MPQ String))
+                (unsafePartial (unsafeIndex values 0))
+                (unsafePartial (unsafeIndex values 1))
+                (unsafePartial (unsafeIndex values 2))
+                lastArgument
+              4 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> Array String -> String -> MPQ String))
+                (unsafePartial (unsafeIndex values 0))
+                (unsafePartial (unsafeIndex values 1))
+                (unsafePartial (unsafeIndex values 2))
+                (unsafePartial (unsafeIndex values 3))
+                lastArgument
+              5 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> Array String -> Array String -> String -> MPQ String))
+                (unsafePartial (unsafeIndex values 0))
+                (unsafePartial (unsafeIndex values 1))
+                (unsafePartial (unsafeIndex values 2))
+                (unsafePartial (unsafeIndex values 3))
+                (unsafePartial (unsafeIndex values 4))
+                lastArgument
+              6 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> Array String -> Array String -> Array String -> String -> MPQ String))
+                (unsafePartial (unsafeIndex values 0))
+                (unsafePartial (unsafeIndex values 1))
+                (unsafePartial (unsafeIndex values 2))
+                (unsafePartial (unsafeIndex values 3))
+                (unsafePartial (unsafeIndex values 4))
+                (unsafePartial (unsafeIndex values 5))
+                lastArgument
+              _ -> throwError (error "Too many arguments for external core module: maximum is 6")
+        )
+        ( \e -> do
+            lift $ lift $ errorCompiler $ "Error for ExternalCorePropertyGetter " <> functionName <> ": " <> show e
+            ArrayT $ pure []
+        )
     )
 
 ---------------------------------------------------------------------------------------------------

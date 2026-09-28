@@ -1361,16 +1361,20 @@ uploadOldTranslation modelUris _ = do
       case moldTranslationTable of
         Nothing -> warnInstall ("No translation table found for model URI: " <> modelUri)
         Just oldTranslationTable -> case (unsafePartial modelUri2ModelUrl modelUri) of
-          { repositoryUrl, documentName } -> do
-            theFile <- liftEffect $ toFile "translationtable.json" "application/json" (unsafeToForeign $ writeJSON oldTranslationTable)
-            mRev <- lift $ retrieveDocumentVersion repositoryUrl documentName
-            void $ lift $ addAttachment
-              repositoryUrl
-              documentName
-              mRev
-              "translationtable.json"
-              theFile
-              (MediaType "text/json")
+          { repositoryUrl, documentName } -> catchError
+            do
+              traceInstall ("Starting to upload old translation table for model URI: " <> modelUri)
+              theFile <- liftEffect $ toFile "translationtable.json" "application/json" (unsafeToForeign $ writeJSON oldTranslationTable)
+              mRev <- lift $ retrieveDocumentVersion repositoryUrl documentName
+              void $ lift $ addAttachment
+                repositoryUrl
+                documentName
+                mRev
+                "translationtable.json"
+                theFile
+                (MediaType "text/json")
+              infoInstall ("Successfully uploaded old translation table for model URI: " <> modelUri)
+            \err -> warnInstall ("Failed to upload old translation table for model URI: " <> modelUri <> " with error: " <> show err)
 
 -- | An Array of External functions. Each External function is inserted into the ExternalFunctionCache and can be retrieved
 -- | with `Perspectives.External.HiddenFunctionCache.lookupHiddenFunction`.

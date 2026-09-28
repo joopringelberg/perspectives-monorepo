@@ -53,7 +53,7 @@ import Perspectives.Identifiers (hasLocalName)
 import Perspectives.Instances.Combinators (exists')
 import Perspectives.Instances.Me (getMyType)
 import Perspectives.Instances.ObjectGetters (Filler_(..), context, contextType, filler2filledFromDatabase_, getActiveRoleStates, getActiveStates, roleType, roleType_)
-import Perspectives.Logging (debugState, traceState, warnState)
+import Perspectives.Logging (debugState, errorCompiler, traceState, warnState)
 import Perspectives.ModelDependencies (sysUser)
 import Perspectives.Persistent (tryRemoveEntiteit)
 import Perspectives.PerspectivesState (addBinding, addWarning, clearPublicRolesJustLoaded, decreaseTransactionLevel, getPublicRolesJustLoaded, increaseTransactionLevel, nextTransactionNumber, pushFrame, restoreFrame, transactionFlag, transactionLevel)
@@ -656,50 +656,53 @@ runEmbeddedIfNecessary share authoringRole a = do
 -- EXECUTEEFFECT
 -----------------------------------------------------------
 executeEffect :: String -> String -> Array (Array String) -> MonadPerspectivesTransaction Unit
-executeEffect functionName origin values = do
-  (f :: HiddenFunction) <- pure $ unsafePartial $ fromJust $ lookupHiddenFunction functionName
-  (nrOfParameters :: Int) <- pure $ unsafePartial (fromJust $ lookupHiddenFunctionNArgs functionName)
-  -- Notice that the number of parameters given ignores the default argument (context or role) that the function is applied to anyway.
-  -- If we do have an extra argument value, supply it as the last argument instead of r.
-  (lastArgument :: String) <- case index values nrOfParameters of
-    Nothing -> pure origin
-    Just v -> pure (unsafePartial (unsafeIndex v 0))
-  case nrOfParameters of
-    0 -> (unsafeCoerce f :: String -> MPT Unit) lastArgument
-    1 -> (unsafeCoerce f :: (Array String -> String -> MPT Unit))
-      (unsafePartial (unsafeIndex values 0))
-      lastArgument
-    2 -> (unsafeCoerce f :: (Array String -> Array String -> String -> MPT Unit))
-      (unsafePartial (unsafeIndex values 0))
-      (unsafePartial (unsafeIndex values 1))
-      lastArgument
-    3 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> String -> MPT Unit))
-      (unsafePartial (unsafeIndex values 0))
-      (unsafePartial (unsafeIndex values 1))
-      (unsafePartial (unsafeIndex values 2))
-      lastArgument
-    4 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> Array String -> String -> MPT Unit))
-      (unsafePartial (unsafeIndex values 0))
-      (unsafePartial (unsafeIndex values 1))
-      (unsafePartial (unsafeIndex values 2))
-      (unsafePartial (unsafeIndex values 3))
-      lastArgument
-    5 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> Array String -> Array String -> String -> MPT Unit))
-      (unsafePartial (unsafeIndex values 0))
-      (unsafePartial (unsafeIndex values 1))
-      (unsafePartial (unsafeIndex values 2))
-      (unsafePartial (unsafeIndex values 3))
-      (unsafePartial (unsafeIndex values 4))
-      lastArgument
-    6 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> Array String -> Array String -> Array String -> String -> MPT Unit))
-      (unsafePartial (unsafeIndex values 0))
-      (unsafePartial (unsafeIndex values 1))
-      (unsafePartial (unsafeIndex values 2))
-      (unsafePartial (unsafeIndex values 3))
-      (unsafePartial (unsafeIndex values 4))
-      (unsafePartial (unsafeIndex values 5))
-      lastArgument
-    _ -> throwError (error "Too many arguments for external core module: maximum is 6")
+executeEffect functionName origin values = catchError
+  ( do
+      (f :: HiddenFunction) <- pure $ unsafePartial $ fromJust $ lookupHiddenFunction functionName
+      (nrOfParameters :: Int) <- pure $ unsafePartial (fromJust $ lookupHiddenFunctionNArgs functionName)
+      -- Notice that the number of parameters given ignores the default argument (context or role) that the function is applied to anyway.
+      -- If we do have an extra argument value, supply it as the last argument instead of r.
+      (lastArgument :: String) <- case index values nrOfParameters of
+        Nothing -> pure origin
+        Just v -> pure (unsafePartial (unsafeIndex v 0))
+      case nrOfParameters of
+        0 -> (unsafeCoerce f :: String -> MPT Unit) lastArgument
+        1 -> (unsafeCoerce f :: (Array String -> String -> MPT Unit))
+          (unsafePartial (unsafeIndex values 0))
+          lastArgument
+        2 -> (unsafeCoerce f :: (Array String -> Array String -> String -> MPT Unit))
+          (unsafePartial (unsafeIndex values 0))
+          (unsafePartial (unsafeIndex values 1))
+          lastArgument
+        3 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> String -> MPT Unit))
+          (unsafePartial (unsafeIndex values 0))
+          (unsafePartial (unsafeIndex values 1))
+          (unsafePartial (unsafeIndex values 2))
+          lastArgument
+        4 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> Array String -> String -> MPT Unit))
+          (unsafePartial (unsafeIndex values 0))
+          (unsafePartial (unsafeIndex values 1))
+          (unsafePartial (unsafeIndex values 2))
+          (unsafePartial (unsafeIndex values 3))
+          lastArgument
+        5 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> Array String -> Array String -> String -> MPT Unit))
+          (unsafePartial (unsafeIndex values 0))
+          (unsafePartial (unsafeIndex values 1))
+          (unsafePartial (unsafeIndex values 2))
+          (unsafePartial (unsafeIndex values 3))
+          (unsafePartial (unsafeIndex values 4))
+          lastArgument
+        6 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> Array String -> Array String -> Array String -> String -> MPT Unit))
+          (unsafePartial (unsafeIndex values 0))
+          (unsafePartial (unsafeIndex values 1))
+          (unsafePartial (unsafeIndex values 2))
+          (unsafePartial (unsafeIndex values 3))
+          (unsafePartial (unsafeIndex values 4))
+          (unsafePartial (unsafeIndex values 5))
+          lastArgument
+        _ -> throwError (error "Too many arguments for external core module: maximum is 6")
+  )
+  (\e -> errorCompiler $ "Error for ExternalDestructiveFunction in executeEffect: " <> show e)
 
 -----------------------------------------------------------
 -- DETECT STATE TRANSITIONS TRIGGERED BY PUBLIC RESOURCES
