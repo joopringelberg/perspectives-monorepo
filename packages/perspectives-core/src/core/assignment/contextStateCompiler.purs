@@ -195,6 +195,7 @@ enteringState contextId stateId = do
         (updater cid)
         ( \e -> do
             warning <- lift $ humanizePerspectivesWarning (AutomaticActionError stateId)
+            traceState (padding <> show warning)
             lift $ addWarning
               ( { message: padding <> show warning <> " in context instance " <> show contextId <> "."
                 , error: show e

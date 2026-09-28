@@ -212,6 +212,7 @@ enteringRoleState roleId stateId = do
           -- setInActiveRoleState stateId roleId 
           do
             warning <- lift $ humanizePerspectivesWarning (AutomaticActionError stateId)
+            traceState (padding <> show warning)
             lift $ addWarning
               ( { message: padding <> show warning <> " in role instance " <> show roleId <> "."
                 , error: show e
