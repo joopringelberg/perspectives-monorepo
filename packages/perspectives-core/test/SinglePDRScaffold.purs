@@ -253,7 +253,7 @@ executeModelTest pdr testAppContext testContextTypeR logConfiguration cfg = do
         lift $ infoTest "Executing RunTest action"
         runContextAction (unwrap testTesterType) "RunTest" (unwrap theTest)
 
-  r <- pollUntilTestFinishes 100 (Milliseconds 100.0)
+  r <- pollUntilTestFinishes 100 (Milliseconds 200.0)
     "Test to complete with a result"
     ( runInPDR pdr
         do

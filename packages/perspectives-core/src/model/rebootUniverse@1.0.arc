@@ -7,6 +7,7 @@ domain model://joopringelberg.nl#RebootUniverse@1.0
   use p for model://perspectives.domains#Parsing
   use hyp for model://perspectives.domains#HyperContext
   use bs for model://perspectives.domains#BrokerServices
+  use util for model://perspectives.domains#Utilities
 
   -------------------------------------------------------------------------------
   ---- SETTING UP
@@ -101,11 +102,11 @@ domain model://joopringelberg.nl#RebootUniverse@1.0
           -- Give Tester credentials.
           callEffect cdb:AddCredentials( url, "alice", "alice" )
           -- Remove cw_servers_and_repositories
-          -- callEffect cdb:DeleteCouchdbDatabase( url, "cw_servers_and_repositories" )
+          callEffect cdb:DeleteCouchdbDatabase( url, "cw_servers_and_repositories" )
           -- Remove cw_perspectives_domains
-          -- callEffect cdb:DeleteCouchdbDatabase( url, "cw_perspectives_domains" )
+          callEffect cdb:DeleteCouchdbDatabase( url, "cw_perspectives_domains" )
           -- Remove models_perspectives_domains
-          -- callEffect cdb:DeleteCouchdbDatabase( url, "models_perspectives_domains" )
+          callEffect cdb:DeleteCouchdbDatabase( url, "models_perspectives_domains" )
           -- Remove the Bespoke database of Big Bang.
           callEffect cdb:DeleteCouchdbDatabase( url, "cw_bigbangsdatabase" )
           TestName = "Cleanup - remove the databases created on the previous run." for extern
@@ -219,10 +220,18 @@ domain model://joopringelberg.nl#RebootUniverse@1.0
             do for Tester
               bind (Manifest >> binding >> context >> Versions >> binding) >>= first to Version
 
+          -- state YamlGenerated = exists Version >> binding >> context >> Translation >> LastYamlChangeDT
+          --   on entry
+          --     do for Tester
+          --       TestSucceeded = true for extern
+
     external
       property NameSpace (String)
       property ModelName (String)
       property VersionNumber (String)
+
+      -- Values like: "RebootUniverse=1.1; CouchdbManagement=12.5; Couchdb=4.0"
+      property ModelVersions (String)
 
       property StartTest (Boolean)
       property StartParsing (Boolean)
@@ -230,7 +239,7 @@ domain model://joopringelberg.nl#RebootUniverse@1.0
 
       state CreateManifest = StartTest
         on entry
-          do for Tester after 20 Milliseconds
+          do for Tester once settled
             letA
               manifest <- create role cm:Repository$Manifests in context >> Repository >> binding >> context
             in
@@ -240,11 +249,24 @@ domain model://joopringelberg.nl#RebootUniverse@1.0
       -- Is the Manifest role filled with the external role of the new ModelManifest?
       state CreateVersion = exists context >> Manifest >> binding
         on entry
-          do for Tester after 20 Milliseconds
+          do for Tester once settled
             letA
               version <- create role cm:ModelManifest$Versions in context >> Manifest >> binding >> context
             in
+              -- Setting the version number triggers state ReadyToMake and creates the VersionedModelManifest context.
               Versions$Version = VersionNumber for version
+
+              -- once settled
+              --   create file "whatever" as "text/arc" in ArcFile for version >> binding
+              --     callExternal util:ApplyModelVersions( ModelVersions, callExternal p:GetLocalArcSource( version >> ModelURIReadable ) returns String ) returns String
+              --   Store = "Repository" for version >> binding
+              --   AutoUpload = true for version >> binding
+              
+              -- once settled
+              --   callEffect cdb:UploadOldTranslation( context >> Version >> binding >> VersionedModelURI )
+              --   -- LET OP: dit gebeurt ook in UploadToRepository!
+              --   GenerateYaml = true for version >> binding >> context >> Translation
+                
       
       state CompileModel = exists context >> Version >> binding
         on entry
@@ -253,24 +275,21 @@ domain model://joopringelberg.nl#RebootUniverse@1.0
               version <- context >> Version >> binding
             in
               create file "whatever" as "text/arc" in ArcFile for version
-                callExternal p:GetLocalArcSource( version >> ModelURIReadable ) returns String 
+                callExternal util:ApplyModelVersions( ModelVersions, callExternal p:GetLocalArcSource( version >> ModelURIReadable ) returns String ) returns String
               Store = "Repository" for version
               StartParsing = true
 
       state StartParsing = StartParsing
         on entry
-          do for Tester after 20 Milliseconds
+          do for Tester once settled
             letA
               version <- context >> Version >> binding
             in
               AutoUpload = true for version
       
-      state AugmentYaml = letE
-          translation <- context >> Version >> binding >> context >> Translation
-        in
-          (exists translation >> TranslationYaml)
+      state AugmentYaml = exists context >> Version >> binding >> context >> Translation >> TranslationYaml
         on entry
-          do for Tester after 20 Milliseconds
+          do for Tester once settled
             letA
               version <- context >> Version >> binding
             in
@@ -282,13 +301,13 @@ domain model://joopringelberg.nl#RebootUniverse@1.0
       state Success = YamlGenerated
         on entry
           -- This ensures that we mark the test as succeeded in the next transaction, hopefully after yaml translation is complete.
-          do for Tester after 500 Milliseconds
+          do for Tester once settled
             TestSucceeded = true
 
     user Tester filledBy (sys:TheWorld$PerspectivesUsers)
       aspect mm:Test$Tester
       perspective on extern
-        props (NameSpace, VersionNumber, ModelName, StartTest, StartParsing, YamlGenerated) verbs (SetPropertyValue, Consult)
+        props (NameSpace, VersionNumber, ModelName, StartTest, StartParsing, YamlGenerated, ModelVersions) verbs (SetPropertyValue, Consult)
 
       perspective on Repository
         only (CreateAndFill)
@@ -453,6 +472,7 @@ domain model://joopringelberg.nl#RebootUniverse@1.0
         ModelName = "System" for extern
         VersionNumber = "7.0" for extern
         TestName = "Add the model System" for extern
+        ModelVersions = "Couchdb=4.0; Serialise=3.0; Sensor=3.0; Utilities=3.0" for extern
 
         bind cm:MyCouchdbApp >> (filter CouchdbServers >> binding >> context >> Repositories with (Repositories$NameSpace == origin >> extern >> NameSpace)) >> binding >>= first to Repository
         StartTest = true for extern
@@ -626,7 +646,7 @@ domain model://joopringelberg.nl#RebootUniverse@1.0
         -- Set these in the specialised versions.
         NameSpace = "perspectives.domains" for extern
         ModelName = "BrokerServices" for extern
-        VersionNumber = "6.1" for extern
+        VersionNumber = "7.0" for extern
         TestName = "Add the model BrokerServices" for extern
 
         bind cm:MyCouchdbApp >> (filter CouchdbServers >> binding >> context >> Repositories with (Repositories$NameSpace == origin >> extern >> NameSpace)) >> binding >>= first to Repository
@@ -787,6 +807,9 @@ domain model://joopringelberg.nl#RebootUniverse@1.0
 
 ------------------------------------------------------------------------------
   ---- MANAGE BROKER SERVICE
+  ---- Creates a BrokerService that is available as a public resource with identifier
+  ---- "https://perspectives.domains/cw_bigbangsdatabase/BigBangsBrokerService"
+
   ------------------------------------------------------------------------------
   case ManageBrokerService
     aspect mm:Test
@@ -812,7 +835,7 @@ domain model://joopringelberg.nl#RebootUniverse@1.0
 
       perspective on bs:BrokerServices$ManagedBrokers
         only (Create)
-        props (StorageLocation) verbs (SetPropertyValue, Consult)
+        props (StorageLocation, GivenIdentifier) verbs (SetPropertyValue, Consult)
 
       action RunTest
         letA
@@ -837,6 +860,7 @@ domain model://joopringelberg.nl#RebootUniverse@1.0
           -- This sets the stage for BespokeDatabase$External$Publish to run, making the database public.
           
           once settled
+            GivenIdentifier = "BigBangsBrokerService" for brokerservice
             StorageLocation = owner >> cm:BespokeDatabase$Owner$BespokeDatabaseUrl for brokerservice
             -- This triggers State BrokerServices$ManagedBrokers$HasStorageLocation, which creates the BrokerService context.
           

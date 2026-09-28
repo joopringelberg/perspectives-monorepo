@@ -108,7 +108,7 @@ rebootUniverseTests =
   , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_Parsing", logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_HelpLib", logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_Files", logConfiguration: emptyLogConfiguration }
-  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_CouchdbManagement", logConfiguration: debugConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_CouchdbManagement", logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_BrokerServices", logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_RabbitMQ", logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_HyperContext", logConfiguration: emptyLogConfiguration }
@@ -118,8 +118,8 @@ rebootUniverseTests =
   , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_RepositoryRegistry", logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_SharedFileServices", logConfiguration: emptyLogConfiguration }
   -- The above tests, once run, are not necessary to run ManageBrokerService and Add_public_pages.
-  -- , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$ManageBrokerService", logConfiguration: emptyLogConfiguration }
-  -- , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$Add_public_pages", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$ManageBrokerService", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$Add_public_pages", logConfiguration: emptyLogConfiguration }
   ]
 
 debugConfiguration :: LogConfiguration
@@ -129,6 +129,7 @@ debugConfiguration =
         -- { topic: TEST, logLevel: Trace }
         { topic: RESOURCE, logLevel: Trace }
       , { topic: STATE, logLevel: Trace }
-      -- , { topic: INSTALL, logLevel: Trace }
+      , { topic: INSTALL, logLevel: Trace }
+      , { topic: MODEL, logLevel: Debug }
       ]
   }
