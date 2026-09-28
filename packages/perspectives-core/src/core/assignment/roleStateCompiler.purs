@@ -337,7 +337,9 @@ exitingRoleState roleId stateId = do
   case lookup (Tuple (unwrap roleId) stateId) fibers of
     Nothing -> pure unit
     Just f -> do
-      lift $ liftAff $ killFiber (error "Stopped execution of repeating action in state") f
+      readableStateId <- lift $ toReadable stateId
+      traceState (padding <> "Stopping repeating action in state " <> unwrap readableStateId)
+      lift $ liftAff $ killFiber (error ("Stopped execution of repeating action in state " <> unwrap readableStateId)) f
       lift $ modify \s@{ transactionFibers } -> s { transactionFibers = delete (Tuple (unwrap roleId) stateId) transactionFibers }
 
   { automaticOnExit, notifyOnExit } <- getCompiledState stateId
