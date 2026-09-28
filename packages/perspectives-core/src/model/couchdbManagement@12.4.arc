@@ -1194,7 +1194,7 @@ domain model://perspectives.domains#CouchdbManagement@12.4
         on entry
           do for Author
             ArcFeedback = "Parsing and compiling the Arc source file for " + VersionedModelURI + "..."
-          do for Author after 500 Milliseconds
+          do for Author once settled
             -- If BasedOnVersion is not set, the PDR will generate new CUIDs.
             ArcFeedback = callExternal p:ParseAndCompileArc( VersionedModelURI, ArcSource, context >> BasedOnVersion >> VersionedModelURI ) returns String
             -- Even though we set LastChangeDT, state ProcessArc is not exited.
@@ -1206,7 +1206,7 @@ domain model://perspectives.domains#CouchdbManagement@12.4
         -- Why not roll up both states into one? I hope this design ensures that the required files are available.!
         state UploadToRepository = Store == "Repository"
           on entry
-            do for Author after 500 Milliseconds
+            do for Author once settled
               -- This will upload an empty Translations table, too. VersionedModelURI should be Stable.
               callEffect p:UploadToRepository( VersionedModelURI, 
                 callExternal util:ReplaceR( "bind publicrole.*in sys:MySystem", "", ArcSource ) returns String, context >> BasedOnVersion >> VersionedModelURI)
@@ -1218,7 +1218,7 @@ domain model://perspectives.domains#CouchdbManagement@12.4
         
         state StoreInLocalDatabase = Store == "Locally"
           on entry
-            do for Author after 500 Milliseconds
+            do for Author once settled
               callEffect p:StoreModelLocally( VersionedModelURI, ArcSource, context >> BasedOnVersion >> VersionedModelURI )
               Build = Build + 1
               MustUpload = false
@@ -1227,7 +1227,7 @@ domain model://perspectives.domains#CouchdbManagement@12.4
 
         state ApplyImmediately = ApplyInSession
           on entry
-            do for Author after 500 Milliseconds
+            do for Author once settled
               callEffect p:ApplyImmediately( VersionedModelURI, ArcSource, context >> BasedOnVersion >> VersionedModelURI )
               MustUpload = false
             notify Author
@@ -1235,7 +1235,7 @@ domain model://perspectives.domains#CouchdbManagement@12.4
         
         state NoAction = not ApplyInSession
           on entry
-            do for Author after 500 Milliseconds
+            do for Author once settled
               MustUpload = false
             notify Author
               "Version {External$Version} (build {Build}) has not been stored in the local store or applied to the current session."
