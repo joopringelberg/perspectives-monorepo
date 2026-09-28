@@ -40,7 +40,7 @@ rebootUniverseConfiguration =
   , snapshotDirectory: rebootUniverseSnapshotDirectory
   , outputSnapshotDirectory: Nothing
   , testModel: rebootUniverseTestModel
-  , testModelLoadMethod: LoadModelFromRepository
+  , testModelLoadMethods: [ LoadModelFromRepository { modelUri: rebootUniverseTestModel } ]
   , indexedTestContext: rebootUniverseIndexedTestContext
   , testAppManager: rebootUniverseTestAppManager
   , testsType: rebootUniverseTestsType
@@ -61,18 +61,30 @@ rebootUniverseCompileTestModelConfiguration :: SinglePDRModelConfiguration
 rebootUniverseCompileTestModelConfiguration =
   rebootUniverseConfiguration
     { suiteName = "Reboot universe tests (compile)"
-    , testModelLoadMethod =
-        CompileModelFromSource
-          { sourcePath: "src/model/rebootUniverse@1.0.arc"
-          , modelUriReadable: "model://joopringelberg.nl#RebootUniverse@1.0"
-          , basedOnVersion: Nothing
-          }
+    , testModelLoadMethods =
+        [ CompileModelFromSource
+            { modelUri: repositoryToolsTestModel
+            , sourcePath: "src/model/repositoryTools@1.0.arc"
+            , modelUriReadable: "model://joopringelberg.nl#RepositoryTools@1.0"
+            , basedOnVersion: Nothing
+            }
+        , CompileModelFromSource
+            { modelUri: rebootUniverseTestModel
+            , sourcePath: "src/model/rebootUniverse@2.0.arc"
+            , modelUriReadable: "model://joopringelberg.nl#RebootUniverse@2.0"
+            , basedOnVersion: Nothing
+            }
+        ]
     , outputSnapshotDirectory = Just "test/pdr-snapshot/universe/aliceAfterReboot"
     }
 
 rebootUniverseTestModel :: String
--- rebootUniverseTestModel = "model://joopringelberg.nl#RebootUniverse@1.0"
-rebootUniverseTestModel = "model://joopringelberg.nl#eqcwpoi6u6@1.0"
+-- rebootUniverseTestModel = "model://joopringelberg.nl#RebootUniverse@2.0"
+rebootUniverseTestModel = "model://joopringelberg.nl#eqcwpoi6u6@2.0"
+
+repositoryToolsTestModel :: String
+-- repositoryToolsTestModel = "model://joopringelberg.nl#RepositoryTools@1.0"
+repositoryToolsTestModel = "model://joopringelberg.nl#ncr77pkxia@1.0"
 
 rebootUniverseIndexedTestContext :: String
 rebootUniverseIndexedTestContext = "model://joopringelberg.nl#RebootUniverse$RebootUniverseApp"
@@ -84,10 +96,10 @@ rebootUniverseTestsType :: String
 rebootUniverseTestsType = "model://joopringelberg.nl#RebootUniverse$TestApp$Tests"
 
 rebootUniverseTestSucceededProperty :: String
-rebootUniverseTestSucceededProperty = "model://joopringelberg.nl#RebootUniverse$Test$External$TestSucceeded"
+rebootUniverseTestSucceededProperty = "model://joopringelberg.nl#RepositoryTools$Test$External$TestSucceeded"
 
 rebootUniverseTestNameProperty :: String
-rebootUniverseTestNameProperty = "model://joopringelberg.nl#RebootUniverse$Test$External$TestName"
+rebootUniverseTestNameProperty = "model://joopringelberg.nl#RepositoryTools$Test$External$TestName"
 
 rebootUniverseSnapshotDirectory :: String
 rebootUniverseSnapshotDirectory = "test/pdr-snapshot/universe/alice"
@@ -95,10 +107,10 @@ rebootUniverseSnapshotDirectory = "test/pdr-snapshot/universe/alice"
 -- Outcomment all tests to just re-create the snapshot without trying to create databases.
 rebootUniverseTests :: Array ModelTest
 rebootUniverseTests =
-  [ { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$Cleanup", logConfiguration: emptyLogConfiguration }
-  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$ManageCouchdb", logConfiguration: emptyLogConfiguration }
+  [ { testContextTypeName: "model://joopringelberg.nl#RepositoryTools$Cleanup", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RepositoryTools$ManageCouchdb", logConfiguration: emptyLogConfiguration }
   -- The following tests, once run, are not necessary to run ManageBrokerService and Add_public_pages.
-  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$CreatePerspectivesDomainsRepository", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RepositoryTools$CreatePerspectivesDomainsRepository", logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_Couchdb", logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_Serialise", logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_Sensor", logConfiguration: emptyLogConfiguration }

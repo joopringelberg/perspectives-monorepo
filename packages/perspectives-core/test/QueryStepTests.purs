@@ -53,7 +53,7 @@ queryStepTestModelConfiguration =
   , snapshotDirectory: snapshotDirectory
   , outputSnapshotDirectory: Nothing
   , testModel
-  , testModelLoadMethod: LoadModelFromRepository
+  , testModelLoadMethods: [ LoadModelFromRepository { modelUri: testModel } ]
   , indexedTestContext
   , testAppManager
   , testsType

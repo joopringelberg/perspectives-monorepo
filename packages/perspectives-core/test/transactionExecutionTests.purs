@@ -37,7 +37,7 @@ transactionExecutionTestModelConfiguration =
   , snapshotDirectory: transactionExecutionSnapshotDirectory
   , outputSnapshotDirectory: Nothing
   , testModel: transactionExecutionTestModel
-  , testModelLoadMethod: LoadModelFromRepository
+  , testModelLoadMethods: [ LoadModelFromRepository { modelUri: transactionExecutionTestModel } ]
   , indexedTestContext: transactionExecutionIndexedTestContext
   , testAppManager: transactionExecutionTestAppManager
   , testsType: transactionExecutionTestsType
@@ -57,12 +57,14 @@ transactionExecutionCompileTestModelConfiguration :: SinglePDRModelConfiguration
 transactionExecutionCompileTestModelConfiguration =
   transactionExecutionTestModelConfiguration
     { suiteName = "Transaction execution tests (compile)"
-    , testModelLoadMethod =
-        CompileModelFromSource
-          { sourcePath: "src/model/transactionExecutionTests@1.0.arc"
-          , modelUriReadable: "model://joopringelberg.nl#TransactionExecutionTests@1.0"
-          , basedOnVersion: Nothing
-          }
+    , testModelLoadMethods =
+        [ CompileModelFromSource
+            { modelUri: transactionExecutionTestModel
+            , sourcePath: "src/model/transactionExecutionTests@1.0.arc"
+            , modelUriReadable: "model://joopringelberg.nl#TransactionExecutionTests@1.0"
+            , basedOnVersion: Nothing
+            }
+        ]
     }
 
 transactionExecutionTestModel :: String

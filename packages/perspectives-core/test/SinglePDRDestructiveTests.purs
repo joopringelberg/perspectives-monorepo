@@ -64,7 +64,7 @@ singlePDRDestructiveTestModelConfiguration =
   , snapshotDirectory: destructiveSnapshotDirectory
   , outputSnapshotDirectory: Nothing
   , testModel: destructiveTestModel
-  , testModelLoadMethod: LoadModelFromRepository
+  , testModelLoadMethods: [ LoadModelFromRepository { modelUri: destructiveTestModel } ]
   , indexedTestContext: destructiveIndexedTestContext
   , testAppManager: destructiveTestAppManager
   , testsType: destructiveTestsType
