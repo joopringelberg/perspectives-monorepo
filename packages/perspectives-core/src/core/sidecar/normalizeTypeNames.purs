@@ -52,7 +52,7 @@ import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (MonadPerspectives, (##=), (##>))
 import Perspectives.Data.EncodableMap (EncodableMap, empty, fromFoldable, toUnfoldable) as EM
 import Perspectives.DomeinFile (DomeinFile(..), SeparateInvertedQuery(..), UpstreamAutomaticEffect(..), UpstreamStateNotification(..))
-import Perspectives.Identifiers (qualifyWith, splitTypeUri, typeUri2typeNameSpace)
+import Perspectives.Identifiers (qualifyWith, splitTypeUri, typeUri2typeNameSpace, unversionedModelUri)
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..))
 import Perspectives.Instances.ObjectGetters (binding)
 import Perspectives.InvertedQuery (InvertedQuery(..), QueryWithAKink(..))
@@ -132,13 +132,18 @@ getSideCars df@(DomeinFile { referredModels }) versioned = do
   cuidMap <- getinstalledModelCuids versioned
   standardModelSideCars <- getStandardModelSidecars versioned
   importedModelSideCars <- foldM
-    ( \sidecars (ModelUri referredModel) -> case Map.lookup (ModelUri referredModel) cuidMap of
-        Nothing -> pure sidecars
-        Just (domeinFileName :: ModelUri Stable) -> do
-          mmapping <- loadStableMapping domeinFileName fromLocalModels
-          case mmapping of
+    -- A `use` clause may pin a version, but type URIs never carry one: key the sidecars by the unversioned model URI.
+    ( \sidecars (ModelUri referredModel) ->
+        let
+          unversioned = ModelUri (unversionedModelUri referredModel) :: ModelUri Readable
+        in
+          case Map.lookup unversioned cuidMap of
             Nothing -> pure sidecars
-            Just submapping -> pure $ Map.insert (ModelUri referredModel) submapping sidecars
+            Just (domeinFileName :: ModelUri Stable) -> do
+              mmapping <- loadStableMapping domeinFileName fromLocalModels
+              case mmapping of
+                Nothing -> pure sidecars
+                Just submapping -> pure $ Map.insert unversioned submapping sidecars
     )
     Map.empty
     referredModels
@@ -219,7 +224,7 @@ instance NormalizeTypeNames (DomeinFile Readable) (ModelUri Readable) where
       (\(Tuple ct rle) -> Tuple <$> unwrap <$> (fqn2tid <<< CalculatedPropertyType) ct <*> normalizeTypeNames rle)
     states' <- fromFoldable <$> for ((toUnfoldable df.states) :: Array (Tuple String State))
       (\(Tuple ct st) -> Tuple <$> unwrap <$> (fqn2tid <<< StateIdentifier) ct <*> normalizeTypeNames st)
-    referredModels' <- for df.referredModels fqn2tid
+    referredModels' <- for df.referredModels (\(ModelUri m) -> fqn2tid (ModelUri (unversionedModelUri m) :: ModelUri Readable))
     invertedQueriesInOtherDomains' <- fromFoldable <$> for ((toUnfoldable df.invertedQueriesInOtherDomains) :: Array (Tuple String (Array SeparateInvertedQuery)))
       (\(Tuple ct q) -> Tuple <$> (unwrap <$> ((fqn2tid (ModelUri ct)) :: WithSideCars (ModelUri Readable))) <*> traverse normalize q)
     upstreamStateNotifications' <- fromFoldable <$> for ((toUnfoldable df.upstreamStateNotifications) :: Array (Tuple String (Array UpstreamStateNotification)))
