@@ -69,6 +69,12 @@ export default async function () {
     plugins: [
       {
         name: 'arc-as-text',
+        resolveId(source) {
+          if (source.startsWith('../test/patches/') && source.endsWith('.arc')) {
+            return path.join(__dirname, source.slice('../'.length));
+          }
+          return null;
+        },
         load(id) {
           if (id.endsWith('.arc')) {
             return `export default ${JSON.stringify(readFileSync(id, 'utf8'))};`;
