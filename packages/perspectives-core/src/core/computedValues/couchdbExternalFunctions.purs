@@ -1121,7 +1121,7 @@ removeAsMemberOf = updateSecurityDocument "RemoveAsMemberOf"
     SecurityDocument r
       { members =
           { names: ARR.delete (unwrap $ user2couchdbuser userName) <$> r.members.names
-          , roles: r.admins.roles
+          , roles: r.members.roles
           }
       }
 
