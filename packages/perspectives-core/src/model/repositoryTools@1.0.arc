@@ -44,7 +44,7 @@ domain model://joopringelberg.nl#RepositoryTools@1.0
     aspect sys:RootContext
     external
     
-    user Manager = sys:Me
+    user Manager = me
       perspective on Tests
         only (CreateAndFill, RemoveContext)
       perspective on Tests >> binding >> context >> Tester

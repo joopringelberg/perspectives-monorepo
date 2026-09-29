@@ -132,6 +132,7 @@ rebootUniverseTests =
   -- The above tests, once run, are not necessary to run ManageBrokerService and Add_public_pages.
   , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$ManageBrokerService", logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$Add_public_pages", logConfiguration: emptyLogConfiguration }
+  -- { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$SignUpToBrokerService", logConfiguration: debugConfiguration }
   ]
 
 debugConfiguration :: LogConfiguration

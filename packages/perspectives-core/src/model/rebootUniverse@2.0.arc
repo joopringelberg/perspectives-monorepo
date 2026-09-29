@@ -508,7 +508,7 @@ domain model://joopringelberg.nl#RebootUniverse@2.0
     aspect context mm:AddModel$Manifest
     aspect context mm:AddModel$Version
 
-------------------------------------------------------------------------------
+  ------------------------------------------------------------------------------
   ---- MANAGE BROKER SERVICE
   ---- Creates a BrokerService that is available as a public resource with identifier
   ---- "https://perspectives.domains/cw_bigbangsdatabase/BigBangsBrokerService"
@@ -574,7 +574,7 @@ domain model://joopringelberg.nl#RebootUniverse@2.0
             SelfRegisterEndpoint = "https://mycontexts.com/rbsr/" for brokerservice
             Name = "Big Bangs BrokerService" for brokerservice
 
-------------------------------------------------------------------------------
+  ------------------------------------------------------------------------------
   ---- PUBLIC PAGES
   ---- 1. Create a public PublicPageCollections "System Pages" in hypercontext:HyperTextApp
   ---- 2. Add a PublicPages instance to the "System Pages" collection and fill it with a new PublicPage. Set its Title property to "StartPagina".
@@ -582,6 +582,9 @@ domain model://joopringelberg.nl#RebootUniverse@2.0
   ---- 4. Add a single unconditional TextBlocks instance to Instructions. Fill its MD property with content.
   ---- 5. Add three TextBlocks instances to Startpagina, each with a condition. Fill their MD properties with content.
   ----    Fill their Condition properties with appropriate conditions.
+  ---- These pages have fixed identifiers:
+  ----    * StartPagina:  pub:https://perspectives.domains/cw_bigbangsdatabase/#StartPage
+  ----    * Instructions: pub:https://perspectives.domains/cw_bigbangsdatabase/#Instructions
   ------------------------------------------------------------------------------
   case Add_public_pages
     aspect mm:Test
@@ -611,7 +614,7 @@ domain model://joopringelberg.nl#RebootUniverse@2.0
                 for block2
               Condition = "not (exists bs:MyBrokers >> PublicBrokers)" for block2
               MD = <## Welcome to MyContexts!
-                    Read our [[link:pub:https://perspectives.domains/cw_ro6a1vrf9y/#atog6qpw44$External|instructions]] for use if you need introductory guidance.> 
+                    Read our [[link:pub:https://perspectives.domains/cw_bigbangsdatabase/#Instructions$External|instructions]] for use if you need introductory guidance.> 
                 for block3
               Condition = "true" for block3
 
@@ -822,3 +825,45 @@ domain model://joopringelberg.nl#RebootUniverse@2.0
 
 
     user Owner = ru:RebootUniverseApp >> BespokeDatabaseOwner
+
+  ------------------------------------------------------------------------------
+  ---- SIGN UP TO BROKERSERVICE
+  ---- Add the BrokerService with the following public resource identifier:
+  ---- "https://perspectives.domains/cw_bigbangsdatabase/BigBangsBrokerService"
+  ---- Then Signup.
+  ------------------------------------------------------------------------------
+  -- case SignUpToBrokerService
+  --   aspect mm:Test
+
+  --   external
+  --     property PublicServiceAvailable (Boolean)
+
+  --     state Signup = PublicServiceAvailable
+  --       on entry
+  --         do for Tester once settled
+  --           letA
+  --             accountsinstance <- create context BrokerContract bound to Accounts in bs:MyBrokers >> PublicBrokers >> binding >> context
+  --           in
+  --             bind me to AccountHolder in accountsinstance >> binding >> context
+  --             bind accountsinstance >> context >> Administrator to Administrator in accountsinstance >> binding >> context
+
+  --     state Success = exists context >> ContractInUse
+  --       on entry
+  --         do for Tester once settled
+  --           TestSucceeded = true
+
+  --   user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+  --     aspect mm:Test$Tester
+
+  --     perspective on MyPublicBrokers
+  --       only (CreateAndFill, Fill)
+
+  --     action RunTest
+  --       letA
+  --         brokerservice <- publicrole pub:https://perspectives.domains/cw_bigbangsdatabase/#BigBangsBrokerService$External
+  --       in
+  --         bind brokerservice to PublicBrokers in bs:MyBrokers
+
+  --         once settled
+  --           PublicServiceAvailable = true
+

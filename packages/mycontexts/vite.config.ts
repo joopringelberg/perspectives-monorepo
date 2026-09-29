@@ -182,7 +182,7 @@ export default defineConfig(async ({ mode }) => {
     define: {
       __MYCONTEXTS_VERSION__: JSON.stringify(thepackage.version),
       __PDR_VERSION__: JSON.stringify(corepackage.version),
-      __STARTPAGE__: JSON.stringify("pub:https://perspectives.domains/cw_ro6a1vrf9y/#wxl4tmx54i$External"),
+      __STARTPAGE__: JSON.stringify("pub:https://perspectives.domains/cw_bigbangsdatabase/#StartPage$External"),
       __MyContextsContainer__: JSON.stringify("root"),
       __PAGEDISPATCHER_VERSION__: pageDispatcherVersion,
       __BUILD_ID__: JSON.stringify(buildId),
