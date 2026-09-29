@@ -25,6 +25,7 @@ module Perspectives.Persistence.Authentication where
 import Prelude
 
 import Affjax.RequestBody as RequestBody
+import Affjax.RequestHeader (RequestHeader(..))
 import Affjax.ResponseFormat as ResponseFormat
 import Affjax.StatusCode (StatusCode(..))
 import Affjax.Web as AJ
@@ -33,6 +34,7 @@ import Control.Monad.Except (catchJust)
 import Data.Either (Either(..))
 import Data.HTTP.Method (Method(..))
 import Data.Maybe (Maybe(..), maybe)
+import Data.String.Base64 (btoa)
 import Effect.Aff (Error, error, throwError)
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
@@ -49,6 +51,8 @@ import Perspectives.ResourceIdentifiers (databaseLocation)
 -----------------------------------------------------------
 
 foreign import isUnauthorized :: Error -> Boolean
+
+foreign import runningInNode :: Boolean
 
 -- | In Resource s, s is a string with a Resource Identifiying Scheme as defined in [Perspectives.ResourceIdentifiers](Perspectives.ResourceIdentifiers.html).
 data AuthoritySource = Resource String | Authority String | Url String
@@ -123,7 +127,12 @@ authenticatedPerspectRequest authority = do
   rq <- defaultPerspectRequest
   mcredential <- getCredentials authority
   pure case mcredential of
-    Just (Credential username password) -> rq { username = Just username, password = Just password }
+    Just (Credential username password) ->
+      -- xhr2 (Node) ignores the credentials passed to open(), so send the header ourselves.
+      if runningInNode then case btoa (username <> ":" <> password) of
+        Right encoded -> rq { headers = [ RequestHeader "Authorization" ("Basic " <> encoded) ] }
+        Left _ -> rq
+      else rq { username = Just username, password = Just password }
     Nothing -> rq
 
 -- | As authenticatedPerspectRequest, deriving the authority from a full url.

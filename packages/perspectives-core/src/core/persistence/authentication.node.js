@@ -12,6 +12,8 @@ export function isUnauthorized (error)
   );
 }
 
+export const runningInNode = true;
+
 function hasSameAuthority(firstUrl, secondUrl)
 {
   try
