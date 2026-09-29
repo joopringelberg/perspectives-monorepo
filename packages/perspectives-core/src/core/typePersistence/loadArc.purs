@@ -98,8 +98,8 @@ loadAndCompileArcFile_ dfid text saveInCache modelCuid modelUriReadable mbasedOn
       mmapping <- case mbasedOnVersion of
         -- In this case, we take the mapping from the indicated version, from the Repository.
         Just basedOnVersion -> lift $ loadStableMapping (ModelUri basedOnVersion) fromRepository
-        -- In this case, we take the mapping from the local models.
-        Nothing -> lift $ loadStableMapping dfid fromLocalModels
+        -- In this case, we take the mapping from the local models (stored under unversioned document names).
+        Nothing -> lift $ loadStableMapping (over ModelUri unversionedModelUri dfid) fromLocalModels
       -- In this case, we generate new CUIDs. Most likely this is the first version ever for this model.
       -- Nothing -> pure Nothing
       loadAndCompileArcFileWithSidecar_ (over ModelUri unversionedModelUri dfid) text saveInCache mmapping modelCuid modelUriReadable (Just version)
