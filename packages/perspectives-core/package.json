@@ -33,8 +33,8 @@
     "copyCoreToRoot": "scp -r ./dist/* joop@inplace.works:/var/www/mycontexts.com",
     "copyCoreToWWW": "scp -r ./dist/* joop@inplace.works:/var/www/mycontexts.com/www",
     "fmt": "purs-tidy format-in-place \"src/**/*.purs\"",
-    "transpileDependencies": "node ./scripts/transpile-model-deps.mjs --cache-dir ./.cache/sidecars --in-file ./scripts/modelDependencies_source.purs --out-file ./src/core/modelDependencies.purs || echo '[transpile] skipping (no versions or offline)'",
-    "prebuild": "node ./scripts/transpile-model-deps.mjs --cache-dir ./.cache/sidecars --in-file ./scripts/modelDependencies_source.purs --out-file ./src/core/modelDependencies.purs || echo '[transpile] skipping (no versions or offline)'",
+    "transpileDependencies": "NODE_EXTRA_CA_CERTS=\"$(command -v mkcert >/dev/null && echo \"$(mkcert -CAROOT)/rootCA.pem\")\" node ./scripts/transpile-model-deps.mjs --cache-dir ./.cache/sidecars --in-file ./scripts/modelDependencies_source.purs --out-file ./src/core/modelDependencies.purs || echo '[transpile] skipping (no versions or offline)'",
+    "prebuild": "NODE_EXTRA_CA_CERTS=\"$(command -v mkcert >/dev/null && echo \"$(mkcert -CAROOT)/rootCA.pem\")\" node ./scripts/transpile-model-deps.mjs --cache-dir ./.cache/sidecars --in-file ./scripts/modelDependencies_source.purs --out-file ./src/core/modelDependencies.purs || echo '[transpile] skipping (no versions or offline)'",
     "build": "pnpm run fmt && pnpm exec spago build && rollup -c",
     "build:node": "pnpm exec spago build && rollup -c rollup.node.config.js",
     "build:layer3": "pnpm exec spago build && ROLLUP_INPUT=./output/Test.Layer3/index.js ROLLUP_OUTPUT=./dist/test.layer3.node.js rollup -c rollup.node.config.js",
@@ -50,6 +50,7 @@
     "test:rebootUniverse": "[ \"$(../../localdevelopment/servefromwhere)\" = local ] || { echo 'test:rebootUniverse requires perspectives.domains to be served locally; run localdevelopment/servefromlocal first' >&2; exit 1; } && pnpm exec spago build && ROLLUP_INPUT=./output/Test.RebootUniverse/index.js ROLLUP_OUTPUT=./dist/test.rebootUniverse.node.js rollup -c rollup.node.config.js  && clear && NODE_EXTRA_CA_CERTS=\"$(mkcert -CAROOT)/rootCA.pem\" node dist/test.rebootUniverse.node.js",
     "test:rebootUniverseDanger": "pnpm exec spago build && ROLLUP_INPUT=./output/Test.RebootUniverse/index.js ROLLUP_OUTPUT=./dist/test.rebootUniverse.node.js rollup -c rollup.node.config.js  && clear && NODE_EXTRA_CA_CERTS=\"$(mkcert -CAROOT)/rootCA.pem\" node dist/test.rebootUniverse.node.js",
     "create:universeSnapshot": "[ \"$(../../localdevelopment/servefromwhere)\" = remote ] || { echo 'create:universeSnapshot requires perspectives.domains to be served remotely; run localdevelopment/servefromremote first' >&2; exit 1; } && pnpm exec spago build && ROLLUP_INPUT=./output/Test.CreateUniverseSnapshot/index.js ROLLUP_OUTPUT=./dist/create.universeSnapshot.node.js rollup -c rollup.node.config.js && clear && node dist/create.universeSnapshot.node.js",
+    "test:modelDependencies": "[ \"$(../../localdevelopment/servefromwhere)\" = local ] || { echo 'test:modelDependencies requires perspectives.domains to be served locally; run localdevelopment/servefromlocal first' >&2; exit 1; } && pnpm exec spago build && ROLLUP_INPUT=./output/Test.ModelDependencies/index.js ROLLUP_OUTPUT=./dist/test.modelDependencies.node.js rollup -c rollup.node.config.js  && clear && NODE_EXTRA_CA_CERTS=\"$(mkcert -CAROOT)/rootCA.pem\" node dist/test.modelDependencies.node.js",
     "test:node": "pnpm exec spago build && ROLLUP_INPUT=./output/Test.Main/index.js ROLLUP_OUTPUT=./dist/test.node.js rollup -c rollup.node.config.js && node dist/test.node.js",
     "modulemap": "node build-module-map.mjs > module-map.json"
   },
