@@ -144,8 +144,7 @@ domain model://perspectives.domains#HyperContext@1.0
       property ConditionResult = RawConditionResult >> callExternal util:SelectR( "^result#(.*)" ) returns String
       property ShowBlock = (exists ConditionResult) and ConditionResult == "true"
       property ShowToAuthor = ShowBlock or context >> extern >> ShowAllBlocks
-      -- NOTA BENE: Dit werkt niet gegeven het huidige executie model van Perspectives.
-      state ConditionsUnequal = (exists Condition) and not (OldCondition == Condition)
+      state ConditionsUnequal = (exists context >> Author) and (exists Condition) and not (OldCondition == Condition)
         on entry
           do for Author
             CompiledCondition = callExternal util:CompileExpression( Condition ) returns String
