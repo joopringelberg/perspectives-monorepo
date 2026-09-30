@@ -31,12 +31,12 @@ import Control.Monad.Except (runExceptT)
 import Control.Monad.State (execState, execStateT)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Writer (tell)
-import Data.Array (catMaybes, concat, cons, filter, find, head, union)
+import Data.Array (catMaybes, concat, cons, filter, filterA, find, head, union)
 import Data.Array (union, delete) as ARR
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.FoldableWithIndex (forWithIndex_)
-import Data.Maybe (Maybe(..), maybe)
+import Data.Maybe (Maybe(..), isJust, maybe)
 import Data.MediaType (MediaType(..))
 import Data.Newtype (over, unwrap)
 import Data.Nullable (toMaybe)
@@ -61,7 +61,7 @@ import Perspectives.ApiTypes (ContextSerialization(..), PropertySerialization(..
 import Perspectives.Assignment.StateCache (clearModelStates)
 import Perspectives.Assignment.Update (withAuthoringRole)
 import Perspectives.Authenticate (getMyPublicKey, getMyTransportPublicKey)
-import Perspectives.ContextAndRole (changeRol_isMe, context_id, rol_id)
+import Perspectives.ContextAndRole (changeRol_isMe, context_id, rol_context, rol_id)
 import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), InformedAssumption(..), MonadPerspectives, MonadPerspectivesTransaction, mkLibEffect1, mkLibEffect2, mkLibEffect3, mkLibFunc2, (##=), (##>), (##>>))
 import Perspectives.Couchdb (DatabaseName, SecurityDocument(..))
 import Perspectives.Couchdb.Revision (Revision_)
@@ -88,7 +88,7 @@ import Perspectives.Persistence.CouchdbFunctions as CDB
 import Perspectives.Persistence.DeltaStore (storeDeltaFromSignedDelta)
 import Perspectives.Persistence.State (getSystemIdentifier, getCouchdbBaseURL, getCouchdbCredentials)
 import Perspectives.Persistence.Types (Credential(..), UserName, Password)
-import Perspectives.Persistent (entitiesDatabaseName, forceSaveDomeinFile, getDomeinFile, getPerspectRol, saveEntiteit, saveEntiteit_, saveMarkedResources, tryGetPerspectContext, tryGetPerspectEntiteit)
+import Perspectives.Persistent (entitiesDatabaseName, forceSaveDomeinFile, getDomeinFile, getPerspectRol, saveEntiteit, saveEntiteit_, saveMarkedResources, tryGetPerspectContext, tryGetPerspectEntiteit, tryGetPerspectRol)
 import Perspectives.Persistent.FromViews (getSafeViewOnDatabase)
 import Perspectives.PerspectivesState (clearQueryCache, contextCache, conversationCacheDelete, getCurrentLanguage, getPerspectivesUser, getTranslationTable, isInstalledModel, lookupModelUri, modelsDatabaseName, removeTranslationTable, roleCache, setModelUri)
 import Perspectives.Query.UnsafeCompiler (getPropertyValues, getRoleInstances)
@@ -697,15 +697,17 @@ readInstalledModelVersions = catchError
   \_ -> pure []
   where
   installedVersion :: RoleInstance -> MonadPerspectives (Maybe InstalledModelVersion)
-  installedVersion manifestExternal = do
-    mversionedModelUri <- manifestExternal ##> getPropertyValues (CP $ CalculatedPropertyType DEP.versionedModelURI)
-    pure case mversionedModelUri of
-      Just (Value versionedModelUri) ->
-        Just
-          { modelId: unversionedModelUri versionedModelUri
-          , versionedModelUri
-          }
-      _ -> Nothing
+  installedVersion manifestExternal = catchError
+    do
+      mversionedModelUri <- manifestExternal ##> getPropertyValues (CP $ CalculatedPropertyType DEP.versionedModelURI)
+      pure case mversionedModelUri of
+        Just (Value versionedModelUri) ->
+          Just
+            { modelId: unversionedModelUri versionedModelUri
+            , versionedModelUri
+            }
+        _ -> Nothing
+    \_ -> pure Nothing
 
 readInstalledDependencyRequirements :: MonadPerspectives (Array InstalledDependencyRequirement)
 readInstalledDependencyRequirements = catchError
@@ -715,23 +717,32 @@ readInstalledDependencyRequirements = catchError
   \_ -> pure []
   where
   dependenciesForManifest :: RoleInstance -> MonadPerspectives (Array InstalledDependencyRequirement)
-  dependenciesForManifest manifestExternal = do
-    mversionedModelUri <- manifestExternal ##> getPropertyValues (CP $ CalculatedPropertyType DEP.versionedModelURI)
-    dependencies <- readManifestDependencies manifestExternal
-    pure case mversionedModelUri of
-      Just (Value versionedModelUri) ->
-        ( \dependency ->
-            { dependentVersionedModelUri: versionedModelUri
-            , dependency
-            }
-        ) <$> dependencies
-      _ -> []
+  dependenciesForManifest manifestExternal = catchError
+    do
+      mversionedModelUri <- manifestExternal ##> getPropertyValues (CP $ CalculatedPropertyType DEP.versionedModelURI)
+      dependencies <- readManifestDependencies manifestExternal
+      pure case mversionedModelUri of
+        Just (Value versionedModelUri) ->
+          ( \dependency ->
+              { dependentVersionedModelUri: versionedModelUri
+              , dependency
+              }
+          ) <$> dependencies
+        _ -> []
+    \_ -> pure []
 
 getInstalledManifestExternals :: MonadPerspectives (Array RoleInstance)
 getInstalledManifestExternals = do
   system <- getMySystem
   modelRoles <- (ContextInstance system) ##= getRoleInstances (ENR $ EnumeratedRoleType DEP.modelsInUse)
-  catMaybes <$> traverse (\modelRole -> modelRole ##> binding) modelRoles
+  manifestExternals <- catMaybes <$> traverse (\modelRole -> modelRole ##> binding) modelRoles
+  filterA isAvailable manifestExternals
+  where
+  -- Checked without the broken-link fixer, so absent manifests are skipped silently.
+  isAvailable :: RoleInstance -> MonadPerspectives Boolean
+  isAvailable manifestExternal = tryGetPerspectRol manifestExternal >>= case _ of
+    Nothing -> pure false
+    Just rol -> isJust <$> tryGetPerspectContext (rol_context rol)
 
 readManifestDependencies :: RoleInstance -> MonadPerspectives (Array ModelDependency)
 readManifestDependencies manifestExternal = do
