@@ -28,7 +28,7 @@ import Control.Monad.Error.Class (catchError, throwError)
 import Data.Array (cons)
 import Data.List (elem)
 import Data.Map (Map, empty, insert, lookup, values) as Map
-import Data.Maybe (Maybe(..), isNothing)
+import Data.Maybe (Maybe(..), isJust)
 import Data.Nullable (null)
 import Data.String (Pattern(..), stripSuffix)
 import Effect (Effect)
@@ -182,8 +182,9 @@ transactionFlag :: MonadPerspectives (AVar Boolean)
 transactionFlag = gets _.transactionFlag
 
 -- Non-blocking check to see if a transaction is currently running. 
+-- The flag is 'down' (the AVar is empty) exactly while a transaction runs.
 noTransactionIsRunning :: MonadPerspectives Boolean
-noTransactionIsRunning = transactionFlag >>= liftAff <<< map isNothing <<< tryRead
+noTransactionIsRunning = transactionFlag >>= liftAff <<< map isJust <<< tryRead
 
 nextTransactionNumber :: MonadPerspectives Int
 nextTransactionNumber = do

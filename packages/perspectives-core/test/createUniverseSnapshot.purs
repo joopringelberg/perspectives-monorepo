@@ -56,14 +56,13 @@ import Perspectives.Identifiers (modelUri2LocalName, modelUri2SchemeAndAuthority
 import Perspectives.Instances.ObjectGetters (getEnumeratedRoleInstances)
 import Perspectives.Logging (ansiRed, infoTest)
 import Perspectives.ModelDependencies (sysUser, manifestsRole, localModelNameProperty, modelCuidProperty)
-import Perspectives.Persistent (saveMarkedResources)
 import Perspectives.PerspectivesState (defaultRuntimeOptions, setTopicLogLevel)
 import Perspectives.Query.UnsafeCompiler (getPropertyFromTelescope)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..))
 import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..), EnumeratedRoleType(..), RoleType(..))
 import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransaction', shareWithPeers)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
-import Test.PDRInstance (noBus, snapshotPDR, startPDRInstance, testPouchdbUser)
+import Test.PDRInstance (noBus, settleAndSave, snapshotPDR, startPDRInstance, testPouchdbUser)
 import Test.PDRInstance.Types (runInPDR)
 
 -----------------------------------------------------------
@@ -168,7 +167,7 @@ main = launchAff_ do
           ]
         void $ recompileLocalModel (ModelUri "model://perspectives.domains#CouchdbManagement")
 
-      runInPDR pdr saveMarkedResources
+      settleAndSave pdr
 
       snapshotPDR (testPouchdbUser userName).systemIdentifier (testPouchdbUser userName).perspectivesUser snapshotDirectory
       log ("Snapshot written to " <> snapshotDirectory)

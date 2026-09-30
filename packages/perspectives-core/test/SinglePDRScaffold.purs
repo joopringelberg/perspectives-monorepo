@@ -62,7 +62,6 @@ import Perspectives.Instances.Builders (createAndAddRoleInstance, constructConte
 import Perspectives.Logging (ansiRed, infoTest)
 import Perspectives.ModelDependencies (sysUser)
 import Perspectives.Names (lookupIndexedContext)
-import Perspectives.Persistent (saveMarkedResources)
 import Perspectives.PerspectivesState (defaultRuntimeOptions, disableAllLogging, setTopicLogLevel)
 import Perspectives.Query.UnsafeCompiler (getPropertyValues)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance(..), Value(..))
@@ -71,7 +70,7 @@ import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransac
 import Perspectives.Sidecar.StableIdMapping (ModelUri(..), Stable)
 import Perspectives.Sidecar.ToStable (toStable)
 import Perspectives.TypePersistence.LoadArc (loadCompileAndStoreArcFile_)
-import Test.PDRInstance (SynchronisationResult, noBus, pollUntil, pollUntilTestFinishes, snapshotPDR, testPouchdbUser, withPDRCached)
+import Test.PDRInstance (SynchronisationResult, noBus, pollUntil, pollUntilTestFinishes, settleAndSave, snapshotPDR, testPouchdbUser, withPDRCached)
 import Test.PDRInstance.Types (PDRInstance, runInPDR)
 
 type TopicLogLevelPair =
@@ -162,7 +161,7 @@ getSinglePDRResults cfg = do
 
           result <- traverse (\testCase -> executeModelTest pdr testAppContext testCase.testContextTypeName testCase.logConfiguration cfg) cfg.tests
 
-          runInPDR pdr $ saveMarkedResources
+          settleAndSave pdr
 
           case cfg.outputSnapshotDirectory of
             Just outputSnapshotDirectory ->
@@ -279,6 +278,8 @@ executeModelTest pdr testAppContext testContextTypeR logConfiguration cfg = do
                 Nothing -> pure (Left { testName, err: error "TestSucceeded property not found" })
             Nothing -> pure (Left { testName: "unknown testname", err: error "TestName property not found" })
     )
+
+  settleAndSave pdr
 
   runInPDR pdr do
     disableAllLogging
