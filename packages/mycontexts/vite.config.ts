@@ -84,6 +84,22 @@ export default defineConfig(async ({ mode }) => {
     }
   }
 
+  // Rollup ignores sourceMappingURL comments of input files; load the map so it is chained to the original sources.
+  const loadInputSourcemaps = {
+    name: 'load-input-sourcemaps',
+    enforce: 'pre' as const,
+    apply: 'build' as const,
+    load(id: string) {
+      if (!/perspectives-react\/dist\/[^/]+\.js$/.test(id)) return null
+      const mapFile = `${id}.map`
+      if (!fs.existsSync(mapFile)) return null
+      return {
+        code: fs.readFileSync(id, 'utf8'),
+        map: JSON.parse(fs.readFileSync(mapFile, 'utf8')),
+      }
+    }
+  }
+
   return {
     // Suppress esbuild’s “ignored directive” warnings globally (build transforms)
     esbuild: {
@@ -120,6 +136,7 @@ export default defineConfig(async ({ mode }) => {
     },
     plugins: [
       silenceUseClient,               // fallback (keeps tree clean if logOverride isn’t honored)
+      loadInputSourcemaps,
       generateServiceWorkerDev,
       generateServiceWorkerBuild,
     ],
