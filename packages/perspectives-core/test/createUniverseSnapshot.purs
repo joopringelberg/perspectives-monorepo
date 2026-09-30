@@ -100,9 +100,9 @@ repository = "pub:https://perspectives.domains/cw_servers_and_repositories/#pers
 logConfiguration :: Array { topic :: LogTopic, logLevel :: LogLevel }
 logConfiguration =
   [ { topic: INSTALL, logLevel: Trace }
-  , { topic: TEST, logLevel: Info }
-  , { topic: RESOURCE, logLevel: Trace }
-  , { topic: STATE, logLevel: Trace }
+  -- , { topic: TEST, logLevel: Info }
+  -- , { topic: RESOURCE, logLevel: Trace }
+  -- , { topic: STATE, logLevel: Trace }
   ]
 
 -----------------------------------------------------------

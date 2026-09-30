@@ -605,6 +605,8 @@ typeTimeOnly _ = false
 --  * if both are empty, the result is true
 --  * if one of them is empty, the result is false.
 --  * because we know both a and b are functional, we just compare the first elements.
+-- IMPORTANT NOTICE: the claim that the result is true if both operands return an empty result, IS FALSE
+-- ALSO, the query interpreter returns an empty result in this situation - diverging from the compiled version here.
 compare
   :: Domain
   -> (String ~~> String)
