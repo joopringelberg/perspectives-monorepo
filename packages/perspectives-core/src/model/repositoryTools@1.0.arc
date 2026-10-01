@@ -154,6 +154,8 @@ domain model://joopringelberg.nl#RepositoryTools@1.0
   ---- 1. Create a repository role.
   ---- 2. Set the NameSpace property to "perspectives.domains"
   ---- 3. Set the AdminEndorses property to true.
+  ---- Notice that the Repository will be identified by its NameSpace property, where dots are replaced by underscores.
+  ---- So this case produces repository perspectives_domains, identified by pub:https://perspectives.domains/cw_servers_and_repositories/#perspectives_domains
   ------------------------------------------------------------------------------
   case CreatePerspectivesDomainsRepository
     aspect mm:Test

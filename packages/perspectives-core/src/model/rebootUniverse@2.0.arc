@@ -9,6 +9,7 @@ domain model://joopringelberg.nl#RebootUniverse@2.0
   use bs for model://perspectives.domains#BrokerServices
   use util for model://perspectives.domains#Utilities
   use mm for model://joopringelberg.nl#RepositoryTools@1.0
+  use rr for model://perspectives.domains#RepositoryRegistry
 
   -------------------------------------------------------------------------------
   ---- SETTING UP
@@ -610,7 +611,7 @@ domain model://joopringelberg.nl#RebootUniverse@2.0
                 for block1
               Condition = "(exists bs:MyBrokers >> PublicBrokers) and not exists bs:MyBrokers >> Contracts" for block1
               MD = <### Get connected
-                    MyContexts is most useful when you connect to other people. This installation does not yet have a means to connect to others. Move to the [[link:pub:https://perspectives.domains/cw_v74vfn21lx/#rbdaciupyn$External|Perspectives Broker Service]] page to get online. You will read further instructions there.> 
+                    MyContexts is most useful when you connect to other people. This installation does not yet have a means to connect to others. Move to the [[link:pub:https://perspectives.domains/cw_bigbangsdatabase/BigBangsBrokerService$External|Perspectives Broker Service]] page to get online. You will read further instructions there.> 
                 for block2
               Condition = "not (exists bs:MyBrokers >> PublicBrokers)" for block2
               MD = <## Welcome to MyContexts!
@@ -823,6 +824,41 @@ domain model://joopringelberg.nl#RebootUniverse@2.0
           -- Now PublicPageCollection$Author is bound, we can create the PublicPages (Author provides the BespokeDatabase to publish to).
           CreateStartPage = true for extern
 
+
+    user Owner = ru:RebootUniverseApp >> BespokeDatabaseOwner
+
+  ------------------------------------------------------------------------------
+  ---- CREATE THE REPOSITORY REGISTRY PUBLIC PAGE
+  ---- Re-use bigbangsdatabase for the repository registry public page.
+  ---- Create a PublicRepositoryOverview named "RepositoryRegistry". Then create an instance of the Manager role and fill it with Owner.
+  ---- Finally, add the Perspectives.Domains Repository to the public page. Its identifier is pub:https://perspectives.domains/cw_servers_and_repositories/#perspectives_domains
+  ------------------------------------------------------------------------------
+  case CreateRepositoryRegistryPublicPage
+    aspect mm:Test
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+
+      perspective on rr:RepositoryOverview$TheRegistry
+        only (CreateAndFill)
+        props (Name) verbs (Consult, SetPropertyValue)
+      
+      perspective on rr:PublicRepositoryOverview$Manager
+        only (Create, Fill)
+      
+      perspective on rr:PublicRepositoryOverview$Repositories
+        only (Create, Fill)
+
+      action RunTest
+        letA
+          publicrepositoryoverview <- create context rr:PublicRepositoryOverview named "RepositoryRegistry" bound to rr:RepositoryOverview$TheRegistry in rr:MyRepositoryOverview
+        in
+          Name = "Repository Registry" for publicrepositoryoverview
+          bind Owner >> binding to rr:PublicRepositoryOverview$Manager in publicrepositoryoverview >> binding >> context
+          bind publicrole pub:https://perspectives.domains/cw_servers_and_repositories/#perspectives_domains$External to Repositories in publicrepositoryoverview >> binding >> context
+
+          once settled
+            TestSucceeded = true for extern
 
     user Owner = ru:RebootUniverseApp >> BespokeDatabaseOwner
 

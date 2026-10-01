@@ -74,7 +74,7 @@ domain model://perspectives.domains#RepositoryRegistry@1.0
             markdown <### Repository Registry
                       Under `where` you find the repositories that are registered in your installation.
                       A repository is a collection of models (apps) that you can install.
-                      Visit the [[link:pub:https://perspectives.domains/cw_v74vfn21lx/#zqys0g055e$External|public repository overview]] to discover 
+                      Visit the [[link:pub:https://perspectives.domains/cw_bigbangsdatabase/#RepositoryRegistry$External|public repository overview]] to discover 
                       new repositories and add them to your installation.
                       >
         where
