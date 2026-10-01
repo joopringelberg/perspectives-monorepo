@@ -602,7 +602,7 @@ binding = VarBinding <$> (parseLetVariableName <* token.reservedOp "<-") <*> def
 parseLetVariableName :: IP String
 parseLetVariableName = do
   candidate <- lowerCaseAlphaNumName <?> "lower case name (a-z and 0-9 only), "
-  _ <- (mandatoryWhiteSpace *> pure unit <|> lookAhead (token.reservedOp "<-")) <?> ("Invalid let variable name starting with '" <> candidate <> "'. A let variable name may contain only lowercase letters a-z and 0-9. ")
+  _ <- (mandatoryWhiteSpace *> pure unit <|> lookAhead (token.reservedOp "<-")) <?> ("Invalid let variable name starting with '" <> candidate <> "'. A let variable name may contain only lowercase letters a-z and 0-9. Remember to use '<-' for binding, not '='. ")
   pure candidate
 
 -- | A pure let: letE <binding>+ in <step>).
