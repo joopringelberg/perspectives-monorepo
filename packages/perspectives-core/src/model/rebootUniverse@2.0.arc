@@ -510,7 +510,7 @@ domain model://joopringelberg.nl#RebootUniverse@2.0
   ------------------------------------------------------------------------------
   ---- MANAGE BROKER SERVICE
   ---- Creates a BrokerService that is available as a public resource with identifier
-  ---- "https://perspectives.domains/cw_bigbangsdatabase/BigBangsBrokerService"
+  ---- "https://perspectives.domains/cw_bigbangsdatabase/#BigBangsBrokerService"
 
   ------------------------------------------------------------------------------
   case ManageBrokerService
@@ -586,7 +586,7 @@ domain model://joopringelberg.nl#RebootUniverse@2.0
                 for block1
               Condition = "(exists bs:MyBrokers >> PublicBrokers) and not exists bs:MyBrokers >> Contracts" for block1
               MD = <### Get connected
-                    MyContexts is most useful when you connect to other people. This installation does not yet have a means to connect to others. Move to the [[link:pub:https://perspectives.domains/cw_bigbangsdatabase/BigBangsBrokerService$External|Perspectives Broker Service]] page to get online. You will read further instructions there.> 
+                    MyContexts is most useful when you connect to other people. This installation does not yet have a means to connect to others. Move to the [[link:pub:https://perspectives.domains/cw_bigbangsdatabase/#BigBangsBrokerService$External|Perspectives Broker Service]] page to get online. You will read further instructions there.> 
                 for block2
               Condition = "not (exists bs:MyBrokers >> PublicBrokers)" for block2
               MD = <## Welcome to MyContexts!
@@ -828,6 +828,7 @@ domain model://joopringelberg.nl#RebootUniverse@2.0
         letA
           publicrepositoryoverview <- create context rr:PublicRepositoryOverview named "RepositoryRegistry" bound to rr:RepositoryOverview$TheRegistry in rr:MyRepositoryOverview
         in
+          TestName = "Create Repository Registry Public Page" for extern
           Name = "Repository Registry" for publicrepositoryoverview
           bind Owner >> binding to rr:PublicRepositoryOverview$Manager in publicrepositoryoverview >> binding >> context
           bind publicrole pub:https://perspectives.domains/cw_servers_and_repositories/#perspectives_domains$External (cm:Repository) to Repositories in publicrepositoryoverview >> binding >> context
@@ -840,7 +841,7 @@ domain model://joopringelberg.nl#RebootUniverse@2.0
   ------------------------------------------------------------------------------
   ---- SIGN UP TO BROKERSERVICE
   ---- Add the BrokerService with the following public resource identifier:
-  ---- "https://perspectives.domains/cw_bigbangsdatabase/BigBangsBrokerService"
+  ---- "https://perspectives.domains/cw_bigbangsdatabase/#BigBangsBrokerService"
   ---- Then Signup.
   ------------------------------------------------------------------------------
   -- case SignUpToBrokerService
@@ -878,3 +879,58 @@ domain model://joopringelberg.nl#RebootUniverse@2.0
   --         once settled
   --           PublicServiceAvailable = true
 
+  ------------------------------------------------------------------------------
+  ---- ADD ALL EXTRA MODELS THAT NEED TO BE INCLUDED IN THE REBOOT UNIVERSE TO THIS INSTALLATION
+  ---- We should use the Stable ModelUris.
+  ---- If we still have the Repository perspectives.domains, or if we have rebuilt it locally, we can use that.
+  ---- Take the Manifest with a given readable ModelUri (filter on ModelURIReadable), then concatenate its
+  ----  * ModelURI
+  ----  * VersionToInstall
+  ---- and call cdb:AddModelToLocalStore on the result.
+  ------------------------------------------------------------------------------
+  case AddExtraModels
+    aspect mm:Test
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+
+      action RunTest
+        letA
+          repository <- publicrole pub:https://perspectives.domains/cw_servers_and_repositories/#perspectives_domains$External (cm:Repository) >> context
+
+          rabbitmqmanifest <- (filter (repository >> Manifests) with ModelURIReadable == "model://perspectives.domains#RabbitMQ") >>= first
+          rabbitmqmodeluri <- rabbitmqmanifest >> ModelURI + "@" + rabbitmqmanifest >> VersionToInstall
+
+          brokerservicesmanifest <- (filter (repository >> Manifests) with ModelURIReadable == "model://perspectives.domains#BrokerServices") >>= first
+          brokerservicesmodeluri <- brokerservicesmanifest >> ModelURI + "@" + brokerservicesmanifest >> VersionToInstall
+          
+          hypercontextmanifest <- (filter (repository >> Manifests) with ModelURIReadable == "model://perspectives.domains#HyperContext") >>= first
+          hypercontextmodeluri <- hypercontextmanifest >> ModelURI + "@" + hypercontextmanifest >> VersionToInstall
+
+          introductionmanifest <- (filter (repository >> Manifests) with ModelURIReadable == "model://perspectives.domains#Introduction") >>= first
+          introductionmodeluri <- introductionmanifest >> ModelURI + "@" + introductionmanifest >> VersionToInstall
+
+          helpprojectmanifest <- (filter (repository >> Manifests) with ModelURIReadable == "model://perspectives.domains#HelpProject") >>= first
+          helpprojectmodeluri <- helpprojectmanifest >> ModelURI + "@" + helpprojectmanifest >> VersionToInstall
+
+          disconnectmanifest <- (filter (repository >> Manifests) with ModelURIReadable == "model://perspectives.domains#Disconnect") >>= first
+          disconnectmodeluri <- disconnectmanifest >> ModelURI + "@" + disconnectmanifest >> VersionToInstall
+
+          repositoryregistrymanifest <- (filter (repository >> Manifests) with ModelURIReadable == "model://perspectives.domains#RepositoryRegistry") >>= first
+          repositoryregistrymodeluri <- repositoryregistrymanifest >> ModelURI + "@" + repositoryregistrymanifest >> VersionToInstall
+
+          sharedfileservicesmanifest <- (filter (repository >> Manifests) with ModelURIReadable == "model://perspectives.domains#SharedFileServices") >>= first
+          sharedfileservicesmodeluri <- sharedfileservicesmanifest >> ModelURI + "@" + sharedfileservicesmanifest >> VersionToInstall
+
+        in
+          callEffect cdb:AddModelToLocalStore( rabbitmqmodeluri )
+          callEffect cdb:AddModelToLocalStore( brokerservicesmodeluri )
+          callEffect cdb:AddModelToLocalStore( hypercontextmodeluri )
+          callEffect cdb:AddModelToLocalStore( introductionmodeluri )
+          callEffect cdb:AddModelToLocalStore( helpprojectmodeluri )
+          callEffect cdb:AddModelToLocalStore( disconnectmodeluri )
+          callEffect cdb:AddModelToLocalStore( repositoryregistrymodeluri )
+          callEffect cdb:AddModelToLocalStore( sharedfileservicesmodeluri )
+
+          once settled
+            TestSucceeded = true for extern

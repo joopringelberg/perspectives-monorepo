@@ -160,12 +160,14 @@ main = launchAff_ do
           runMonadPerspectivesTransaction' shareWithPeers (ENR $ EnumeratedRoleType sysUser)
             (addModelToLocalStore_ [ modelUri ] (RoleInstance "Ignored"))
 
-      -- Now patch CouchdbManagement and recompile locally.
+      -- Now patch CouchdbManagement and RepositoryRegistry and recompile locally.
       runInPDR pdr do
         patchModels $ fromFoldable
           [ Tuple "model://perspectives.domains#CouchdbManagement" couchdbmanagement
+          , Tuple "model://perspectives.domains#RepositoryRegistry" repositoryregistry
           ]
         void $ recompileLocalModel (ModelUri "model://perspectives.domains#CouchdbManagement")
+        void $ recompileLocalModel (ModelUri "model://perspectives.domains#RepositoryRegistry")
 
       settleAndSave pdr
 
@@ -173,3 +175,4 @@ main = launchAff_ do
       log ("Snapshot written to " <> snapshotDirectory)
 
 foreign import couchdbmanagement :: String
+foreign import repositoryregistry :: String

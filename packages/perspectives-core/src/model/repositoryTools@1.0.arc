@@ -54,6 +54,9 @@ domain model://joopringelberg.nl#RepositoryTools@1.0
     -- To check if a test has succeeded, retrieve the value of TestSucceeded in the second PDR.
     context Tests (relational) filledBy Test
 
+    user BespokeDatabaseOwner filledBy cm:BespokeDatabase$Owner
+
+
   case Test
     -- The automatic actions are contextualised in their specialisations,
     -- meaning that specialisation of Tester is created.
@@ -198,6 +201,55 @@ domain model://joopringelberg.nl#RepositoryTools@1.0
           NameSpace = "perspectives.domains" for repo
           AdminEndorses = true for repo
 
+  ------------------------------------------------------------------------------
+  ---- CREATE BIGBANGSDATABASE
+  ---- Creates a Database with the stable name "cw_bigbangsdatabase".
+  ---- "https://perspectives.domains/cw_bigbangsdatabase"
+  ---- We use this to store the public pages Introduction and Instructions in, and
+  ---- the BrokerService public page and the RepositoryRegistry public page.
+
+  ------------------------------------------------------------------------------
+  case CreateBigBangsDatabase
+    aspect mm:Test
+
+    external
+      -- Success is defined as the existence of a BespokeDatabase bound to a CouchdbServer.
+      state Success = exists cm:MyCouchdbApp >> CouchdbServers >> binding >> context >> BespokeDatabases >> binding
+        on entry
+          do for Tester once settled
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+
+      perspective on cm:CouchdbServer$BespokeDatabases
+        only (CreateAndFill)
+        props (Endorsed, Public, EnteredDatabaseName) verbs (SetPropertyValue, Consult)
+
+      perspective on cm:BespokeDatabase$Owner
+        only (Create, Fill)
+
+      action RunTest
+        letA
+          -- Only when test ManageCouchdb has run, the PDR has a CouchdbServer available.
+          couchdbserver <- cm:MyCouchdbApp >> CouchdbServers >> binding >> context >>= first
+          -- Create the BespokeDatabases role instance first and then set its EnteredDatabaseName property.
+          -- Then, create the actual context and fill the role with it.
+          -- All statements referring to bigbangsdatabase should be postponed to the next transaction!
+          bigbangsdatabase <- create context cm:BespokeDatabase bound to cm:CouchdbServer$BespokeDatabases in couchdbserver
+          owner <- create role cm:BespokeDatabase$Owner in bigbangsdatabase >> binding >> context
+        in
+          TestName = "Create bigbangsdatabase." for extern
+          bind_ me to owner
+          -- Save for reference in case Add_public_pages.
+          bind owner to BespokeDatabaseOwner in mm:RepositoryToolsApp
+          EnteredDatabaseName = "cw_bigbangsdatabase/" for bigbangsdatabase
+          Endorsed = true for bigbangsdatabase
+          -- Now state BespokeDatabase$External$CreateDb runs, creating the actual database and setting DatabaseName.
+          
+          Public = true for bigbangsdatabase
+          -- This sets the stage for BespokeDatabase$External$Publish to run, making the database public.
+
 ------------------------------------------------------------------------------
   ---- ADD MODEL
   ---- This case can be used as an aspect to create individual tests for concrete models.
@@ -258,31 +310,6 @@ domain model://joopringelberg.nl#RepositoryTools@1.0
 
               once settled
                 AutoUpload = true for version >> binding
-              
-              -- once settled
-              --   callEffect cdb:UploadOldTranslation( context >> Version >> binding >> VersionedModelURI )
-              --   -- LET OP: dit gebeurt ook in UploadToRepository!
-              --   GenerateYaml = true for version >> binding >> context >> Translation
-                
-      
-      -- state CompileModel = exists context >> Version >> binding
-      --   on entry
-      --     do for Tester
-      --       letA
-      --         version <- context >> Version >> binding
-      --       in
-      --         create file "whatever" as "text/arc" in ArcFile for version
-      --           callExternal util:ApplyModelVersions( ModelVersions, callExternal p:GetLocalArcSource( version >> ModelURIReadable ) returns String ) returns String
-      --         Store = "Repository" for version
-      --         StartParsing = true
-
-      -- state StartParsing = StartParsing
-      --   on entry
-      --     do for Tester once settled
-      --       letA
-      --         version <- context >> Version >> binding
-      --       in
-      --         AutoUpload = true for version
       
       state AugmentYaml = exists context >> Version >> binding >> context >> Translation >> TranslationYaml
         on entry
@@ -296,12 +323,6 @@ domain model://joopringelberg.nl#RepositoryTools@1.0
 
               once settled
                 TestSucceeded = true
-      
-      -- state Success = YamlGenerated
-      --   on entry
-      --     -- This ensures that we mark the test as succeeded in the next transaction, hopefully after yaml translation is complete.
-      --     do for Tester once settled
-      --       TestSucceeded = true
 
     user Tester filledBy (sys:TheWorld$PerspectivesUsers)
       aspect mm:Test$Tester
