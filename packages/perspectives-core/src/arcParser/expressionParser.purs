@@ -99,6 +99,7 @@ step_ parenthesised = do
     keyword <- option "" (lookAhead reservedIdentifier)
     case keyword of
       "filter" -> reserved "filter" *> step_ parenthesised
+      "letA" -> fail "letA is not allowed in query expressions. Use letE instead. "
       "letE" -> pureLetStep
       "callExternal" -> computationStep
       u | isUnaryKeyword u -> unaryStep

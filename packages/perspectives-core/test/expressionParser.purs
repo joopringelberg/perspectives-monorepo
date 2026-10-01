@@ -104,6 +104,20 @@ theSuite = suite "Perspectives.Parsing.Arc.Expression" do
               otherwise -> false
             otherwise -> false
 
+  test "letA is rejected in a query expression" do
+    (r :: Either ParseError Step) <- runIndentParser "letA value <- MyRole in value" step
+    case r of
+      Left (ParseError message _) ->
+        assert "letA should be rejected with a query-specific error" (message == "letA is not allowed in query expressions. Use letE instead. ")
+      Right _ -> assert "letA should not be parsed as a query expression" false
+
+  test "letA is rejected in a nested query expression" do
+    (r :: Either ParseError Step) <- runIndentParser "MyRole >> letA value <- AnotherRole in value" step
+    case r of
+      Left (ParseError message _) ->
+        assert "Nested letA should be rejected with a query-specific error" (message == "letA is not allowed in query expressions. Use letE instead. ")
+      Right _ -> assert "Nested letA should not be parsed as a query expression" false
+
   test "CompoundStep on filter with parens" do
     (r :: Either ParseError Step) <- runIndentParser "(filter MyRole with ItsBooleanProp)" step
     case r of
