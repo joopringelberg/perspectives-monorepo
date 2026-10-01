@@ -67,7 +67,7 @@ import Perspectives.Names (expandDefaultNamespaces, lookupIndexedContext, lookup
 import Perspectives.ObjectGetterLookup (lookupPropertyValueGetterByName, lookupRoleGetterByName, propertyGetterCacheInsert)
 import Perspectives.Parsing.Arc.Expression.RegExP (RegExP(..))
 import Perspectives.Persistent (getPerspectRol)
-import Perspectives.PerspectivesState (addBinding, getPerspectivesUser, getVariableBindings, lookupVariableBinding)
+import Perspectives.PerspectivesState (addBinding, addWarning, getPerspectivesUser, getVariableBindings, lookupVariableBinding)
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), Range, RoleInContext(..), domain, domain2PropertyRange, domain2contextType, domain2roleType, range, roleInContext2Role)
 import Perspectives.Representation.ADT (ADT(..), equalsOrSpecialises_)
 import Perspectives.Representation.CNF (toConjunctiveNormalForm)
@@ -97,6 +97,19 @@ compileFunction qfd = case qfd of
   MQD _ _ _ _ _ _ -> unsafePartial $ compileMQD qfd
   UQD _ _ _ _ _ _ -> unsafePartial $ compileUQD qfd
   BQD _ _ _ _ _ _ _ -> unsafePartial $ compileBQD qfd
+
+publicRoleWithAssertion :: RoleInstance -> ADT RoleInContext -> String ~~> String
+publicRoleWithAssertion individual expectedType _ = ArrayT do
+  matches <- (lift $ roleMatchesTypeFilter individual expectedType) :: AssumptionTracking Boolean
+  if matches then pure [ unwrap individual ]
+  else do
+    lift $ addWarning
+      { message: "Public resource '" <> unwrap individual <> "' does not satisfy its asserted role type " <> show expectedType <> "; it was ignored."
+      , error: ""
+      , externalRoleId: ""
+      , contextName: ""
+      }
+    pure []
 
 ---------------------------------------------------------------------------------------------------
 -- COMPILESQD
@@ -188,7 +201,11 @@ compileSQD (SQD dom (ContextIndividual (ContextInstance ident)) _ _ _) = pure $ 
     Nothing -> pure []
     Just i -> pure [ unwrap i ]
 
-compileSQD (SQD dom (PublicRole individual) _ _ _) = pure $ unsafeCoerce (\x -> (pure $ unwrap individual :: MonadPerspectivesQuery String))
+compileSQD (SQD dom (PublicRole individual Nothing) _ _ _) = pure $ unsafeCoerce (\x -> (pure $ unwrap individual :: MonadPerspectivesQuery String))
+
+compileSQD (SQD dom (PublicRole individual (Just assertedType)) _ _ _) = case readJSON assertedType of
+  Left e -> throwError $ error $ "Cannot read asserted public-role type: " <> show e
+  Right (expectedType :: ADT RoleInContext) -> pure $ publicRoleWithAssertion individual expectedType
 
 compileSQD (SQD dom (PublicContext individual) _ _ _) = pure $ unsafeCoerce (\x -> (pure $ unwrap individual :: MonadPerspectivesQuery String))
 

@@ -112,7 +112,9 @@ main = launchAff_ do
 -- |   ]
 modelFilePaths :: Array String
 modelFilePaths =
-  [ "/Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/src/model/couchdbManagement@12.4.arc" ]
+  [ "/Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/src/model/couchdbManagement@12.4.arc"
+  , "test/publicRoleTypeAssertion.arc"
+  ]
 
 -- | Directory where the PDR snapshot is cached between test runs.
 -- | Delete this directory to force a full PDR rebuild on the next run.

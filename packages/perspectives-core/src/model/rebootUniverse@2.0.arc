@@ -56,8 +56,6 @@ domain model://joopringelberg.nl#RebootUniverse@2.0
     -- To check if a test has succeeded, retrieve the value of TestSucceeded in the second PDR.
     context Tests (relational) filledBy mm:Test
 
-    user BespokeDatabaseOwner filledBy cm:BespokeDatabase$Owner
-
 ------------------------------------------------------------------------------
   ---- COUCHDB
   ---- This case can be used as an aspect to create individual tests for concrete models.
@@ -530,43 +528,18 @@ domain model://joopringelberg.nl#RebootUniverse@2.0
       perspective on bs:BrokerService$External
         props (Url, Exchange, ManagementEndpoint, SelfRegisterEndpoint, Name) verbs (SetPropertyValue, Consult)
 
-      perspective on cm:CouchdbServer$BespokeDatabases
-        only (CreateAndFill)
-        props (Endorsed, Public, EnteredDatabaseName) verbs (SetPropertyValue, Consult)
-
-      perspective on cm:BespokeDatabase$Owner
-        only (Create, Fill)
-
       perspective on bs:BrokerServices$ManagedBrokers
         only (Create)
         props (StorageLocation, GivenIdentifier) verbs (SetPropertyValue, Consult)
 
       action RunTest
         letA
-          -- Only when test ManageCouchdb has run, the PDR has a CouchdbServer available.
-          couchdbserver <- cm:MyCouchdbApp >> CouchdbServers  >> binding >> context >>= first
-          -- Create the BespokeDatabases role instance first and then set its EnteredDatabaseName property.
-          -- Then, create the actual context and fill the role with it.
-          -- All statements referring to publicbrokerservicedb should be postponed to the next transaction!
-          publicbrokerservicedb <- create context cm:BespokeDatabase bound to cm:CouchdbServer$BespokeDatabases in couchdbserver
-          owner <- create role cm:BespokeDatabase$Owner in publicbrokerservicedb >> binding >> context
           brokerservice <- create role bs:BrokerServices$ManagedBrokers in bs:MyBrokers
         in
           TestName = "Managing BrokerServices." for extern
-          bind_ me to owner
-          -- Save for reference in case Add_public_pages.
-          bind owner to BespokeDatabaseOwner in ru:RebootUniverseApp
-          EnteredDatabaseName = "cw_bigbangsdatabase/" for publicbrokerservicedb
-          Endorsed = true for publicbrokerservicedb
-          -- Now state BespokeDatabase$External$CreateDb runs, creating the actual database and setting DatabaseName.
-          
-          Public = true for publicbrokerservicedb
-          -- This sets the stage for BespokeDatabase$External$Publish to run, making the database public.
-          
-          once settled
-            GivenIdentifier = "BigBangsBrokerService" for brokerservice
-            StorageLocation = owner >> cm:BespokeDatabase$Owner$BespokeDatabaseUrl for brokerservice
-            -- This triggers State BrokerServices$ManagedBrokers$HasStorageLocation, which creates the BrokerService context.
+          GivenIdentifier = "BigBangsBrokerService" for brokerservice
+          StorageLocation = Owner >> cm:BespokeDatabase$Owner$BespokeDatabaseUrl for brokerservice
+          -- This triggers State BrokerServices$ManagedBrokers$HasStorageLocation, which creates the BrokerService context.
           
           once settled
             Url = "wss://mycontexts.com:15673/ws" for brokerservice
@@ -574,6 +547,8 @@ domain model://joopringelberg.nl#RebootUniverse@2.0
             ManagementEndpoint = "https://mycontexts.com/rbmq/" for brokerservice
             SelfRegisterEndpoint = "https://mycontexts.com/rbsr/" for brokerservice
             Name = "Big Bangs BrokerService" for brokerservice
+      
+    user Owner = mm:RepositoryToolsApp >> mm:TestApp$BespokeDatabaseOwner
 
   ------------------------------------------------------------------------------
   ---- PUBLIC PAGES
@@ -825,7 +800,7 @@ domain model://joopringelberg.nl#RebootUniverse@2.0
           CreateStartPage = true for extern
 
 
-    user Owner = ru:RebootUniverseApp >> BespokeDatabaseOwner
+    user Owner = mm:RepositoryToolsApp >> mm:TestApp$BespokeDatabaseOwner
 
   ------------------------------------------------------------------------------
   ---- CREATE THE REPOSITORY REGISTRY PUBLIC PAGE
@@ -855,12 +830,12 @@ domain model://joopringelberg.nl#RebootUniverse@2.0
         in
           Name = "Repository Registry" for publicrepositoryoverview
           bind Owner >> binding to rr:PublicRepositoryOverview$Manager in publicrepositoryoverview >> binding >> context
-          bind publicrole pub:https://perspectives.domains/cw_servers_and_repositories/#perspectives_domains$External to Repositories in publicrepositoryoverview >> binding >> context
+          bind publicrole pub:https://perspectives.domains/cw_servers_and_repositories/#perspectives_domains$External (cm:Repository) to Repositories in publicrepositoryoverview >> binding >> context
 
           once settled
             TestSucceeded = true for extern
 
-    user Owner = ru:RebootUniverseApp >> BespokeDatabaseOwner
+    user Owner = mm:RepositoryToolsApp >> mm:TestApp$BespokeDatabaseOwner
 
   ------------------------------------------------------------------------------
   ---- SIGN UP TO BROKERSERVICE

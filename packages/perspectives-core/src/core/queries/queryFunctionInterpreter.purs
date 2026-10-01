@@ -61,7 +61,7 @@ import Perspectives.Parsing.Arc.Expression.RegExP (RegExP(..))
 import Perspectives.Parsing.Arc.Position (arcParserStartPosition)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistent (getPerspectRol)
-import Perspectives.PerspectivesState (addBinding, getPerspectivesUser, getVariableBindings, pushFrame, restoreFrame)
+import Perspectives.PerspectivesState (addBinding, addWarning, getPerspectivesUser, getVariableBindings, pushFrame, restoreFrame)
 import Perspectives.Query.Interpreter.Dependencies (Dependency(..), DependencyPath, addAsSupportingPaths, allPaths, appendPaths, applyValueFunction, composePaths, consOnMainPath, dependencyToValue, domain2Dependency, functionOnBooleans, singletonPath, snocOnMainPath, (#>>))
 import Perspectives.Query.QueryTypes (Domain(..), QueryFunctionDescription(..), RoleInContext(..), domain2PropertyRange, domain2roleType, range)
 import Perspectives.Query.UnsafeCompiler (compareRangeValues, lookup, mapDurationOperator, mapNumericOperator, performNumericOperation')
@@ -582,7 +582,22 @@ interpretSQD (SQD _ (RoleTypeConstant qname) _ _ _) a = pure $ consOnMainPath (R
 
 interpretSQD (SQD _ (ContextTypeConstant qname) _ _ _) a = pure $ consOnMainPath (CT qname) a
 
-interpretSQD (SQD _ (PublicRole individual) _ _ _) a = pure $ consOnMainPath (R individual) a
+interpretSQD (SQD _ (PublicRole individual assertedType) _ _ _) a = case assertedType of
+  Nothing -> pure $ consOnMainPath (R individual) a
+  Just typeAssertion -> ArrayT do
+    case readJSON typeAssertion of
+      Left e -> throwError $ error $ "Cannot read asserted public-role type: " <> show e
+      Right (expectedType :: ADT RoleInContext) -> do
+        matches <- (lift $ roleMatchesTypeFilter individual expectedType) :: AssumptionTracking Boolean
+        if matches then pure [ consOnMainPath (R individual) a ]
+        else do
+          lift $ addWarning
+            { message: "Public resource '" <> unwrap individual <> "' does not satisfy its asserted role type " <> show expectedType <> "; it was ignored."
+            , error: ""
+            , externalRoleId: ""
+            , contextName: ""
+            }
+          pure []
 
 interpretSQD (SQD _ (PublicContext individual) _ _ _) a = pure $ consOnMainPath (C individual) a
 
