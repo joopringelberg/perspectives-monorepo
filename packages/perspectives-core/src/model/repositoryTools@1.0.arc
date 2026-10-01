@@ -164,14 +164,13 @@ domain model://joopringelberg.nl#RepositoryTools@1.0
     aspect mm:Test
 
     external
-      state Success = (exists cm:MyCouchdbApp >> CouchdbServers) and 
-        -- CouchdbServer has an Admin
-        (exists exists cm:MyCouchdbApp >> CouchdbServers >> binding >> context >> Admin) and
-        -- CouchdbServer has a Repository
-        (exists cm:MyCouchdbApp >> CouchdbServers >> binding >> context >> Repositories >> binding)
-        -- Repository has an Admin
-        and (exists cm:MyCouchdbApp >> CouchdbServers >> binding >> context >> Repositories >> binding >> context >> Admin)
-
+      state Success =
+          letE 
+            couchdbserver <- cm:MyCouchdbApp >> CouchdbServers >> binding >> context
+            repo <- filter couchdbserver >> Repositories >> binding with NameSpace == "perspectives.domains"
+          in
+            (exists couchdbserver >> Admin) and (exists repo) and (exists repo >> context >> Admin)
+        
         on entry
           do for Tester
             TestSucceeded = true
@@ -197,8 +196,55 @@ domain model://joopringelberg.nl#RepositoryTools@1.0
           server <- cm:MyCouchdbApp >> CouchdbServers >> binding >> context >>= first
           repo <- create role cm:CouchdbServer$Repositories in server
         in
-          TestName = "CreatePerspectivesDomainsRepository - create a repository." for extern
+          TestName = "CreatePerspectivesDomainsRepository - create the repository perspectives.domains." for extern
           NameSpace = "perspectives.domains" for repo
+          AdminEndorses = true for repo
+
+  ------------------------------------------------------------------------------
+  ---- CREATE REPOSITORY JOOPRINGELBERG.NL
+  ---- 1. Create a repository role.
+  ---- 2. Set the NameSpace property to "joopringelberg.nl"
+  ---- 3. Set the AdminEndorses property to true.
+  ---- Notice that the Repository will be identified by its NameSpace property, where dots are replaced by underscores.
+  ---- So this case produces repository joopringelberg_nl, identified by pub:https://joopringelberg.nl/cw_servers_and_repositories/#joopringelberg_nl
+  ------------------------------------------------------------------------------
+  case CreateJoopringelbergNlRepository
+    aspect mm:Test
+
+    external
+      state Success = 
+          letE 
+            couchdbserver <- cm:MyCouchdbApp >> CouchdbServers >> binding >> context
+            repo <- filter couchdbserver >> Repositories >> binding with NameSpace == "joopringelberg.nl"
+          in
+            (exists couchdbserver >> Admin) and (exists repo) and (exists repo >> context >> Admin)
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on extern
+
+      -- Same perspective as cm:CouchdbServer$Admin      
+      perspective on cm:CouchdbServer$Repositories
+        all roleverbs
+        props (Repositories$NameSpace, AdminEndorses, IsPublic, AdminLastName) verbs (Consult)
+        props (IsPublic, NameSpace_, HasDatabases) verbs (SetPropertyValue)
+        in object state WithoutExternalDatabase
+          props (AdminEndorses) verbs (SetPropertyValue)
+        in object state CreateDatabases
+          props (IsPublic) verbs (SetPropertyValue)
+        in object state NoNameSpace
+          props (Repositories$NameSpace) verbs (SetPropertyValue, AddPropertyValue)
+
+      action RunTest
+        letA
+          server <- cm:MyCouchdbApp >> CouchdbServers >> binding >> context >>= first
+          repo <- create role cm:CouchdbServer$Repositories in server
+        in
+          TestName = "CreateJoopringelbergNlRepository - create the repository joopringelberg.nl." for extern
+          NameSpace = "joopringelberg.nl" for repo
           AdminEndorses = true for repo
 
   ------------------------------------------------------------------------------

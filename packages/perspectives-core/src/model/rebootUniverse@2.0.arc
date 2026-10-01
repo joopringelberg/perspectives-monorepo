@@ -482,7 +482,7 @@ domain model://joopringelberg.nl#RebootUniverse@2.0
     aspect context mm:AddModel$Manifest
     aspect context mm:AddModel$Version
 
-------------------------------------------------------------------------------
+  ------------------------------------------------------------------------------
   ---- SHAREDFILESERVICES
   ---- This case can be used as an aspect to create individual tests for concrete models.
   ------------------------------------------------------------------------------
@@ -499,6 +499,56 @@ domain model://joopringelberg.nl#RebootUniverse@2.0
         ModelName = "SharedFileServices" for extern
         VersionNumber = "4.0" for extern
         TestName = "Add the model SharedFileServices" for extern
+
+        bind cm:MyCouchdbApp >> (filter CouchdbServers >> binding >> context >> Repositories with (Repositories$NameSpace == origin >> extern >> NameSpace)) >> binding >>= first to Repository
+        StartTest = true for extern
+
+    aspect context mm:AddModel$Repository
+    aspect context mm:AddModel$Manifest
+    aspect context mm:AddModel$Version
+
+  ------------------------------------------------------------------------------
+  ---- REPOSITORY TOOLS
+  ---- This case can be used as an aspect to create individual tests for concrete models.
+  ------------------------------------------------------------------------------
+  case AddModel_RepositoryTools
+    aspect mm:AddModel
+
+    user Tester
+      aspect mm:Test$Tester
+      aspect mm:AddModel$Tester
+
+      action RunTest
+        -- Set these in the specialised versions.
+        NameSpace = "joopringelberg.nl" for extern
+        ModelName = "RepositoryTools" for extern
+        VersionNumber = "1.0" for extern
+        TestName = "Add the model RepositoryTools" for extern
+
+        bind cm:MyCouchdbApp >> (filter CouchdbServers >> binding >> context >> Repositories with (Repositories$NameSpace == origin >> extern >> NameSpace)) >> binding >>= first to Repository
+        StartTest = true for extern
+
+    aspect context mm:AddModel$Repository
+    aspect context mm:AddModel$Manifest
+    aspect context mm:AddModel$Version
+
+  ------------------------------------------------------------------------------
+  ---- REBOOT UNIVERSE
+  ---- This case can be used as an aspect to create individual tests for concrete models.
+  ------------------------------------------------------------------------------
+  case AddModel_RebootUniverse
+    aspect mm:AddModel
+
+    user Tester
+      aspect mm:Test$Tester
+      aspect mm:AddModel$Tester
+
+      action RunTest
+        -- Set these in the specialised versions.
+        NameSpace = "joopringelberg.nl" for extern
+        ModelName = "RebootUniverse" for extern
+        VersionNumber = "2.0" for extern
+        TestName = "Add the model RebootUniverse" for extern
 
         bind cm:MyCouchdbApp >> (filter CouchdbServers >> binding >> context >> Repositories with (Repositories$NameSpace == origin >> extern >> NameSpace)) >> binding >>= first to Repository
         StartTest = true for extern
@@ -832,6 +882,7 @@ domain model://joopringelberg.nl#RebootUniverse@2.0
           Name = "Repository Registry" for publicrepositoryoverview
           bind Owner >> binding to rr:PublicRepositoryOverview$Manager in publicrepositoryoverview >> binding >> context
           bind publicrole pub:https://perspectives.domains/cw_servers_and_repositories/#perspectives_domains$External (cm:Repository) to Repositories in publicrepositoryoverview >> binding >> context
+          bind publicrole pub:https://perspectives.domains/cw_servers_and_repositories/#joopringelberg_nl$External (cm:Repository) to Repositories in publicrepositoryoverview >> binding >> context
 
           once settled
             TestSucceeded = true for extern
