@@ -90,10 +90,24 @@ extraModels =
   , "model://perspectives.domains#Disconnect@1.1"
   , "model://perspectives.domains#RepositoryRegistry@1.0"
   , "model://perspectives.domains#SharedFileServices@4.0"
+  , "model://joopringelberg.nl#SynchronisationTestModel@2.0"
+  , "model://joopringelberg.nl#TwoPDRDestructiveTests@1.0"
+  , "model://joopringelberg.nl#StateTestModel@1.0"
+  , "model://joopringelberg.nl#SinglePDRDestructiveTests@2.0"
+  , "model://joopringelberg.nl#TransactionExecutionTests@1.0"
+  , "model://joopringelberg.nl#AMQPtestModel@1.0"
+  -- The next two are not in the remote Repository but are added during reboot
+  -- , "model://joopringelberg.nl#RebootUniverse@2.0"
+  -- , "model://joopringelberg.nl#RepositoryTools@1.0"
+  -- The next model is not yet finished. We'll continue after the reboot.
+  -- , "model://joopringelberg.nl#TestModelDependencies@1.0"
   ]
 
-repository :: String
-repository = "pub:https://perspectives.domains/cw_servers_and_repositories/#perspectives_domains"
+perspectivesDomainsRepository :: String
+perspectivesDomainsRepository = "pub:https://perspectives.domains/cw_servers_and_repositories/#perspectives_domains"
+
+joopringelbergNlRepository :: String
+joopringelbergNlRepository = "pub:https://joopringelberg.nl/cw_servers_and_repositories/#joopringelberg_nl"
 
 -- | Log topics enabled while the snapshot is being created.
 logConfiguration :: Array { topic :: LogTopic, logLevel :: LogLevel }
@@ -124,9 +138,15 @@ getLocalModelNameToCuid repo = do
 
 -- | Replace the Readable local name in a model URI by its CUID, preserving the
 -- | version part (if any).
-readableModelUri2StableModelUri :: Object String -> String -> Maybe String
-readableModelUri2StableModelUri cuids modelUri = unsafePartial do
-  let unversioned = unversionedModelUri modelUri
+readableModelUri2StableModelUri :: Object String -> Object String -> String -> Maybe String
+readableModelUri2StableModelUri perspectivesDomainsCuids joopringelbergNlCuids modelUri = unsafePartial do
+  let
+    unversioned = unversionedModelUri modelUri
+    cuids =
+      if modelUri2SchemeAndAuthority unversioned == "model://joopringelberg.nl" then
+        joopringelbergNlCuids
+      else
+        perspectivesDomainsCuids
   cuid <- lookup (modelUri2LocalName unversioned) cuids
   pure $ modelUri2SchemeAndAuthority unversioned
     <> "#"
@@ -145,10 +165,11 @@ main = launchAff_ do
     \pdr -> do
       runInPDR pdr $ for_ logConfiguration \{ topic, logLevel } -> setTopicLogLevel topic logLevel
 
-      cuids <- runInPDR pdr $ getLocalModelNameToCuid (ContextInstance repository)
+      perspectivesDomainsCuids <- runInPDR pdr $ getLocalModelNameToCuid (ContextInstance perspectivesDomainsRepository)
+      joopringelbergNlCuids <- runInPDR pdr $ getLocalModelNameToCuid (ContextInstance joopringelbergNlRepository)
 
       stableModelUris <- traverse
-        ( \modelUri -> case readableModelUri2StableModelUri cuids modelUri of
+        ( \modelUri -> case readableModelUri2StableModelUri perspectivesDomainsCuids joopringelbergNlCuids modelUri of
             Just stableUri -> pure stableUri
             Nothing -> throwError $ error ("No ModelManifest found in the repository for " <> modelUri)
         )

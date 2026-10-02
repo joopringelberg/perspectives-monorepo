@@ -109,8 +109,10 @@ rebootUniverseTests :: Array ModelTest
 rebootUniverseTests =
   [ { testContextTypeName: "model://joopringelberg.nl#RepositoryTools$Cleanup", logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: "model://joopringelberg.nl#RepositoryTools$ManageCouchdb", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RepositoryTools$CreateBigBangsDatabase", logConfiguration: emptyLogConfiguration }
   -- The following tests, once run, are not necessary to run ManageBrokerService and Add_public_pages.
   , { testContextTypeName: "model://joopringelberg.nl#RepositoryTools$CreatePerspectivesDomainsRepository", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RepositoryTools$CreateJoopringelbergNlRepository", logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_Couchdb", logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_Serialise", logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_Sensor", logConfiguration: emptyLogConfiguration }
@@ -129,9 +131,20 @@ rebootUniverseTests =
   , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_Disconnect", logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_RepositoryRegistry", logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_SharedFileServices", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_RepositoryTools", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_RebootUniverse", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_SynchronisationTestModel", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_TwoPDRDestructiveTests", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_StateTestModel", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_SinglePDRDestructiveTests", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_TransactionExecutionTests", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_AMQPtestModel", logConfiguration: emptyLogConfiguration }
+  -- The next model is not yet finished. We'll continue after the reboot.
+  -- , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_TestModelDependencies", logConfiguration: emptyLogConfiguration }
   -- The above tests, once run, are not necessary to run ManageBrokerService and Add_public_pages.
   , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$ManageBrokerService", logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$Add_public_pages", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$CreateRepositoryRegistryPublicPage", logConfiguration: emptyLogConfiguration }
   -- { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$SignUpToBrokerService", logConfiguration: debugConfiguration }
   ]
 

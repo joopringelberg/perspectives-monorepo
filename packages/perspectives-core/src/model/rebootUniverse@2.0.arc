@@ -558,6 +558,150 @@ domain model://joopringelberg.nl#RebootUniverse@2.0
     aspect context mm:AddModel$Version
 
   ------------------------------------------------------------------------------
+  ---- TEST MODELS
+  ---- Add the test models used by the perspectives-core suites to the repository.
+  ------------------------------------------------------------------------------
+  case AddModel_SynchronisationTestModel
+    aspect mm:AddModel
+
+    user Tester
+      aspect mm:Test$Tester
+      aspect mm:AddModel$Tester
+
+      action RunTest
+        NameSpace = "joopringelberg.nl" for extern
+        ModelName = "SynchronisationTestModel" for extern
+        VersionNumber = "2.0" for extern
+        TestName = "Add the model SynchronisationTestModel" for extern
+
+        bind cm:MyCouchdbApp >> (filter CouchdbServers >> binding >> context >> Repositories with (Repositories$NameSpace == origin >> extern >> NameSpace)) >> binding >>= first to Repository
+        StartTest = true for extern
+
+    aspect context mm:AddModel$Repository
+    aspect context mm:AddModel$Manifest
+    aspect context mm:AddModel$Version
+
+  case AddModel_TwoPDRDestructiveTests
+    aspect mm:AddModel
+
+    user Tester
+      aspect mm:Test$Tester
+      aspect mm:AddModel$Tester
+
+      action RunTest
+        NameSpace = "joopringelberg.nl" for extern
+        ModelName = "TwoPDRDestructiveTests" for extern
+        VersionNumber = "1.0" for extern
+        TestName = "Add the model TwoPDRDestructiveTests" for extern
+
+        bind cm:MyCouchdbApp >> (filter CouchdbServers >> binding >> context >> Repositories with (Repositories$NameSpace == origin >> extern >> NameSpace)) >> binding >>= first to Repository
+        StartTest = true for extern
+
+    aspect context mm:AddModel$Repository
+    aspect context mm:AddModel$Manifest
+    aspect context mm:AddModel$Version
+
+  case AddModel_StateTestModel
+    aspect mm:AddModel
+
+    user Tester
+      aspect mm:Test$Tester
+      aspect mm:AddModel$Tester
+
+      action RunTest
+        NameSpace = "joopringelberg.nl" for extern
+        ModelName = "StateTestModel" for extern
+        VersionNumber = "1.0" for extern
+        TestName = "Add the model StateTestModel" for extern
+
+        bind cm:MyCouchdbApp >> (filter CouchdbServers >> binding >> context >> Repositories with (Repositories$NameSpace == origin >> extern >> NameSpace)) >> binding >>= first to Repository
+        StartTest = true for extern
+
+    aspect context mm:AddModel$Repository
+    aspect context mm:AddModel$Manifest
+    aspect context mm:AddModel$Version
+
+  case AddModel_SinglePDRDestructiveTests
+    aspect mm:AddModel
+
+    user Tester
+      aspect mm:Test$Tester
+      aspect mm:AddModel$Tester
+
+      action RunTest
+        NameSpace = "joopringelberg.nl" for extern
+        ModelName = "SinglePDRDestructiveTests" for extern
+        VersionNumber = "2.0" for extern
+        TestName = "Add the model SinglePDRDestructiveTests" for extern
+
+        bind cm:MyCouchdbApp >> (filter CouchdbServers >> binding >> context >> Repositories with (Repositories$NameSpace == origin >> extern >> NameSpace)) >> binding >>= first to Repository
+        StartTest = true for extern
+
+    aspect context mm:AddModel$Repository
+    aspect context mm:AddModel$Manifest
+    aspect context mm:AddModel$Version
+
+  case AddModel_TransactionExecutionTests
+    aspect mm:AddModel
+
+    user Tester
+      aspect mm:Test$Tester
+      aspect mm:AddModel$Tester
+
+      action RunTest
+        NameSpace = "joopringelberg.nl" for extern
+        ModelName = "TransactionExecutionTests" for extern
+        VersionNumber = "1.0" for extern
+        TestName = "Add the model TransactionExecutionTests" for extern
+
+        bind cm:MyCouchdbApp >> (filter CouchdbServers >> binding >> context >> Repositories with (Repositories$NameSpace == origin >> extern >> NameSpace)) >> binding >>= first to Repository
+        StartTest = true for extern
+
+    aspect context mm:AddModel$Repository
+    aspect context mm:AddModel$Manifest
+    aspect context mm:AddModel$Version
+
+  case AddModel_AMQPtestModel
+    aspect mm:AddModel
+
+    user Tester
+      aspect mm:Test$Tester
+      aspect mm:AddModel$Tester
+
+      action RunTest
+        NameSpace = "joopringelberg.nl" for extern
+        ModelName = "AMQPtestModel" for extern
+        VersionNumber = "1.0" for extern
+        TestName = "Add the model AMQPtestModel" for extern
+
+        bind cm:MyCouchdbApp >> (filter CouchdbServers >> binding >> context >> Repositories with (Repositories$NameSpace == origin >> extern >> NameSpace)) >> binding >>= first to Repository
+        StartTest = true for extern
+
+    aspect context mm:AddModel$Repository
+    aspect context mm:AddModel$Manifest
+    aspect context mm:AddModel$Version
+
+  -- case AddModel_TestModelDependencies
+  --   aspect mm:AddModel
+
+  --   user Tester
+  --     aspect mm:Test$Tester
+  --     aspect mm:AddModel$Tester
+
+  --     action RunTest
+  --       NameSpace = "joopringelberg.nl" for extern
+  --       ModelName = "TestModelDependencies" for extern
+  --       VersionNumber = "1.0" for extern
+  --       TestName = "Add the model TestModelDependencies" for extern
+
+  --       bind cm:MyCouchdbApp >> (filter CouchdbServers >> binding >> context >> Repositories with (Repositories$NameSpace == origin >> extern >> NameSpace)) >> binding >>= first to Repository
+  --       StartTest = true for extern
+
+  --   aspect context mm:AddModel$Repository
+  --   aspect context mm:AddModel$Manifest
+  --   aspect context mm:AddModel$Version
+
+  ------------------------------------------------------------------------------
   ---- MANAGE BROKER SERVICE
   ---- Creates a BrokerService that is available as a public resource with identifier
   ---- "https://perspectives.domains/cw_bigbangsdatabase/#BigBangsBrokerService"
