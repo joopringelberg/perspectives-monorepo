@@ -96,7 +96,7 @@ import Perspectives.Representation.Class.Cacheable (CalculatedRoleType(..), Cont
 import Perspectives.Representation.Class.Identifiable (identifier)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser(..), RoleInstance, Value(..), perspectivesUser2RoleInstance)
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
-import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), EnumeratedPropertyType(..), PropertyType(..), RoleType(..))
+import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..), PropertyType(..), RoleType(..))
 import Perspectives.ResourceIdentifiers (createDefaultIdentifier, resourceIdentifier2DocLocator, resourceIdentifier2WriteDocLocator, takeGuid)
 import Perspectives.RoleAssignment (roleIsMe)
 import Perspectives.SaveUserData (scheduleContextRemoval, setFirstBinding)
@@ -692,14 +692,18 @@ renderDependencyResolutionPlan { targetVersionedModel, directDependencies, direc
 readInstalledModelVersions :: MonadPerspectives (Array InstalledModelVersion)
 readInstalledModelVersions = catchError
   do
-    manifestExternals <- getInstalledManifestExternals
-    catMaybes <$> traverse installedVersion manifestExternals
+    system <- getMySystem
+    modelRoles <- (ContextInstance system) ##= getRoleInstances (ENR $ EnumeratedRoleType DEP.modelsInUse)
+    catMaybes <$> traverse installedVersion modelRoles
   \_ -> pure []
   where
+  -- Installation records are local and describe the release actually installed.
+  -- Evaluating VersionedModelURI on a remote manifest can traverse missing resources
+  -- and wait for the integrity fixer while this installation holds the transaction lock.
   installedVersion :: RoleInstance -> MonadPerspectives (Maybe InstalledModelVersion)
-  installedVersion manifestExternal = catchError
+  installedVersion modelRole = catchError
     do
-      mversionedModelUri <- manifestExternal ##> getPropertyValues (CP $ CalculatedPropertyType DEP.versionedModelURI)
+      mversionedModelUri <- modelRole ##> getPropertyValues (ENP $ EnumeratedPropertyType DEP.modelToRemove)
       pure case mversionedModelUri of
         Just (Value versionedModelUri) ->
           Just
@@ -712,17 +716,18 @@ readInstalledModelVersions = catchError
 readInstalledDependencyRequirements :: MonadPerspectives (Array InstalledDependencyRequirement)
 readInstalledDependencyRequirements = catchError
   do
-    manifestExternals <- getInstalledManifestExternals
-    concat <$> traverse dependenciesForManifest manifestExternals
+    installedModels <- readInstalledModelVersions
+    concat <$> traverse dependenciesForModel installedModels
   \_ -> pure []
   where
-  dependenciesForManifest :: RoleInstance -> MonadPerspectives (Array InstalledDependencyRequirement)
-  dependenciesForManifest manifestExternal = catchError
+  -- Read the dependency metadata of the installed compilation, not its remote manifest.
+  -- Legacy DomeinFiles without dependency metadata contribute no requirements.
+  dependenciesForModel :: InstalledModelVersion -> MonadPerspectives (Array InstalledDependencyRequirement)
+  dependenciesForModel { modelId, versionedModelUri } = catchError
     do
-      mversionedModelUri <- manifestExternal ##> getPropertyValues (CP $ CalculatedPropertyType DEP.versionedModelURI)
-      dependencies <- readManifestDependencies manifestExternal
-      pure case mversionedModelUri of
-        Just (Value versionedModelUri) ->
+      mmodel <- tryGetPerspectEntiteit (ModelUri modelId :: ModelUri Stable)
+      pure case mmodel of
+        Just (DomeinFile { modelDependencies: Just dependencies }) ->
           ( \dependency ->
               { dependentVersionedModelUri: versionedModelUri
               , dependency
