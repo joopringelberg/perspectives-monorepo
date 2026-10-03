@@ -108,6 +108,8 @@ domain model://joopringelberg.nl#RepositoryTools@1.0
           callEffect cdb:DeleteCouchdbDatabase( url, "cw_perspectives_domains" )
           -- Remove models_perspectives_domains
           callEffect cdb:DeleteCouchdbDatabase( url, "models_perspectives_domains" )
+          callEffect cdb:DeleteCouchdbDatabase( url, "cw_joopringelberg_nl" )
+          callEffect cdb:DeleteCouchdbDatabase( url, "models_joopringelberg_nl" )
           -- Remove the Bespoke database of Big Bang.
           callEffect cdb:DeleteCouchdbDatabase( url, "cw_bigbangsdatabase" )
           TestName = "Cleanup - remove the databases created on the previous run." for extern
@@ -419,4 +421,3 @@ domain model://joopringelberg.nl#RepositoryTools@1.0
     context Manifest filledBy cm:ModelManifest
     -- Is filled with the external role of the VersionedModelManifest.
     context Version filledBy cm:VersionedModelManifest
-

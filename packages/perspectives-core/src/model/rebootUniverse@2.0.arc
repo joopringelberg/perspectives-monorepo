@@ -1077,7 +1077,7 @@ domain model://joopringelberg.nl#RebootUniverse@2.0
   ------------------------------------------------------------------------------
   ---- ADD ALL EXTRA MODELS THAT NEED TO BE INCLUDED IN THE REBOOT UNIVERSE TO THIS INSTALLATION
   ---- We should use the Stable ModelUris.
-  ---- If we still have the Repository perspectives.domains, or if we have rebuilt it locally, we can use that.
+  ---- Use the perspectives.domains and joopringelberg.nl repositories, remote or rebuilt locally.
   ---- Take the Manifest with a given readable ModelUri (filter on ModelURIReadable), then concatenate its
   ----  * ModelURI
   ----  * VersionToInstall
@@ -1117,6 +1117,26 @@ domain model://joopringelberg.nl#RebootUniverse@2.0
           sharedfileservicesmanifest <- (filter (repository >> Manifests) with ModelURIReadable == "model://perspectives.domains#SharedFileServices") >>= first
           sharedfileservicesmodeluri <- sharedfileservicesmanifest >> ModelURI + "@" + sharedfileservicesmanifest >> VersionToInstall
 
+          testrepository <- publicrole pub:https://joopringelberg.nl/cw_servers_and_repositories/#joopringelberg_nl$External (cm:Repository) >> context
+
+          synchronisationtestmodelmanifest <- (filter (testrepository >> Manifests) with ModelURIReadable == "model://joopringelberg.nl#SynchronisationTestModel") >>= first
+          synchronisationtestmodelmodeluri <- synchronisationtestmodelmanifest >> ModelURI + "@" + synchronisationtestmodelmanifest >> VersionToInstall
+
+          twopdrdestructivetestsmanifest <- (filter (testrepository >> Manifests) with ModelURIReadable == "model://joopringelberg.nl#TwoPDRDestructiveTests") >>= first
+          twopdrdestructivetestsmodeluri <- twopdrdestructivetestsmanifest >> ModelURI + "@" + twopdrdestructivetestsmanifest >> VersionToInstall
+
+          statetestmodelmanifest <- (filter (testrepository >> Manifests) with ModelURIReadable == "model://joopringelberg.nl#StateTestModel") >>= first
+          statetestmodelmodeluri <- statetestmodelmanifest >> ModelURI + "@" + statetestmodelmanifest >> VersionToInstall
+
+          singlepdrdestructivetestsmanifest <- (filter (testrepository >> Manifests) with ModelURIReadable == "model://joopringelberg.nl#SinglePDRDestructiveTests") >>= first
+          singlepdrdestructivetestsmodeluri <- singlepdrdestructivetestsmanifest >> ModelURI + "@" + singlepdrdestructivetestsmanifest >> VersionToInstall
+
+          transactionexecutiontestsmanifest <- (filter (testrepository >> Manifests) with ModelURIReadable == "model://joopringelberg.nl#TransactionExecutionTests") >>= first
+          transactionexecutiontestsmodeluri <- transactionexecutiontestsmanifest >> ModelURI + "@" + transactionexecutiontestsmanifest >> VersionToInstall
+
+          amqptestmodelmanifest <- (filter (testrepository >> Manifests) with ModelURIReadable == "model://joopringelberg.nl#AMQPtestModel") >>= first
+          amqptestmodelmodeluri <- amqptestmodelmanifest >> ModelURI + "@" + amqptestmodelmanifest >> VersionToInstall
+
         in
           callEffect cdb:AddModelToLocalStore( rabbitmqmodeluri )
           callEffect cdb:AddModelToLocalStore( brokerservicesmodeluri )
@@ -1126,6 +1146,12 @@ domain model://joopringelberg.nl#RebootUniverse@2.0
           callEffect cdb:AddModelToLocalStore( disconnectmodeluri )
           callEffect cdb:AddModelToLocalStore( repositoryregistrymodeluri )
           callEffect cdb:AddModelToLocalStore( sharedfileservicesmodeluri )
+          callEffect cdb:AddModelToLocalStore( synchronisationtestmodelmodeluri )
+          callEffect cdb:AddModelToLocalStore( twopdrdestructivetestsmodeluri )
+          callEffect cdb:AddModelToLocalStore( statetestmodelmodeluri )
+          callEffect cdb:AddModelToLocalStore( singlepdrdestructivetestsmodeluri )
+          callEffect cdb:AddModelToLocalStore( transactionexecutiontestsmodeluri )
+          callEffect cdb:AddModelToLocalStore( amqptestmodelmodeluri )
 
           once settled
             TestSucceeded = true for extern

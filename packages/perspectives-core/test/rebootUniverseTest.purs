@@ -80,7 +80,7 @@ rebootUniverseCompileTestModelConfiguration =
 
 rebootUniverseTestModel :: String
 -- rebootUniverseTestModel = "model://joopringelberg.nl#RebootUniverse@2.0"
-rebootUniverseTestModel = "model://joopringelberg.nl#eqcwpoi6u6@2.0"
+rebootUniverseTestModel = "model://joopringelberg.nl#p80ohyse8t@2.0"
 
 repositoryToolsTestModel :: String
 -- repositoryToolsTestModel = "model://joopringelberg.nl#RepositoryTools@1.0"
