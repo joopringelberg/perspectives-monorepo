@@ -503,8 +503,19 @@ resolveDocumentConflict dbName doc docName = withDatabase dbName
               Right (PutCouchdbDocument { rev }) -> pure rev
           (handlePouchError "resolveDocumentConflict" docName)
       \e -> do
-        log ("resolveDocumentConflict: getDocumentWithConflicts failed for '" <> docName <> "', falling back to forceCleanSave. Error: " <> show e)
-        forceCleanSave dbName doc docName
+        ({ status } :: PouchError) <- parsePouchError "resolveDocumentConflict" docName e
+        case status of
+          -- The document does not exist, but our copy carries a stale _rev (e.g. the database was recreated).
+          Just 404 -> catchError
+            do
+              f <- liftAff $ fromEffectFnAff $ runEffectFnAff3 addDocumentImpl db (write doc) withForce
+              case PutCouchdbDocument <$> (read f) of
+                Left e' -> throwError $ error ("resolveDocumentConflict: error: " <> show e')
+                Right (PutCouchdbDocument { rev }) -> pure rev
+            (handlePouchError "resolveDocumentConflict" docName)
+          _ -> do
+            log ("resolveDocumentConflict: getDocumentWithConflicts failed for '" <> docName <> "', falling back to forceCleanSave. Error: " <> show e)
+            forceCleanSave dbName doc docName
 
 withForce :: Boolean
 withForce = true

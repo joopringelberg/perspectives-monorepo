@@ -78,6 +78,7 @@ import Perspectives.PerspectivesState (getPerspectivesUser)
 import Perspectives.Representation.InstanceIdentifiers (PerspectivesUser(..), Value(..), perspectivesUser2RoleInstance)
 import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..))
 import Perspectives.ResourceIdentifiers (stripNonPublicIdentifiers, takeGuid)
+import Perspectives.Sync.CanonicalJson (canonicalizeJsonString)
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
 import Simple.JSON (parseJSON, unsafeStringify)
 import Unsafe.Coerce (unsafeCoerce)
@@ -90,13 +91,14 @@ import Web.Encoding.TextEncoder (encode, new) as Encoder
 -- | the users private key and signing the message.
 signDelta :: String -> MonadPerspectivesTransaction SignedDelta
 signDelta encryptedDelta = do
+  canonicalDelta <- liftEffect $ canonicalizeJsonString encryptedDelta
   author <- lift getPerspectivesUser
-  deltaBuff :: ArrayBuffer <- liftEffect $ string2buff encryptedDelta
+  deltaBuff :: ArrayBuffer <- liftEffect $ string2buff canonicalDelta
   mcryptoKey <- lift $ gets (_.privateKey <<< _.runtimeOptions)
   case mcryptoKey of
     Nothing -> pure $ SignedDelta
       { author: over PerspectivesUser stripNonPublicIdentifiers author
-      , encryptedDelta
+      , encryptedDelta: canonicalDelta
       , signature: Nothing
       }
     Just cryptoKey -> do
@@ -105,7 +107,7 @@ signDelta encryptedDelta = do
       (signature :: String) <- liftAff $ bytesToBase64DataUrl int8array
       sd <- pure $ SignedDelta
         { author: over PerspectivesUser stripNonPublicIdentifiers author
-        , encryptedDelta
+        , encryptedDelta: canonicalDelta
         , signature: Just signature
         }
       pure sd

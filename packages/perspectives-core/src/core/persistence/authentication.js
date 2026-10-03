@@ -14,6 +14,9 @@ export function isUnauthorized (e)
     );
 }
 
+// The Node build substitutes authentication.node.js for this file.
+export const runningInNode = false;
+
 export function invalidateDatabaseConnectors (_url)
 {
   return function (_couchdbUrl)

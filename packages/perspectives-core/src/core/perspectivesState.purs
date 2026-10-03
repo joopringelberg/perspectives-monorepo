@@ -28,7 +28,7 @@ import Control.Monad.Error.Class (catchError, throwError)
 import Data.Array (cons)
 import Data.List (elem)
 import Data.Map (Map, empty, insert, lookup, values) as Map
-import Data.Maybe (Maybe(..), isNothing)
+import Data.Maybe (Maybe(..), isJust)
 import Data.Nullable (null)
 import Data.String (Pattern(..), stripSuffix)
 import Effect (Effect)
@@ -40,7 +40,7 @@ import Foreign.Object (Object, empty, singleton)
 import Foreign.Object (lookup, insert, delete) as OBJ
 import LRUCache (Cache, clear, defaultCreateOptions, defaultGetOptions, delete, get, newCache, set)
 import Perspectives.AMQP.Stomp (StompClient, createStompClient)
-import Perspectives.CoreTypes (AssumptionRegister, BrokerService, ContextInstances, DeltaCache, DomeinCache, IndexedResource, IntegrityFix, JustInTimeModelLoad, LogConfig, LogLevel(..), LogTopic, MonadPerspectives, PerspectivesState, QueryInstances, RepeatingTransaction, ResourceDeltasCache, ResourceVersionCache, RolInstances, RoleInstanceDeltasCache, RuntimeOptions, TranslationTable, TypeFix, Warning)
+import Perspectives.CoreTypes (AssumptionRegister, BrokerService, ContextInstances, DeltaCache, DomeinCache, IndexedResource, IntegrityFix, JustInTimeModelLoad, LogConfig, LogLevel(..), LogTopic, MonadPerspectives, PerspectivesState, QueryInstances, RepeatingTransaction, ResourceDeltasCache, ResourceVersionCache, RolInstances, RoleInstanceDeltasCache, RuntimeOptions, TranslationTable, TypeFix, Warning, newPendingSettledStack)
 import Perspectives.DomeinFile (DomeinFile)
 import Perspectives.Instances.Environment (Environment, _pushFrame, addVariable, empty, lookup) as ENV
 import Perspectives.Logging.DefaultLevels (defaultLogLevels)
@@ -113,6 +113,7 @@ newPerspectivesState uinfo transFlag transactionWithTiming modelToLoad runtimeOp
   , modelUris: Map.empty
   , logConfig: defaultLogLevels
   , logColor: Nothing
+  , pendingSettledTransactions: newPendingSettledStack unit
   }
 
 defaultRuntimeOptions :: RuntimeOptions
@@ -181,8 +182,9 @@ transactionFlag :: MonadPerspectives (AVar Boolean)
 transactionFlag = gets _.transactionFlag
 
 -- Non-blocking check to see if a transaction is currently running. 
+-- The flag is 'down' (the AVar is empty) exactly while a transaction runs.
 noTransactionIsRunning :: MonadPerspectives Boolean
-noTransactionIsRunning = transactionFlag >>= liftAff <<< map isNothing <<< tryRead
+noTransactionIsRunning = transactionFlag >>= liftAff <<< map isJust <<< tryRead
 
 nextTransactionNumber :: MonadPerspectives Int
 nextTransactionNumber = do

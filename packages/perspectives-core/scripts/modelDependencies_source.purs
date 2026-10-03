@@ -62,9 +62,6 @@ socialEnvironmentSystemUser = "model://perspectives.domains#System$SocialEnviron
 systemModelName :: String
 systemModelName = "model://perspectives.domains#tiodn6tcyc" -- System
 
-addressBookModelName :: String
-addressBookModelName = "model://perspectives.domains#ofhpcy5a0x" -- AddressBook
-
 repositoryRegistryModelName :: String
 repositoryRegistryModelName = "model://perspectives.domains#k1bnh6wqk9" -- RepositoryRegistry
 
@@ -291,6 +288,21 @@ modelURIReadable = "model://perspectives.domains#CouchdbManagement$VersionedMode
 
 versionedModelManifestModelCuid :: String
 versionedModelManifestModelCuid = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$ModelCuid"
+
+modelDependency :: String
+modelDependency = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$ModelDependency"
+
+modelDependencyModelId :: String
+modelDependencyModelId = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$ModelDependency$ModelId"
+
+modelDependencyDeclaredRequirement :: String
+modelDependencyDeclaredRequirement = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$ModelDependency$DeclaredRequirement"
+
+modelDependencyResolvedModel :: String
+modelDependencyResolvedModel = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$ModelDependency$ResolvedModel"
+
+modelDependencyResolvedVersion :: String
+modelDependencyResolvedVersion = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$ModelDependency$ResolvedVersion"
 
 manifestsRole :: String
 manifestsRole = "model://perspectives.domains#CouchdbManagement$Repository$Manifests"

@@ -26,6 +26,7 @@
 -- | This suite aggregates:
 -- |   1. Constructive synchronisation tests (two connected PDR instances)
 -- |   2. Model compilation regression tests (full compilation flow)
+-- |   3. Single-PDR tests for actions, transactions, and model-file compilation
 -- |
 -- | Run with:
 -- |
@@ -38,14 +39,16 @@ import Prelude
 import Effect (Effect)
 import Effect.Aff (launchAff_)
 import Effect.Class (liftEffect)
-import Test.SinglePDRScaffold (getSinglePDRResults)
 import Test.ConstructiveSynchronisationTest (getSynchronisationResults, synchronisationSuite)
 import Test.DestructiveSynchronisationTests (getSynchronisationResults, synchronisationSuite) as DestructiveSynchronisationTests
 import Test.Layer3ScaffoldTests (scaffoldTests)
 import Test.ModelCompilationRegression (getCompilationResults, modelCompilationSuite)
+import Test.ModelFileCompilation (getCompilationResults, modelFileCompilationSuite) as ModelFileCompilation
 import Test.QueryStepTests (queryStepSuite, queryStepTestModelConfiguration)
+import Test.RunAction (runActionCompileTestModelConfiguration, runActionSuite)
 import Test.SinglePDRDestructiveTests (singlePDRDestructiveSuite, singlePDRDestructiveTestModelConfiguration)
-import Test.TransactionExecutionTests (transactionExecutionSuite, transactionExecutionTestModelConfiguration)
+import Test.SinglePDRScaffold (getSinglePDRResults)
+import Test.TransactionExecutionTests (transactionExecutionCompileTestModelConfiguration, transactionExecutionSuite)
 import Test.Unit.Main (runTest)
 
 main :: Effect Unit
@@ -53,15 +56,18 @@ main = launchAff_ do
   constructiveSynchronisationResults <- getSynchronisationResults
   destructiveSynchronisationResults <- DestructiveSynchronisationTests.getSynchronisationResults
   compilationResults <- getCompilationResults
+  modelFileCompilationResults <- ModelFileCompilation.getCompilationResults
   queryStepResults <- getSinglePDRResults queryStepTestModelConfiguration
   destructiveResults <- getSinglePDRResults singlePDRDestructiveTestModelConfiguration
-  transactionExecutionResults <- getSinglePDRResults transactionExecutionTestModelConfiguration
+  transactionExecutionResults <- getSinglePDRResults transactionExecutionCompileTestModelConfiguration
+  runActionResults <- getSinglePDRResults runActionCompileTestModelConfiguration
   liftEffect $ runTest do
     scaffoldTests
     synchronisationSuite constructiveSynchronisationResults
     DestructiveSynchronisationTests.synchronisationSuite destructiveSynchronisationResults
     modelCompilationSuite compilationResults
+    ModelFileCompilation.modelFileCompilationSuite modelFileCompilationResults
     queryStepSuite queryStepResults
     singlePDRDestructiveSuite destructiveResults
     transactionExecutionSuite transactionExecutionResults
-  
+    runActionSuite runActionResults

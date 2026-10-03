@@ -64,7 +64,6 @@ import Data.TraversableWithIndex (forWithIndex)
 import Foreign.Object (Object, values)
 import Perspectives.Assignment.SerialiseAsDeltas (newPeer, serialisedAsDeltasFor)
 import Perspectives.Assignment.Update (cacheAndSave, getSubject)
-import Perspectives.Authenticate (signDelta)
 import Perspectives.Checking.PerspectivesTypeChecker (checkBinding)
 import Perspectives.CollectAffectedContexts (addDeltasForPerspectiveObjects, usersWithPerspectiveOnRoleBinding, usersWithPerspectiveOnRoleBinding', usersWithPerspectiveOnRoleInstance)
 import Perspectives.ContextAndRole (changeContext_me, context_buitenRol, context_pspType, modifyContext_rolInContext, rol_binding, rol_context, rol_isMe, rol_pspType)
@@ -99,12 +98,12 @@ import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.StrippedDelta (stripResourceSchemes)
 import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
 import Perspectives.Sync.SignedDelta (SignedDelta)
+import Perspectives.Sync.VersionedDelta (signVersionedDelta)
 import Perspectives.Sync.Transaction (Transaction(..))
 import Perspectives.Types.ObjectGetters (allUnlinkedRoles, isUnlinked_)
 import Perspectives.TypesForDeltas (RoleBindingDelta(..), RoleBindingDeltaType(..), UniverseRoleDelta(..), UniverseRoleDeltaType(..))
 import Perspectives.Warning (PerspectivesWarning(..))
 import Prelude (Unit, bind, discard, not, pure, unit, void, ($), (&&), (<$>), (<<<), (<>), (==), (>>=), (||), (/=))
-import Simple.JSON (writeJSON)
 
 synchronise :: Boolean
 synchronise = true
@@ -186,7 +185,7 @@ scheduleContextRemoval authorizedRole usersWithPerspectiveOnEmbeddingRole id =
         subject <- getSubject
         let rkey = unwrap (context_buitenRol ctxt)
         rversion <- lift $ incrementResourceVersion rkey
-        signedDelta <- signDelta $ writeJSON $ stripResourceSchemes $ UniverseRoleDelta
+        signedDelta <- signVersionedDelta $ stripResourceSchemes $ UniverseRoleDelta
           { id
           , contextType: context_pspType ctxt
           , roleType: over ContextType buitenRol (context_pspType ctxt)
@@ -263,8 +262,8 @@ stateEvaluationAndQueryUpdatesForContext id authorizedRole = do
         -- (roleType ###>> hasAspect (EnumeratedRoleType "sys:RootContext$External"))
         let rkey = unwrap (context_buitenRol ctxt)
         rversion <- lift $ incrementResourceVersion rkey
-        delta <- signDelta
-          ( writeJSON $ stripResourceSchemes $ UniverseRoleDelta
+        delta <- signVersionedDelta
+          ( stripResourceSchemes $ UniverseRoleDelta
               { id
               , contextType
               , roleType: externalRoleType contextType
@@ -358,8 +357,8 @@ synchroniseRoleRemoval (PerspectRol { id: roleId, pspType: roleType, context: co
       subject <- getSubject
       let rkey = unwrap roleId
       rversion <- lift $ incrementResourceVersion rkey
-      delta <- signDelta
-        ( writeJSON $ stripResourceSchemes $ UniverseRoleDelta
+      delta <- signVersionedDelta
+        ( stripResourceSchemes $ UniverseRoleDelta
             { id: contextId
             , contextType
             , roleInstance: roleId
@@ -593,7 +592,7 @@ setFirstBindingWithMode mode filled filler msignedDelta = (lift $ try $ getPersp
                     , resourceKey: rkey
                     , resourceVersion: rversion
                     }
-                signDelta (writeJSON $ stripResourceSchemes $ delta)
+                signVersionedDelta (stripResourceSchemes delta)
               Just signedDelta -> pure signedDelta
 
             -- SYNCHRONISATION
@@ -731,7 +730,7 @@ removeBinding_ filled mFillerId msignedDelta = (lift $ try $ getPerspectRol fill
                   , resourceKey: rkey
                   , resourceVersion: rversion
                   }
-              signDelta (writeJSON $ stripResourceSchemes $ delta)
+              signVersionedDelta (stripResourceSchemes delta)
             Just signedDelta -> pure signedDelta
           addDelta (DeltaInTransaction { users, delta: signedDelta })
 

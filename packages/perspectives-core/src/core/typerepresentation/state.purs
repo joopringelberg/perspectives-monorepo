@@ -46,6 +46,7 @@ newtype State = State StateRecord
 type StateRecord =
   { id :: StateIdentifier
   -- NOTE: the Maybe is temporary to prevent a breaking change in DomeinFile. It will be removed in a future version.
+  , typeVersion :: Maybe String
   , displayName :: Maybe String
   , readableName :: StateIdentifier
   , stateFulObject :: StateFulObject
@@ -121,6 +122,7 @@ instance ReadForeign StateDependentPerspective where
 constructState :: StateIdentifier -> String -> Calculation -> StateFulObject -> Array StateIdentifier -> State
 constructState id displayName condition stateFulObject subStates = State
   { id: id
+  , typeVersion: Nothing
   , displayName: Just displayName
   , readableName: id
   , stateFulObject

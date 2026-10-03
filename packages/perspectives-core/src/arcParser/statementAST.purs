@@ -72,6 +72,10 @@ data Assignment
   | PropertyAssignment (WithTextRange (propertyIdentifier :: String, operator :: AssignmentOperator, valueExpression :: Step, roleExpression :: Maybe Step))
   | ExternalEffect (WithTextRange (effectName :: String, arguments :: (Array Step)))
   | ExternalDestructiveEffect (WithTextRange (effectName :: String, arguments :: (Array Step)))
+  -- | runContextAction <ArcIdentifier> for <userRoleIdentifier> in <contextExpression>
+  | RunContextAction (WithTextRange (actionIdentifier :: String, userRoleIdentifier :: String, contextExpression :: Step))
+  -- | runRoleAction <ArcIdentifier> for <userRoleIdentifier> on <objectExpression> in <contextExpression>
+  | RunRoleAction (WithTextRange (actionIdentifier :: String, userRoleIdentifier :: String, objectExpression :: Step, contextExpression :: Step))
 
 startOfAssignment :: Assignment -> ArcPosition
 startOfAssignment (RemoveRole { start }) = start
@@ -93,6 +97,8 @@ startOfAssignment (DeleteProperty { start }) = start
 startOfAssignment (PropertyAssignment { start }) = start
 startOfAssignment (ExternalEffect { start }) = start
 startOfAssignment (ExternalDestructiveEffect { start }) = start
+startOfAssignment (RunContextAction { start }) = start
+startOfAssignment (RunRoleAction { start }) = start
 
 endOfAssignment :: Assignment -> ArcPosition
 endOfAssignment (RemoveRole { end }) = end
@@ -114,6 +120,8 @@ endOfAssignment (DeleteProperty { end }) = end
 endOfAssignment (PropertyAssignment { end }) = end
 endOfAssignment (ExternalEffect { end }) = end
 endOfAssignment (ExternalDestructiveEffect { end }) = end
+endOfAssignment (RunContextAction { end }) = end
+endOfAssignment (RunRoleAction { end }) = end
 
 derive instance genericStatements :: Generic Statements _
 instance showStatements :: Show Statements where
@@ -182,6 +190,8 @@ instance prettyPrintAssignment :: PrettyPrint Assignment where
   prettyPrint' t (PropertyAssignment { propertyIdentifier, operator, valueExpression, roleExpression }) = "PropertyAssignment " <> propertyIdentifier <> " " <> prettyPrint' t operator <> " " <> "\n" <> t <> prettyPrint' (t <> "  ") valueExpression <> "\n" <> t <> prettyPrint' (t <> "  ") roleExpression
   prettyPrint' t (ExternalEffect { arguments }) = "ExternalEffect\n" <> intercalate ("\n" <> t) (prettyPrint' (t <> "  ") <$> arguments)
   prettyPrint' t (ExternalDestructiveEffect { arguments }) = "ExternalDestructiveEffect\n" <> intercalate ("\n" <> t) (prettyPrint' (t <> "  ") <$> arguments)
+  prettyPrint' t (RunContextAction { actionIdentifier, userRoleIdentifier, contextExpression }) = "RunContextAction " <> actionIdentifier <> " for " <> userRoleIdentifier <> " in " <> prettyPrint' t contextExpression
+  prettyPrint' t (RunRoleAction { actionIdentifier, userRoleIdentifier, objectExpression, contextExpression }) = "RunRoleAction " <> actionIdentifier <> " for " <> userRoleIdentifier <> " on " <> prettyPrint' t objectExpression <> " in " <> prettyPrint' t contextExpression
 
 derive instance genericAssignmentOperator :: Generic AssignmentOperator _
 instance showAssignmentOperator :: Show AssignmentOperator where

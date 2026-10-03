@@ -386,8 +386,10 @@ forkTimedTransactions repeatingTransactionAVar state = do
       registerTransactionFiber f instanceId stateId state
       forkTimedTransactions repeatingTransactionAVar state
     (SettledTransaction { transaction, instanceId, stateId, authoringRole, capturedBindings }) -> do
+      registered <- empty
       f <- forkAff
         ( do
+            take registered
             case stateId of
               Nothing -> pure unit
               Just sid -> unregisterTransactionFiber instanceId sid state
@@ -397,6 +399,7 @@ forkTimedTransactions repeatingTransactionAVar state = do
       case stateId of
         Nothing -> pure unit
         Just sid -> registerTransactionFiber f instanceId sid state
+      put unit registered
       forkTimedTransactions repeatingTransactionAVar state
   where
   runSettledTransaction authoringRole capturedBindings transaction = do

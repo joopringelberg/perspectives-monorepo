@@ -33,7 +33,8 @@ import Effect.Aff.Class (liftAff)
 import Effect.AVar (AVar)
 import Effect.Aff (Fiber)
 import Effect.Aff.AVar (put)
-import Perspectives.CoreTypes (CapturedBindings, MP, RepeatingTransaction(..), Updater)
+import Effect.Class (liftEffect)
+import Perspectives.CoreTypes (CapturedBindings, MP, PendingSettledStack, RepeatingTransaction(..), Updater, appendPendingSettled)
 import Perspectives.PerspectivesState (lookupVariableBinding)
 import Perspectives.Repetition (Repeater(..))
 import Perspectives.Representation.Action (StartMoment(..), TimeFacets)
@@ -47,11 +48,14 @@ captureBindings names = mapMaybe identity <$> traverse capture names
     mvalues <- lookupVariableBinding name
     pure $ Tuple name <$> mvalues
 
+-- | Instead of dispatching to `transactionWithTiming` right away, appends to the top frame of the
+-- | current `PendingSettledStack`. It is only handed over to `transactionWithTiming` once the enclosing
+-- | `runMonadPerspectivesTransaction'` call has itself fully finished (see runMonadPerspectivesTransaction.purs).
 scheduleSettledTransaction :: forall a. Updater a -> RoleType -> Maybe StateIdentifier -> Array String -> Updater a
 scheduleSettledTransaction transaction authoringRole stateId capturedBindingNames a = do
-  (av :: AVar RepeatingTransaction) <- lift (gets _.transactionWithTiming :: MP (AVar RepeatingTransaction))
+  (stack :: PendingSettledStack) <- lift (gets _.pendingSettledTransactions :: MP PendingSettledStack)
   capturedBindings <- lift $ captureBindings capturedBindingNames
-  liftAff $ put
+  liftEffect $ appendPendingSettled stack
     ( SettledTransaction
         { transaction: transaction a
         , instanceId: unsafeUnwrapResource a
@@ -60,7 +64,6 @@ scheduleSettledTransaction transaction authoringRole stateId capturedBindingName
         , capturedBindings
         }
     )
-    av
 
 addTimeFacets :: forall a f. Partial => Updater a -> TimeFacets f -> RoleType -> StateIdentifier -> MP (Updater a)
 addTimeFacets updater { startMoment, endMoment, repeats } authoringRole stateId = do

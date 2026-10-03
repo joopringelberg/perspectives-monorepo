@@ -46,6 +46,7 @@ import Test.Unit.Main (runTest)
 
 -- Pure parser (no MonadPerspectives at all)
 import Test.Parsing.Arc.Expression (theSuite) as TPAE
+import Test.Parsing.Arc.ActionStages (theSuite) as AS
 import Test.ObsoleteRepresentationCleanup (theSuite) as ORC
 
 -- Pure ArrayT combinator tests (no MonadPerspectives)
@@ -72,6 +73,7 @@ main :: Effect Unit
 main = runTest do
   -- ── Truly pure (no MonadPerspectives / no IO) ──────────────────────────────
   TPAE.theSuite -- ARC expression parser
+  AS.theSuite -- Plain and letA action settlement stages
   ARRT.theSuite -- ArrayT combinators
   AIP.theSuite -- Incoming-post status message formatting
   TEP.theSuite -- Error pretty-printing helpers

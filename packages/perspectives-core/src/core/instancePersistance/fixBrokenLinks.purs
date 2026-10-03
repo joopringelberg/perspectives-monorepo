@@ -41,7 +41,7 @@ import Control.Monad.Error.Class (try)
 import Control.Monad.Writer (execWriterT, lift, tell)
 import Data.Array (concat, delete, head)
 import Data.Either (Either(..))
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), isJust)
 import Data.Newtype (unwrap)
 import Data.Traversable (for, for_)
 import Foreign.Object (mapWithKey)
@@ -50,17 +50,19 @@ import Perspectives.ContextAndRole (changeContext_me, context_buitenRol, context
 import Perspectives.ContextStateCompiler (evaluateContextState)
 import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction, ResourceToBeStored(..))
 import Perspectives.Error.Boundaries (handlePerspectContextError, handlePerspectRolError')
-import Perspectives.Identifiers (buitenRol)
+import Perspectives.Identifiers (buitenRol, url2Authority)
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol)
 import Perspectives.Instances.Clipboard (findItemOnClipboardWithRole)
 import Perspectives.Instances.ObjectGetters (Filler_(..), context2roleFromDatabase_, contextType_, filled2fillerFromDatabase_, filler2filledFromDatabase_, role2contextFromDatabase_, roleType_)
 import Perspectives.Logging (warnResource)
 import Perspectives.ModelDependencies (sysUser)
+import Perspectives.Persistence.Authentication (getCredentials)
 import Perspectives.Persistent (getPerspectContext, getPerspectRol, removeEntiteit, saveMarkedResources)
 import Perspectives.PerspectivesState (addWarning, transactionLevel)
 import Perspectives.Representation.Class.Cacheable (tryReadEntiteitFromCache)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..))
 import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedRoleType(..), RoleType(..))
+import Perspectives.ResourceIdentifiers (databaseLocation, isInPublicScheme)
 import Perspectives.RestoreResource (restoreResource)
 import Perspectives.RoleAssignment (filledNoLongerPointsTo) as RA
 import Perspectives.RoleStateCompiler (evaluateRoleState)
@@ -102,8 +104,9 @@ fixReferences resource@(Rle roleId) = do
         , externalRoleId: extRole
         , contextName: displayName
         }
-      -- Persist the restored role.
-      saveMarkedResources
+      -- Persist the restored role, but only if we're actually able to save it: a public resource
+      -- can generally not be written to, as this installation typically has no credentials for it.
+      canSaveResource (unwrap roleId) >>= flip when saveMarkedResources
       pure true
 fixReferences resource@(Ctxt contextId) = do
   -- Restore the resource so that it is available in the database.
@@ -128,13 +131,24 @@ fixReferences resource@(Ctxt contextId) = do
         , externalRoleId: extRole
         , contextName: displayName
         }
-      -- Persist the restored context.
-      saveMarkedResources
+      -- Persist the restored context, but only if we're actually able to save it: a public resource
+      -- can generally not be written to, as this installation typically has no credentials for it.
+      canSaveResource (unwrap contextId) >>= flip when saveMarkedResources
       pure true
 fixReferences (Dfile _) = pure false
 
-----------------------------------------------------------------------------
----- I've kept this mechanism. We might want to use it later.
+-- | A public resource is generally hosted by someone else, so this installation usually has no
+-- | credentials to write to it. Only attempt to save such a resource if credentials are available;
+-- | local and remote (non-public) resources can always be saved.
+canSaveResource :: String -> MonadPerspectives Boolean
+canSaveResource resId
+  | not (isInPublicScheme resId) = pure true
+  | otherwise = do
+      murl <- databaseLocation resId
+      case murl >>= url2Authority of
+        Nothing -> pure false
+        Just authority -> isJust <$> getCredentials authority
+
 ----------------------------------------------------------------------------
 -- | Apply this function when a reference to a context has been found that cannot be retrieved.
 -- | We want all references to this context to be removed.

@@ -35,8 +35,9 @@ transactionExecutionTestModelConfiguration :: SinglePDRModelConfiguration
 transactionExecutionTestModelConfiguration =
   { suiteName: "Transaction execution tests"
   , snapshotDirectory: transactionExecutionSnapshotDirectory
+  , outputSnapshotDirectory: Nothing
   , testModel: transactionExecutionTestModel
-  , testModelLoadMethod: LoadModelFromRepository
+  , testModelLoadMethods: [ LoadModelFromRepository { modelUri: transactionExecutionTestModel } ]
   , indexedTestContext: transactionExecutionIndexedTestContext
   , testAppManager: transactionExecutionTestAppManager
   , testsType: transactionExecutionTestsType
@@ -56,12 +57,14 @@ transactionExecutionCompileTestModelConfiguration :: SinglePDRModelConfiguration
 transactionExecutionCompileTestModelConfiguration =
   transactionExecutionTestModelConfiguration
     { suiteName = "Transaction execution tests (compile)"
-    , testModelLoadMethod =
-        CompileModelFromSource
-          { sourcePath: "src/model/transactionExecutionTests@1.0.arc"
-          , modelUriReadable: "model://joopringelberg.nl#TransactionExecutionTests@1.0"
-          , basedOnVersion: Nothing
-          }
+    , testModelLoadMethods =
+        [ CompileModelFromSource
+            { modelUri: transactionExecutionTestModel
+            , sourcePath: "src/model/transactionExecutionTests@1.0.arc"
+            , modelUriReadable: "model://joopringelberg.nl#TransactionExecutionTests@1.0"
+            , basedOnVersion: Nothing
+            }
+        ]
     }
 
 transactionExecutionTestModel :: String
@@ -87,41 +90,40 @@ transactionExecutionSnapshotDirectory :: String
 transactionExecutionSnapshotDirectory = "test/pdr-snapshot/layer3-clean/alice"
 
 transactionExecutionTests :: Array ModelTest
-transactionExecutionTests = 
-  [ 
-      { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T01", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T02", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T03", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T04", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T05", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T07", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T08", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T08a", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T09", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T10", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T12", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T13", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T14", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T15", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T16", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T17", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T18", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T19", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T20", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T21", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T22", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T23", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$RoleRemoveReordering", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T26", logConfiguration: emptyLogConfiguration }
+transactionExecutionTests =
+  [ { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T01", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T02", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T03", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T04", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T05", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T07", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T08", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T08a", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T09", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T10", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T12", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T13", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T14", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T15", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T16", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T17", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T18", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T19", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T20", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T21", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T22", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T23", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$RoleRemoveReordering", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T26", logConfiguration: emptyLogConfiguration }
   ]
 
 debugConfiguration :: LogConfiguration
-debugConfiguration =       
+debugConfiguration =
   { pdr:
-    [
-    -- { topic: TEST, logLevel: Trace }
-     { topic: RESOURCE, logLevel: Trace }
-    , { topic: STATE, logLevel: Trace }
-    -- , { topic: INSTALL, logLevel: Trace }
-    ]
+      [
+        -- { topic: TEST, logLevel: Trace }
+        { topic: RESOURCE, logLevel: Trace }
+      , { topic: STATE, logLevel: Trace }
+      -- , { topic: INSTALL, logLevel: Trace }
+      ]
   }

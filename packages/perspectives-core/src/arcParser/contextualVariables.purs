@@ -151,6 +151,14 @@ assignmentContainsReference varName (ExternalEffect { arguments }) =
 assignmentContainsReference varName (ExternalDestructiveEffect { arguments }) =
   ala Disj foldMap $ stepContainsVariableReference varName <$> arguments
 
+assignmentContainsReference varName (RunContextAction { contextExpression }) =
+  stepContainsVariableReference varName contextExpression
+
+assignmentContainsReference varName (RunRoleAction { objectExpression, contextExpression }) =
+  stepContainsVariableReference varName objectExpression
+    ||
+      stepContainsVariableReference varName contextExpression
+
 --------------------------------------------------------------------------
 --- CONSTRUCTING AND ADDING BINDINGS
 --------------------------------------------------------------------------

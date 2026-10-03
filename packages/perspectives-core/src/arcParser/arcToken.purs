@@ -199,6 +199,8 @@ perspectDef = LanguageDef
       , "delete"
       , "callEffect"
       , "callDestructiveEffect"
+      , "runContextAction"
+      , "runRoleAction"
       , "letE"
       , "letA"
       , "callExternal"
