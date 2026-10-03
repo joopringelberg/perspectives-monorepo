@@ -43,7 +43,7 @@ import Effect.Exception (error)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CollectAffectedContexts (reEvaluatePublicFillerChanges)
 import Perspectives.ContextStateCompiler (enteringState, evaluateContextState, exitingState)
-import Perspectives.CoreTypes (MPT, MonadPerspectives, MonadPerspectivesTransaction, PendingSettledStack, RepeatingTransaction, liftToInstanceLevel, popPendingSettledFrame, pushPendingSettledFrame, (##=), (##>), (##>>))
+import Perspectives.CoreTypes (MPT, MonadPerspectives, MonadPerspectivesTransaction, PendingSettledStack, RepeatingTransaction(..), liftToInstanceLevel, popPendingSettledFrame, pushPendingSettledFrame, (##=), (##>), (##>>))
 import Perspectives.Deltas (TransactionPerUser, distributeTransaction)
 import Perspectives.DependencyTracking.Dependency (lookupActiveSupportedEffect)
 import Perspectives.Error.Pretty (humanizePerspectivesWarning)
@@ -651,6 +651,109 @@ runEmbeddedIfNecessary share authoringRole a = do
         throwError e
   -- Otherwise, since a transaction is already running, we queue up behind it.
   else runMonadPerspectivesTransaction' share authoringRole a
+
+-----------------------------------------------------------
+-- AWAITING SETTLEMENT (depth-first, awaitable action invocation)
+-----------------------------------------------------------
+-- | Like `runMonadPerspectivesTransaction'`, but instead of handing this transaction's
+-- | `once settled` continuations to the asynchronous `transactionWithTiming` scheduler,
+-- | runs each of them to completion - including whatever they in turn schedule - before
+-- | returning. This gives depth-first, awaitable semantics for a single call chain
+-- | (one action directly invoking another), as opposed to the breadth-first interleaving
+-- | across independently-scheduled chains that the ordinary mechanism produces.
+runMonadPerspectivesTransactionAwaitingSettlement
+  :: forall o
+   . Boolean
+  -> RoleType
+  -> MonadPerspectivesTransaction o
+  -> (MonadPerspectives o)
+runMonadPerspectivesTransactionAwaitingSettlement share authoringRole a = (liftAff $ createTransaction authoringRole share) >>= liftAff <<< new >>= runReaderT whenFlagIsDown
+  where
+  whenFlagIsDown :: MonadPerspectivesTransaction o
+  whenFlagIsDown = do
+    t <- lift $ transactionFlag
+    lift $ liftAff $ void $ take t
+    transactionNumber <- lift $ nextTransactionNumber
+    AA.modify \trns -> over Transaction (\tr -> tr { transactionNumber = transactionNumber }) trns
+    padding <- lift transactionLevel
+    lift $ debugState (padding <> "Starting " <> (if share then "" else "non-") <> "sharing transaction (awaiting settlement) " <> show transactionNumber)
+    (pendingSettledStack :: PendingSettledStack) <- lift (AA.gets _.pendingSettledTransactions :: MonadPerspectives PendingSettledStack)
+    lift $ liftEffect $ pushPendingSettledFrame pendingSettledStack
+    catchError
+      do
+        r <- a >>= phase1 share authoringRole
+        -- Drain this transaction's own settled continuations now, synchronously, instead of
+        -- dispatching them to the asynchronous scheduler.
+        lift $ drainSettledFrame pendingSettledStack
+        _ <- lift $ liftAff $ put true t
+        lift $ debugState (padding <> "Ending transaction (awaiting settlement) " <> show transactionNumber)
+        pure r
+      \e -> do
+        _ <- lift $ liftEffect $ popPendingSettledFrame pendingSettledStack
+        _ <- lift $ liftAff $ put true t
+        lift $ debugState (padding <> "Ending transaction (awaiting settlement) " <> show transactionNumber)
+        throwError e
+
+  -- | Pops this transaction's own frame and runs each entry to completion, depth-first,
+  -- | before returning.
+  drainSettledFrame :: PendingSettledStack -> MonadPerspectives Unit
+  drainSettledFrame pendingSettledStack = do
+    (frame :: Array RepeatingTransaction) <- liftEffect $ popPendingSettledFrame pendingSettledStack
+    for_ frame runSettledEntryAwaitingSettlement
+
+-- | Runs a single scheduled continuation to completion, depth-first (including every
+-- | `once settled` continuation it in turn schedules), instead of handing it to the
+-- | asynchronous `transactionWithTiming` scheduler. Time-based continuations (which do not
+-- | arise from directly-awaited action chains) are handed to the regular scheduler instead,
+-- | since there is nothing sensible to await about a delay or a repeat.
+runSettledEntryAwaitingSettlement :: RepeatingTransaction -> MonadPerspectives Unit
+runSettledEntryAwaitingSettlement (SettledTransaction { transaction, authoringRole, capturedBindings }) = do
+  oldFrame <- pushFrame
+  for_ capturedBindings \(Tuple name values) -> addBinding name values
+  catchError
+    ( do
+        -- The draining transaction still holds the flag, so this must run embedded to avoid deadlock.
+        _ <- runEmbeddedIfNecessaryAwaitingSettlement shareWithPeers authoringRole transaction
+        restoreFrame oldFrame
+    )
+    \e -> do
+      restoreFrame oldFrame
+      throwError e
+runSettledEntryAwaitingSettlement rt = do
+  (timingAVar :: AVar RepeatingTransaction) <- (AA.gets _.transactionWithTiming :: MonadPerspectives (AVar RepeatingTransaction))
+  liftAff $ put rt timingAVar
+
+-- | Like `runEmbeddedIfNecessary`, but awaits this embedded transaction's full settlement -
+-- | i.e. every `once settled` continuation it (recursively) schedules - before returning,
+-- | giving depth-first semantics for one action directly invoking another.
+runEmbeddedIfNecessaryAwaitingSettlement
+  :: forall o
+   . Boolean
+  -> RoleType
+  -> MonadPerspectivesTransaction o
+  -> (MonadPerspectives o)
+runEmbeddedIfNecessaryAwaitingSettlement share authoringRole a = do
+  t <- transactionFlag
+  flagIsDown <- isNothing <$> (liftAff $ tryRead t)
+  if flagIsDown then do
+    _ <- liftAff $ put true t
+    increaseTransactionLevel
+    padding <- transactionLevel
+    debugState $ padding <> "Starting embedded " <> (if share then "" else "non-") <> "sharing transaction (awaiting settlement) because it was necessary."
+    catchError
+      do
+        result <- runMonadPerspectivesTransactionAwaitingSettlement share authoringRole a
+        decreaseTransactionLevel
+        _ <- liftAff $ take t
+        debugState $ padding <> "Ending transaction that needed to be embedded (awaiting settlement)."
+        pure result
+      \e -> do
+        decreaseTransactionLevel
+        _ <- liftAff $ take t
+        debugState $ padding <> ("Ending transaction that needed to be embedded (awaiting settlement) in failure. " <> show e)
+        throwError e
+  -- Otherwise, since a transaction is already running, we queue up behind it, awaiting settlement too.
+  else runMonadPerspectivesTransactionAwaitingSettlement share authoringRole a
 
 -----------------------------------------------------------
 -- EXECUTEEFFECT

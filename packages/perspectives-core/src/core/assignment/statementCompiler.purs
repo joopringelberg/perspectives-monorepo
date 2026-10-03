@@ -64,7 +64,7 @@ import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..)) as QF
 import Perspectives.Representation.Range (Range(..))
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..), pessimistic)
-import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedPropertyType, EnumeratedRoleType(..), PropertyType(..), RoleKind(..), RoleType(..))
+import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedPropertyType, EnumeratedRoleType(..), PropertyType(..), RoleKind(..), RoleType(..), roletype2string)
 import Perspectives.Representation.Verbs (PropertyVerb(..), RoleVerb(..)) as Verbs
 import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.Types.ObjectGetters (externalRole, generalisesRoleType_, hasPerspectiveOnPropertyWithVerb, isDatabaseQueryRole, isEnumeratedProperty)
@@ -492,6 +492,26 @@ compileActionEffect originDomain currentcontextDomain userRoleTypes statements =
             otherwise -> (lift2 $ humanizePerspectivesError $ NotARoleDomain (range qfd) (startOf e) (endOf e)) >>= throwError
       (qualifiedProperty :: EnumeratedPropertyType) <- qualifyPropertyWithRespectTo propertyIdentifier roleQfd f.start f.end
       pure $ MQD originDomain (QF.CreateFileF mimeType qualifiedProperty) [ filenameQfd, contentQfd, roleQfd ] originDomain True False
+
+    -- | Compiles to a call of the internally registered "RunContextActionEffect" hidden function.
+    -- | Authorization is enforced at runtime: the action only runs for an instance of the user
+    -- | role that is filled by the local user ("me"); see Perspectives.Extern.RunAction.
+    RunContextAction f@{ actionIdentifier, userRoleIdentifier, contextExpression } -> do
+      (cte :: QueryFunctionDescription) <- ensureContext subjects contextExpression
+      (qualifiedUserRoleType :: RoleType) <- qualifyWithRespectTo userRoleIdentifier cte f.start f.end
+      let actionNameConst = SQD originDomain (QF.Constant PString actionIdentifier) (VDOM PString Nothing) True True
+      let userRoleConst = SQD originDomain (QF.Constant PString (roletype2string qualifiedUserRoleType)) (VDOM PString Nothing) True True
+      pure $ MQD originDomain (QF.ExternalEffectFullFunction "RunContextActionEffect") [ actionNameConst, userRoleConst, cte ] originDomain True False
+
+    -- | Compiles to a call of the internally registered "RunRoleActionEffect" hidden function.
+    -- | Authorization is enforced at runtime: see RunContextAction above.
+    RunRoleAction f@{ actionIdentifier, userRoleIdentifier, objectExpression, contextExpression } -> do
+      (cte :: QueryFunctionDescription) <- ensureContext subjects contextExpression
+      (qualifiedUserRoleType :: RoleType) <- qualifyWithRespectTo userRoleIdentifier cte f.start f.end
+      (obj :: QueryFunctionDescription) <- ensureRole subjects objectExpression
+      let actionNameConst = SQD originDomain (QF.Constant PString actionIdentifier) (VDOM PString Nothing) True True
+      let userRoleConst = SQD originDomain (QF.Constant PString (roletype2string qualifiedUserRoleType)) (VDOM PString Nothing) True True
+      pure $ MQD originDomain (QF.ExternalEffectFullFunction "RunRoleActionEffect") [ actionNameConst, userRoleConst, obj, cte ] originDomain True False
 
     ExternalEffect f@{ start, end, effectName, arguments } -> case lookupHiddenFunction effectName of
       Nothing -> throwError (UnknownExternalFunction start end effectName)

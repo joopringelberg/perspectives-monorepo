@@ -37,7 +37,7 @@ import Perspectives.Parsing.Arc.Expression (parseLetVariableName, step)
 import Perspectives.Parsing.Arc.Expression.AST (VarBinding(..))
 import Perspectives.Parsing.Arc.Identifiers (arcIdentifier, reserved)
 import Perspectives.Parsing.Arc.IndentParser (IP, getPosition, outdented', sameOrOutdented')
-import Perspectives.Parsing.Arc.Statement.AST (Assignment(..), AssignmentOperator(..), LetABinding(..), LetStep(..), StatementStage)
+import Perspectives.Parsing.Arc.Statement.AST (Assignment(..), AssignmentOperator(..), LetABinding(..), LetStep(..), StatementStage, Statements(..))
 import Perspectives.Parsing.Arc.Token (reservedIdentifier, token)
 import Prelude (bind, discard, pure, ($), (*>), (<$>), (<*), (<*>), (<>), (>>=))
 
@@ -48,7 +48,7 @@ assignment = isPropertyAssignment >>=
 
 roleAssignment :: IP Assignment
 roleAssignment = do
-  keyword <- lookAhead reservedIdentifier <?> "Expected remove, create, create_, move, bind, bind_, delete, callEffect or callDestructiveEffect. "
+  keyword <- lookAhead reservedIdentifier <?> "Expected remove, create, create_, move, bind, bind_, delete, callEffect, callDestructiveEffect, runContextAction or runRoleAction. "
   case keyword of
     "remove" -> do
       (Tuple first second) <- twoReservedWords
@@ -69,6 +69,8 @@ roleAssignment = do
         _, _ -> fail ("Expected 'role' or 'context' after 'delete'. ")
     "callEffect" -> callEffect
     "callDestructiveEffect" -> callDestructiveEffect
+    "runContextAction" -> runContextActionP
+    "runRoleAction" -> runRoleActionP
     "create" -> do
       (Tuple first second) <- twoReservedWords
       case first, second of
@@ -80,7 +82,7 @@ roleAssignment = do
       case first, second of
         "create_", "context" -> createContext_
         _, _ -> fail ("Expected 'context' after 'create_'.")
-    s -> fail ("Expected remove, create, create_, move, bind, bind_, delete, callDestructiveEffect or callEffect but found '" <> s <> "'. ")
+    s -> fail ("Expected remove, create, create_, move, bind, bind_, delete, callDestructiveEffect, callEffect, runContextAction or runRoleAction but found '" <> s <> "'. ")
 
 roleRemoval :: IP Assignment
 roleRemoval = do
@@ -338,6 +340,27 @@ callDestructiveEffect = do
   end <- getPosition
   pure $ ExternalDestructiveEffect { start, end, effectName, arguments: (fromFoldable arguments) }
 
+-- | runContextAction <ArcIdentifier> for <ArcIdentifier> in <step>
+runContextActionP :: IP Assignment
+runContextActionP = do
+  start <- getPosition
+  actionIdentifier <- reserved "runContextAction" *> arcIdentifier
+  userRoleIdentifier <- reserved "for" *> arcIdentifier
+  contextExpression <- reserved "in" *> step
+  end <- getPosition
+  pure $ RunContextAction { start, end, actionIdentifier, userRoleIdentifier, contextExpression }
+
+-- | runRoleAction <ArcIdentifier> for <ArcIdentifier> on <step> in <step>
+runRoleActionP :: IP Assignment
+runRoleActionP = do
+  start <- getPosition
+  actionIdentifier <- reserved "runRoleAction" *> arcIdentifier
+  userRoleIdentifier <- reserved "for" *> arcIdentifier
+  objectExpression <- reserved "on" *> step
+  contextExpression <- reserved "in" *> step
+  end <- getPosition
+  pure $ RunRoleAction { start, end, actionIdentifier, userRoleIdentifier, objectExpression, contextExpression }
+
 -- | A let with assignments: letA <binding>+ in <assignment>+.
 letWithAssignment :: IP LetStep
 letWithAssignment = withPos do
@@ -347,6 +370,17 @@ letWithAssignment = withPos do
   stages <- reserved "in" *> stagedAssignments
   end <- getPosition
   pure $ LetStep { start, end, bindings: fromFoldable bindings, stages }
+
+-- | A plain statement block can have settlement stages without introducing bindings.
+-- | Keep single-stage blocks unchanged; reuse LetStep for multi-stage execution.
+stagedStatements :: IP Statements
+stagedStatements = withPos do
+  start <- getPosition
+  stages <- stagedAssignments
+  end <- getPosition
+  pure $ case stages of
+    [ stage ] -> Statements stage
+    _ -> Let $ LetStep { start, end, bindings: [], stages }
 
 stagedAssignments :: IP (Array StatementStage)
 stagedAssignments = do

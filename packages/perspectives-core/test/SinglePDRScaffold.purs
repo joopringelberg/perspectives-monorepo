@@ -195,7 +195,7 @@ loadModel pdr = case _ of
         )
       case compilationResult of
         Left errs -> throwError $ error ("Failed to compile and store model " <> modelUri <> ": " <> show errs)
-        Right _ -> pure unit
+        Right _ -> infoTest ("Successfully compiled and stored model " <> modelUri)
 
 singlePDRCacheKey :: SinglePDRModelConfiguration -> String
 singlePDRCacheKey cfg =

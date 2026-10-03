@@ -221,6 +221,17 @@ instance containsPrefixesAssignment :: ScanSymbols Assignment where
     eeffectName <- f effectName
     earguments <- traverse scan arguments
     pure $ ExternalEffect r { effectName = eeffectName, arguments = earguments }
+  scan (RunContextAction r@{ actionIdentifier, userRoleIdentifier, contextExpression }) = do
+    eactionIdentifier <- f actionIdentifier
+    euserRoleIdentifier <- f userRoleIdentifier
+    econtextExpression <- scan contextExpression
+    pure $ RunContextAction r { actionIdentifier = eactionIdentifier, userRoleIdentifier = euserRoleIdentifier, contextExpression = econtextExpression }
+  scan (RunRoleAction r@{ actionIdentifier, userRoleIdentifier, objectExpression, contextExpression }) = do
+    eactionIdentifier <- f actionIdentifier
+    euserRoleIdentifier <- f userRoleIdentifier
+    eobjectExpression <- scan objectExpression
+    econtextExpression <- scan contextExpression
+    pure $ RunRoleAction r { actionIdentifier = eactionIdentifier, userRoleIdentifier = euserRoleIdentifier, objectExpression = eobjectExpression, contextExpression = econtextExpression }
 
 instance containsPrefixesStateQualifiedPart :: ScanSymbols StateQualifiedPart where
   scan (R r) = R <$> (scan r)
