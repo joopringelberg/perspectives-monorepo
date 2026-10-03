@@ -48,7 +48,7 @@ import Data.Foldable (for_)
 import Data.Maybe (Maybe(..))
 import Data.Traversable (for)
 import Effect (Effect)
-import Effect.Aff (launchAff_)
+import Effect.Aff (Aff, launchAff_)
 import Effect.Class (liftEffect)
 import Node.Encoding (Encoding(..))
 import Node.FS.Aff (readTextFile)
@@ -66,7 +66,7 @@ import Perspectives.Sidecar.StableIdMapping (ModelUri(..))
 import Perspectives.TypePersistence.LoadArc (loadAndCompileArcFile_, parseError2PerspectivesError)
 import Test.PDRInstance (noBus, testPouchdbUser, withPDRCached)
 import Test.PDRInstance.Types (runInPDR)
-import Test.Unit (suite, test)
+import Test.Unit (TestSuite, suite, test)
 import Test.Unit.Assert (assert)
 import Test.Unit.Main (runTest)
 
@@ -74,8 +74,13 @@ type CompilationResult = { filePath :: String, errors :: MultiplePerspectivesErr
 
 main :: Effect Unit
 main = launchAff_ do
+  testResults <- getCompilationResults
+  liftEffect $ runTest $ modelFileCompilationSuite testResults
+
+getCompilationResults :: Aff (Array CompilationResult)
+getCompilationResults = do
   let user = testPouchdbUser "modelfiletest"
-  testResults <- withPDRCached user defaultRuntimeOptions Nothing noBus snapshotDirectory \pdr -> do
+  withPDRCached user defaultRuntimeOptions Nothing noBus snapshotDirectory \pdr -> do
     for modelFilePaths \filePath -> do
       text <- readTextFile UTF8 filePath
       (parsed :: Either ParseError ContextE) <- runIndentParser text domain
@@ -92,15 +97,17 @@ main = launchAff_ do
           case r of
             Left errors -> pure { filePath, errors }
             Right _ -> pure { filePath, errors: [] }
-  liftEffect $ runTest do
-    suite "Model file compilation tests" do
-      for_ testResults \{ filePath, errors } ->
-        if null errors then
-          test (filePath <> " compiled correctly") do
-            assert ("The model file '" <> filePath <> "' should compile without errors") true
-        else
-          test (filePath <> " failed to compile") do
-            assert ("The model file '" <> filePath <> "' should compile without errors, but got: " <> show errors) false
+
+modelFileCompilationSuite :: Array CompilationResult -> TestSuite
+modelFileCompilationSuite testResults =
+  suite "Model file compilation tests" do
+    for_ testResults \{ filePath, errors } ->
+      if null errors then
+        test (filePath <> " compiled correctly") do
+          assert ("The model file '" <> filePath <> "' should compile without errors") true
+      else
+        test (filePath <> " failed to compile") do
+          assert ("The model file '" <> filePath <> "' should compile without errors, but got: " <> show errors) false
 
 -- | The ARC model files to compile.
 -- | Each entry is an absolute path or a path relative to the process working
@@ -112,7 +119,7 @@ main = launchAff_ do
 -- |   ]
 modelFilePaths :: Array String
 modelFilePaths =
-  [ "/Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/src/model/couchdbManagement@12.4.arc"
+  [ "src/model/couchdbManagement@12.4.arc"
   , "test/publicRoleTypeAssertion.arc"
   ]
 
