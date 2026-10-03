@@ -107,7 +107,8 @@ rebootUniverseSnapshotDirectory = "test/pdr-snapshot/universe/alice"
 -- Outcomment all tests to just re-create the snapshot without trying to create databases.
 rebootUniverseTests :: Array ModelTest
 rebootUniverseTests =
-  [ { testContextTypeName: "model://joopringelberg.nl#RepositoryTools$Cleanup", logConfiguration: emptyLogConfiguration }
+  [ 
+    { testContextTypeName: "model://joopringelberg.nl#RepositoryTools$Cleanup", logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: "model://joopringelberg.nl#RepositoryTools$ManageCouchdb", logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: "model://joopringelberg.nl#RepositoryTools$CreateBigBangsDatabase", logConfiguration: emptyLogConfiguration }
   -- The following tests, once run, are not necessary to run ManageBrokerService and Add_public_pages.
@@ -139,12 +140,14 @@ rebootUniverseTests =
   , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_SinglePDRDestructiveTests", logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_TransactionExecutionTests", logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_AMQPtestModel", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_AMQPtestSetup", logConfiguration: emptyLogConfiguration }
   -- The next model is not yet finished. We'll continue after the reboot.
   -- , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_TestModelDependencies", logConfiguration: emptyLogConfiguration }
   -- The above tests, once run, are not necessary to run ManageBrokerService and Add_public_pages.
   , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$ManageBrokerService", logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$Add_public_pages", logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$CreateRepositoryRegistryPublicPage", logConfiguration: emptyLogConfiguration }
+  -- Signing up has not yet been tested.
   -- { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$SignUpToBrokerService", logConfiguration: debugConfiguration }
   ]
 
