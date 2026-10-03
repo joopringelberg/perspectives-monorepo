@@ -51,7 +51,7 @@ domain model://joopringelberg.nl#AMQPtestModel@1.0
       perspective on bs:MyBrokers >> ManagedBrokers
         only (CreateAndFill, RemoveContext)
       perspective on bs:MyBrokers >> ManagedBrokers >> binding
-        props (Name, Url, Exchange, ManagementEndpoint, SelfRegisterEndpoint, ContractPeriod, GracePeriod, TerminationPeriod) verbs (Consult, SetPropertyValue)
+        props (Name, Url, Exchange, ManagementEndpoint, SelfRegisterEndpoint) verbs (Consult, SetPropertyValue)
       perspective on bs:MyBrokers >> PublicBrokers >> binding >> context >> Administrator
         props (AdminUserName, AdminPassword) verbs (Consult, SetPropertyValue)
       perspective on bs:MyBrokers >> PublicBrokers
