@@ -114,20 +114,27 @@ loadAndCompileArcFile_ dfid text saveInCache modelCuid modelUriReadable mbasedOn
 -- | `mExistingMapping`, if given, is reused as the basis for stable-id assignment (e.g. the mapping
 -- | produced by a previous compilation of the same source elsewhere), so no new CUIDs are coined for
 -- | the types and individuals it already covers.
+-- | Otherwise reuse the installed model's mapping; if none exists, use the normal repository /
+-- | `mbasedOnVersion` mapping lookup. Recompiling an installed model must preserve its stable IDs.
 -- | NOTE: this function is only used from module Test.SinglePDRScaffold and Test.Layer3Scaffold
 loadCompileAndStoreArcFile_ :: ModelUri Stable -> Source -> Boolean -> String -> String -> Maybe String -> Maybe StableIdMapping -> MonadPerspectivesTransaction (Either (Array PerspectivesError) (Tuple (DomeinFile Stable) (Tuple StoredQueries StableIdMapping)))
-loadCompileAndStoreArcFile_ dfid text saveInCache modelCuid modelUriReadable _mbasedOnVersion mExistingMapping = do
+loadCompileAndStoreArcFile_ dfid text saveInCache modelCuid modelUriReadable mbasedOnVersion mExistingMapping = do
   version <- case modelUriVersion (unwrap dfid) of
     Nothing -> throwError $ error ("ModelUri " <> show dfid <> " is expected to be versioned.")
     Just v -> pure v
-  result <- loadAndCompileArcFileWithSidecar_
-    (over ModelUri unversionedModelUri dfid)
-    text
-    saveInCache
-    mExistingMapping
-    modelCuid
-    modelUriReadable
-    (Just version)
+  mapping <- case mExistingMapping of
+    Just _ -> pure mExistingMapping
+    Nothing -> lift $ loadStableMapping (over ModelUri unversionedModelUri dfid) fromLocalModels
+  result <- case mapping of
+    Nothing -> loadAndCompileArcFile_ dfid text saveInCache modelCuid modelUriReadable mbasedOnVersion
+    Just _ -> loadAndCompileArcFileWithSidecar_
+      (over ModelUri unversionedModelUri dfid)
+      text
+      saveInCache
+      mapping
+      modelCuid
+      modelUriReadable
+      (Just version)
   case result of
     Left errs -> pure $ Left errs
     Right (Tuple df@(DomeinFile dfr@{ id }) (Tuple invertedQueries mapping')) -> do
