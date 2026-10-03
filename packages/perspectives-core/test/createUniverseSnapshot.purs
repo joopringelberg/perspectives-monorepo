@@ -96,6 +96,7 @@ extraModels =
   , "model://joopringelberg.nl#SinglePDRDestructiveTests@2.0"
   , "model://joopringelberg.nl#TransactionExecutionTests@1.0"
   , "model://joopringelberg.nl#AMQPtestModel@1.0"
+  , "model://joopringelberg.nl#AMQPtestSetup@1.0"
   -- The next two are not in the remote Repository but are added during reboot
   -- , "model://joopringelberg.nl#RebootUniverse@2.0"
   -- , "model://joopringelberg.nl#RepositoryTools@1.0"
@@ -183,12 +184,23 @@ main = launchAff_ do
 
       -- Now patch CouchdbManagement and RepositoryRegistry and recompile locally.
       runInPDR pdr do
+        -- patchModels and recompileLocalModel log on the UPGRADE topic.
+        setTopicLogLevel UPGRADE Debug
         patchModels $ fromFoldable
           [ Tuple "model://perspectives.domains#CouchdbManagement" couchdbmanagement
           , Tuple "model://perspectives.domains#RepositoryRegistry" repositoryregistry
+          , Tuple "model://joopringelberg.nl#AMQPtestModel" amqptestmodel
+          , Tuple "model://joopringelberg.nl#AMQPtestSetup" amqptestsetup
           ]
-        void $ recompileLocalModel (ModelUri "model://perspectives.domains#CouchdbManagement")
-        void $ recompileLocalModel (ModelUri "model://perspectives.domains#RepositoryRegistry")
+        for_
+          [ "model://perspectives.domains#CouchdbManagement"
+          , "model://perspectives.domains#RepositoryRegistry"
+          , "model://joopringelberg.nl#AMQPtestModel"
+          , "model://joopringelberg.nl#AMQPtestSetup"
+          ]
+          \modelUri -> do
+            success <- recompileLocalModel (ModelUri modelUri)
+            log ("Patched and recompiled " <> modelUri <> ": " <> show success)
 
       settleAndSave pdr
 
@@ -197,3 +209,5 @@ main = launchAff_ do
 
 foreign import couchdbmanagement :: String
 foreign import repositoryregistry :: String
+foreign import amqptestmodel :: String
+foreign import amqptestsetup :: String
