@@ -79,7 +79,7 @@ main = launchAff_ do
 
 getCompilationResults :: Aff (Array CompilationResult)
 getCompilationResults = do
-  let user = testPouchdbUser "modelfiletest"
+  let user = testPouchdbUser "alice"
   withPDRCached user defaultRuntimeOptions Nothing noBus snapshotDirectory \pdr -> do
     for modelFilePaths \filePath -> do
       text <- readTextFile UTF8 filePath
@@ -119,11 +119,11 @@ modelFileCompilationSuite testResults =
 -- |   ]
 modelFilePaths :: Array String
 modelFilePaths =
-  [ "src/model/couchdbManagement@12.4.arc"
-  , "test/publicRoleTypeAssertion.arc"
+  [ 
+    "src/model/AMQPtestModel@1.0.arc"
   ]
 
 -- | Directory where the PDR snapshot is cached between test runs.
 -- | Delete this directory to force a full PDR rebuild on the next run.
 snapshotDirectory :: String
-snapshotDirectory = "test/pdr-snapshot/modelfiletest"
+snapshotDirectory = "test/pdr-snapshot/universe/alice"
