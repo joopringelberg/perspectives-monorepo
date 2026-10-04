@@ -529,7 +529,17 @@ pollUntilTestFinishes maxAttempts interval description action = go
   maxAttempts
   ((Left { testName: description, err: error "pollUntilTestFinishes: initial state" }) :: SynchronisationResult)
   where
-  go 0 previousResult = pure previousResult
+  go 0 previousResult = pure case previousResult of
+    Left { testName, err } -> Left
+      { testName
+      , err: error $ "pollUntilTestFinishes timed out after " <> show maxAttempts <> " attempts of "
+          <> show (unwrap interval)
+          <> " ms waiting for: "
+          <> description
+          <> ". Last poll result: "
+          <> message err
+      }
+    Right _ -> previousResult
   go n _ = do
     result <- action
     case result of

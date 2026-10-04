@@ -111,7 +111,6 @@ rebootUniverseTests =
     { testContextTypeName: "model://joopringelberg.nl#RepositoryTools$Cleanup", logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: "model://joopringelberg.nl#RepositoryTools$ManageCouchdb", logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: "model://joopringelberg.nl#RepositoryTools$CreateBigBangsDatabase", logConfiguration: emptyLogConfiguration }
-  -- The following tests, once run, are not necessary to run ManageBrokerService and Add_public_pages.
   , { testContextTypeName: "model://joopringelberg.nl#RepositoryTools$CreatePerspectivesDomainsRepository", logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: "model://joopringelberg.nl#RepositoryTools$CreateJoopringelbergNlRepository", logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_Couchdb", logConfiguration: emptyLogConfiguration }
@@ -143,12 +142,10 @@ rebootUniverseTests =
   , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_AMQPtestSetup", logConfiguration: emptyLogConfiguration }
   -- The next model is not yet finished. We'll continue after the reboot.
   -- , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_TestModelDependencies", logConfiguration: emptyLogConfiguration }
-  -- The above tests, once run, are not necessary to run ManageBrokerService and Add_public_pages.
   , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$ManageBrokerService", logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$Add_public_pages", logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$CreateRepositoryRegistryPublicPage", logConfiguration: emptyLogConfiguration }
-  -- Signing up has not yet been tested.
-  -- { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$SignUpToBrokerService", logConfiguration: debugConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$SignUpToBrokerService", logConfiguration: emptyLogConfiguration }
   ]
 
 debugConfiguration :: LogConfiguration

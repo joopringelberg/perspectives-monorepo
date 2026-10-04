@@ -262,7 +262,9 @@ executeModelTest pdr testAppContext testContextTypeR logConfiguration cfg = do
         lift $ infoTest "Executing RunTest action"
         runContextAction (unwrap testTesterType) "RunTest" (unwrap theTest)
 
-  r <- pollUntilTestFinishes 100 (Milliseconds 200.0)
+  -- Polling stops as soon as the test reports a result; the generous budget (3 minutes) accommodates
+  -- tests that involve network round trips and `once settled` chains.
+  r <- pollUntilTestFinishes 900 (Milliseconds 200.0)
     "Test to complete with a result"
     ( runInPDR pdr
         do
