@@ -632,6 +632,8 @@ instance normalizeCalculation :: Normalize Calculation where
 instance normalizeQfdInst :: Normalize QueryFunctionDescription where
   normalize qfd = traverseQfd nQfd qfd
     where
+    -- traverseQfd already normalizes the sub-descriptions (bottom-up) before calling nQfd on the parent,
+    -- so nQfd must not recurse into them again; doing so makes normalization exponential in query depth.
     nQfd :: QueryFunctionDescription -> WithSideCars QueryFunctionDescription
     nQfd (SQD dom qf ran fun man) = do
       dom' <- normalizeDomain dom
@@ -641,22 +643,18 @@ instance normalizeQfdInst :: Normalize QueryFunctionDescription where
     nQfd (UQD dom qf subQfd ran fun man) = do
       dom' <- normalizeDomain dom
       qf' <- normalizeQueryFunction qf
-      subQfd' <- normalize subQfd
       ran' <- normalizeDomain ran
-      pure $ UQD dom' qf' subQfd' ran' fun man
+      pure $ UQD dom' qf' subQfd ran' fun man
     nQfd (BQD dom qf subQfd1 subQfd2 ran fun man) = do
       dom' <- normalizeDomain dom
       qf' <- normalizeQueryFunction qf
-      subQfd1' <- normalize subQfd1
-      subQfd2' <- normalize subQfd2
       ran' <- normalizeDomain ran
-      pure $ BQD dom' qf' subQfd1' subQfd2' ran' fun man
+      pure $ BQD dom' qf' subQfd1 subQfd2 ran' fun man
     nQfd (MQD dom qf subQfds ran fun man) = do
       dom' <- normalizeDomain dom
       qf' <- normalizeQueryFunction qf
-      subQfds' <- for subQfds normalize
       ran' <- normalizeDomain ran
-      pure $ MQD dom' qf' subQfds' ran' fun man
+      pure $ MQD dom' qf' subQfds ran' fun man
 
     normalizeDomain :: Domain -> WithSideCars Domain
     normalizeDomain (RDOM (d :: ADT RoleInContext)) = RDOM <$> (traverse normalize d)
