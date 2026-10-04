@@ -102,6 +102,7 @@ runActionTests :: Array ModelTest
 runActionTests =
   [ { testContextTypeName: "model://joopringelberg.nl#TestRunAction$TwoContextActionsForSameUser", logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: "model://joopringelberg.nl#TestRunAction$TwoRoleActionsForSameUser", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#TestRunAction$RoleActionForMultipleObjects", logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: "model://joopringelberg.nl#TestRunAction$TwoContextActionsForDifferentUsers", logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: "model://joopringelberg.nl#TestRunAction$TwoContextActionsWithOnceSettledClausesForSameUser", logConfiguration: emptyLogConfiguration }
   ]

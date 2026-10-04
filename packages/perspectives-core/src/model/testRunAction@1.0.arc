@@ -131,6 +131,38 @@ domain model://joopringelberg.nl#TestRunAction@1.0
       property Action2Executed (Boolean)
 
   ------------------------------------------------------------------------------
+  ---- ROLE ACTION FOR MULTIPLE OBJECTS
+  ------------------------------------------------------------------------------
+  case RoleActionForMultipleObjects
+    aspect mm:Test
+    external
+
+      state TestSuccess = context >> AnotherRole >> ActionExecuted >>= count == 2
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+
+      perspective on AnotherRole
+        only (Create)
+        props (ActionExecuted) verbs (SetPropertyValue, Consult)
+        action Action1
+          ActionExecuted = true
+
+      action RunTest
+        letA
+          role1 <- create role AnotherRole in origin
+          role2 <- create role AnotherRole in origin
+        in
+          TestName = "Role action for multiple objects" for extern
+          runRoleAction Action1 for Tester on AnotherRole in origin
+
+    thing AnotherRole (relational)
+      property ActionExecuted (Boolean)
+
+  ------------------------------------------------------------------------------
   ---- TWO CONTEXT ACTIONS FOR DIFFERENT USERS
   ------------------------------------------------------------------------------
   case TwoContextActionsForDifferentUsers
