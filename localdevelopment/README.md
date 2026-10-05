@@ -19,7 +19,7 @@ and proxies repository requests to CouchDB at `http://127.0.0.1:5984`.
 
 The configuration expects MAMP Apache. Confirm that it is the running server:
 
-```bash
+```bash 
 ps -axo pid,user,command | grep '[h]ttpd'
 ```
 
@@ -313,3 +313,67 @@ reopen the browser before testing again.
 
 Be deliberate when entering remote mode: applications using these domain names
 can then reach the production repositories again.
+
+## 8. Back up the local CouchDB files
+
+`backupcouchdb` makes a file-level backup of the local
+`Apache CouchDB 3.app` installation, following the
+[CouchDB backup guidance](https://docs.couchdb.org/en/stable/maintenance/backups.html).
+From the repository root:
+
+```bash
+./localdevelopment/backupcouchdb
+```
+
+By default the command:
+
+- reads `database_dir` and `view_index_dir` from the app's `default.ini` and
+  `~/Library/Preferences/couchdb2-local.ini`;
+- quits the CouchDB menu-bar app and stops its detached Erlang VM gracefully
+  with `SIGTERM`, waiting until it has exited;
+- copies the secondary indexes (`.shards`) before the database files
+  (`shards/` and the system databases such as `_users.couch` and `_dbs.couch`);
+- copies the app's `etc/` directory and the local ini;
+- verifies the copy against the stopped source with SHA-256 checksums;
+- restarts CouchDB and waits for `/_up`, also when the backup fails.
+
+Clients such as a running PDR or MyContexts lose their CouchDB connection
+while the server is stopped. Use `--online` to copy without stopping CouchDB;
+that backup is not compared with the source and its databases are not
+guaranteed to be mutually consistent. Other options are `--dest DIR` and
+`--no-restart`; see `--help`.
+
+Backups are written to `~/CouchDBBackups/couchdb-<timestamp>/`, unless another
+directory is given, and contain `data/` (and `index/` if the index directory is
+separate), `config/`, `SHA256SUMS`, and `MANIFEST.txt`. An interrupted backup
+remains in a `.incomplete-couchdb-<timestamp>` directory. Backups are readable
+only by the current user, because the configuration contains secrets; keep them
+outside the repository.
+
+### Restore a backup
+
+```bash
+./localdevelopment/restorecouchdb ~/CouchDBBackups/couchdb-<timestamp>
+```
+
+The command:
+
+- verifies the backup against its `SHA256SUMS` and refuses incomplete or
+  corrupt backups;
+- refuses a backup whose Erlang node name or CouchDB version (from
+  `MANIFEST.txt`) differs from the current installation, unless `--force` is
+  given;
+- shows what will be replaced and asks you to type `restore` (`--yes` skips
+  this);
+- stops CouchDB as `backupcouchdb` does;
+- moves the current `database_dir` (and a separate `view_index_dir`) aside to
+  `<dir>.before-restore-<timestamp>`, copies the backup into place, and
+  verifies the copied files;
+- puts the original directories back if anything fails after the move;
+- restarts CouchDB and waits for `/_up` (unless `--no-restart`).
+
+All changes made since the backup are lost. The local ini is only restored
+with `--with-config` (the current one is kept as
+`<ini>.before-restore-<timestamp>`); the app's `etc/` directory is never
+restored automatically. Remove the `.before-restore-*` directories once
+CouchDB works as expected.

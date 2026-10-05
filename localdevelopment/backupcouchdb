@@ -1,0 +1,255 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Back up the files of the local macOS "Apache CouchDB 3.app" installation:
+# database files, secondary indexes, and configuration. See README.md.
+
+COUCHDB_APP="${COUCHDB_APP:-/Applications/Apache CouchDB 3.app}"
+COUCHDB_LOCAL_INI="${COUCHDB_LOCAL_INI:-$HOME/Library/Preferences/couchdb2-local.ini}"
+COUCHDB_URL="${COUCHDB_URL:-http://127.0.0.1:5984}"
+DEST_ROOT="${COUCHDB_BACKUP_DIR:-$HOME/CouchDBBackups}"
+ONLINE=false
+RESTART=true
+TIMEOUT_SECS=60
+
+APP_NAME=$(basename "$COUCHDB_APP" .app)
+CORE_DIR="$COUCHDB_APP/Contents/Resources/couchdbx-core"
+CORE_ETC="$CORE_DIR/etc"
+
+print_usage() {
+  cat <<USAGE
+Usage: $0 [--dest DIR] [--online] [--no-restart]
+
+Backs up the local CouchDB database files, indexes, and configuration to
+DIR/couchdb-<timestamp> (default DIR: $DEST_ROOT).
+
+By default CouchDB is quit during the copy, the copy is verified against the
+stopped source with SHA-256 checksums, and CouchDB is restarted afterwards.
+
+Options:
+  --dest DIR      Directory that receives the backup (outside the data dir)
+  --online        Copy while CouchDB keeps running (no stop, no source
+                  comparison; databases are not mutually consistent)
+  --no-restart    Leave CouchDB stopped after a stopped backup
+  -h, --help      Show this help
+
+Environment overrides: COUCHDB_APP, COUCHDB_LOCAL_INI, COUCHDB_URL,
+COUCHDB_BACKUP_DIR.
+USAGE
+}
+
+fail() { echo "Error: $*" >&2; exit 1; }
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --dest) DEST_ROOT=${2:?--dest requires a directory}; shift 2 ;;
+    --online) ONLINE=true; shift ;;
+    --no-restart) RESTART=false; shift ;;
+    -h|--help) print_usage; exit 0 ;;
+    *) echo "Unknown argument: $1" >&2; print_usage; exit 2 ;;
+  esac
+done
+
+[[ -d "$COUCHDB_APP" ]] || fail "CouchDB app not found: $COUCHDB_APP"
+[[ -f "$COUCHDB_LOCAL_INI" ]] || fail "Local CouchDB configuration not found: $COUCHDB_LOCAL_INI"
+
+# Print the value of KEY in section [couchdb]; the last occurrence wins.
+ini_value() {
+  awk -v key="$1" '
+    /^[[:space:]]*\[/ { in_section = ($0 ~ /^[[:space:]]*\[couchdb\][[:space:]]*$/); next }
+    in_section {
+      line = $0
+      sub(/^[[:space:]]+/, "", line)
+      if (index(line, key) == 1) {
+        rest = substr(line, length(key) + 1)
+        if (rest ~ /^[[:space:]]*=/) {
+          sub(/^[[:space:]]*=[[:space:]]*/, "", rest)
+          sub(/[[:space:]]+$/, "", rest)
+          value = rest
+        }
+      }
+    }
+    END { print value }
+  ' "${@:2}"
+}
+
+# The local ini overrides default.ini, mirroring CouchDB's configuration chain.
+resolve_dir() {
+  local value
+  value=$(ini_value "$1" "$CORE_ETC/default.ini" "$COUCHDB_LOCAL_INI")
+  [[ -n "$value" ]] || fail "No $1 configured"
+  [[ "$value" == /* ]] || value="$CORE_DIR/$value"
+  [[ -d "$value" ]] || fail "$1 does not exist: $value"
+  (cd "$value" && pwd -P)
+}
+
+DATA_DIR=$(resolve_dir database_dir)
+INDEX_DIR=$(resolve_dir view_index_dir)
+
+[[ "$DEST_ROOT" == /* ]] || DEST_ROOT="$PWD/$DEST_ROOT"
+# Resolve the nearest existing ancestor physically, so the destination can be
+# checked against the data directories before anything is created.
+existing=$DEST_ROOT
+remainder=""
+until [[ -d "$existing" ]]; do
+  remainder="/$(basename "$existing")$remainder"
+  existing=$(dirname "$existing")
+done
+DEST_ROOT="$(cd "$existing" && pwd -P)$remainder"
+for source_dir in "$DATA_DIR" "$INDEX_DIR"; do
+  case "$DEST_ROOT/" in
+    "$source_dir"/*) fail "Backup directory must be outside $source_dir" ;;
+  esac
+done
+mkdir -p "$DEST_ROOT"
+
+needed_kb=$(du -sk "$DATA_DIR" | awk '{ print $1 }')
+if [[ "$INDEX_DIR" != "$DATA_DIR" ]]; then
+  needed_kb=$((needed_kb + $(du -sk "$INDEX_DIR" | awk '{ print $1 }')))
+fi
+available_kb=$(df -k "$DEST_ROOT" | awk 'NR == 2 { print $4 }')
+# Keep at least 100 MB free after the backup.
+if (( available_kb < needed_kb + 102400 )); then
+  fail "Not enough space in $DEST_ROOT: need about $((needed_kb / 1024)) MB plus margin, $((available_kb / 1024)) MB available"
+fi
+
+couchdb_up() { /usr/bin/curl -fsS --max-time 2 "$COUCHDB_URL/_up" >/dev/null 2>&1; }
+beam_pids() { pgrep -f "$CORE_DIR/.*beam\.smp" || true; }
+beam_running() { [[ -n "$(beam_pids)" ]]; }
+app_pids() { pgrep -f "$COUCHDB_APP/Contents/MacOS/" || true; }
+app_running() { [[ -n "$(app_pids)" ]]; }
+
+# Wait until the predicate function given as $1 fails, at most TIMEOUT_SECS.
+wait_while() {
+  local waited=0
+  while "$1"; do
+    (( waited < TIMEOUT_SECS )) || return 1
+    sleep 1
+    waited=$((waited + 1))
+  done
+}
+
+COUCHDB_VERSION=$(/usr/bin/curl -fsS --max-time 2 "$COUCHDB_URL/" 2>/dev/null \
+  | sed -n 's/.*"version":"\([^"]*\)".*/\1/p' || true)
+NODE_NAME=$(awk '$1 == "-name" { print $2 }' "$CORE_ETC/vm.args" 2>/dev/null || true)
+
+STAMP=$(date +%Y%m%d-%H%M%S)
+BACKUP_DIR="$DEST_ROOT/couchdb-$STAMP"
+WORK_DIR="$DEST_ROOT/.incomplete-couchdb-$STAMP"
+[[ ! -e "$BACKUP_DIR" && ! -e "$WORK_DIR" ]] || fail "Backup already exists: $BACKUP_DIR"
+
+umask 077
+mkdir "$WORK_DIR"
+
+STOPPED_BY_US=false
+restart_couchdb() {
+  local status=$?
+  if [[ "$STOPPED_BY_US" == true && "$RESTART" == true ]]; then
+    echo "Restarting $APP_NAME..."
+    open "$COUCHDB_APP"
+    local waited=0
+    until couchdb_up; do
+      if (( waited >= TIMEOUT_SECS )); then
+        echo "Warning: CouchDB did not answer $COUCHDB_URL/_up within ${TIMEOUT_SECS}s." >&2
+        exit 1
+      fi
+      sleep 1
+      waited=$((waited + 1))
+    done
+    echo "CouchDB is up again."
+  elif [[ "$STOPPED_BY_US" == true ]]; then
+    echo "CouchDB left stopped (--no-restart). Start it with: open \"$COUCHDB_APP\""
+  fi
+  if (( status != 0 )); then
+    rmdir "$WORK_DIR" 2>/dev/null || true
+    if [[ -d "$WORK_DIR" ]]; then
+      echo "Backup failed; incomplete files remain in $WORK_DIR" >&2
+    else
+      echo "Backup failed; nothing was written." >&2
+    fi
+  fi
+}
+trap restart_couchdb EXIT
+
+if [[ "$ONLINE" == false ]] && beam_running; then
+  echo "Stopping CouchDB..."
+  STOPPED_BY_US=true
+  # The menu-bar app only launches CouchDB; quit it so it can start CouchDB
+  # again on restart. It may refuse while showing a dialog.
+  if app_running; then
+    osascript -e "tell application \"$APP_NAME\" to quit" >/dev/null 2>&1 || true
+    if ! TIMEOUT_SECS=10 wait_while app_running; then
+      for pid in $(app_pids); do
+        kill -TERM "$pid"
+      done
+      wait_while app_running || fail "$APP_NAME did not quit; nothing was copied"
+    fi
+  fi
+  # The Erlang VM runs detached from the app. SIGTERM makes it shut down
+  # gracefully (init:stop/0).
+  for pid in $(beam_pids); do
+    kill -TERM "$pid"
+  done
+  wait_while beam_running || fail "CouchDB did not stop within ${TIMEOUT_SECS}s; nothing was copied"
+fi
+
+# Secondary indexes are copied before the databases: an index older than its
+# database is updated on the next read, a newer one forces a full rebuild.
+copy_tree() {
+  local source=$1 target=$2
+  shift 2
+  mkdir -p "$target"
+  find "$source" -mindepth 1 -maxdepth 1 "$@" -print0 | while IFS= read -r -d '' entry; do
+    ditto "$entry" "$target/$(basename "$entry")"
+  done
+}
+
+echo "Copying indexes..."
+if [[ "$INDEX_DIR" == "$DATA_DIR" ]]; then
+  [[ ! -e "$DATA_DIR/.shards" ]] || ditto "$DATA_DIR/.shards" "$WORK_DIR/data/.shards"
+  echo "Copying databases..."
+  copy_tree "$DATA_DIR" "$WORK_DIR/data" ! -name .shards
+else
+  copy_tree "$INDEX_DIR" "$WORK_DIR/index"
+  echo "Copying databases..."
+  copy_tree "$DATA_DIR" "$WORK_DIR/data"
+fi
+
+echo "Copying configuration..."
+ditto "$CORE_ETC" "$WORK_DIR/config/app-etc"
+ditto "$COUCHDB_LOCAL_INI" "$WORK_DIR/config/$(basename "$COUCHDB_LOCAL_INI")"
+
+echo "Computing checksums..."
+checksum_dirs=(data)
+[[ ! -d "$WORK_DIR/index" ]] || checksum_dirs+=(index)
+(cd "$WORK_DIR" && find "${checksum_dirs[@]}" -type f -print0 | sort -z | xargs -0 shasum -a 256 > SHA256SUMS)
+
+if [[ "$ONLINE" == false ]]; then
+  echo "Verifying the copy against the stopped source..."
+  sed 's#  data/#  #' "$WORK_DIR/SHA256SUMS" | grep -v '  index/' > "$WORK_DIR/.data.sums" || true
+  (cd "$DATA_DIR" && shasum -a 256 -c --quiet "$WORK_DIR/.data.sums")
+  if [[ "$INDEX_DIR" != "$DATA_DIR" ]]; then
+    grep '  index/' "$WORK_DIR/SHA256SUMS" | sed 's#  index/#  #' > "$WORK_DIR/.index.sums" || true
+    (cd "$INDEX_DIR" && shasum -a 256 -c --quiet "$WORK_DIR/.index.sums")
+  fi
+  rm -f "$WORK_DIR/.data.sums" "$WORK_DIR/.index.sums"
+fi
+
+cat > "$WORK_DIR/MANIFEST.txt" <<MANIFEST
+CouchDB file backup
+Created:          $(date -u +%Y-%m-%dT%H:%M:%SZ)
+Mode:             $([[ "$ONLINE" == true ]] && echo "online (running server, not verified against source)" || echo "stopped (verified against source)")
+CouchDB version:  ${COUCHDB_VERSION:-unknown}
+Erlang node name: ${NODE_NAME:-unknown}
+Application:      $COUCHDB_APP
+database_dir:     $DATA_DIR
+view_index_dir:   $INDEX_DIR
+Local ini:        $COUCHDB_LOCAL_INI
+Host:             $(hostname)
+
+Restore only into a stopped CouchDB of the same version and node name.
+The config directory contains secrets (admin password hashes, cookies).
+MANIFEST
+
+mv "$WORK_DIR" "$BACKUP_DIR"
+echo "Backup written to $BACKUP_DIR ($(du -sh "$BACKUP_DIR" | awk '{ print $1 }'))."
