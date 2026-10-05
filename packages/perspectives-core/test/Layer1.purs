@@ -55,6 +55,7 @@ import Test.AMQP.IncomingPost (theSuite) as AIP
 import Test.Error.Pretty (theSuite) as TEP
 import Test.Query.ComparisonOperators (theSuite) as TQCO
 import Test.SidecarUniqueTypeNames (theSuite) as SUTN
+import Test.Persistence.Authentication (theSuite) as PA
 
 -- Comprehensive unit tests for ExpandedADT, CNF, and ADT (with real assertions)
 import Test.Perspectives.Representation.AbstractDataTypeTests (theSuite) as ADTTESTS
@@ -80,6 +81,7 @@ main = runTest do
   TQCO.theSuite -- Typed query comparison operators
   SUTN.theSuite -- Stable ID mapping regression tests
   ORC.theSuite -- Serialization regression for obsolete representation members
+  PA.theSuite
 
   -- Read a file from the file-system, but otherwise pure (no MonadPerspectives / no HTTP)
   TPAM.theSuite -- ARC model parser (parses .arc files from the model/

@@ -153,6 +153,29 @@ hard-coded versions.
 **Checkpoint:** extra-model installation settles successfully before switching
 away from the local repositories. Keep BigBang available for the remote phase.
 
+### Browser authentication and Big Bang settlement
+
+Build the browser runtime with `pnpm run build`, not `pnpm run build:node`.
+The browser bundle is `dist/perspectives-core.js`; the Node bundle is
+`dist/perspectives-core.node.js`. Browser requests use CouchDB session cookies;
+only the Node runtime sends stored credentials in a Basic Authorization header.
+Do not pass credentials as XHR username/password parameters on cross-origin
+requests: browsers can reject these requests even when the session is valid.
+
+Both local repository virtual hosts must mark session cookies `Secure` and
+`SameSite=None`; `Partitioned` supports browsers restricting third-party cookies.
+After changing the Apache configuration, validate it and reload Apache as
+described in the local development setup. Logging in successfully at `_session`
+does not prove that the browser accepted the returned cookie. Verify a subsequent
+credentialed request to a protected database on **each** domain.
+
+`ExecuteBigBang` separates cleanup, server registration, database/repository
+creation, model publication, broker setup, and public-page creation with
+`once settled` stages. Server and repository creation trigger automatic actions:
+their consumers must not execute in the same stage. A new CouchDB database
+initially restricts members to `_admin`; the publication actions must successfully
+update `_security` before anonymous repository reads can work.
+
 ## 4. Copy the existing remote databases before rebooting them
 
 ```bash

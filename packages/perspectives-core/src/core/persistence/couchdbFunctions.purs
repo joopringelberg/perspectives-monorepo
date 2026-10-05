@@ -97,24 +97,13 @@ setSecurityDocument base db doc = do
   res <- liftAff $ AJ.request $ rq { method = Left PUT, url = (base <> db <> "/_security"), content = Just $ RequestBody.json (toJson $ unwrap doc) }
   liftAff $ onAccepted res [ StatusCode 200, StatusCode 201, StatusCode 202 ] "setSecurityDocument" (\_ -> pure unit)
 
--- | Returns a security document, even if none existed before.
--- | The latter is probably superfluous, as Couchdb returns a default design document anyway
--- | ("If the security object for a database has never been set, then the value returned will be empty." from the
--- | above reference). However, what is returned on a new database in an installation with a Server Admin, is:
--- | {"members":{"roles":["_admin"]},"admins":{"roles":["_admin"]}}
+-- | CouchDB always supplies a security document, including the default for a new database.
+-- | Authentication is retried if the browser's session cookie has expired.
 ensureSecurityDocument :: forall f. Url -> DatabaseName -> MonadPouchdb f SecurityDocument
-ensureSecurityDocument base db = do
+ensureSecurityDocument base db = ensureAuthentication (Authority base) \_ -> do
   rq <- authenticatedPerspectRequest base
   res <- liftAff $ AJ.request $ rq { method = Left GET, url = (base <> db <> "/_security") }
-  onAccepted_
-    ( \_ _ -> do
-        doc <- pure $ SecurityDocument
-          { admins: { names: Just [], roles: [ "_admin" ] }
-          , members: { names: Just [], roles: [ "_admin" ] }
-          }
-        setSecurityDocument base db doc
-        pure doc
-    )
+  onAccepted
     res
     [ StatusCode 200 ]
     "ensureSecurityDocument"

@@ -26,9 +26,11 @@ import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Effect (Effect)
 import Effect.Aff (Aff)
+import Node.Encoding (Encoding(..))
+import Node.FS.Aff (readTextFile)
 import Parsing.String (eof)
-import Perspectives.Parsing.Arc (userRoleE)
-import Perspectives.Parsing.Arc.AST (ActionE(..), ContextActionE(..), ContextPart(..), RoleE(..), RolePart(..), StateE(..), StateQualifiedPart(..))
+import Perspectives.Parsing.Arc (domain, userRoleE)
+import Perspectives.Parsing.Arc.AST (ActionE(..), ContextActionE(..), ContextE(..), ContextPart(..), RoleE(..), RolePart(..), StateE(..), StateQualifiedPart(..))
 import Perspectives.Parsing.Arc.IndentParser (runIndentParser)
 import Perspectives.Parsing.Arc.Statement.AST (LetStep(..), Statements(..))
 import Test.Unit (TestSuite, suite, test)
@@ -94,6 +96,28 @@ theSuite = suite "Action settlement stages" do
             equal 1 (length bindings)
             equal [ 1, 1 ] (map length stages)
           _ -> assert "Expected letA bindings and two stages" false
+
+  test "Big Bang settles server and repositories before running their consumers" do
+    source <- readTextFile UTF8 "src/model/rebootUniverse@2.0.arc"
+    parsed <- runIndentParser source (domain <* eof)
+    case parsed of
+      Left err -> assert (show err) false
+      Right root -> case bigBangEffects root of
+        [ Let (LetStep { stages }) ] ->
+          equal [ 1, 1, 1, 3, 27, 1, 3 ] (map length stages)
+        _ -> assert "Expected the staged Big Bang context action" false
+
+bigBangEffects :: ContextE -> Array Statements
+bigBangEffects (ContextE { contextParts }) = fromFoldable contextParts >>= case _ of
+  CE child@(ContextE { id, contextParts: parts }) ->
+    if id == "ExecuteBigBang" then fromFoldable parts >>= case _ of
+      RE (RoleE { roleParts }) -> fromFoldable roleParts >>= case _ of
+        SQP qualified -> fromFoldable qualified >>= actionEffect
+        ROLESTATE (StateE { stateParts }) -> fromFoldable stateParts >>= actionEffect
+        _ -> []
+      _ -> []
+    else bigBangEffects child
+  _ -> []
 
 -- The action header is two columns to the left of its body.
 prefixActionIndent :: String -> String

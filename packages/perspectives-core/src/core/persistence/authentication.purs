@@ -120,20 +120,18 @@ defaultPerspectRequest = pure
   , timeout: Nothing
   }
 
--- | As defaultPerspectRequest, but carrying the stored credentials for the authority as basic auth.
--- | Needed where the session cookie is unavailable, e.g. under Node (xhr2 keeps no cookies).
+-- | Browsers use the session cookie; Node needs Basic auth because xhr2 keeps no cookies.
 authenticatedPerspectRequest :: forall f. Authority -> MonadPouchdb f (AJ.Request String)
 authenticatedPerspectRequest authority = do
   rq <- defaultPerspectRequest
   mcredential <- getCredentials authority
-  pure case mcredential of
-    Just (Credential username password) ->
+  case mcredential of
+    Just (Credential username password) | runningInNode ->
       -- xhr2 (Node) ignores the credentials passed to open(), so send the header ourselves.
-      if runningInNode then case btoa (username <> ":" <> password) of
-        Right encoded -> rq { headers = [ RequestHeader "Authorization" ("Basic " <> encoded) ] }
-        Left _ -> rq
-      else rq { username = Just username, password = Just password }
-    Nothing -> rq
+      case btoa (username <> ":" <> password) of
+        Right encoded -> pure $ rq { headers = [ RequestHeader "Authorization" ("Basic " <> encoded) ] }
+        Left encodingError -> throwError $ error ("authenticatedPerspectRequest: " <> show encodingError)
+    _ -> pure rq
 
 -- | As authenticatedPerspectRequest, deriving the authority from a full url.
 authenticatedUrlRequest :: forall f. Url -> MonadPouchdb f (AJ.Request String)

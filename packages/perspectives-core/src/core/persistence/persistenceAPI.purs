@@ -232,7 +232,7 @@ withDatabase dbName fun = do
           mprefix <- getCouchdbBaseURL
           case mprefix of
             Nothing -> pure unit
-            Just _ -> ensureAuthentication (Authority "") (\_ -> ensureDatabaseExists dbName)
+            Just prefix -> ensureAuthentication (Authority prefix) (\_ -> ensureDatabaseExists dbName)
         db <- gets \{ databases } -> unsafePartial $ fromJust $ lookup dbName databases
         pure db
       Just db -> do
@@ -241,7 +241,7 @@ withDatabase dbName fun = do
         -- Access the database and throw error if unauthorized.
         f <- liftAff $ fromEffectFnAff $ databaseInfoImpl db
         case read f of
-          Left e -> throwError (error "unauthorized")
+          Left e -> throwError $ error ("ensureDatabase: error in decoding database info: " <> show e)
           (Right (i :: DatabaseInfo)) -> pure unit
         pure db
 

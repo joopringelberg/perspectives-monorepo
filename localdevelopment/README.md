@@ -130,6 +130,12 @@ sudo /Applications/MAMP/bin/stopApache.sh
 sudo /Applications/MAMP/bin/startApache.sh
 ```
 
+Both repository virtual hosts add `Secure`, `SameSite=None`, and `Partitioned`
+to CouchDB session cookies so browser requests from `mycontexts.com` can use
+them cross-site. Without `Secure`, browsers reject `SameSite=None` cookies:
+`POST /_session` can succeed while subsequent database requests remain
+unauthenticated. Validate and reload Apache after changing these cookie headers.
+
 ## 3. Build and serve MyContexts
 
 Build the experimental executable with the same `/www/` base path used by the

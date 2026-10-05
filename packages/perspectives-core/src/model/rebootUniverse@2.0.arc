@@ -1276,11 +1276,14 @@ domain model://joopringelberg.nl#RebootUniverse@2.0
           -- That only happens when the transaction settles, so the sub-tests must run in a later stage.
           once settled
             runContextAction RunTest for Tester in cleanup >> binding >> context
+          once settled
             runContextAction RunTest for Tester in managecouchdb >> binding >> context
+          once settled
             runContextAction RunTest for Tester in createbigbangsdatabase >> binding >> context
             runContextAction RunTest for Tester in createperspectivesdomainsrepository >> binding >> context
             runContextAction RunTest for Tester in createjoopringelbergnlrepository >> binding >> context
 
+          once settled
             runContextAction RunTest for Tester in addmodelcouchdb >> binding >> context
             runContextAction RunTest for Tester in addmodelserialise >> binding >> context
             runContextAction RunTest for Tester in addmodelsensor >> binding >> context
@@ -1309,7 +1312,9 @@ domain model://joopringelberg.nl#RebootUniverse@2.0
             runContextAction RunTest for Tester in addmodelamqptestmodel >> binding >> context
             runContextAction RunTest for Tester in addmodelamqptestsetup >> binding >> context
 
+          once settled
             runContextAction RunTest for Tester in managebrokerservice >> binding >> context
+          once settled
             runContextAction RunTest for Tester in addpublicpages >> binding >> context
             runContextAction RunTest for Tester in createrepositoryregistrypublicpage >> binding >> context
             runContextAction RunTest for Tester in signup >> binding >> context
