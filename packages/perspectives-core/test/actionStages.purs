@@ -21,9 +21,9 @@ module Test.Parsing.Arc.ActionStages where
 
 import Prelude
 
-import Data.Array (fromFoldable, length)
+import Data.Array (concat, fromFoldable, length)
 import Data.Either (Either(..))
-import Data.Foldable (for_)
+import Data.Foldable (any, for_)
 import Effect (Effect)
 import Effect.Aff (Aff)
 import Node.Encoding (Encoding(..))
@@ -32,7 +32,8 @@ import Parsing.String (eof)
 import Perspectives.Parsing.Arc (domain, userRoleE)
 import Perspectives.Parsing.Arc.AST (ActionE(..), ContextActionE(..), ContextE(..), ContextPart(..), RoleE(..), RolePart(..), StateE(..), StateQualifiedPart(..))
 import Perspectives.Parsing.Arc.IndentParser (runIndentParser)
-import Perspectives.Parsing.Arc.Statement.AST (LetStep(..), Statements(..))
+import Perspectives.Parsing.Arc.Expression.AST (Step(..), SimpleStep(..))
+import Perspectives.Parsing.Arc.Statement.AST (Assignment(..), LetStep(..), Statements(..))
 import Test.Unit (TestSuite, suite, test)
 import Test.Unit.Assert (assert, equal)
 import Test.Unit.Main (runTest)
@@ -107,16 +108,46 @@ theSuite = suite "Action settlement stages" do
           equal [ 1, 1, 1, 3, 27, 1, 3 ] (map length stages)
         _ -> assert "Expected the staged Big Bang context action" false
 
+  test "bespoke database settles its owner and entered name before endorsement" do
+    source <- readTextFile UTF8 "src/model/repositoryTools@1.0.arc"
+    parsed <- runIndentParser source (domain <* eof)
+    case parsed of
+      Left err -> assert (show err) false
+      Right root -> case contextEffects "CreateBigBangsDatabase" root of
+        [ Let (LetStep { stages }) ] -> equal [ 4, 2 ] (map length stages)
+        _ -> assert "Expected the staged bespoke database action" false
+
+  test "browser preparation installs AMQPtestSetup before reporting success" do
+    source <- readTextFile UTF8 "src/model/rebootUniverse@2.0.arc"
+    parsed <- runIndentParser source (domain <* eof)
+    case parsed of
+      Left err -> assert (show err) false
+      Right root -> case contextEffects "AddExtraModels" root of
+        [ Let (LetStep { stages }) ] -> do
+          equal [ 15, 1 ] (map length stages)
+          assert "AMQPtestSetup must be installed alongside the other reboot inputs" $
+            any
+              ( case _ of
+                  ExternalEffect { effectName, arguments: [ Simple (Variable _ name) ] } ->
+                    effectName == "cdb:AddModelToLocalStore" && name == "amqptestsetupmodeluri"
+                  _ -> false
+              )
+              (concat stages)
+        _ -> assert "Expected the staged extra-model preparation action" false
+
 bigBangEffects :: ContextE -> Array Statements
-bigBangEffects (ContextE { contextParts }) = fromFoldable contextParts >>= case _ of
+bigBangEffects = contextEffects "ExecuteBigBang"
+
+contextEffects :: String -> ContextE -> Array Statements
+contextEffects target (ContextE { contextParts }) = fromFoldable contextParts >>= case _ of
   CE child@(ContextE { id, contextParts: parts }) ->
-    if id == "ExecuteBigBang" then fromFoldable parts >>= case _ of
+    if id == target then fromFoldable parts >>= case _ of
       RE (RoleE { roleParts }) -> fromFoldable roleParts >>= case _ of
         SQP qualified -> fromFoldable qualified >>= actionEffect
         ROLESTATE (StateE { stateParts }) -> fromFoldable stateParts >>= actionEffect
         _ -> []
       _ -> []
-    else bigBangEffects child
+    else contextEffects target child
   _ -> []
 
 -- The action header is two columns to the left of its body.

@@ -1,3 +1,4 @@
+-- "model://joopringelberg.nl#ncr77pkxia"
 domain model://joopringelberg.nl#RepositoryTools@1.0
   use sys for model://perspectives.domains#System
   use mm for model://joopringelberg.nl#RepositoryTools
@@ -262,8 +263,8 @@ domain model://joopringelberg.nl#RepositoryTools@1.0
     aspect mm:Test
 
     external
-      -- Success is defined as the existence of a BespokeDatabase bound to a CouchdbServer.
-      state Success = exists cm:MyCouchdbApp >> CouchdbServers >> binding >> context >> BespokeDatabases >> binding
+      state Success = (exists mm:RepositoryToolsApp >> BespokeDatabaseOwner >> BespokeDatabaseUrl) and
+        callExternal cdb:DatabaseExists( "https://perspectives.domains/", "cw_bigbangsdatabase" ) returns Boolean
         on entry
           do for Tester once settled
             TestSucceeded = true
@@ -282,22 +283,17 @@ domain model://joopringelberg.nl#RepositoryTools@1.0
         letA
           -- Only when test ManageCouchdb has run, the PDR has a CouchdbServer available.
           couchdbserver <- cm:MyCouchdbApp >> CouchdbServers >> binding >> context >>= first
-          -- Create the BespokeDatabases role instance first and then set its EnteredDatabaseName property.
-          -- Then, create the actual context and fill the role with it.
-          -- All statements referring to bigbangsdatabase should be postponed to the next transaction!
           bigbangsdatabase <- create context cm:BespokeDatabase bound to cm:CouchdbServer$BespokeDatabases in couchdbserver
           owner <- create role cm:BespokeDatabase$Owner in bigbangsdatabase >> binding >> context
         in
           TestName = "Create bigbangsdatabase." for extern
-          bind_ me to owner
+          bind_ couchdbserver >> Admin to owner
           -- Save for reference in case Add_public_pages.
           bind owner to BespokeDatabaseOwner in mm:RepositoryToolsApp
           EnteredDatabaseName = "cw_bigbangsdatabase/" for bigbangsdatabase
-          Endorsed = true for bigbangsdatabase
-          -- Now state BespokeDatabase$External$CreateDb runs, creating the actual database and setting DatabaseName.
-          
-          Public = true for bigbangsdatabase
-          -- This sets the stage for BespokeDatabase$External$Publish to run, making the database public.
+          once settled
+            Endorsed = true for bigbangsdatabase
+            Public = true for bigbangsdatabase
 
 ------------------------------------------------------------------------------
   ---- ADD MODEL

@@ -31,7 +31,6 @@ module Perspectives.Persistence.API
 
 import Prelude
 
-import Affjax.RequestHeader (RequestHeader(..))
 import Affjax.StatusCode (StatusCode(..))
 import Affjax.Web as AJ
 import Control.Alt ((<|>))
@@ -44,7 +43,7 @@ import Data.Either (Either(..))
 import Data.HTTP.Method (Method(..))
 import Data.Maybe (Maybe(..), fromJust)
 import Data.MediaType (MediaType)
-import Data.Nullable (Nullable, toMaybe, toNullable)
+import Data.Nullable (Nullable, toNullable)
 import Data.String.Regex (Regex, match, test)
 import Data.String.Regex.Flags (noFlags)
 import Data.String.Regex.Unsafe (unsafeRegex)
@@ -60,10 +59,11 @@ import Foreign (F, Foreign, unsafeToForeign)
 import Foreign.Object (Object, delete, empty, insert, lookup)
 import Partial.Unsafe (unsafePartial)
 import Persistence.Attachment (class Attachment)
-import Perspectives.Couchdb (DeleteCouchdbDocument(..), PutCouchdbDocument(..), ViewDocResult(..), ViewDocResultRow(..), ViewResult(..), ViewResultRow(..), DocumentConflicts, onAccepted_)
-import Perspectives.Couchdb.Revision (class Revision, Revision_)
+import Perspectives.Couchdb (DeleteCouchdbDocument(..), PutCouchdbDocument(..), ViewDocResult(..), ViewDocResultRow(..), ViewResult(..), ViewResultRow(..), onAccepted, onAccepted_)
+import Perspectives.Couchdb.Revision (class Revision, Revision_, changeRevision)
 import Perspectives.Identifiers (url2Authority)
-import Perspectives.Persistence.Authentication (AuthoritySource(..), defaultPerspectRequest, ensureAuthentication, getCredentials)
+import Perspectives.Persistence.Authentication (AuthoritySource(..), authenticatedUrlRequest, ensureAuthentication, getCredentials)
+import Perspectives.Persistence.DatabaseInfo (databaseInfoImpl)
 import Perspectives.Persistence.Errors (handleNotFound, handlePouchError, parsePouchError)
 import Perspectives.Persistence.RunEffectAff (runEffectFnAff1, runEffectFnAff2, runEffectFnAff3, runEffectFnAff6)
 import Perspectives.Persistence.State (getCouchdbBaseURL)
@@ -113,22 +113,13 @@ createDatabaseConnector dbname =
 -- | PUT the database URL once to ensure it exists. Accept 201 (created) and 412 (already exists).
 createRemoteDatabaseIfMissing :: forall f. DatabaseName -> MonadPouchdb f Unit
 createRemoteDatabaseIfMissing dbUrl = do
-  (rq :: AJ.Request String) <- defaultPerspectRequest
-  authenticationHeaders <- case url2Authority dbUrl of
-    Nothing -> pure []
-    Just authority -> getCredentials authority >>= case _ of
-      Nothing -> pure []
-      Just (Credential username password) -> pure $ case toMaybe (basicAuthenticationHeader username password) of
-        Nothing -> []
-        Just header -> [ RequestHeader "Authorization" header ]
+  rq <- authenticatedUrlRequest dbUrl
   res <- liftAff $ AJ.request $ rq
     { method = Left PUT
     , url = dbUrl
     , content = Nothing
-    , headers = authenticationHeaders
     }
-  onAccepted_
-    (\response _ -> throwError (error $ "Failure in createRemoteDatabaseIfMissing. HTTP statuscode " <> show response.status))
+  onAccepted
     res
     [ StatusCode 201, StatusCode 202, StatusCode 412 ]
     "createRemoteDatabaseIfMissing"
@@ -236,13 +227,8 @@ withDatabase dbName fun = do
         db <- gets \{ databases } -> unsafePartial $ fromJust $ lookup dbName databases
         pure db
       Just db -> do
-        -- We have accessed this database before, but we don't know whether
-        -- we still have a valid session.
-        -- Access the database and throw error if unauthorized.
-        f <- liftAff $ fromEffectFnAff $ databaseInfoImpl db
-        case read f of
-          Left e -> throwError $ error ("ensureDatabase: error in decoding database info: " <> show e)
-          (Right (i :: DatabaseInfo)) -> pure unit
+        -- Another connector may have deleted this database since it was cached.
+        ensureDatabaseExists dbName
         pure db
 
 -- | Ensure that a remote database exists. For local/IndexedDB, this is a no-op.
@@ -298,8 +284,6 @@ databaseInfo dbName = withDatabase dbName
         Right info -> pure info
     -- Convert the incoming message to a PouchError type.
     (handlePouchError "databaseInfo" dbName)
-
-foreign import databaseInfoImpl :: PouchdbDatabase -> EffectFnAff Foreign
 
 -----------------------------------------------------------
 -- COMPACTDATABASE
@@ -448,17 +432,10 @@ addDocument dbName doc docName = withDatabase dbName
       \e -> do
         ({ status, message } :: PouchError) <- parsePouchError "addDocument" docName e
         case status of
-          -- A document update conflict. We handle that by purging the database and adding the document again.
-          -- Perspectives has no concept of a shared database. This means that the only source of truth is the PDR.
-          -- This may not be always true, but it is the best we can do.
-          -- The only exception is when we save documents that are in a public perspective. It may be that
-          -- there are multiple users that contribute to that perspective, and they may not agree on the version.
-          -- However, we resolve that here by just overwriting the document.
+          -- Preserve the existing last-writer-wins policy without creating revision branches.
           Just 409 -> resolveDocumentConflict dbName doc docName
-          -- A missing revision: the _rev provided does not exist in the database. This can happen when the
-          -- entity in cache has a stale revision from before the document was deleted (e.g. after manual
-          -- IndexedDB removal or incomplete deletion). Recover by purging the document history and re-creating.
-          Just 404 -> forceCleanSave dbName doc docName
+          -- The database may have been recreated while the cached entity retained its old revision.
+          Just 404 -> resolveDocumentConflict dbName doc docName
           -- Promise rejected otherwise. Convert the incoming message to a PouchError type.
           _ -> handlePouchError "addDocument" docName e
 
@@ -477,45 +454,29 @@ addDocument_ dbName doc docName = withDatabase dbName
 foreign import addDocumentImpl :: EffectFn3 PouchdbDatabase Foreign Boolean Foreign
 
 resolveDocumentConflict :: forall d f. WriteForeign d => Revision d => DatabaseName -> d -> DocumentName -> MonadPouchdb f Revision_
-resolveDocumentConflict dbName doc docName = withDatabase dbName
-  \db -> do
-    -- Get all document revisions (including conflicts).
-    -- If the document data is gone (e.g. manual IndexedDB deletion), fall back to forceCleanSave.
-    catchError
-      do
-        conflicts <- liftAff $ fromEffectFnAff $ runEffectFnAff3 getDocumentWithConflictsImpl db docName true
-
-        -- Delete all conflict revisions
-        case read conflicts of
-          Right ({ _conflicts } :: DocumentConflicts) -> do
-            _ <- traverse
-              (\rev -> liftAff $ fromEffectFnAff $ runEffectFnAff3 deleteDocumentImpl db docName rev)
-              _conflicts
-            pure unit
-          _ -> pure unit
-
-        -- Now try to add the document
-        catchError
-          do
-            f <- liftAff $ fromEffectFnAff $ runEffectFnAff3 addDocumentImpl db (write doc) withForce
-            case PutCouchdbDocument <$> (read f) of
-              Left e -> throwError $ error ("resolveDocumentConflict: error: " <> show e)
-              Right (PutCouchdbDocument { rev }) -> pure rev
-          (handlePouchError "resolveDocumentConflict" docName)
-      \e -> do
-        ({ status } :: PouchError) <- parsePouchError "resolveDocumentConflict" docName e
-        case status of
-          -- The document does not exist, but our copy carries a stale _rev (e.g. the database was recreated).
-          Just 404 -> catchError
-            do
-              f <- liftAff $ fromEffectFnAff $ runEffectFnAff3 addDocumentImpl db (write doc) withForce
-              case PutCouchdbDocument <$> (read f) of
-                Left e' -> throwError $ error ("resolveDocumentConflict: error: " <> show e')
-                Right (PutCouchdbDocument { rev }) -> pure rev
-            (handlePouchError "resolveDocumentConflict" docName)
-          _ -> do
-            log ("resolveDocumentConflict: getDocumentWithConflicts failed for '" <> docName <> "', falling back to forceCleanSave. Error: " <> show e)
-            forceCleanSave dbName doc docName
+resolveDocumentConflict dbName doc docName = withDatabase dbName \db -> do
+  current <- catchError
+    do
+      raw <- liftAff $ fromEffectFnAff $ runEffectFnAff3 getDocumentWithConflictsImpl db docName true
+      case read raw of
+        Left e -> throwError $ error ("resolveDocumentConflict: error in decoding current document: " <> show e)
+        Right (stored :: { _rev :: String, _conflicts :: Maybe (Array String) }) -> pure $ Just stored
+    (handleNotFound "resolveDocumentConflict" docName)
+  let currentRevision = _._rev <$> current
+  catchError
+    do
+      f <- liftAff $ fromEffectFnAff $ runEffectFnAff3 addDocumentImpl db (write $ changeRevision currentRevision doc) withoutForce
+      case PutCouchdbDocument <$> read f of
+        Left e -> throwError $ error ("resolveDocumentConflict: error: " <> show e)
+        Right (PutCouchdbDocument { rev }) -> do
+          void $ traverse
+            (\conflict -> liftAff $ fromEffectFnAff $ runEffectFnAff3 deleteDocumentImpl db docName conflict)
+            ( case current of
+                Just { _conflicts: Just conflicts } -> conflicts
+                _ -> []
+            )
+          pure rev
+    (handlePouchError "resolveDocumentConflict" docName)
 
 withForce :: Boolean
 withForce = true

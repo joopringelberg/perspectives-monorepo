@@ -24,6 +24,7 @@ module Perspectives.Persistence.CouchdbFunctions
   ( addRoleToUser
   , concatenatePathSegments
   , createUser
+  , databaseExists
   , deleteUser
   , endReplication
   , ensureSecurityDocument
@@ -368,7 +369,15 @@ documentExists url = ensureAuthentication (Url url) \_ -> do
     (\_ -> pure true)
 
 databaseExists :: forall f. Url -> MonadPouchdb f Boolean
-databaseExists = documentExists
+databaseExists url = ensureAuthentication (Url url) \_ -> do
+  rq <- authenticatedUrlRequest url
+  res <- liftAff $ AJ.request $ rq { method = Left GET, url = url }
+  case res of
+    Right response | response.status == StatusCode 404 -> pure false
+    _ -> onAccepted res [ StatusCode 200 ] "databaseExists" \response ->
+      case readJSON response.body of
+        Left e -> throwError $ error ("databaseExists: error in decoding result: " <> show e)
+        Right (_ :: { db_name :: String, doc_count :: Int }) -> pure true
 
 -----------------------------------------------------------
 -- DELETEDATABASE

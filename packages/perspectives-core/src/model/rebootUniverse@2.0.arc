@@ -1187,6 +1187,9 @@ domain model://joopringelberg.nl#RebootUniverse@2.0
           amqptestmodelmanifest <- (filter (testrepository >> Manifests) with ModelURIReadable == "model://joopringelberg.nl#AMQPtestModel") >>= first
           amqptestmodelmodeluri <- amqptestmodelmanifest >> ModelURI + "@" + amqptestmodelmanifest >> VersionToInstall
 
+          amqptestsetupmanifest <- (filter (testrepository >> Manifests) with ModelURIReadable == "model://joopringelberg.nl#AMQPtestSetup") >>= first
+          amqptestsetupmodeluri <- amqptestsetupmanifest >> ModelURI + "@" + amqptestsetupmanifest >> VersionToInstall
+
         in
           callEffect cdb:AddModelToLocalStore( rabbitmqmodeluri )
           callEffect cdb:AddModelToLocalStore( brokerservicesmodeluri )
@@ -1202,6 +1205,7 @@ domain model://joopringelberg.nl#RebootUniverse@2.0
           callEffect cdb:AddModelToLocalStore( singlepdrdestructivetestsmodeluri )
           callEffect cdb:AddModelToLocalStore( transactionexecutiontestsmodeluri )
           callEffect cdb:AddModelToLocalStore( amqptestmodelmodeluri )
+          callEffect cdb:AddModelToLocalStore( amqptestsetupmodeluri )
 
           once settled
             TestSucceeded = true for extern

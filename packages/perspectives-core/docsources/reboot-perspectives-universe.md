@@ -143,10 +143,12 @@ identifies the test context type; the action on its `Tester` role is `RunTest`.
 It looks up manifests in both repositories and installs
 RabbitMQ, BrokerServices, HyperContext, Introduction, HelpProject, Disconnect,
 RepositoryRegistry, and SharedFileServices using their stable URIs and
-`VersionToInstall`. From `joopringelberg.nl` it also installs the six enabled
+`VersionToInstall`. From `joopringelberg.nl` it also installs the seven enabled
 test models in the snapshot creator's `extraModels` list:
 SynchronisationTestModel, TwoPDRDestructiveTests, StateTestModel,
-SinglePDRDestructiveTests, TransactionExecutionTests, and AMQPtestModel.
+SinglePDRDestructiveTests, TransactionExecutionTests, AMQPtestModel, and
+AMQPtestSetup. The latter is also a reboot input; leaving it out means its local
+model CUID and ARC source cannot be found when recreating its manifest.
 These also use the manifests' stable URIs and `VersionToInstall`, rather than
 hard-coded versions.
 
@@ -175,6 +177,34 @@ creation, model publication, broker setup, and public-page creation with
 their consumers must not execute in the same stage. A new CouchDB database
 initially restricts members to `_admin`; the publication actions must successfully
 update `_security` before anonymous repository reads can work.
+
+`CreateBigBangsDatabase` binds its Owner to the server's Admin, not directly to
+`sys:Me`, so the Owner can resolve CouchDB credentials through its filler. It
+settles the owner and entered database name before endorsement. Success requires
+the Owner's database URL and a read-only `Couchdb$DatabaseExists` check of
+`cw_bigbangsdatabase`; a modelled registration alone is not sufficient.
+
+Database-info requests preserve HTTP errors (notably 401 and 404) rather than
+decoding CouchDB error bodies as database metadata. Database-creation PUT requests
+also preserve authentication failures so login and retry can run. Cached
+connectors recheck existence after cleanup has deleted the physical database.
+Stale document revisions are
+updated against the current winning revision, without forced writes that create
+revision branches. Failed background saves are logged and remain queued for a
+later persistence pass; they are not silently discarded.
+
+Publication refresh also evicts previously persisted instances whose remote
+documents disappeared during cleanup. Otherwise a cached public context can
+suppress its creation delta even though CouchDB no longer contains it. Pending
+saves and genuinely new, unpersisted instances remain cached. This is important
+for versioned manifests: publishing their external properties does not itself
+rewrite their context document.
+
+Persistence recovery regressions run with `pnpm run test:layer2`; the HTTP-status
+helper tests run with `node --test test/databaseInfo.test.mjs`. The separate
+`Test.RebootModelCompilation` entry point compiles both reboot models against the
+seed snapshot with no reboot actions and no output snapshot, and tests public
+versioned-manifest recreation against an isolated in-memory endpoint.
 
 ## 4. Copy the existing remote databases before rebooting them
 

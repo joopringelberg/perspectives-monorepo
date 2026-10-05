@@ -965,6 +965,19 @@ createCouchdbDatabase databaseUrls databaseNames _ =
     )
     >>= handleExternalStatementError "model://perspectives.domains#CreateCouchdbDatabase"
 
+-- | Read-only check of a physical database, rather than its modelled registration.
+databaseExists :: Array Url -> Array DatabaseName -> (RoleInstance ~~> Value)
+databaseExists databaseUrls databaseNames _ =
+  try
+    ( ArrayT do
+        case head databaseUrls, head databaseNames of
+          Just databaseUrl, Just databaseName -> do
+            exists <- lift $ CDB.databaseExists (databaseUrl <> databaseName)
+            pure [ Value $ if exists then "true" else "false" ]
+          _, _ -> lift $ throwError $ error "DatabaseExists: database URL and name are required"
+    )
+    >>= handleExternalFunctionError "model://perspectives.domains#Couchdb$DatabaseExists"
+
 -- | Create a database with all views that are useful for retrieving role- and context instances
 createEntitiesDatabase :: Array Url -> Array DatabaseName -> Array Namespace -> RoleInstance -> MonadPerspectivesTransaction Unit
 createEntitiesDatabase databaseUrls databaseNames namespaces _ =
@@ -1399,6 +1412,7 @@ externalFunctions =
   [
     -- SERVERADMIN
     mkLibEffect2 "model://perspectives.domains#Couchdb$CreateCouchdbDatabase" True createCouchdbDatabase
+  , mkLibFunc2 "model://perspectives.domains#Couchdb$DatabaseExists" True databaseExists
   , mkLibEffect3 "model://perspectives.domains#Couchdb$CreateEntitiesDatabase" True createEntitiesDatabase
   , mkLibEffect2 "model://perspectives.domains#Couchdb$DeleteCouchdbDatabase" True deleteCouchdbDatabase
   , mkLibEffect3 "model://perspectives.domains#Couchdb$CreateUser" True createUser

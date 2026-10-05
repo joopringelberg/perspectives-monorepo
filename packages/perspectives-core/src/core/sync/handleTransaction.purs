@@ -739,7 +739,8 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
 -- | that specific url.
 -- | As an INVARIANT, all these (public) resources are de-cached, so we ensure that they are freshly retrieved from the database prior to executing 
 -- | a delta on them. This is so we mitigate the risk of a peer having written the resource while we have an older version in cache.
--- | However, if the resource isn't present in the database, we don't delete it from the cache.
+-- | Pending saves and new, unpersisted instances remain cached. Previously persisted
+-- | instances are evicted even if their database was deleted, so creation deltas can reconstruct them.
 -- | All deltas in this transaction have either been sent to this installation and thus have been verified before, or
 -- | they are created by this installation so verification is meaningless.
 -- | We ignore a delta if its subject is public.
