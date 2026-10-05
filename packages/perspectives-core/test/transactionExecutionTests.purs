@@ -2,6 +2,8 @@ module Test.TransactionExecutionTests where
 
 import Prelude
 
+import Data.Time.Duration (Milliseconds(..))
+
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.Maybe (Maybe(..))
@@ -43,6 +45,7 @@ transactionExecutionTestModelConfiguration =
   , testsType: transactionExecutionTestsType
   , testSucceededProperty: transactionExecutionTestSucceededProperty
   , testNameProperty: transactionExecutionTestNameProperty
+  , testTimeLimit: Milliseconds 180000.0
   , setupLogConfiguration:
       { pdr:
           [ { topic: TEST, logLevel: Debug }

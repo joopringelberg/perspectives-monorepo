@@ -29,6 +29,8 @@ module Test.SinglePDRDestructiveTests
 
 import Prelude
 
+import Data.Time.Duration (Milliseconds(..))
+
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.Maybe (Maybe(..))
@@ -70,6 +72,7 @@ singlePDRDestructiveTestModelConfiguration =
   , testsType: destructiveTestsType
   , testSucceededProperty: destructiveTestSucceededProperty
   , testNameProperty: destructiveTestNameProperty
+  , testTimeLimit: Milliseconds 180000.0
   , setupLogConfiguration:
       { pdr:
           [ { topic: TEST, logLevel: Debug }

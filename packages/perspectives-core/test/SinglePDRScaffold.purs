@@ -43,6 +43,7 @@ import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
 import Data.Foldable (intercalate)
+import Data.Int (ceil)
 import Data.Time.Duration (Milliseconds(..))
 import Data.Traversable (for_, traverse)
 import Effect.Aff (Aff, error)
@@ -116,6 +117,8 @@ type SinglePDRModelConfiguration =
   , testsType :: String
   , testSucceededProperty :: String
   , testNameProperty :: String
+  -- | Upper limit on the time each test in the suite may take to report a result.
+  , testTimeLimit :: Milliseconds
   , setupLogConfiguration :: LogConfiguration
   , tests :: Array ModelTest
   }
@@ -262,9 +265,10 @@ executeModelTest pdr testAppContext testContextTypeR logConfiguration cfg = do
         lift $ infoTest "Executing RunTest action"
         runContextAction (unwrap testTesterType) "RunTest" (unwrap theTest)
 
-  -- Polling stops as soon as the test reports a result; the generous budget (3 minutes) accommodates
-  -- tests that involve network round trips and `once settled` chains.
-  r <- pollUntilTestFinishes 900 (Milliseconds 200.0)
+  -- Polling stops as soon as the test reports a result; the suite configures the upper time limit.
+  let pollInterval = 200.0
+  let Milliseconds timeLimit = cfg.testTimeLimit
+  r <- pollUntilTestFinishes (max 1 (ceil (timeLimit / pollInterval))) (Milliseconds pollInterval)
     "Test to complete with a result"
     ( runInPDR pdr
         do

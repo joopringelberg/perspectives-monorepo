@@ -40,8 +40,11 @@ import Perspectives.Assignment.RunAction (runActionForObject, runContextAction)
 import Perspectives.CoreTypes (MonadPerspectivesTransaction, (##>))
 import Perspectives.External.HiddenFunctionCache (HiddenFunctionDescription)
 import Perspectives.Instances.Me (getMeInRoleAndContext)
+import Perspectives.Instances.ObjectGetters (roleType_)
+import Perspectives.Logging (debugAction)
 import Perspectives.Representation.Class.Role (getRoleType)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..))
+import Perspectives.Representation.TypeIdentifiers (RoleType(..))
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
 import Perspectives.RunMonadPerspectivesTransaction (runEmbeddedIfNecessaryAwaitingSettlement, shareWithPeers)
 import Unsafe.Coerce (unsafeCoerce)
@@ -61,9 +64,18 @@ runContextActionEffect actionNameArr userRoleTypeArr contexts _ = case head acti
     let contextId = ContextInstance context
     muserRoleInstance <- lift (contextId ##> getMeInRoleAndContext userRoleType)
     case muserRoleInstance of
-      Nothing -> pure unit
-      Just _ -> do
-        _ <- lift $ runEmbeddedIfNecessaryAwaitingSettlement shareWithPeers userRoleType
+      Nothing -> lift $ debugAction
+        ( "Skipping context action '" <> actionName <> "' in context '" <> context
+            <> "': no instance of user role type '"
+            <> userRoleTypeString
+            <> "' filled by me (yet)."
+        )
+      Just userRoleInstance -> do
+        -- Author the embedded transaction with the actual type of the user role instance. The declared
+        -- type may be a generalisation (e.g. an aspect user role) that lacks the perspectives of the
+        -- action, so that e.g. `create role` would find no role types to create.
+        instanceType <- lift $ ENR <$> roleType_ userRoleInstance
+        _ <- lift $ runEmbeddedIfNecessaryAwaitingSettlement shareWithPeers instanceType
           (runContextAction userRoleTypeString actionName context)
         pure unit
 

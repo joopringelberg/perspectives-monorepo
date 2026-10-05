@@ -24,6 +24,8 @@ module Test.RunAction where
 
 import Prelude
 
+import Data.Time.Duration (Milliseconds(..))
+
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.Maybe (Maybe(..))
@@ -68,6 +70,7 @@ runActionConfiguration =
   , testsType: "model://joopringelberg.nl#TestRunAction$TestApp$Tests"
   , testSucceededProperty: "model://joopringelberg.nl#TestRunAction$Test$External$TestSucceeded"
   , testNameProperty: "model://joopringelberg.nl#TestRunAction$Test$External$TestName"
+  , testTimeLimit: Milliseconds 180000.0
   , setupLogConfiguration:
       { pdr:
           [ { topic: TEST, logLevel: Trace }

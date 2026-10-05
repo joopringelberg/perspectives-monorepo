@@ -125,6 +125,7 @@ domain model://joopringelberg.nl#RepositoryTools@1.0
       on entry
         do for Tester
           callEffect cdb:AddCredentials( "https://perspectives.domains/", "alice", "alice" )
+          callEffect cdb:AddCredentials( "https://joopringelberg.nl/", "alice", "alice" )
 
     external
       state Success = (exists cm:MyCouchdbApp >> CouchdbServers) and 

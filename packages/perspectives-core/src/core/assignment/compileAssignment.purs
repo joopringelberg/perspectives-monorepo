@@ -73,7 +73,7 @@ import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), Rol
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
 import Perspectives.Representation.QueryFunction (QueryFunction(..)) as QF
 import Perspectives.Representation.ThreeValuedLogic (pessimistic)
-import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), RoleType(..))
+import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedRoleType(..), RoleType(..))
 import Perspectives.ResourceIdentifiers (databaseLocation, resourceIdentifier2DocLocator)
 import Perspectives.SaveUserData (removeBinding, scheduleContextRemoval, scheduleRoleRemoval, setBinding, setFirstBinding, synchronise)
 import Perspectives.ScheduledAssignment (ScheduledAssignment(..))
@@ -470,18 +470,7 @@ compileContextAssignment (UQD _ (QF.CreateContext qualifiedContextTypeIdentifier
           roleTypesToCreate <- roleContextualisations ctxt enumeratedType
           -- Now, each of these role types may have a more restricted filler.
           for_ roleTypesToCreate \roleTypeToCreate -> do
-            -- Get the context types whose external roles may be bound to this role type we're about to create.
-            -- Keep only those that are a specialisation of qualifiedContextTypeIdentifier.
-            contextTypesToCreate <-
-              lift
-                ( bindingOfRole (ENR roleTypeToCreate)
-                    >>= pure <<< (map contextOfADT)
-                    >>= pure <<< (map allLeavesInADT)
-                )
-                >>= maybe (pure []) (filterA \cType -> lift (cType ###>> hasContextAspect qualifiedContextTypeIdentifier))
-            contextTypesToCreate' <-
-              if length contextTypesToCreate > 1 then pure $ filter ((notEq) qualifiedContextTypeIdentifier) contextTypesToCreate
-              else pure contextTypesToCreate
+            contextTypesToCreate' <- lift $ contextTypesToCreateFor qualifiedContextTypeIdentifier roleTypeToCreate
             for contextTypesToCreate' \contextTypeToCreate -> void do
               contextCreationResult <- runExceptT $ constructContext (Just $ ENR roleTypeToCreate)
                 ( ContextSerialization defaultContextSerializationRecord
@@ -624,6 +613,23 @@ compileRoleCreatingAssignments (UQD _ (QF.CreateRole qualifiedRoleIdentifier) co
             (RolSerialization { id: localName, properties: PropertySerialization empty, binding: Nothing })
           pure (unwrap <$> mroleIdentifier)
 
+-- | The context types to instantiate for `create context X bound to R`, where R has been contextualised
+-- | to `roleType`. These are the leaves of R's filler restriction that specialise X (X itself included).
+-- | When there are none, but X specialises one of those leaves, X itself is an acceptable filler.
+-- | If more than one specialisation qualifies, X itself is left out.
+contextTypesToCreateFor :: ContextType -> EnumeratedRoleType -> MP (Array ContextType)
+contextTypesToCreateFor requested roleType = do
+  mfillerLeaves <- map (allLeavesInADT <<< contextOfADT) <$> bindingOfRole (ENR roleType)
+  case mfillerLeaves of
+    Nothing -> pure []
+    Just fillerLeaves -> do
+      specialisations <- filterA (\cType -> cType ###>> hasContextAspect requested) fillerLeaves
+      if null specialisations then do
+        generalisations <- filterA (\cType -> requested ###>> hasContextAspect cType) fillerLeaves
+        pure $ if null generalisations then [] else [ requested ]
+      else if length specialisations > 1 then pure $ filter (notEq requested) specialisations
+      else pure specialisations
+
 compileContextCreatingAssignments :: Partial => QueryFunctionDescription -> Maybe QueryFunctionDescription -> MP (ContextInstance -> MonadPerspectivesTransaction (Array String))
 compileContextCreatingAssignments (UQD _ (QF.CreateContext qualifiedContextTypeIdentifier qualifiedRoleIdentifier) contextGetterDescription _ _ _) mnameGetterDescription = do
   (contextGetter :: (ContextInstance ~~> ContextInstance)) <- context2context contextGetterDescription
@@ -658,18 +664,7 @@ compileContextCreatingAssignments (UQD _ (QF.CreateContext qualifiedContextTypeI
           roleTypesToCreate <- roleContextualisations ctxt enumeratedType
           -- Now, each of these role types may have a more restricted filler.
           concat <$> for roleTypesToCreate \roleTypeToCreate -> do
-            -- Get the context types whose external roles may be bound to this role type we're about to create.
-            -- Keep only those that are a specialisation of qualifiedContextTypeIdentifier.
-            contextTypesToCreate <-
-              lift
-                ( bindingOfRole (ENR roleTypeToCreate)
-                    >>= pure <<< (map contextOfADT)
-                    >>= pure <<< (map allLeavesInADT)
-                )
-                >>= maybe (pure []) (filterA \cType -> lift (cType ###>> hasContextAspect qualifiedContextTypeIdentifier))
-            contextTypesToCreate' <-
-              if length contextTypesToCreate > 1 then pure $ filter ((notEq) qualifiedContextTypeIdentifier) contextTypesToCreate
-              else pure contextTypesToCreate
+            contextTypesToCreate' <- lift $ contextTypesToCreateFor qualifiedContextTypeIdentifier roleTypeToCreate
             for contextTypesToCreate' \contextTypeToCreate -> do
               r <- runExceptT $ constructContext (Just $ ENR roleTypeToCreate)
                 ( ContextSerialization defaultContextSerializationRecord

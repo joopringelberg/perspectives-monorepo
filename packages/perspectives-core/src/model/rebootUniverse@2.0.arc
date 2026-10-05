@@ -46,6 +46,7 @@ domain model://joopringelberg.nl#RebootUniverse@2.0
     indexed ru:RebootUniverseApp
     aspect sys:RootContext
     external
+      property BigBangFinished (Boolean)
     
     user Manager = sys:Me
       perspective on Tests
@@ -1038,6 +1039,9 @@ domain model://joopringelberg.nl#RebootUniverse@2.0
       
       perspective on rr:PublicRepositoryOverview$Repositories
         only (Create, Fill)
+      
+      perspective on ru:RebootUniverseApp >> External
+        props (BigBangFinished) verbs (SetPropertyValue)
 
       action RunTest
         letA
@@ -1051,6 +1055,9 @@ domain model://joopringelberg.nl#RebootUniverse@2.0
 
           once settled
             TestSucceeded = true for extern
+            -- NOTICE THAT WE SIGNAL THAT THE BIG BANG HAS FINISHED WHEN WE HAVE THE PUBLIC PAGES.
+            -- THIS SIGNPOST MAY BE MOVED, EG TO AFTER SIGNING UP TO THE BROKER SERVICE.
+            BigBangFinished = true for ru:RebootUniverseApp >> extern
 
     user Owner = mm:RepositoryToolsApp >> mm:TestApp$BespokeDatabaseOwner
 
@@ -1107,7 +1114,7 @@ domain model://joopringelberg.nl#RebootUniverse@2.0
 
       action RunTest
         letA
-          brokerservice <- publicrole pub:https://perspectives.domains/cw_bigbangsdatabase/#BigBangsBrokerService$External
+          brokerservice <- publicrole pub:https://perspectives.domains/cw_bigbangsdatabase/#BigBangsBrokerService$External (bs:BrokerService)
         in
           TestName = "Sign up to Broker Service" for extern
           bind brokerservice to PublicBrokers in bs:MyBrokers
@@ -1131,9 +1138,6 @@ domain model://joopringelberg.nl#RebootUniverse@2.0
 
     user Tester filledBy (sys:TheWorld$PerspectivesUsers)
       aspect mm:Test$Tester
-
-      perspective on mm:TestApp$Tests
-        only (CreateAndFill, Fill)
 
       action RunTest
         letA
@@ -1209,85 +1213,103 @@ domain model://joopringelberg.nl#RebootUniverse@2.0
   ----  * Instantiate and Fill the Tester role
   ----  * execute the RunTest action for the Tester role
   ------------------------------------------------------------------------------
-      action BigBang
+
+  case ExecuteBigBang
+    aspect mm:Test
+
+    external
+      state Success = binder ru:TestApp$Tests >> context >> extern >> BigBangFinished
+        on entry
+          do for Tester once settled
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+
+      perspective on ru:RebootUniverseApp >> Tests
+        only (CreateAndFill, Fill)
+
+      action RunTest
         letA
-          cleanup <- create context mm:Cleanup bound to mm:TestApp$Tests in mm:RepositoryToolsApp
-          managecouchdb <- create context mm:ManageCouchdb bound to mm:TestApp$Tests in mm:RepositoryToolsApp
-          createbigbangsdatabase <- create context mm:CreateBigBangsDatabase bound to mm:TestApp$Tests in mm:RepositoryToolsApp
-          createperspectivesdomainsrepository <- create context mm:CreatePerspectivesDomainsRepository bound to mm:TestApp$Tests in mm:RepositoryToolsApp
-          createjoopringelbergnlrepository <- create context mm:CreateJoopringelbergNlRepository bound to mm:TestApp$Tests in mm:RepositoryToolsApp
-          addmodeltemplate <- create context mm:AddModel bound to mm:TestApp$Tests in mm:RepositoryToolsApp
+          cleanup <- create context mm:Cleanup bound to Tests in ru:RebootUniverseApp
+          managecouchdb <- create context mm:ManageCouchdb bound to Tests in ru:RebootUniverseApp
+          createbigbangsdatabase <- create context mm:CreateBigBangsDatabase bound to Tests in ru:RebootUniverseApp
+          createperspectivesdomainsrepository <- create context mm:CreatePerspectivesDomainsRepository bound to Tests in ru:RebootUniverseApp
+          createjoopringelbergnlrepository <- create context mm:CreateJoopringelbergNlRepository bound to Tests in ru:RebootUniverseApp
 
-          addmodelcouchdb <- create context AddModel_Couchdb bound to Tests in mm:RepositoryToolsApp
-          addmodelserialise <- create context AddModel_Serialise bound to Tests in mm:RepositoryToolsApp
-          addmodelsensor <- create context AddModel_Sensor bound to Tests in mm:RepositoryToolsApp
-          addmodelutilities <- create context AddModel_Utilities bound to Tests in mm:RepositoryToolsApp
-          addmodelsystem <- create context AddModel_System bound to Tests in mm:RepositoryToolsApp
-          addmodelbodieswithaccounts <- create context AddModel_BodiesWithAccounts bound to Tests in mm:RepositoryToolsApp
-          addmodelparsing <- create context AddModel_Parsing bound to Tests in mm:RepositoryToolsApp
-          addmodelhelplib <- create context AddModel_HelpLib bound to Tests in mm:RepositoryToolsApp
-          addmodelfiles <- create context AddModel_Files bound to Tests in mm:RepositoryToolsApp
-          addmodelcouchdbmanagement <- create context AddModel_CouchdbManagement bound to Tests in mm:RepositoryToolsApp
-          addmodelbrokerservices <- create context AddModel_BrokerServices bound to Tests in mm:RepositoryToolsApp
-          addmodelrabbitmq <- create context AddModel_RabbitMQ bound to Tests in mm:RepositoryToolsApp
-          addmodelhypercontext <- create context AddModel_HyperContext bound to Tests in mm:RepositoryToolsApp
-          addmodelintroduction <- create context AddModel_Introduction bound to Tests in mm:RepositoryToolsApp
-          addmodelhelpproject <- create context AddModel_HelpProject bound to Tests in mm:RepositoryToolsApp
-          addmodeldisconnect <- create context AddModel_Disconnect bound to Tests in mm:RepositoryToolsApp
-          addmodelrepositoryregistry <- create context AddModel_RepositoryRegistry bound to Tests in mm:RepositoryToolsApp
-          addmodelsharedfileservices <- create context AddModel_SharedFileServices bound to Tests in mm:RepositoryToolsApp
-          addmodelrepositorytools <- create context AddModel_RepositoryTools bound to Tests in mm:RepositoryToolsApp
-          addmodelrebootuniverse <- create context AddModel_RebootUniverse bound to Tests in mm:RepositoryToolsApp
-          addmodelsynchronisationtestmodel <- create context AddModel_SynchronisationTestModel bound to Tests in mm:RepositoryToolsApp
-          addmodeltwopdrdestructivetests <- create context AddModel_TwoPDRDestructiveTests bound to Tests in mm:RepositoryToolsApp
-          addmodelstatetestmodel <- create context AddModel_StateTestModel bound to Tests in mm:RepositoryToolsApp
-          addmodelsinglepdrdestructivetests <- create context AddModel_SinglePDRDestructiveTests bound to Tests in mm:RepositoryToolsApp
-          addmodeltransactionexecutiontests <- create context AddModel_TransactionExecutionTests bound to Tests in mm:RepositoryToolsApp
-          addmodelamqptestmodel <- create context AddModel_AMQPtestModel bound to Tests in mm:RepositoryToolsApp
-          addmodelamqptestsetup <- create context AddModel_AMQPtestSetup bound to Tests in mm:RepositoryToolsApp
+          addmodelcouchdb <- create context AddModel_Couchdb bound to Tests in ru:RebootUniverseApp
+          addmodelserialise <- create context AddModel_Serialise bound to Tests in ru:RebootUniverseApp
+          addmodelsensor <- create context AddModel_Sensor bound to Tests in ru:RebootUniverseApp
+          addmodelutilities <- create context AddModel_Utilities bound to Tests in ru:RebootUniverseApp
+          addmodelsystem <- create context AddModel_System bound to Tests in ru:RebootUniverseApp
+          addmodelbodieswithaccounts <- create context AddModel_BodiesWithAccounts bound to Tests in ru:RebootUniverseApp
+          addmodelparsing <- create context AddModel_Parsing bound to Tests in ru:RebootUniverseApp
+          addmodelhelplib <- create context AddModel_HelpLib bound to Tests in ru:RebootUniverseApp
+          addmodelfiles <- create context AddModel_Files bound to Tests in ru:RebootUniverseApp
+          addmodelcouchdbmanagement <- create context AddModel_CouchdbManagement bound to Tests in ru:RebootUniverseApp
+          addmodelbrokerservices <- create context AddModel_BrokerServices bound to Tests in ru:RebootUniverseApp
+          addmodelrabbitmq <- create context AddModel_RabbitMQ bound to Tests in ru:RebootUniverseApp
+          addmodelhypercontext <- create context AddModel_HyperContext bound to Tests in ru:RebootUniverseApp
+          addmodelintroduction <- create context AddModel_Introduction bound to Tests in ru:RebootUniverseApp
+          addmodelhelpproject <- create context AddModel_HelpProject bound to Tests in ru:RebootUniverseApp
+          addmodeldisconnect <- create context AddModel_Disconnect bound to Tests in ru:RebootUniverseApp
+          addmodelrepositoryregistry <- create context AddModel_RepositoryRegistry bound to Tests in ru:RebootUniverseApp
+          addmodelsharedfileservices <- create context AddModel_SharedFileServices bound to Tests in ru:RebootUniverseApp
+          addmodelrepositorytools <- create context AddModel_RepositoryTools bound to Tests in ru:RebootUniverseApp
+          addmodelrebootuniverse <- create context AddModel_RebootUniverse bound to Tests in ru:RebootUniverseApp
+          addmodelsynchronisationtestmodel <- create context AddModel_SynchronisationTestModel bound to Tests in ru:RebootUniverseApp
+          addmodeltwopdrdestructivetests <- create context AddModel_TwoPDRDestructiveTests bound to Tests in ru:RebootUniverseApp
+          addmodelstatetestmodel <- create context AddModel_StateTestModel bound to Tests in ru:RebootUniverseApp
+          addmodelsinglepdrdestructivetests <- create context AddModel_SinglePDRDestructiveTests bound to Tests in ru:RebootUniverseApp
+          addmodeltransactionexecutiontests <- create context AddModel_TransactionExecutionTests bound to Tests in ru:RebootUniverseApp
+          addmodelamqptestmodel <- create context AddModel_AMQPtestModel bound to Tests in ru:RebootUniverseApp
+          addmodelamqptestsetup <- create context AddModel_AMQPtestSetup bound to Tests in ru:RebootUniverseApp
 
-          managebrokerservice <- create context ManageBrokerService bound to Tests in mm:RepositoryToolsApp
-          addpublicpages <- create context Add_public_pages bound to Tests in mm:RepositoryToolsApp
-          createrepositoryregistrypublicpage <- create context CreateRepositoryRegistryPublicPage bound to Tests in mm:RepositoryToolsApp
-          addextramodels <- create context AddExtraModels bound to Tests in mm:RepositoryToolsApp
+          managebrokerservice <- create context ManageBrokerService bound to Tests in ru:RebootUniverseApp
+          addpublicpages <- create context Add_public_pages bound to Tests in ru:RebootUniverseApp
+          createrepositoryregistrypublicpage <- create context CreateRepositoryRegistryPublicPage bound to Tests in ru:RebootUniverseApp
+          signup <- create context SignUpToBrokerService bound to Tests in ru:RebootUniverseApp
 
         in
-          runContextAction RunTest for Tester in cleanup >> binding >> context
-          runContextAction RunTest for Tester in managecouchdb >> binding >> context
-          runContextAction RunTest for Tester in createbigbangsdatabase >> binding >> context
-          runContextAction RunTest for Tester in createperspectivesdomainsrepository >> binding >> context
-          runContextAction RunTest for Tester in createjoopringelbergnlrepository >> binding >> context
-          runContextAction RunTestTemplate for Tester in addmodeltemplate >> binding >> context
+          TestName = "Big Bang" for extern
+          -- The Tester role of each newly created test context is filled by the on entry action of mm:Test.
+          -- That only happens when the transaction settles, so the sub-tests must run in a later stage.
+          once settled
+            runContextAction RunTest for Tester in cleanup >> binding >> context
+            runContextAction RunTest for Tester in managecouchdb >> binding >> context
+            runContextAction RunTest for Tester in createbigbangsdatabase >> binding >> context
+            runContextAction RunTest for Tester in createperspectivesdomainsrepository >> binding >> context
+            runContextAction RunTest for Tester in createjoopringelbergnlrepository >> binding >> context
 
-          runContextAction RunTest for Tester in addmodelcouchdb >> binding >> context
-          runContextAction RunTest for Tester in addmodelserialise >> binding >> context
-          runContextAction RunTest for Tester in addmodelsensor >> binding >> context
-          runContextAction RunTest for Tester in addmodelutilities >> binding >> context
-          runContextAction RunTest for Tester in addmodelsystem >> binding >> context
-          runContextAction RunTest for Tester in addmodelbodieswithaccounts >> binding >> context
-          runContextAction RunTest for Tester in addmodelparsing >> binding >> context
-          runContextAction RunTest for Tester in addmodelhelplib >> binding >> context
-          runContextAction RunTest for Tester in addmodelfiles >> binding >> context
-          runContextAction RunTest for Tester in addmodelcouchdbmanagement >> binding >> context
-          runContextAction RunTest for Tester in addmodelbrokerservices >> binding >> context
-          runContextAction RunTest for Tester in addmodelrabbitmq >> binding >> context
-          runContextAction RunTest for Tester in addmodelhypercontext >> binding >> context
-          runContextAction RunTest for Tester in addmodelintroduction >> binding >> context
-          runContextAction RunTest for Tester in addmodelhelpproject >> binding >> context
-          runContextAction RunTest for Tester in addmodeldisconnect >> binding >> context
-          runContextAction RunTest for Tester in addmodelrepositoryregistry >> binding >> context
-          runContextAction RunTest for Tester in addmodelsharedfileservices >> binding >> context
-          runContextAction RunTest for Tester in addmodelrepositorytools >> binding >> context
-          runContextAction RunTest for Tester in addmodelrebootuniverse >> binding >> context
-          runContextAction RunTest for Tester in addmodelsynchronisationtestmodel >> binding >> context
-          runContextAction RunTest for Tester in addmodeltwopdrdestructivetests >> binding >> context
-          runContextAction RunTest for Tester in addmodelstatetestmodel >> binding >> context
-          runContextAction RunTest for Tester in addmodelsinglepdrdestructivetests >> binding >> context
-          runContextAction RunTest for Tester in addmodeltransactionexecutiontests >> binding >> context
-          runContextAction RunTest for Tester in addmodelamqptestmodel >> binding >> context
-          runContextAction RunTest for Tester in addmodelamqptestsetup >> binding >> context
+            runContextAction RunTest for Tester in addmodelcouchdb >> binding >> context
+            runContextAction RunTest for Tester in addmodelserialise >> binding >> context
+            runContextAction RunTest for Tester in addmodelsensor >> binding >> context
+            runContextAction RunTest for Tester in addmodelutilities >> binding >> context
+            runContextAction RunTest for Tester in addmodelsystem >> binding >> context
+            runContextAction RunTest for Tester in addmodelbodieswithaccounts >> binding >> context
+            runContextAction RunTest for Tester in addmodelparsing >> binding >> context
+            runContextAction RunTest for Tester in addmodelhelplib >> binding >> context
+            runContextAction RunTest for Tester in addmodelfiles >> binding >> context
+            runContextAction RunTest for Tester in addmodelcouchdbmanagement >> binding >> context
+            runContextAction RunTest for Tester in addmodelbrokerservices >> binding >> context
+            runContextAction RunTest for Tester in addmodelrabbitmq >> binding >> context
+            runContextAction RunTest for Tester in addmodelhypercontext >> binding >> context
+            runContextAction RunTest for Tester in addmodelintroduction >> binding >> context
+            runContextAction RunTest for Tester in addmodelhelpproject >> binding >> context
+            runContextAction RunTest for Tester in addmodeldisconnect >> binding >> context
+            runContextAction RunTest for Tester in addmodelrepositoryregistry >> binding >> context
+            runContextAction RunTest for Tester in addmodelsharedfileservices >> binding >> context
+            runContextAction RunTest for Tester in addmodelrepositorytools >> binding >> context
+            runContextAction RunTest for Tester in addmodelrebootuniverse >> binding >> context
+            runContextAction RunTest for Tester in addmodelsynchronisationtestmodel >> binding >> context
+            runContextAction RunTest for Tester in addmodeltwopdrdestructivetests >> binding >> context
+            runContextAction RunTest for Tester in addmodelstatetestmodel >> binding >> context
+            runContextAction RunTest for Tester in addmodelsinglepdrdestructivetests >> binding >> context
+            runContextAction RunTest for Tester in addmodeltransactionexecutiontests >> binding >> context
+            runContextAction RunTest for Tester in addmodelamqptestmodel >> binding >> context
+            runContextAction RunTest for Tester in addmodelamqptestsetup >> binding >> context
 
-          runContextAction RunTest for Tester in managebrokerservice >> binding >> context
-          runContextAction RunTest for Tester in addpublicpages >> binding >> context
-          runContextAction RunTest for Tester in createrepositoryregistrypublicpage >> binding >> context
-          runContextAction RunTest for Tester in addextramodels >> binding >> context
+            runContextAction RunTest for Tester in managebrokerservice >> binding >> context
+            runContextAction RunTest for Tester in addpublicpages >> binding >> context
+            runContextAction RunTest for Tester in createrepositoryregistrypublicpage >> binding >> context
+            runContextAction RunTest for Tester in signup >> binding >> context

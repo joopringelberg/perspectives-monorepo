@@ -28,6 +28,8 @@ module Test.QueryStepTests
 
 import Prelude
 
+import Data.Time.Duration (Milliseconds(..))
+
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.Maybe (Maybe(..))
@@ -59,6 +61,7 @@ queryStepTestModelConfiguration =
   , testsType
   , testSucceededProperty
   , testNameProperty
+  , testTimeLimit: Milliseconds 180000.0
   , setupLogConfiguration:
       { pdr:
           [ { topic: TEST, logLevel: Debug }

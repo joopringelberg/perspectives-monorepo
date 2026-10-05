@@ -2,6 +2,8 @@ module Test.ModelDependencies where
 
 import Prelude
 
+import Data.Time.Duration (Milliseconds(..))
+
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.Maybe (Maybe(..))
@@ -46,6 +48,7 @@ modelDependenciesConfiguration =
   , testsType: modelDependenciesTestsType
   , testSucceededProperty: repositoryToolsTestSucceededProperty
   , testNameProperty: repositoryToolsTestNameProperty
+  , testTimeLimit: Milliseconds 180000.0
   , setupLogConfiguration: --emptyLogConfiguration
       { pdr:
           [ { topic: TEST, logLevel: Trace }
