@@ -263,7 +263,8 @@ domain model://joopringelberg.nl#RepositoryTools@1.0
     aspect mm:Test
 
     external
-      state Success = (exists mm:RepositoryToolsApp >> BespokeDatabaseOwner >> BespokeDatabaseUrl) and
+      property Finished (Boolean)
+      state Success = Finished and (exists mm:RepositoryToolsApp >> BespokeDatabaseOwner >> BespokeDatabaseUrl) and
         callExternal cdb:DatabaseExists( "https://perspectives.domains/", "cw_bigbangsdatabase" ) returns Boolean
         on entry
           do for Tester once settled
@@ -271,6 +272,9 @@ domain model://joopringelberg.nl#RepositoryTools@1.0
 
     user Tester filledBy (sys:TheWorld$PerspectivesUsers)
       aspect mm:Test$Tester
+
+      perspective on extern
+        props (Finished) verbs (SetPropertyValue, Consult)
 
       perspective on cm:CouchdbServer$BespokeDatabases
         only (CreateAndFill)
@@ -293,7 +297,10 @@ domain model://joopringelberg.nl#RepositoryTools@1.0
           EnteredDatabaseName = "cw_bigbangsdatabase/" for bigbangsdatabase
           once settled
             Endorsed = true for bigbangsdatabase
+          once settled
             Public = true for bigbangsdatabase
+          once settled
+            Finished = true for extern
 
 ------------------------------------------------------------------------------
   ---- ADD MODEL

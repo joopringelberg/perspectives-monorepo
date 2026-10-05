@@ -108,13 +108,19 @@ theSuite = suite "Action settlement stages" do
           equal [ 1, 1, 1, 3, 27, 1, 3 ] (map length stages)
         _ -> assert "Expected the staged Big Bang context action" false
 
-  test "bespoke database settles its owner and entered name before endorsement" do
+  test "bespoke database settles owner, creation and publication before signaling completion" do
     source <- readTextFile UTF8 "src/model/repositoryTools@1.0.arc"
     parsed <- runIndentParser source (domain <* eof)
     case parsed of
       Left err -> assert (show err) false
       Right root -> case contextEffects "CreateBigBangsDatabase" root of
-        [ Let (LetStep { stages }) ] -> equal [ 4, 2 ] (map length stages)
+        [ Let (LetStep { stages }) ] -> do
+          equal [ 4, 1, 1, 1 ] (map length stages)
+          case stages of
+            [ _, [ PropertyAssignment endorsement ], [ PropertyAssignment publication ], [ PropertyAssignment completion ] ] ->
+              equal [ "Endorsed", "Public", "Finished" ]
+                [ endorsement.propertyIdentifier, publication.propertyIdentifier, completion.propertyIdentifier ]
+            _ -> assert "Expected separate endorsement, publication and completion stages" false
         _ -> assert "Expected the staged bespoke database action" false
 
   test "browser preparation installs AMQPtestSetup before reporting success" do

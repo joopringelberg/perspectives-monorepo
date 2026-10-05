@@ -30,6 +30,7 @@ module Test.SinglePDRScaffold
   , SinglePDRResults
   , SinglePDRModelConfiguration
   , getSinglePDRResults
+  , loadModel
   , executeModelTest
   ) where
 

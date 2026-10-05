@@ -180,9 +180,19 @@ update `_security` before anonymous repository reads can work.
 
 `CreateBigBangsDatabase` binds its Owner to the server's Admin, not directly to
 `sys:Me`, so the Owner can resolve CouchDB credentials through its filler. It
-settles the owner and entered database name before endorsement. Success requires
-the Owner's database URL and a read-only `Couchdb$DatabaseExists` check of
-`cw_bigbangsdatabase`; a modelled registration alone is not sufficient.
+settles the owner and entered database name before endorsement, then settles
+database creation before setting `Public`. After publication settles, it sets a
+local `Finished` property to trigger reevaluation of `Success`. The indexed-context
+URL lookup and the `Couchdb$DatabaseExists` call with constant arguments do not
+themselves provide a change trigger. Success still requires the Owner's database
+URL and physical existence of `cw_bigbangsdatabase`; a modelled registration alone
+is not sufficient. No timer is needed.
+
+For a focused local regression, run `pnpm run test:rebootDatabase`. It executes
+only `Cleanup`, `ManageCouchdb`, and `CreateBigBangsDatabase`, with a 15-second
+completion limit per case, then verifies physical existence and public database
+membership settings. It has the same destructive cleanup scope described in
+step 2 and refuses non-local routing. It does not write an output snapshot.
 
 Database-info requests preserve HTTP errors (notably 401 and 404) rather than
 decoding CouchDB error bodies as database metadata. Database-creation PUT requests
