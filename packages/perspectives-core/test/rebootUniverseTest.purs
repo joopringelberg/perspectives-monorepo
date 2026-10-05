@@ -144,11 +144,11 @@ rebootUniverseTests =
     , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_AMQPtestModel", logConfiguration: emptyLogConfiguration }
     , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_AMQPtestSetup", logConfiguration: emptyLogConfiguration }
     -- The next model is not yet finished. We'll continue after the reboot.
-    , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_TestModelDependencies", logConfiguration: emptyLogConfiguration }
+    -- , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_TestModelDependencies", logConfiguration: emptyLogConfiguration }
     , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$ManageBrokerService", logConfiguration: emptyLogConfiguration }
     , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$Add_public_pages", logConfiguration: emptyLogConfiguration }
     , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$CreateRepositoryRegistryPublicPage", logConfiguration: emptyLogConfiguration }
-    -- , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$SignUpToBrokerService", logConfiguration: emptyLogConfiguration }
+    , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$SignUpToBrokerService", logConfiguration: emptyLogConfiguration }
     -- , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$ExecuteBigBang", logConfiguration: emptyLogConfiguration }
   ]
 
@@ -157,10 +157,10 @@ debugConfiguration =
   { pdr:
       [
         -- { topic: TEST, logLevel: Trace }
-        --   { topic: RESOURCE, logLevel: Trace }
-        -- , { topic: STATE, logLevel: Trace }
-        { topic: INSTALL, logLevel: Trace }
+          { topic: RESOURCE, logLevel: Trace }
+        , { topic: STATE, logLevel: Trace }
+        , { topic: INSTALL, logLevel: Trace }
       -- , { topic: MODEL, logLevel: Debug }
-      -- , { topic: ACTION, logLevel: Trace }
+      , { topic: ACTION, logLevel: Trace }
       ]
   }
