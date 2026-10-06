@@ -30,7 +30,7 @@ import Node.Encoding (Encoding(..))
 import Node.FS.Aff (readTextFile)
 import Parsing.String (eof)
 import Perspectives.Parsing.Arc (domain, userRoleE)
-import Perspectives.Parsing.Arc.AST (ActionE(..), ContextActionE(..), ContextE(..), ContextPart(..), RoleE(..), RolePart(..), StateE(..), StateQualifiedPart(..))
+import Perspectives.Parsing.Arc.AST (ActionE(..), AutomaticEffectE(..), ContextActionE(..), ContextE(..), ContextPart(..), RoleE(..), RolePart(..), StateE(..), StateQualifiedPart(..))
 import Perspectives.Parsing.Arc.IndentParser (runIndentParser)
 import Perspectives.Parsing.Arc.Expression.AST (Step(..), SimpleStep(..))
 import Perspectives.Parsing.Arc.Statement.AST (Assignment(..), LetStep(..), Statements(..))
@@ -97,6 +97,44 @@ theSuite = suite "Action settlement stages" do
             equal 1 (length bindings)
             equal [ 1, 1 ] (map length stages)
           _ -> assert "Expected letA bindings and two stages" false
+
+  for_ [ "entry", "exit" ] \transition ->
+    for_ [ "do", "do for Tester", "do for Tester once settled" ] \header -> do
+      let
+        prefix = "user Tester\n  on " <> transition <> "\n    " <> header <> "\n"
+        immediate = "      Text1 = \"immediate\" for extern\n"
+        settled = "      once settled\n        Text1 = \"settled\" for extern\n"
+        sibling = "    notify Tester\n      \"Finished\"\n    do for Tester\n      Text1 = \"sibling\" for extern\n"
+
+      test (transition <> " " <> header <> " supports multiple settlement stages and sibling effects") do
+        effects <- parseEffects (prefix <> immediate <> settled <> settled <> sibling)
+        case effects of
+          [ Let (LetStep { bindings, stages }), Statements next ] -> do
+            equal [] bindings
+            equal [ 1, 1, 1 ] (map length stages)
+            equal 1 (length next)
+          _ -> assert "Expected staged automatic effect and a separate sibling effect" false
+
+      test (transition <> " " <> header <> " preserves plain assignments") do
+        effects <- parseEffects (prefix <> immediate <> immediate <> sibling)
+        case effects of
+          [ Statements assignments, Statements _ ] -> equal 2 (length assignments)
+          _ -> assert "Expected the existing single-stage automatic effect representation" false
+
+  test "repository upload settles before updating build and generating translations" do
+    source <- readTextFile UTF8 "src/model/couchdbManagement@12.4.arc"
+    parsed <- runIndentParser source (domain <* eof)
+    case parsed of
+      Left err -> assert (show err) false
+      Right root ->
+        assert "Expected upload and completion in separate settlement stages" $
+          any
+            ( case _ of
+                Let (LetStep { bindings: [], stages: [ [ ExternalEffect { effectName } ], completion ] }) ->
+                  effectName == "p:UploadToRepository" && map propertyName completion == [ "Build", "MustUpload", "GenerateYaml" ]
+                _ -> false
+            )
+            (automaticEffects root)
 
   test "Big Bang settles server and repositories before running their consumers" do
     source <- readTextFile UTF8 "src/model/rebootUniverse@2.0.arc"
@@ -181,4 +219,25 @@ actionEffect :: StateQualifiedPart -> Array Statements
 actionEffect = case _ of
   CA (ContextActionE { effect }) -> [ effect ]
   AC (ActionE { effect }) -> [ effect ]
+  AE (AutomaticEffectE { effect }) -> [ effect ]
   _ -> []
+
+automaticEffects :: ContextE -> Array Statements
+automaticEffects (ContextE { contextParts }) = fromFoldable contextParts >>= case _ of
+  CE child -> automaticEffects child
+  CSQP parts -> fromFoldable parts >>= actionEffect
+  STATE state -> stateEffects state
+  RE (RoleE { roleParts }) -> fromFoldable roleParts >>= case _ of
+    SQP parts -> fromFoldable parts >>= actionEffect
+    ROLESTATE state -> stateEffects state
+    _ -> []
+  _ -> []
+
+stateEffects :: StateE -> Array Statements
+stateEffects (StateE { stateParts, subStates }) =
+  (fromFoldable stateParts >>= actionEffect) <> (fromFoldable subStates >>= stateEffects)
+
+propertyName :: Assignment -> String
+propertyName = case _ of
+  PropertyAssignment { propertyIdentifier } -> propertyIdentifier
+  _ -> ""

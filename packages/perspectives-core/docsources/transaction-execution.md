@@ -355,7 +355,7 @@ Client query subscriptions (`correlationIdentifiers`) are run at the very end of
 
 ### 9. `once settled` staged actions: the `PendingSettledStack`
 
-An ARC `letA` action body can split its statements into stages separated by `once settled`:
+ARC action bodies and automatic `do` effects in `on entry` or `on exit` transitions can split their statements into stages separated by `once settled`, with or without `letA` bindings:
 
 ```arc
 letA
@@ -369,6 +369,8 @@ in
   once settled
     AutoUpload = true for version >> binding
 ```
+
+Without `letA`, place `once settled` at the same indentation as the first stage's statements and indent the next stage beneath it. In `do for Author once settled`, the header delays the first stage; a `once settled` inside its body delays the next stage until the first has settled.
 
 Each stage is compiled into a separate `Updater` (`Perspectives.Representation.Action.ActionEffect`, see `Perspectives.Query.StatementCompiler.compileActionEffect`). At run time (`Perspectives.CompileActionEffect.compileActionEffectWith`), the first stage runs synchronously as part of the current transaction; every later stage is handed to `scheduleSettledTransaction` (`Perspectives.CompileTimeFacets`), which is supposed to run it only once the current logical transaction — including everything it triggers — has *settled*.
 

@@ -1129,7 +1129,7 @@ automaticEffectE = do
           effect <- case keyword of
             "letE" -> fail "letE does not allow assignment operators, so this will not have an effect. Did you mean 'letA'? "
             "letA" -> Let <$> letWithAssignment
-            _ -> Statements <<< fromFoldable <$> nestedBlock assignment
+            _ -> stagedStatements
           end <- getPosition
           { subject, object, onEntry, onExit, currentContext } <- getArcParserState
           case usr of
