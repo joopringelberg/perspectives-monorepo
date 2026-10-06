@@ -47,12 +47,15 @@ domain model://joopringelberg.nl#RebootUniverse@2.0
     aspect sys:RootContext
     external
       property BigBangFinished (Boolean)
+      property BrokerServiceUrl (String)
     
     user Manager = sys:Me
       perspective on Tests
         only (CreateAndFill, RemoveContext)
       perspective on Tests >> binding >> context >> Tester
         only (Create, Fill)
+      perspective on extern
+        props (BrokerServiceUrl) verbs (SetPropertyValue)
           
     -- To execute any test, run the action RunTest in the first PDR.
     -- To check if a test has succeeded, retrieve the value of TestSucceeded in the second PDR.
@@ -758,7 +761,7 @@ domain model://joopringelberg.nl#RebootUniverse@2.0
           -- This triggers State BrokerServices$ManagedBrokers$HasStorageLocation, which creates the BrokerService context.
           
           once settled
-            Url = "wss://mycontexts.com:15673/ws" for brokerservice
+            Url = ru:RebootUniverseApp >> extern >> BrokerServiceUrl orElse "wss://mycontexts.com:15673/ws" for brokerservice
             Exchange = "mycontexts" for brokerservice
             ManagementEndpoint = "https://mycontexts.com/rbmq/" for brokerservice
             SelfRegisterEndpoint = "https://mycontexts.com/rbsr/" for brokerservice

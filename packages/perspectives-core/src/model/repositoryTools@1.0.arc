@@ -44,6 +44,8 @@ domain model://joopringelberg.nl#RepositoryTools@1.0
     indexed mm:RepositoryToolsApp
     aspect sys:RootContext
     external
+      property CouchdbServerAdminName (String)
+      property CouchdbServerAdminPassword (String)
     
     user Manager = me
       perspective on Tests
@@ -100,9 +102,11 @@ domain model://joopringelberg.nl#RepositoryTools@1.0
       action RunTest
         letA
           url <- "https://perspectives.domains/"
+          adminName <- mm:RepositoryToolsApp >> extern >> CouchdbServerAdminName orElse "alice"
+          adminPassword <- mm:RepositoryToolsApp >> extern >> CouchdbServerAdminPassword orElse "alice"
         in
           -- Give Tester credentials.
-          callEffect cdb:AddCredentials( url, "alice", "alice" )
+          callEffect cdb:AddCredentials( url, adminName, adminPassword )
           -- Remove cw_servers_and_repositories
           callEffect cdb:DeleteCouchdbDatabase( url, "cw_servers_and_repositories" )
           -- Remove cw_perspectives_domains
@@ -125,8 +129,12 @@ domain model://joopringelberg.nl#RepositoryTools@1.0
     state TesterExists = exists Tester
       on entry
         do for Tester
-          callEffect cdb:AddCredentials( "https://perspectives.domains/", "alice", "alice" )
-          callEffect cdb:AddCredentials( "https://joopringelberg.nl/", "alice", "alice" )
+          letA
+            adminName <- mm:RepositoryToolsApp >> extern >> CouchdbServerAdminName orElse "alice"
+            adminPassword <- mm:RepositoryToolsApp >> extern >> CouchdbServerAdminPassword orElse "alice"
+          in
+            callEffect cdb:AddCredentials( "https://perspectives.domains/", adminName, adminPassword )
+            callEffect cdb:AddCredentials( "https://joopringelberg.nl/", adminName, adminPassword )
 
     external
       state Success = (exists cm:MyCouchdbApp >> CouchdbServers) and 
