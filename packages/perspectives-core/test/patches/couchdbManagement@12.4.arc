@@ -1,4 +1,5 @@
 -- CouchdbManagement - Copyright Joop Ringelberg and Cor Baars 2021 - 2024
+-- model://perspectives.domains#xyfxpg3lzq@12.4
 
 domain model://perspectives.domains#CouchdbManagement@12.4
   use sys for model://perspectives.domains#System
@@ -1197,9 +1198,11 @@ domain model://perspectives.domains#CouchdbManagement@12.4
           do for Author once settled
             -- If BasedOnVersion is not set, the PDR will generate new CUIDs.
             ArcFeedback = callExternal p:ParseAndCompileArc( VersionedModelURI, ArcSource, context >> BasedOnVersion >> VersionedModelURI ) returns String
-            -- Even though we set LastChangeDT, state ProcessArc is not exited.
-            LastChangeDT = callExternal sensor:ReadSensor( "clock", "now" ) returns DateTime
-            MustUpload = true
+
+            once settled
+              -- Even though we set LastChangeDT, state ProcessArc is not exited.
+              LastChangeDT = callExternal sensor:ReadSensor( "clock", "now" ) returns DateTime
+              MustUpload = true
 
       state AfterSuccesfulParse = (ArcFeedback matches regexp "^OK") and MustUpload and (IsTheOnlyVersion or (exists context >> BasedOnVersion))
         -- NOTE. This state triggers GenerateYaml.
@@ -1210,9 +1213,12 @@ domain model://perspectives.domains#CouchdbManagement@12.4
               -- This will upload an empty Translations table, too. VersionedModelURI should be Stable.
               callEffect p:UploadToRepository( VersionedModelURI, 
                 callExternal util:ReplaceR( "bind publicrole.*in sys:MySystem", "", ArcSource ) returns String, context >> BasedOnVersion >> VersionedModelURI)
-              Build = Build + 1
-              MustUpload = false
-              GenerateYaml = true for context >> Translation
+              
+              once settled
+                Build = Build + 1
+                MustUpload = false
+                GenerateYaml = true for context >> Translation
+            
             notify Author
               "Version {External$Version} (build {Build}) has been uploaded to the repository for {binder Versions >> context >> Repository >> NameSpace >>= first}."
         
