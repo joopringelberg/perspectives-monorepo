@@ -53,7 +53,6 @@ import Perspectives.HiddenFunction (HiddenFunction)
 import Perspectives.Identifiers (buitenRol)
 import Perspectives.InstanceRepresentation (PerspectRol(..))
 import Perspectives.Instances.Builders (constructContext, createAndAddRoleInstance)
-import Perspectives.Instances.Environment (_pushFrame)
 import Perspectives.Instances.ObjectGetters (allRoleBinders, getFilledRoles) as OG
 import Perspectives.Instances.ObjectGetters (binding, context, roleType_)
 import Perspectives.Instances.Values (writePerspectivesFile)
@@ -61,7 +60,7 @@ import Perspectives.Logging (errorCompiler)
 import Perspectives.ModelDependencies (sysUser)
 import Perspectives.Persistent (getPerspectRol)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
-import Perspectives.PerspectivesState (addBinding, getVariableBindings)
+import Perspectives.PerspectivesState (addBinding, pushFrame, restoreFrame)
 import Perspectives.Query.QueryTypes (QueryFunctionDescription(..))
 import Perspectives.Query.UnsafeCompiler (compileFunction, getRoleInstances, role2context, role2propertyValue, role2role, role2string, typeTimeOnly)
 import Perspectives.Representation.ADT (allLeavesInADT)
@@ -321,10 +320,9 @@ compileAssignmentFromRole (BQD _ (BinaryCombinator SequenceF) f1 f2 _ _ _) = do
 compileAssignmentFromRole (UQD _ WithFrame f1 _ _ _) = do
   f1' <- compileAssignmentFromRole f1
   pure \c -> do
-    old <- lift $ getVariableBindings
-    void $ lift $ modify \s@{ variableBindings } -> s { variableBindings = (_pushFrame old) }
-    r <- f1' c
-    void $ lift $ modify \s@{ variableBindings } -> s { variableBindings = old }
+    old <- lift pushFrame
+    _ <- f1' c
+    lift $ restoreFrame old
     pure unit
 
 compileAssignmentFromRole (UQD _ (BindVariable varName) f1 _ _ _) = do

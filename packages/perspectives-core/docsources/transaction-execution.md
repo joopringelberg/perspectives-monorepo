@@ -406,3 +406,37 @@ Because `PendingSettledStack` push/pop already nests like a call stack (see §9)
 **Error handling and attribution.** A failure anywhere in the invoked chain propagates up to the generic `ExternalEffectFullFunction` error boundary in `Perspectives.CompileAssignment` / `Perspectives.CompileRoleAssignment`, which logs it and swallows it, exactly as for any other `callEffect` failure; the calling transaction is not aborted, and nothing already done deeper in the invoked chain is rolled back. The embedded transaction's `authoringRole` — and therefore the authoring role captured for its own `once settled` continuations — is the resolved *target* user role, not the calling action's authoring role.
 
 See `Perspectives.RunMonadPerspectivesTransaction` (`runMonadPerspectivesTransactionAwaitingSettlement`, `runEmbeddedIfNecessaryAwaitingSettlement`, `drainSettledFrame`, `runSettledEntryAwaitingSettlement`), `Perspectives.Extern.RunAction` (`runContextActionEffect`, `runRoleActionEffect`), and `Perspectives.Query.StatementCompiler` (the `RunContextAction` / `RunRoleAction` cases of `describeAssignmentStatement`).
+
+### 11. Variable bindings are private to a fiber
+
+Queries and actions use variable bindings: the PDR binds `currentcontext`, `currentactor`, `notifieduser` and `currentobject` before it runs a state's or action's effect, and `letA`/`letE` bind their own variables. These bindings live in an `Environment (Array String)` (`Perspectives.Instances.Environment`), a stack of frames: `pushFrame` opens a new scope, `addBinding` adds to the top frame, `lookupVariableBinding` searches from the top down, and `restoreFrame` returns to an earlier scope.
+
+**The bug (fixed 2026-10-06).** The environment used to be a single field, `variableBindings`, in `PerspectivesState`, and that state is shared by *every* fiber running against the PDR: API requests (including the calculated property getters that the GUI runs outside of any transaction), transactions forked by `forkTimedTransactions` (`once settled`, `after`, repeating), incoming post, the clocks, and so on. The transaction flag serialises *transactions*, but not the query evaluation that happens outside them. And the save/push/restore pattern (`withFrame`, `withFrame_` in the unsafe compiler, the `WithFrame` cases of the query interpreter and the assignment compilers, `runSettledTransaction` in Main.purs) spans `Aff` suspensions. So two fibers could interleave like this:
+
+1. fiber B pushes a frame (saving the environment as it is now);
+2. fiber A binds `currentcontext` (into B's frame, as it happens to be on top);
+3. B restores its saved environment — A's binding is gone, or an older, stale value for it is back.
+
+This surfaced in the browser during Reboot Universe: the `once settled` stages of `AddModel$External$CreateVersion` (repositoryTools) for one model wrote to the version role of *another* model that was being added concurrently, so Serialise and Utilities were never installed. In node the timing happened to be different, so the run succeeded.
+
+There was a second leak in the FFI: `ENV.empty` is a single, shared JavaScript object, and `ENV.addVariable` changes the top frame *in place*. A binding made without first pushing a frame was therefore written into one global object, visible to every fiber.
+
+**The fix.** The environment is no longer part of the state. The reader of `MonadPouchdb` (`Perspectives.Persistence.Types`) is now a `PouchdbContext`:
+
+```purescript
+type PouchdbContext f =
+  { state :: AVar (PouchdbState f)              -- shared by all fibers
+  , variableBindings :: Ref VariableBindings    -- private to this run
+  }
+```
+
+- `runMonadPouchdbWithState` (and therefore `runMonadPerspectives` / `runPerspectivesWithState`, the single way every fiber is started) creates a fresh `Ref` holding a fresh frame on top of `ENV.empty`. Two fibers therefore never share a frame object, even if they mutate it in place.
+- The `Parallel` instance gives each parallel branch its own `Ref` with a fresh frame on top of the parent's bindings.
+- `MonadAsk`/`MonadReader` still yield just the state `AVar`, so `Control.Monad.AvarMonadAsk` (`gets`, `modify`, …) and `HasPerspectivesState` are unaffected.
+- The binding functions in `Perspectives.PerspectivesState` (`getVariableBindings`, `setVariableBindings`, `addBinding`, `lookupVariableBinding`, `withFrame`, `pushFrame`, `restoreFrame`) read and write that `Ref` via `variableBindingsRef`. No code outside them touches the environment directly.
+
+**Consequence for deferred work.** A fiber now starts with *no* bindings at all. Work that is deferred to another fiber can therefore no longer (accidentally) see the scheduling fiber's bindings; it must capture what it needs when it is scheduled. `Perspectives.CompileTimeFacets` does this:
+- `scheduleSettledTransaction` (`once settled` time facets and later `letA` stages) captures `currentcontext`, `currentactor` and `notifieduser` (`contextVariableNames`) in addition to the `letA` variable names; `runSettledTransaction` (Main.purs) and `runSettledEntryAwaitingSettlement` rebind them in a new frame.
+- `after`, repeating (`Forever`) and `RepeatFor` time facets capture the same names and wrap the transaction with `withCapturedBindings`, which rebinds them in a new frame when the transaction eventually runs.
+
+See `Perspectives.Persistence.Types` (`PouchdbContext`, `runMonadPouchdbWithState`, `variableBindingsRef`), `Perspectives.PerspectivesState` (the variable binding functions), `Perspectives.CompileTimeFacets` (`contextVariableNames`, `captureBindings`, `withCapturedBindings`), and the regression tests in `test/variableBindings.purs` (part of `pnpm run test:layer1`).

@@ -29,7 +29,6 @@ module Perspectives.Query.UnsafeCompiler where
 
 import Control.Alt (void, (<|>))
 import Control.Alternative (guard)
-import Control.Monad.AvarMonadAsk (modify)
 import Control.Monad.Error.Class (class MonadError, catchError, throwError, try)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Writer (WriterT, tell)
@@ -58,7 +57,6 @@ import Perspectives.Identifiers (isExternalRole, isUrl)
 import Perspectives.InstanceRepresentation (PerspectRol(..))
 import Perspectives.Instances.Combinators (available_, exists, logicalAnd, logicalOr, not)
 import Perspectives.Instances.Combinators (conjunction, intersection, orElse) as Combinators
-import Perspectives.Instances.Environment (_pushFrame)
 import Perspectives.Instances.ObjectGetters (binding, binding_, completeRuntimeType, context, contextModelName, contextType, contextType_, externalRole, filledByCombinator, filledByOperator, fillsCombinator, fillsOperator, getActiveRoleStates_, getActiveStates_, getEnumeratedRoleInstances, getFilledRoles, getProperty, getRecursivelyFilledRoles', getUnlinkedRoleInstances, indexedContextName, indexedRoleName, roleModelName, roleType, roleType_)
 import Perspectives.Instances.Values (parseBool, parseNumber)
 import Perspectives.Logging (errorCompiler)
@@ -67,7 +65,7 @@ import Perspectives.Names (expandDefaultNamespaces, lookupIndexedContext, lookup
 import Perspectives.ObjectGetterLookup (lookupPropertyValueGetterByName, lookupRoleGetterByName, propertyGetterCacheInsert)
 import Perspectives.Parsing.Arc.Expression.RegExP (RegExP(..))
 import Perspectives.Persistent (getPerspectRol)
-import Perspectives.PerspectivesState (addBinding, addWarning, getPerspectivesUser, getVariableBindings, lookupVariableBinding)
+import Perspectives.PerspectivesState (addBinding, addWarning, getPerspectivesUser, lookupVariableBinding, pushFrame, restoreFrame)
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), Range, RoleInContext(..), domain, domain2PropertyRange, domain2contextType, domain2roleType, range, roleInContext2Role)
 import Perspectives.Representation.ADT (ADT(..), equalsOrSpecialises_)
 import Perspectives.Representation.CNF (toConjunctiveNormalForm)
@@ -677,10 +675,9 @@ addBinding_ varName computation ctxt = ArrayT do
 
 withFrame_ :: forall a b. (a ~~> b) -> a ~~> b
 withFrame_ computation ctxt = ArrayT do
-  old <- lift $ getVariableBindings
-  void $ lift $ modify \s@{ variableBindings } -> s { variableBindings = (_pushFrame old) }
+  old <- lift pushFrame
   r <- runArrayT $ computation ctxt
-  void $ lift $ modify \s@{ variableBindings } -> s { variableBindings = old }
+  lift $ restoreFrame old
   pure r
 
 lookup :: String -> String ~~> String

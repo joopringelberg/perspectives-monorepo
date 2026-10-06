@@ -138,7 +138,7 @@ module Perspectives.CoreTypes
 import Control.Monad.AvarMonadAsk (gets, modify)
 import Control.Monad.Error.Class (class MonadError, class MonadThrow)
 import Control.Monad.Except (ExceptT)
-import Control.Monad.Reader (ReaderT, ask, lift, runReaderT)
+import Control.Monad.Reader (ReaderT, ask, lift)
 import Control.Monad.Writer (WriterT, runWriterT)
 import Data.Array (cons, foldMap, foldl, foldr, head, union)
 import Data.Array (uncons) as Array
@@ -172,11 +172,10 @@ import Perspectives.DependencyTracking.Array.Trans (ArrayT(..), runArrayT)
 import Perspectives.DomeinFile (DomeinFile)
 import Perspectives.External.HiddenFunctionCache (HiddenFunctionDescription)
 import Perspectives.InstanceRepresentation (PerspectContext, PerspectRol)
-import Perspectives.Instances.Environment (Environment)
 import Perspectives.InvertedQuery (InvertedQuery)
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord)
 import Perspectives.Persistence.State (getSystemIdentifier)
-import Perspectives.Persistence.Types (PouchdbState, MonadPouchdb(..))
+import Perspectives.Persistence.Types (PouchdbState, MonadPouchdb, runMonadPouchdbWithState)
 import Perspectives.Persistent.ChangesFeed (EventSource)
 import Perspectives.Repetition (Duration)
 import Perspectives.Representation.Action (StartMoment)
@@ -245,8 +244,6 @@ type PerspectivesExtraState =
   , roleInstanceDeltasCache :: RoleInstanceDeltasCache
 
   , queryAssumptionRegister :: AssumptionRegister
-
-  , variableBindings :: Environment (Array String)
 
   , indexedRoles :: Object RoleInstance
 
@@ -544,8 +541,9 @@ instance Ord InformedAssumption where
 type MonadPerspectives = MonadPouchdb PerspectivesExtraState
 
 -- | Run a MonadPerspectives action given the state AVar.
+-- | The action gets its own, fresh variable bindings (they are not shared with other fibers).
 runMonadPerspectives :: forall a. MonadPerspectives a -> AVar PerspectivesState -> Aff a
-runMonadPerspectives (MonadPouchdb mp) rf = runReaderT mp rf
+runMonadPerspectives = runMonadPouchdbWithState
 
 type MP = MonadPerspectives
 

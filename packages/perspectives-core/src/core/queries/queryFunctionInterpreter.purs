@@ -24,7 +24,6 @@ module Perspectives.Query.Interpreter where
 
 import Control.Alternative (guard)
 import Control.Bind (join)
-import Control.Monad.AvarMonadAsk (modify)
 import Control.Monad.Error.Class (catchError, throwError)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Writer (WriterT, execWriterT, tell)
@@ -51,7 +50,6 @@ import Perspectives.HiddenFunction (HiddenFunction)
 import Perspectives.HumanReadableType (translateType)
 import Perspectives.Identifiers (isExternalRole)
 import Perspectives.Instances.Combinators (available', not_)
-import Perspectives.Instances.Environment (_pushFrame)
 import Perspectives.Instances.ObjectGetters (Filled_(..), Filler_(..), binding, binding_, completeRuntimeType, context, contextModelName, contextType, contextType_, externalRole, filledBy, fills, getActiveRoleStates_, getActiveStates_, getAllFilledRoles_, getEnumeratedRoleInstances, getFilledRoles, getProperty, getUnlinkedRoleInstances, indexedContextName, indexedRoleName, roleModelName, roleType, roleType_)
 import Perspectives.Instances.Values (bool2Value, parseNumber)
 import Perspectives.Logging (errorCompiler)
@@ -61,7 +59,7 @@ import Perspectives.Parsing.Arc.Expression.RegExP (RegExP(..))
 import Perspectives.Parsing.Arc.Position (arcParserStartPosition)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistent (getPerspectRol)
-import Perspectives.PerspectivesState (addBinding, addWarning, getPerspectivesUser, getVariableBindings, pushFrame, restoreFrame)
+import Perspectives.PerspectivesState (addBinding, addWarning, getPerspectivesUser, pushFrame, restoreFrame)
 import Perspectives.Query.Interpreter.Dependencies (Dependency(..), DependencyPath, addAsSupportingPaths, allPaths, appendPaths, applyValueFunction, composePaths, consOnMainPath, dependencyToValue, domain2Dependency, functionOnBooleans, singletonPath, snocOnMainPath, (#>>))
 import Perspectives.Query.QueryTypes (Domain(..), QueryFunctionDescription(..), RoleInContext(..), domain2PropertyRange, domain2roleType, range)
 import Perspectives.Query.UnsafeCompiler (compareRangeValues, lookup, mapDurationOperator, mapNumericOperator, performNumericOperation')
@@ -101,10 +99,9 @@ interpretUQD (UQD _ (BindVariable varName) f1 _ _ _) a = ArrayT do
   lift $ addBinding varName (toString <$> values)
   pure values
 interpretUQD (UQD _ WithFrame f1 _ _ _) a = do
-  old <- lift2MPQ getVariableBindings
-  void $ lift $ lift $ modify \s@{ variableBindings } -> s { variableBindings = (_pushFrame old) }
+  old <- lift2MPQ pushFrame
   x <- interpret f1 a
-  void $ lift $ lift $ modify \s@{ variableBindings } -> s { variableBindings = old }
+  lift2MPQ $ restoreFrame old
   pure x
 interpretUQD (UQD _ (UnaryCombinator ExistsF) f1 _ _ _) a = ArrayT do
   (r :: Array DependencyPath) <- runArrayT $ interpret f1 a
