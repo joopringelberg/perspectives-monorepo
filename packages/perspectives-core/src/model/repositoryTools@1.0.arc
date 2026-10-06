@@ -52,6 +52,8 @@ domain model://joopringelberg.nl#RepositoryTools@1.0
         only (CreateAndFill, RemoveContext)
       perspective on Tests >> binding >> context >> Tester
         only (Create, Fill)
+      perspective on extern
+        props (CouchdbServerAdminName, CouchdbServerAdminPassword) verbs (SetPropertyValue)
           
     -- To execute any test, run the action RunTest in the first PDR.
     -- To check if a test has succeeded, retrieve the value of TestSucceeded in the second PDR.
@@ -163,6 +165,9 @@ domain model://joopringelberg.nl#RepositoryTools@1.0
           CouchdbPort = "5987" for server
           AdminUserName = "alice" for server
           AdminPassword = "alice" for server
+
+          once settled
+            Name = "Perspectives Server" for server
 
   ------------------------------------------------------------------------------
   ---- CREATE REPOSITORY PERSPECTIVES.DOMAINS
