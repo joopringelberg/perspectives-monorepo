@@ -119,8 +119,8 @@ modelFileCompilationSuite testResults =
 -- |   ]
 modelFilePaths :: Array String
 modelFilePaths =
-  [ 
-    "src/model/AMQPtestModel@1.0.arc"
+  [ "src/model/AMQPtestModel@1.0.arc"
+  , "src/model/brokerServiceSignupTests@1.0.arc"
   ]
 
 -- | Directory where the PDR snapshot is cached between test runs.

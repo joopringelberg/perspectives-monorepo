@@ -12,13 +12,13 @@ import Data.Newtype (unwrap)
 import Data.Time.Duration (Milliseconds(..))
 import Effect (Effect)
 import Effect.Aff.Class (liftAff)
-import Perspectives.Persistence.Authentication (addCredentials)
 import Perspectives.Persistence.CouchdbFunctions (databaseExists, ensureSecurityDocument)
 import Perspectives.PerspectivesState (defaultRuntimeOptions)
 import Perspectives.Names (lookupIndexedContext)
 import Perspectives.Representation.TypeIdentifiers (IndexedContext(..))
 import Perspectives.Sidecar.ToStable (toStable)
 import Test.PDRInstance (noBus, pollUntil, testPouchdbUser, withPDRCached)
+import Test.LocalCouchdbTestSupport (addLocalCouchdbCredentials)
 import Test.PDRInstance.Types (runInPDR)
 import Test.RebootUniverse (rebootUniverseCompileTestModelConfiguration)
 import Test.SinglePDRScaffold (emptyLogConfiguration, executeModelTest, loadModel)
@@ -38,9 +38,7 @@ theSuite = suite "Big Bang database creation (local destructive test)" do
         , outputSnapshotDirectory = Nothing
         }
     withPDRCached (testPouchdbUser "alice") defaultRuntimeOptions Nothing noBus cfg.snapshotDirectory \pdr -> do
-      runInPDR pdr do
-        addCredentials "https://perspectives.domains/" "alice" "alice"
-        addCredentials "https://joopringelberg.nl/" "alice" "alice"
+      addLocalCouchdbCredentials pdr
       for_ cfg.testModelLoadMethods (loadModel pdr)
       testApp <- pollUntil 100 (Milliseconds 100.0) "Reboot test app to be installed" $
         runInPDR pdr do
