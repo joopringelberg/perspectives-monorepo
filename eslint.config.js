@@ -131,12 +131,12 @@ export default [
       'no-undef': 'warn'
     }
   },
-  // perspectives-rabbitmq-service and perspectives-sharedfilestorage: standalone
-  // CommonJS Node.js services (not bundled/transpiled), integrated from separate repos.
+  // CommonJS Node.js services and GitHub Actions scripts.
   {
     files:
       [ '**/packages/perspectives-rabbitmq-service/**/*.js'
       , '**/packages/perspectives-sharedfilestorage/**/*.js'
+      , '.github/scripts/weekly-report*.cjs'
       ],
     languageOptions: {
       sourceType: 'commonjs',
