@@ -669,8 +669,8 @@ domain model://perspectives.domains#CouchdbManagement@12.4
         -- WithCredentials$AuthorizedDomain
         -- As Admin, has a full perspective on Accounts.
 
-      -- If we fill Admin with a role that already has an AuthorizedDomain, we will still set AuthorizedDomain on the Admin role itself.
-      state IsFilled = (exists binding) and (not AuthorizedDomain == context >> extern >> RepositoryUrl) and context >> extern >> RepoHasDatabases
+      -- Keep database admin rights until the role is unfilled, not until AuthorizedDomain is set.
+      state IsFilled = (exists binding) and context >> extern >> RepoHasDatabases
         on entry
           do for ServerAdmin
             -- Only the CouchdbServer$Admin has a Create and Fill perspective on

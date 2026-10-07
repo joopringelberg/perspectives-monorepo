@@ -21,18 +21,21 @@ module Test.Parsing.Arc.ActionStages where
 
 import Prelude
 
-import Data.Array (concat, fromFoldable, length)
+import Data.Array (concat, fromFoldable, head, length)
 import Data.Either (Either(..))
 import Data.Foldable (any, for_)
+import Data.Maybe (Maybe(..))
+import Data.String (Pattern(..), joinWith, split)
+import Data.String.CodeUnits (drop)
 import Effect (Effect)
 import Effect.Aff (Aff)
-import Node.Encoding (Encoding(..))
+import Node.Encoding (Encoding(UTF8))
 import Node.FS.Aff (readTextFile)
 import Parsing.String (eof)
 import Perspectives.Parsing.Arc (domain, userRoleE)
 import Perspectives.Parsing.Arc.AST (ActionE(..), AutomaticEffectE(..), ContextActionE(..), ContextE(..), ContextPart(..), RoleE(..), RolePart(..), StateE(..), StateQualifiedPart(..))
 import Perspectives.Parsing.Arc.IndentParser (runIndentParser)
-import Perspectives.Parsing.Arc.Expression.AST (Step(..), SimpleStep(..))
+import Perspectives.Parsing.Arc.Expression.AST (BinaryStep(..), Operator(..), Step(..), SimpleStep(..), UnaryStep(..))
 import Perspectives.Parsing.Arc.Statement.AST (Assignment(..), LetStep(..), Statements(..))
 import Test.Unit (TestSuite, suite, test)
 import Test.Unit.Assert (assert, equal)
@@ -135,6 +138,53 @@ theSuite = suite "Action settlement stages" do
                 _ -> false
             )
             (automaticEffects root)
+
+  for_ [ "src/model/couchdbManagement@12.4.arc", "src/model/couchdbManagement.arc" ] \path ->
+    test (path <> " keeps repository admin rights after setting AuthorizedDomain") do
+      source <- readTextFile UTF8 path
+      roleSource <- case split (Pattern "    user Admin filledBy CouchdbServer$Admin\n") source of
+        [ _, rest ] -> case head (split (Pattern "\n      on exit ") rest) of
+          Just lifecycle -> pure $
+            "user Admin filledBy CouchdbServer$Admin\n"
+              <> joinWith "\n" (map (drop 4) (split (Pattern "\n") lifecycle))
+              <> "\n"
+          _ -> do
+            assert "Expected repository admin role exit handler" false
+            pure ""
+        _ -> do
+          assert "Expected repository admin role" false
+          pure ""
+      parsed <- runIndentParser roleSource (userRoleE <* eof)
+      case parsed of
+        Left err -> assert (show err) false
+        Right (RE (RoleE { roleParts })) -> case fromFoldable roleParts >>= adminLifecycleStates of
+          [ StateE { condition, stateParts } ] -> do
+            assert ("Admin lifecycle must depend only on binding and database readiness: " <> show condition) $
+              case condition of
+                Binary
+                  ( BinaryStep
+                      { operator: LogicalAnd _
+                      , left: Unary (Exists _ (Simple (Filler _ _)))
+                      , right: Binary
+                          ( BinaryStep
+                              { operator: Compose _
+                              , left: Simple (Context _)
+                              , right: Binary
+                                  ( BinaryStep
+                                      { operator: Compose _
+                                      , left: Simple (Extern _)
+                                      , right: Simple (ArcIdentifier _ "RepoHasDatabases")
+                                      }
+                                  )
+                              }
+                          )
+                      }
+                  ) -> true
+                _ -> false
+            equal [ "AuthorizedDomain" ] $
+              concatMapPropertyNames (fromFoldable stateParts >>= actionEffect)
+          _ -> assert "Expected one repository admin lifecycle state" false
+        _ -> assert "Expected repository admin role" false
 
   test "Big Bang settles server and repositories before running their consumers" do
     source <- readTextFile UTF8 "src/model/rebootUniverse@2.0.arc"
@@ -241,3 +291,30 @@ propertyName :: Assignment -> String
 propertyName = case _ of
   PropertyAssignment { propertyIdentifier } -> propertyIdentifier
   _ -> ""
+
+adminLifecycleStates :: RolePart -> Array StateE
+adminLifecycleStates = case _ of
+  ROLESTATE state -> findLifecycle state
+  _ -> []
+  where
+  findLifecycle state@(StateE { stateParts, subStates }) =
+    if any hasAdminGrant (fromFoldable stateParts >>= actionEffect) then [ state ]
+    else fromFoldable subStates >>= findLifecycle
+
+  hasAdminGrant = case _ of
+    Let (LetStep { stages }) -> any
+      ( case _ of
+          ExternalEffect { effectName } -> effectName == "cdb:MakeAdminOfDb"
+          _ -> false
+      )
+      (concat stages)
+    _ -> false
+
+concatMapPropertyNames :: Array Statements -> Array String
+concatMapPropertyNames effects = effects >>= case _ of
+  Statements assignments -> assignments >>= assignedProperty
+  Let (LetStep { stages }) -> concat stages >>= assignedProperty
+  where
+  assignedProperty assignment = case assignment of
+    PropertyAssignment { propertyIdentifier } -> [ propertyIdentifier ]
+    _ -> []
