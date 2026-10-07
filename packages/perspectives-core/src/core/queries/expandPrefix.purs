@@ -78,7 +78,7 @@ instance containsPrefixesSimpleStep :: ScanSymbols SimpleStep where
   scan (Filled pos s mcontext) = Filled pos <$> f s <*> (traverse f mcontext)
   scan (SpecialisesRoleType pos s) = SpecialisesRoleType pos <$> f s
   scan (IsInState pos s) = IsInState pos <$> f s
-  scan (PublicRole pos s) = PublicRole pos <$> f s
+  scan (PublicRole pos s mtype) = PublicRole pos <$> f s <*> traverse f mtype
   scan (PublicContext pos s) = PublicContext pos <$> f s
   scan (TypeTimeOnlyContext pos s) = TypeTimeOnlyContext pos <$> f s
   scan (TypeTimeOnlyEnumeratedRole pos s1 s2) = TypeTimeOnlyEnumeratedRole pos <$> f s1 <*> f s2
@@ -221,6 +221,17 @@ instance containsPrefixesAssignment :: ScanSymbols Assignment where
     eeffectName <- f effectName
     earguments <- traverse scan arguments
     pure $ ExternalEffect r { effectName = eeffectName, arguments = earguments }
+  scan (RunContextAction r@{ actionIdentifier, userRoleIdentifier, contextExpression }) = do
+    eactionIdentifier <- f actionIdentifier
+    euserRoleIdentifier <- f userRoleIdentifier
+    econtextExpression <- scan contextExpression
+    pure $ RunContextAction r { actionIdentifier = eactionIdentifier, userRoleIdentifier = euserRoleIdentifier, contextExpression = econtextExpression }
+  scan (RunRoleAction r@{ actionIdentifier, userRoleIdentifier, objectExpression, contextExpression }) = do
+    eactionIdentifier <- f actionIdentifier
+    euserRoleIdentifier <- f userRoleIdentifier
+    eobjectExpression <- scan objectExpression
+    econtextExpression <- scan contextExpression
+    pure $ RunRoleAction r { actionIdentifier = eactionIdentifier, userRoleIdentifier = euserRoleIdentifier, objectExpression = eobjectExpression, contextExpression = econtextExpression }
 
 instance containsPrefixesStateQualifiedPart :: ScanSymbols StateQualifiedPart where
   scan (R r) = R <$> (scan r)

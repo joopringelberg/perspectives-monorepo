@@ -28,7 +28,7 @@ import Data.Eq.Generic (genericEq)
 import Data.Foldable (intercalate)
 import Data.Generic.Rep (class Generic)
 import Data.List.Types (NonEmptyList)
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), maybe)
 import Data.Show.Generic (genericShow)
 import Perspectives.Parsing.Arc.Expression.RegExP (RegExP)
 import Perspectives.Parsing.Arc.Position (ArcPosition)
@@ -66,7 +66,7 @@ data SimpleStep
   | Translate ArcPosition
   | RegEx ArcPosition RegExP
 
-  | PublicRole ArcPosition String
+  | PublicRole ArcPosition String (Maybe String)
   | PublicContext ArcPosition String
 
   -- These step types are used in Perspectives.Parsing.Arc.PhaseThree for the standard variables.
@@ -207,7 +207,7 @@ instance prettyPrintSimpleStep :: PrettyPrint SimpleStep where
   prettyPrint' t (TypeTimeOnlyEnumeratedRole _ r c) = "TypeTimeOnlyEnumeratedRole " <> r <> " " <> c
   prettyPrint' t (TypeTimeOnlyCalculatedRole _ s) = "TypeTimeOnlyCalculatedRole " <> s
   prettyPrint' t (RegEx _ r) = show r
-  prettyPrint' t (PublicRole _ u) = "PublicRole " <> u
+  prettyPrint' t (PublicRole _ u mtype) = "PublicRole " <> u <> maybe "" (\typeName -> " (" <> typeName <> ")") mtype
   prettyPrint' t (PublicContext _ u) = "PublicContext " <> u
 
 derive instance Generic TypeCombination _

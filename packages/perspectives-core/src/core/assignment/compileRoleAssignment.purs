@@ -28,7 +28,7 @@ module Perspectives.CompileRoleAssignment where
 import Prelude
 
 import Control.Monad.AvarMonadAsk (gets, modify)
-import Control.Monad.Error.Class (throwError, try)
+import Control.Monad.Error.Class (catchError, throwError, try)
 import Control.Monad.Except (runExceptT)
 import Control.Monad.Trans.Class (lift)
 import Data.Array (catMaybes, concat, elem, filter, filterA, head, index, length, nub, singleton, union, unsafeIndex)
@@ -53,7 +53,6 @@ import Perspectives.HiddenFunction (HiddenFunction)
 import Perspectives.Identifiers (buitenRol)
 import Perspectives.InstanceRepresentation (PerspectRol(..))
 import Perspectives.Instances.Builders (constructContext, createAndAddRoleInstance)
-import Perspectives.Instances.Environment (_pushFrame)
 import Perspectives.Instances.ObjectGetters (allRoleBinders, getFilledRoles) as OG
 import Perspectives.Instances.ObjectGetters (binding, context, roleType_)
 import Perspectives.Instances.Values (writePerspectivesFile)
@@ -61,7 +60,7 @@ import Perspectives.Logging (errorCompiler)
 import Perspectives.ModelDependencies (sysUser)
 import Perspectives.Persistent (getPerspectRol)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
-import Perspectives.PerspectivesState (addBinding, getVariableBindings)
+import Perspectives.PerspectivesState (addBinding, pushFrame, restoreFrame)
 import Perspectives.Query.QueryTypes (QueryFunctionDescription(..))
 import Perspectives.Query.UnsafeCompiler (compileFunction, getRoleInstances, role2context, role2propertyValue, role2role, role2string, typeTimeOnly)
 import Perspectives.Representation.ADT (allLeavesInADT)
@@ -321,10 +320,9 @@ compileAssignmentFromRole (BQD _ (BinaryCombinator SequenceF) f1 f2 _ _ _) = do
 compileAssignmentFromRole (UQD _ WithFrame f1 _ _ _) = do
   f1' <- compileAssignmentFromRole f1
   pure \c -> do
-    old <- lift $ getVariableBindings
-    void $ lift $ modify \s@{ variableBindings } -> s { variableBindings = (_pushFrame old) }
-    r <- f1' c
-    void $ lift $ modify \s@{ variableBindings } -> s { variableBindings = old }
+    old <- lift pushFrame
+    _ <- f1' c
+    lift $ restoreFrame old
     pure unit
 
 compileAssignmentFromRole (UQD _ (BindVariable varName) f1 _ _ _) = do
@@ -345,50 +343,53 @@ compileAssignmentFromRole (MQD dom (ExternalEffectFullFunction functionName) arg
   (f :: HiddenFunction) <- pure $ unsafePartial $ fromJust $ lookupHiddenFunction functionName
   (argFunctions :: Array (RoleInstance ~~> String)) <- traverse (unsafeCoerce compileFunction) args
   pure
-    ( \c -> do
-        (values :: Array (Array String)) <- lift $ traverse (\g -> c ##= g) argFunctions
-        (nrOfParameters :: Int) <- pure $ unsafePartial (fromJust $ lookupHiddenFunctionNArgs functionName)
-        -- Notice that the number of parameters given ignores the default argument (context or role) that the function is applied to anyway.
-        -- If we do have an extra argument value, supply it as the last argument instead of r.
-        (lastArgument :: RoleInstance) <- case index values nrOfParameters of
-          Nothing -> pure c
-          Just v -> pure $ RoleInstance (unsafePartial (unsafeIndex v 0))
-        case unsafePartial $ fromJust $ lookupHiddenFunctionNArgs functionName of
-          0 -> (unsafeCoerce f :: RoleInstance -> MPT Unit) lastArgument
-          1 -> (unsafeCoerce f :: (Array String -> RoleInstance -> MPT Unit))
-            (unsafePartial (unsafeIndex values 0))
-            lastArgument
-          2 -> (unsafeCoerce f :: (Array String -> Array String -> RoleInstance -> MPT Unit))
-            (unsafePartial (unsafeIndex values 0))
-            (unsafePartial (unsafeIndex values 1))
-            lastArgument
-          3 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> RoleInstance -> MPT Unit))
-            (unsafePartial (unsafeIndex values 0))
-            (unsafePartial (unsafeIndex values 1))
-            (unsafePartial (unsafeIndex values 2))
-            lastArgument
-          4 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> Array String -> RoleInstance -> MPT Unit))
-            (unsafePartial (unsafeIndex values 0))
-            (unsafePartial (unsafeIndex values 1))
-            (unsafePartial (unsafeIndex values 2))
-            (unsafePartial (unsafeIndex values 3))
-            lastArgument
-          5 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> Array String -> Array String -> RoleInstance -> MPT Unit))
-            (unsafePartial (unsafeIndex values 0))
-            (unsafePartial (unsafeIndex values 1))
-            (unsafePartial (unsafeIndex values 2))
-            (unsafePartial (unsafeIndex values 3))
-            (unsafePartial (unsafeIndex values 4))
-            lastArgument
-          6 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> Array String -> Array String -> Array String -> RoleInstance -> MPT Unit))
-            (unsafePartial (unsafeIndex values 0))
-            (unsafePartial (unsafeIndex values 1))
-            (unsafePartial (unsafeIndex values 2))
-            (unsafePartial (unsafeIndex values 3))
-            (unsafePartial (unsafeIndex values 4))
-            (unsafePartial (unsafeIndex values 5))
-            c
-          _ -> throwError (error "Too many arguments for external core module: maximum is 6")
+    ( \c -> catchError
+        ( do
+            (values :: Array (Array String)) <- lift $ traverse (\g -> c ##= g) argFunctions
+            (nrOfParameters :: Int) <- pure $ unsafePartial (fromJust $ lookupHiddenFunctionNArgs functionName)
+            -- Notice that the number of parameters given ignores the default argument (context or role) that the function is applied to anyway.
+            -- If we do have an extra argument value, supply it as the last argument instead of r.
+            (lastArgument :: RoleInstance) <- case index values nrOfParameters of
+              Nothing -> pure c
+              Just v -> pure $ RoleInstance (unsafePartial (unsafeIndex v 0))
+            case unsafePartial $ fromJust $ lookupHiddenFunctionNArgs functionName of
+              0 -> (unsafeCoerce f :: RoleInstance -> MPT Unit) lastArgument
+              1 -> (unsafeCoerce f :: (Array String -> RoleInstance -> MPT Unit))
+                (unsafePartial (unsafeIndex values 0))
+                lastArgument
+              2 -> (unsafeCoerce f :: (Array String -> Array String -> RoleInstance -> MPT Unit))
+                (unsafePartial (unsafeIndex values 0))
+                (unsafePartial (unsafeIndex values 1))
+                lastArgument
+              3 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> RoleInstance -> MPT Unit))
+                (unsafePartial (unsafeIndex values 0))
+                (unsafePartial (unsafeIndex values 1))
+                (unsafePartial (unsafeIndex values 2))
+                lastArgument
+              4 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> Array String -> RoleInstance -> MPT Unit))
+                (unsafePartial (unsafeIndex values 0))
+                (unsafePartial (unsafeIndex values 1))
+                (unsafePartial (unsafeIndex values 2))
+                (unsafePartial (unsafeIndex values 3))
+                lastArgument
+              5 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> Array String -> Array String -> RoleInstance -> MPT Unit))
+                (unsafePartial (unsafeIndex values 0))
+                (unsafePartial (unsafeIndex values 1))
+                (unsafePartial (unsafeIndex values 2))
+                (unsafePartial (unsafeIndex values 3))
+                (unsafePartial (unsafeIndex values 4))
+                lastArgument
+              6 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> Array String -> Array String -> Array String -> RoleInstance -> MPT Unit))
+                (unsafePartial (unsafeIndex values 0))
+                (unsafePartial (unsafeIndex values 1))
+                (unsafePartial (unsafeIndex values 2))
+                (unsafePartial (unsafeIndex values 3))
+                (unsafePartial (unsafeIndex values 4))
+                (unsafePartial (unsafeIndex values 5))
+                c
+              _ -> throwError (error "Too many arguments for external core module: maximum is 6")
+        )
+        (\e -> errorCompiler $ "Error for ExternalEffectFullFunction (role instance): " <> show e)
     )
 
 compileAssignmentFromRole (MQD dom (ExternalDestructiveFunction functionName) args _ _ _) = do

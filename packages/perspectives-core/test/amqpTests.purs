@@ -39,7 +39,7 @@ import Effect.Class (liftEffect)
 import Effect.Ref (Ref, new, read, write)
 import Effect.Unsafe (unsafePerformEffect)
 import Perspectives.CoreTypes (LogLevel(..), LogTopic(..))
-import Test.Layer3Scaffold (LogConfiguration, ModelTest, SynchronisationModelConfiguration, SynchronisationResults)
+import Test.Layer3Scaffold (LogConfiguration, ModelTest, SynchronisationModelConfiguration, SynchronisationResults, TestModelLoadMethod(..))
 import Test.Layer3Scaffold (getSynchronisationResultsOverAMQP) as Layer3Scaffold
 import Test.Unit (TestSuite, suite, test)
 import Test.Unit.Assert (assert)
@@ -81,6 +81,7 @@ synchronisationTestModelConfiguration =
   , snapshotDirAlice: "test/pdr-snapshot/layer3-clean/alice"
   , snapshotDirBob: "test/pdr-snapshot/layer3-clean/bob"
   , testModel
+  , testModelLoadMethod: LoadModelFromRepository
   , indexedTestContext
   , testAppManager
   , testAppFollowerType

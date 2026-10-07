@@ -23,15 +23,15 @@
 module Perspectives.Representation.QueryFunction where
 
 import Control.Monad.Error.Class (throwError)
-import Data.Either (Either(..))
 import Data.List.NonEmpty (singleton)
+import Data.Maybe (Maybe(..))
 import Foreign (ForeignError(..))
 import Perspectives.Parsing.Arc.Expression.RegExP (RegExP)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..))
 import Perspectives.Representation.Range (Range)
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
 import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedPropertyType, EnumeratedRoleType, PropertyType, RoleType)
-import Prelude (class Eq, class Ord, class Show, Ordering(..), bind, compare, eq, flip, pure, show, ($), (&&), (<$>), (<*>), (<>), (<<<))
+import Prelude (class Eq, class Ord, class Show, Ordering(..), bind, compare, eq, flip, pure, show, ($), (&&), (<$>), (<*>), (<>), (==), (<<<))
 import Simple.JSON (class ReadForeign, class WriteForeign, read', readJSON', writeImpl, writeJSON)
 
 type VariableName = String
@@ -373,7 +373,7 @@ data QueryFunction
   | ContextIndividual ContextInstance
 
   | PublicContext ContextInstance
-  | PublicRole RoleInstance
+  | PublicRole RoleInstance (Maybe String)
 
   | CreateContext ContextType RoleType
   | CreateRootContext ContextType
@@ -444,7 +444,7 @@ instance showQueryFunction :: Show QueryFunction where
   show (ContextIndividual contextInstance) = "ContextIndividual " <> show contextInstance
 
   show (PublicContext contextInstance) = "PublicContext " <> show contextInstance
-  show (PublicRole roleInstance) = "PublicRole " <> show roleInstance
+  show (PublicRole roleInstance _) = "PublicRole " <> show roleInstance
 
   show (CreateContext contextType roleType) = "CreateContext " <> show contextType <> " " <> show roleType
   show (CreateRootContext contextType) = "CreateRootContext " <> show contextType
@@ -515,7 +515,7 @@ instance eqQueryFunction :: Eq QueryFunction where
   eq (ContextIndividual a) (ContextIndividual b) = eq a b
 
   eq (PublicContext a) (PublicContext b) = eq a b
-  eq (PublicRole a) (PublicRole b) = eq a b
+  eq (PublicRole a assertedType) (PublicRole b assertedType') = eq a b && eq assertedType assertedType'
 
   eq (CreateContext a p) (CreateContext b q) = eq a b && eq p q
   eq (CreateRootContext a) (CreateRootContext b) = eq a b
@@ -590,7 +590,13 @@ instance writeForeignQueryFunction :: WriteForeign QueryFunction where
   writeImpl (ContextIndividual contextInstance) = writeImpl { constructor: "ContextIndividual", arg1: writeJSON contextInstance, arg2: "" }
 
   writeImpl (PublicContext contextInstance) = writeImpl { constructor: "PublicContext", arg1: writeJSON contextInstance, arg2: "" }
-  writeImpl (PublicRole roleInstance) = writeImpl { constructor: "PublicRole", arg1: writeJSON roleInstance, arg2: "" }
+  writeImpl (PublicRole roleInstance assertedType) = writeImpl
+    { constructor: "PublicRole"
+    , arg1: writeJSON roleInstance
+    , arg2: case assertedType of
+        Nothing -> ""
+        Just typeAssertion -> typeAssertion
+    }
 
   writeImpl (CreateContext contextType roleType) = writeImpl { constructor: "CreateContext", arg1: writeJSON contextType, arg2: writeJSON roleType }
   writeImpl (CreateRootContext contextType) = writeImpl { constructor: "CreateRootContext", arg1: writeJSON contextType, arg2: "" }
@@ -664,7 +670,10 @@ instance readForeignQueryFunction :: ReadForeign QueryFunction where
       "RoleIndividual", roleInstance, _ -> RoleIndividual <<< RoleInstance <$> readJSON' roleInstance
       "ContextIndividual", contextInstance, _ -> ContextIndividual <<< ContextInstance <$> readJSON' contextInstance
       "PublicContext", contextInstance, _ -> PublicContext <<< ContextInstance <$> readJSON' contextInstance
-      "PublicRole", roleInstance, _ -> PublicRole <<< RoleInstance <$> readJSON' roleInstance
+      "PublicRole", roleInstance, assertedType -> do
+        role <- RoleInstance <$> readJSON' roleInstance
+        if assertedType == "" then pure $ PublicRole role Nothing
+        else pure $ PublicRole role (Just assertedType)
       "CreateContext", contextType, roleType -> CreateContext <$> readJSON' contextType <*> readJSON' roleType
       "CreateRootContext", contextType, _ -> CreateRootContext <$> (readJSON' contextType)
       "CreateContext_", contextType, _ -> CreateContext_ <$> (readJSON' contextType)
@@ -731,7 +740,10 @@ instance ordQueryFunction :: Ord QueryFunction where
   compare (ContextIndividual contextInstance) (ContextIndividual contextInstance') = compare contextInstance contextInstance'
 
   compare (PublicContext contextInstance) (PublicContext contextInstance') = compare contextInstance contextInstance'
-  compare (PublicRole roleInstance) (PublicRole roleInstance') = compare roleInstance roleInstance'
+  compare (PublicRole roleInstance assertedType) (PublicRole roleInstance' assertedType') =
+    case compare roleInstance roleInstance' of
+      EQ -> compare assertedType assertedType'
+      ordering -> ordering
 
   compare (CreateContext contextType roleType) (CreateContext contextType' roleType') = compare contextType contextType'
   compare (CreateRootContext contextType) (CreateRootContext contextType') = compare contextType contextType'

@@ -79,7 +79,7 @@ import Perspectives.Representation.QueryFunction (FunctionName(..), isFunctional
 import Perspectives.Representation.Range (Duration_(..), Range(..), isDate, isPDuration, isPMonth, isTime, isTimeDuration)
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..), bool2threeValued, pessimistic)
 import Perspectives.Representation.ThreeValuedLogic (and, or) as THREE
-import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..))
+import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), externalRoleType_)
 import Perspectives.Representation.TypeIdentifiers (RoleKind(..)) as RTI
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.Sidecar.ToReadable (toReadable)
@@ -448,10 +448,19 @@ compileSimpleStep currentDomain s@(ArcIdentifier pos ident) = do
                           else throwError $ NotUniquelyIdentifyingPropertyType pos (ENP $ EnumeratedPropertyType ident) pts
                     otherwise -> (lift2 $ humanizePerspectivesError $ DomainTypeRequired "context or role" currentDomain pos (endOf (Simple s))) >>= throwError
 
-compileSimpleStep currentDomain (PublicRole pos ident) = do
+compileSimpleStep currentDomain (PublicRole pos ident Nothing) = do
   rType <- lift2 $ roleType_ (RoleInstance ident)
   cType <- lift2 $ enumeratedRoleContextType rType
-  pure $ SQD currentDomain (QF.PublicRole (RoleInstance ident)) (RDOM $ UET $ RoleInContext { context: cType, role: rType }) True True
+  pure $ SQD currentDomain (QF.PublicRole (RoleInstance ident) Nothing) (RDOM $ UET $ RoleInContext { context: cType, role: rType }) True True
+
+compileSimpleStep currentDomain (PublicRole pos ident (Just declaredType)) = do
+  expectedType <- resolvePublicRoleType pos declaredType
+  pure $ SQD
+    currentDomain
+    (QF.PublicRole (RoleInstance ident) (Just $ writeJSON expectedType))
+    (RDOM expectedType)
+    True
+    True
 
 compileSimpleStep currentDomain (PublicContext pos ident) = do
   rType <- lift2 $ contextType_ (ContextInstance ident)
@@ -698,6 +707,23 @@ compileSimpleStep currentDomain (Me _) = pure $ SQD currentDomain (QF.DataTypeGe
   )
   True
   True
+
+-- | Resolve an asserted public-role type without retrieving the public resource.
+-- | A context type denotes its External role; an enumerated role type denotes itself.
+resolvePublicRoleType :: ArcPosition -> String -> PhaseThree (ADT RoleInContext)
+resolvePublicRoleType pos declaredType = do
+  declaredRole <- lift2 $ try $ getEnumeratedRole (EnumeratedRoleType declaredType)
+  case declaredRole of
+    Right (EnumeratedRole { id, context }) ->
+      pure $ UET $ RoleInContext { context, role: id }
+    Left _ -> do
+      declaredContext <- lift2 $ try $ getContext (ContextType declaredType)
+      case declaredContext of
+        Right _ -> pure $ UET $ RoleInContext
+          { context: ContextType declaredType
+          , role: EnumeratedRoleType $ externalRoleType_ declaredType
+          }
+        Left _ -> throwError $ UnknownRole pos declaredType
 
 compileUnaryStep :: Domain -> UnaryStep -> FD
 compileUnaryStep currentDomain (LogicalNot pos s) = do

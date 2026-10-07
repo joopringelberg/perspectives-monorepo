@@ -84,6 +84,22 @@ export default defineConfig(async ({ mode }) => {
     }
   }
 
+  // Rollup ignores sourceMappingURL comments of input files; load the map so it is chained to the original sources.
+  const loadInputSourcemaps = {
+    name: 'load-input-sourcemaps',
+    enforce: 'pre' as const,
+    apply: 'build' as const,
+    load(id: string) {
+      if (!/perspectives-react\/dist\/[^/]+\.js$/.test(id)) return null
+      const mapFile = `${id}.map`
+      if (!fs.existsSync(mapFile)) return null
+      return {
+        code: fs.readFileSync(id, 'utf8'),
+        map: JSON.parse(fs.readFileSync(mapFile, 'utf8')),
+      }
+    }
+  }
+
   return {
     // Suppress esbuild’s “ignored directive” warnings globally (build transforms)
     esbuild: {
@@ -120,6 +136,7 @@ export default defineConfig(async ({ mode }) => {
     },
     plugins: [
       silenceUseClient,               // fallback (keeps tree clean if logOverride isn’t honored)
+      loadInputSourcemaps,
       generateServiceWorkerDev,
       generateServiceWorkerBuild,
     ],
@@ -182,7 +199,7 @@ export default defineConfig(async ({ mode }) => {
     define: {
       __MYCONTEXTS_VERSION__: JSON.stringify(thepackage.version),
       __PDR_VERSION__: JSON.stringify(corepackage.version),
-      __STARTPAGE__: JSON.stringify("pub:https://perspectives.domains/cw_ro6a1vrf9y/#wxl4tmx54i$External"),
+      __STARTPAGE__: JSON.stringify("pub:https://perspectives.domains/cw_bigbangsdatabase/#StartPage$External"),
       __MyContextsContainer__: JSON.stringify("root"),
       __PAGEDISPATCHER_VERSION__: pageDispatcherVersion,
       __BUILD_ID__: JSON.stringify(buildId),

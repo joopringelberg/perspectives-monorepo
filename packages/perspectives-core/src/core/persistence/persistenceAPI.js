@@ -91,7 +91,7 @@ export function createDatabaseImpl( databaseName )
     // NOTE. We have to decide in coding time whether to include the browser or the Node version.
     // Node doesn't know fetch.
     // Outcomment when running Node!
-    , {fetch: captureFetch}
+    , {fetch: captureFetch, skip_setup: true}
     );
 }
 
@@ -102,7 +102,8 @@ export function createRemoteDatabaseImpl( databaseName, couchdbUrl )
     // NOTE. We have to decide in coding time whether to include the browser or the Node version.
     // Node doesn't know fetch.
     // Outcomment when running Node!
-    , fetch: captureFetch 
+    , fetch: captureFetch
+    , skip_setup: true
     });
   return new P(databaseName);
 }
@@ -132,28 +133,6 @@ export function deleteDatabaseImpl ( database ) {
 export function documentsInDatabaseImpl( database, options ) {
   return function (onError, onSuccess) {
     database.allDocs( options, function(err, response)
-      {
-        if (err != null)
-        {
-          onError( convertPouchError(err) ); // invoke the error callback in case of an error
-        }
-        else
-        {
-          onSuccess(response); // invoke the success callback with the reponse
-        }
-      });
-
-    // Return a canceler, which is just another Aff effect.
-    return function (cancelError, cancelerError, cancelerSuccess) {
-      // No way to cancel the request.
-      cancelerSuccess(); // invoke the success callback for the canceler
-    };
-  };
-};
-
-export function databaseInfoImpl ( database ) {
-  return function (onError, onSuccess) {
-    database.info( function(err, response)
       {
         if (err != null)
         {

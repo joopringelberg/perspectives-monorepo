@@ -136,12 +136,14 @@ model://perspectives.domains#zjuzxbqpgc:
                   **NOTE**: Most people will **not** manage broker services, but use the ones that are available."
                 nl: "### Beheerde broker services\n
                    Dit zijn de broker services die je beheert. Je kunt nieuwe toevoegen, bestaande verwijderen,\n
-                   of hun opslaglocatie wijzigen. Voeg een lege rol instantie toe en specificeer vervolgens de opslaglocatie\n
+                   of hun opslaglocatie wijzigen. Voeg een lege rol instantie toe. Wil je de identifier van de BrokerService\n
+                   bepalen, vul dan eerst de `Gegeven identifier` in. Pas daarna specificeer je de opslaglocatie\n
                    (die een Bespoke Database identificeert). Na het opslaan wordt de broker service context aangemaakt.\n
                    **LET OP**: De meeste mensen zullen broker services **niet** beheren, maar de beschikbare gebruiken."
                 en: "### Managed broker services\n
                    These are the broker services you manage. You can add new ones, remove existing ones,\n
-                   or change their storage location. Add an empty role instance, then specify its storage location\n
+                   or change their storage location. Add an empty role instance. If you want to determine the identifier of the BrokerService,\n
+                   fill in the `Given identifier` first. Only after that specify its storage location\n
                    (identifying a Bespoke Database). Upon saving, the broker service context will be created.\n
                    **NOTE**: Most people will **not** manage broker services, but use the ones that are available."
       contextroles:

@@ -29,6 +29,7 @@ import Control.Monad.Error.Class (throwError)
 import Control.Monad.Trans.Class (lift)
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
+import Data.Tuple (Tuple(..))
 import Effect.Exception (error)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CompileActionEffect (compileActionEffectWith)
@@ -39,7 +40,7 @@ import Perspectives.HumanReadableType (translateType)
 import Perspectives.Identifiers (isTypeUri)
 import Perspectives.Instances.Me (getMeInRoleAndContext)
 import Perspectives.Instances.ObjectGetters (roleType_)
-import Perspectives.Logging (debugState)
+import Perspectives.Logging (debugAction)
 import Perspectives.PerspectivesState (addBinding, pushFrame, restoreFrame)
 import Perspectives.Representation.Action (Action(..)) as ACTION
 import Perspectives.Representation.Class.Role (getRoleType)
@@ -57,11 +58,16 @@ import Perspectives.Types.ObjectGetters (findPerspective, findPerspectiveForObje
 -- | Throws an error when the action or the user role instance cannot be found.
 runContextAction :: String -> String -> String -> MonadPerspectivesTransaction Unit
 runContextAction user actionName context = do
-  userRoleType <- lift $ getRoleType user
-  maction <- lift $
-    if isTypeUri actionName then getContextAction actionName userRoleType
-    else getContextActionFromUnqualifiedName actionName userRoleType
-  muserRoleInstance <- lift ((ContextInstance context) ##> getMeInRoleAndContext userRoleType)
+  declaredUserRoleType <- lift $ getRoleType user
+  muserRoleInstance <- lift ((ContextInstance context) ##> getMeInRoleAndContext declaredUserRoleType)
+  maction' <- lift $ findAction declaredUserRoleType
+  -- The declared user role type may be a generalisation (e.g. when the context is only statically known
+  -- by an aspect) that lacks the action. Then dispatch on the actual type of the user role instance.
+  Tuple userRoleType maction <- case maction', muserRoleInstance of
+    Nothing, Just userInstance -> do
+      instanceType <- lift $ ENR <$> roleType_ userInstance
+      Tuple instanceType <$> lift (findAction instanceType)
+    _, _ -> pure $ Tuple declaredUserRoleType maction'
   case muserRoleInstance, maction of
     Just userInstance, Just (ACTION.Action { qfd: action }) -> do
       oldFrame <- lift $ pushFrame
@@ -69,7 +75,7 @@ runContextAction user actionName context = do
       lift $ addBinding "currentactor" [ unwrap userInstance ]
       updater <- lift $ compileActionEffectWith compileAssignment action userRoleType Nothing
       readableUserRoleType <- lift $ toReadable userRoleType
-      lift $ debugState ("Executing context action '" <> actionName <> "' for user role type '" <> show readableUserRoleType <> "' in context '" <> context <> "'.")
+      lift $ debugAction ("Executing context action '" <> actionName <> "' for user role type '" <> show readableUserRoleType <> "' in context '" <> context <> "'.")
       updater (ContextInstance context)
       lift $ restoreFrame oldFrame
     Nothing, _ -> do
@@ -86,6 +92,10 @@ runContextAction user actionName context = do
             <> "' and action name '"
             <> actionName
             <> "'."
+  where
+  findAction rt =
+    if isTypeUri actionName then getContextAction actionName rt
+    else getContextActionFromUnqualifiedName actionName rt
 
 -- | Execute a perspective action on behalf of an authoring role in a context instance.
 -- | Parameters:
@@ -116,7 +126,7 @@ runAction authoringRole perspectiveId actionName context object = do
       updater <- lift $ compileActionEffectWith compileAssignmentFromRole action authoringRole Nothing
       readableAuthoringRole <- lift $ toReadable authoringRole
       readableActionName <- lift $ translateType (ActionIdentifier actionName)
-      lift $ debugState ("Executing perspective action '" <> readableActionName <> "' for authoring role type '" <> show readableAuthoringRole <> "' in context '" <> context <> "'.")
+      lift $ debugAction ("Executing perspective action '" <> readableActionName <> "' for authoring role type '" <> show readableAuthoringRole <> "' in context '" <> context <> "'.")
       updater (RoleInstance object)
       lift $ restoreFrame oldFrame
     _, _ -> do
@@ -154,7 +164,7 @@ runActionForObject authoringRole actionName context object = do
       updater <- lift $ compileActionEffectWith compileAssignmentFromRole action authoringRole Nothing
       readableAuthoringRole <- lift $ toReadable authoringRole
       readableActionName <- lift $ translateType (ActionIdentifier actionName)
-      lift $ debugState ("Executing perspective action '" <> readableActionName <> "' for authoring role type '" <> show readableAuthoringRole <> "' in context '" <> context <> "' on object '" <> object <> "'.")
+      lift $ debugAction ("Executing perspective action '" <> readableActionName <> "' for authoring role type '" <> show readableAuthoringRole <> "' in context '" <> context <> "' on object '" <> object <> "'.")
       updater (RoleInstance object)
       lift $ restoreFrame oldFrame
     _, _ -> do

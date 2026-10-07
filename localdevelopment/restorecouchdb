@@ -1,0 +1,304 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Restore a backup made by backupcouchdb into the local macOS
+# "Apache CouchDB 3.app" installation. See README.md.
+
+COUCHDB_APP="${COUCHDB_APP:-/Applications/Apache CouchDB 3.app}"
+COUCHDB_LOCAL_INI="${COUCHDB_LOCAL_INI:-$HOME/Library/Preferences/couchdb2-local.ini}"
+COUCHDB_URL="${COUCHDB_URL:-http://127.0.0.1:5984}"
+WITH_CONFIG=false
+RESTART=true
+ASSUME_YES=false
+FORCE=false
+TIMEOUT_SECS=60
+
+APP_NAME=$(basename "$COUCHDB_APP" .app)
+CORE_DIR="$COUCHDB_APP/Contents/Resources/couchdbx-core"
+CORE_ETC="$CORE_DIR/etc"
+
+print_usage() {
+  cat <<USAGE
+Usage: $0 [--with-config] [--no-restart] [--yes] [--force] BACKUP_DIR
+
+Restores the database files and indexes of a backup made by backupcouchdb
+(BACKUP_DIR is a couchdb-<timestamp> directory).
+
+The backup is verified first. CouchDB is then stopped, the current data
+directory is moved aside to <dir>.before-restore-<timestamp>, the backup is
+copied into place and verified, and CouchDB is restarted. If anything fails
+after the move, the original data directory is put back.
+
+Options:
+  --with-config   Also restore the local ini ($(basename "$COUCHDB_LOCAL_INI"));
+                  the current one is kept as <ini>.before-restore-<timestamp>
+  --no-restart    Leave CouchDB stopped after the restore
+  --yes           Do not ask for confirmation
+  --force         Restore despite a node name or CouchDB version mismatch
+  -h, --help      Show this help
+
+Environment overrides: COUCHDB_APP, COUCHDB_LOCAL_INI, COUCHDB_URL.
+USAGE
+}
+
+fail() { echo "Error: $*" >&2; exit 1; }
+
+BACKUP_DIR=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --with-config) WITH_CONFIG=true; shift ;;
+    --no-restart) RESTART=false; shift ;;
+    --yes) ASSUME_YES=true; shift ;;
+    --force) FORCE=true; shift ;;
+    -h|--help) print_usage; exit 0 ;;
+    -*) echo "Unknown argument: $1" >&2; print_usage; exit 2 ;;
+    *) [[ -z "$BACKUP_DIR" ]] || { echo "Only one backup directory allowed" >&2; exit 2; }
+       BACKUP_DIR=$1; shift ;;
+  esac
+done
+[[ -n "$BACKUP_DIR" ]] || { print_usage; exit 2; }
+
+[[ -d "$COUCHDB_APP" ]] || fail "CouchDB app not found: $COUCHDB_APP"
+[[ -f "$COUCHDB_LOCAL_INI" ]] || fail "Local CouchDB configuration not found: $COUCHDB_LOCAL_INI"
+[[ -d "$BACKUP_DIR" ]] || fail "Backup directory not found: $BACKUP_DIR"
+BACKUP_DIR=$(cd "$BACKUP_DIR" && pwd -P)
+case "$(basename "$BACKUP_DIR")" in
+  .incomplete-*) fail "$BACKUP_DIR is an incomplete backup" ;;
+esac
+for required in MANIFEST.txt SHA256SUMS data; do
+  [[ -e "$BACKUP_DIR/$required" ]] || fail "Not a backupcouchdb backup (missing $required): $BACKUP_DIR"
+done
+BACKUP_INI="$BACKUP_DIR/config/$(basename "$COUCHDB_LOCAL_INI")"
+if [[ "$WITH_CONFIG" == true ]]; then
+  [[ -f "$BACKUP_INI" ]] || fail "Backup contains no $(basename "$COUCHDB_LOCAL_INI")"
+fi
+
+# Print the value of KEY in section [couchdb]; the last occurrence wins.
+ini_value() {
+  awk -v key="$1" '
+    /^[[:space:]]*\[/ { in_section = ($0 ~ /^[[:space:]]*\[couchdb\][[:space:]]*$/); next }
+    in_section {
+      line = $0
+      sub(/^[[:space:]]+/, "", line)
+      if (index(line, key) == 1) {
+        rest = substr(line, length(key) + 1)
+        if (rest ~ /^[[:space:]]*=/) {
+          sub(/^[[:space:]]*=[[:space:]]*/, "", rest)
+          sub(/[[:space:]]+$/, "", rest)
+          value = rest
+        }
+      }
+    }
+    END { print value }
+  ' "${@:2}"
+}
+
+# The local ini overrides default.ini, mirroring CouchDB's configuration chain.
+# Prints the configured directory with its parent resolved physically; the
+# directory itself need not exist.
+configured_dir() {
+  local value parent
+  value=$(ini_value "$1" "$CORE_ETC/default.ini" "$2")
+  [[ -n "$value" ]] || fail "No $1 configured in $2"
+  [[ "$value" == /* ]] || value="$CORE_DIR/$value"
+  value=${value%/}
+  parent=$(dirname "$value")
+  [[ -d "$parent" ]] || fail "Parent directory of $1 does not exist: $parent"
+  printf '%s/%s\n' "$(cd "$parent" && pwd -P)" "$(basename "$value")"
+}
+
+DATA_DIR=$(configured_dir database_dir "$COUCHDB_LOCAL_INI")
+INDEX_DIR=$(configured_dir view_index_dir "$COUCHDB_LOCAL_INI")
+if [[ "$WITH_CONFIG" == true ]]; then
+  # Restoring the ini must not move the data elsewhere than where we restore it.
+  [[ "$(configured_dir database_dir "$BACKUP_INI")" == "$DATA_DIR" \
+    && "$(configured_dir view_index_dir "$BACKUP_INI")" == "$INDEX_DIR" ]] \
+    || fail "The backup's ini configures other data directories than the current one"
+fi
+[[ -d "$BACKUP_DIR/index" || "$INDEX_DIR" == "$DATA_DIR" ]] \
+  || fail "view_index_dir is separate from database_dir, but the backup has no index/ directory"
+[[ ! -d "$BACKUP_DIR/index" || "$INDEX_DIR" != "$DATA_DIR" ]] \
+  || fail "The backup has a separate index/ directory, but view_index_dir equals database_dir"
+for target in "$DATA_DIR" "$INDEX_DIR"; do
+  case "$BACKUP_DIR/" in
+    "$target"/*) fail "Backup directory must be outside $target" ;;
+  esac
+done
+
+manifest_value() { sed -n "s/^$1:[[:space:]]*//p" "$BACKUP_DIR/MANIFEST.txt"; }
+BACKUP_VERSION=$(manifest_value "CouchDB version")
+BACKUP_NODE=$(manifest_value "Erlang node name")
+BACKUP_MODE=$(manifest_value "Mode")
+BACKUP_CREATED=$(manifest_value "Created")
+
+couchdb_up() { /usr/bin/curl -fsS --max-time 2 "$COUCHDB_URL/_up" >/dev/null 2>&1; }
+beam_pids() { pgrep -f "$CORE_DIR/.*beam\.smp" || true; }
+beam_running() { [[ -n "$(beam_pids)" ]]; }
+app_pids() { pgrep -f "$COUCHDB_APP/Contents/MacOS/" || true; }
+app_running() { [[ -n "$(app_pids)" ]]; }
+
+# Wait until the predicate function given as $1 fails, at most TIMEOUT_SECS.
+wait_while() {
+  local waited=0
+  while "$1"; do
+    (( waited < TIMEOUT_SECS )) || return 1
+    sleep 1
+    waited=$((waited + 1))
+  done
+}
+
+CURRENT_VERSION=$(/usr/bin/curl -fsS --max-time 2 "$COUCHDB_URL/" 2>/dev/null \
+  | sed -n 's/.*"version":"\([^"]*\)".*/\1/p' || true)
+CURRENT_NODE=$(awk '$1 == "-name" { print $2 }' "$CORE_ETC/vm.args" 2>/dev/null || true)
+
+mismatch() {
+  if [[ "$FORCE" == true ]]; then
+    echo "Warning: $*" >&2
+  else
+    fail "$* (use --force to restore anyway)"
+  fi
+}
+if [[ -n "$CURRENT_NODE" && "$BACKUP_NODE" != "unknown" && "$BACKUP_NODE" != "$CURRENT_NODE" ]]; then
+  mismatch "backup node name $BACKUP_NODE differs from current $CURRENT_NODE"
+fi
+if [[ -z "$CURRENT_VERSION" ]]; then
+  echo "Warning: CouchDB is not answering; cannot compare its version with ${BACKUP_VERSION}." >&2
+elif [[ "$BACKUP_VERSION" != "unknown" && "$BACKUP_VERSION" != "$CURRENT_VERSION" ]]; then
+  mismatch "backup CouchDB version $BACKUP_VERSION differs from current $CURRENT_VERSION"
+fi
+
+echo "Verifying the backup..."
+(cd "$BACKUP_DIR" && shasum -a 256 -c --quiet SHA256SUMS) || fail "Backup is corrupt: checksum mismatch"
+checksum_dirs=(data)
+[[ ! -d "$BACKUP_DIR/index" ]] || checksum_dirs+=(index)
+listed=$(wc -l < "$BACKUP_DIR/SHA256SUMS" | tr -d ' ')
+present=$(cd "$BACKUP_DIR" && find "${checksum_dirs[@]}" -type f | wc -l | tr -d ' ')
+[[ "$listed" == "$present" ]] || fail "Backup is inconsistent: $present files present, $listed listed in SHA256SUMS"
+
+needed_kb=$(du -sk "${checksum_dirs[@]/#/$BACKUP_DIR/}" | awk '{ sum += $1 } END { print sum }')
+available_kb=$(df -k "$(dirname "$DATA_DIR")" | awk 'NR == 2 { print $4 }')
+# The current data is kept aside, so the backup needs room of its own.
+if (( available_kb < needed_kb + 102400 )); then
+  fail "Not enough space for $DATA_DIR: need about $((needed_kb / 1024)) MB plus margin, $((available_kb / 1024)) MB available"
+fi
+
+STAMP=$(date +%Y%m%d-%H%M%S)
+ASIDE_SUFFIX=".before-restore-$STAMP"
+targets=("$DATA_DIR")
+[[ "$INDEX_DIR" == "$DATA_DIR" ]] || targets+=("$INDEX_DIR")
+for target in "${targets[@]}" "$COUCHDB_LOCAL_INI"; do
+  [[ ! -e "$target$ASIDE_SUFFIX" ]] || fail "Already exists: $target$ASIDE_SUFFIX"
+done
+
+cat <<SUMMARY
+Restore $BACKUP_DIR
+  created:  $BACKUP_CREATED
+  mode:     $BACKUP_MODE
+into      $DATA_DIR$([[ "$INDEX_DIR" == "$DATA_DIR" ]] || printf '\n  and     %s' "$INDEX_DIR")$([[ "$WITH_CONFIG" == false ]] || printf '\nand replace %s' "$COUCHDB_LOCAL_INI")
+The current files are kept with suffix $ASIDE_SUFFIX.
+All changes made since the backup will be lost from CouchDB.
+SUMMARY
+case "$BACKUP_MODE" in
+  stopped*) ;;
+  *) echo "Warning: this backup was not made from a stopped CouchDB; its databases may be mutually inconsistent." >&2 ;;
+esac
+if [[ "$ASSUME_YES" == false ]]; then
+  [[ -t 0 ]] || fail "Not running interactively; use --yes to confirm"
+  read -r -p "Type 'restore' to continue: " answer
+  [[ "$answer" == restore ]] || fail "Aborted; nothing was changed"
+fi
+
+STOPPED_BY_US=false
+REPLACING=false
+INI_MOVED=false
+COMPLETED=false
+finish() {
+  local status=$?
+  if [[ "$COMPLETED" == false && "$REPLACING" == true ]]; then
+    echo "Restore failed; putting the original files back..." >&2
+    local target
+    for target in "${targets[@]}"; do
+      if [[ -e "$target$ASIDE_SUFFIX" ]]; then
+        rm -rf "$target"
+        mv "$target$ASIDE_SUFFIX" "$target"
+      fi
+    done
+    if [[ "$INI_MOVED" == true ]]; then
+      mv -f "$COUCHDB_LOCAL_INI$ASIDE_SUFFIX" "$COUCHDB_LOCAL_INI"
+    fi
+    echo "Original files restored." >&2
+  elif (( status != 0 )); then
+    echo "Restore failed; nothing was changed." >&2
+  fi
+  if [[ "$STOPPED_BY_US" == true && "$RESTART" == true ]]; then
+    echo "Starting $APP_NAME..."
+    open "$COUCHDB_APP"
+    local waited=0
+    until couchdb_up; do
+      if (( waited >= TIMEOUT_SECS )); then
+        echo "Warning: CouchDB did not answer $COUCHDB_URL/_up within ${TIMEOUT_SECS}s." >&2
+        exit 1
+      fi
+      sleep 1
+      waited=$((waited + 1))
+    done
+    echo "CouchDB is up again."
+  elif [[ "$STOPPED_BY_US" == true ]]; then
+    echo "CouchDB left stopped (--no-restart). Start it with: open \"$COUCHDB_APP\""
+  fi
+}
+trap finish EXIT
+
+if beam_running || app_running; then
+  echo "Stopping CouchDB..."
+  STOPPED_BY_US=true
+  # The menu-bar app only launches CouchDB; quit it so it can start CouchDB
+  # again afterwards. It may refuse while showing a dialog.
+  if app_running; then
+    osascript -e "tell application \"$APP_NAME\" to quit" >/dev/null 2>&1 || true
+    if ! TIMEOUT_SECS=10 wait_while app_running; then
+      for pid in $(app_pids); do
+        kill -TERM "$pid"
+      done
+      wait_while app_running || fail "$APP_NAME did not quit"
+    fi
+  fi
+  # The Erlang VM runs detached from the app. SIGTERM makes it shut down
+  # gracefully (init:stop/0).
+  for pid in $(beam_pids); do
+    kill -TERM "$pid"
+  done
+  wait_while beam_running || fail "CouchDB did not stop within ${TIMEOUT_SECS}s"
+fi
+
+echo "Moving the current files aside..."
+REPLACING=true
+for target in "${targets[@]}"; do
+  [[ ! -e "$target" ]] || mv "$target" "$target$ASIDE_SUFFIX"
+done
+
+umask 077
+echo "Copying the backup into place..."
+ditto "$BACKUP_DIR/data" "$DATA_DIR"
+[[ ! -d "$BACKUP_DIR/index" ]] || ditto "$BACKUP_DIR/index" "$INDEX_DIR"
+
+echo "Verifying the restored files..."
+sums_tmp=$(mktemp)
+sed -n 's#  data/#  #p' "$BACKUP_DIR/SHA256SUMS" > "$sums_tmp"
+(cd "$DATA_DIR" && shasum -a 256 -c --quiet "$sums_tmp")
+if [[ -d "$BACKUP_DIR/index" ]]; then
+  sed -n 's#  index/#  #p' "$BACKUP_DIR/SHA256SUMS" > "$sums_tmp"
+  (cd "$INDEX_DIR" && shasum -a 256 -c --quiet "$sums_tmp")
+fi
+rm -f "$sums_tmp"
+
+if [[ "$WITH_CONFIG" == true ]]; then
+  echo "Restoring $(basename "$COUCHDB_LOCAL_INI")..."
+  cp -p "$COUCHDB_LOCAL_INI" "$COUCHDB_LOCAL_INI$ASIDE_SUFFIX"
+  INI_MOVED=true
+  cp -p "$BACKUP_INI" "$COUCHDB_LOCAL_INI"
+fi
+
+COMPLETED=true
+echo "Restored $BACKUP_DIR."
+echo "The previous files are kept with suffix $ASIDE_SUFFIX; remove them once CouchDB works as expected."

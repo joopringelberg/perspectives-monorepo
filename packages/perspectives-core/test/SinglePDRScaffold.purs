@@ -30,6 +30,7 @@ module Test.SinglePDRScaffold
   , SinglePDRResults
   , SinglePDRModelConfiguration
   , getSinglePDRResults
+  , loadModel
   , executeModelTest
   ) where
 
@@ -42,6 +43,8 @@ import Data.Array (find)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
+import Data.Foldable (intercalate)
+import Data.Int (ceil)
 import Data.Time.Duration (Milliseconds(..))
 import Data.Traversable (for_, traverse)
 import Effect.Aff (Aff, error)
@@ -61,7 +64,6 @@ import Perspectives.Instances.Builders (createAndAddRoleInstance, constructConte
 import Perspectives.Logging (ansiRed, infoTest)
 import Perspectives.ModelDependencies (sysUser)
 import Perspectives.Names (lookupIndexedContext)
-import Perspectives.Persistent (saveMarkedResources)
 import Perspectives.PerspectivesState (defaultRuntimeOptions, disableAllLogging, setTopicLogLevel)
 import Perspectives.Query.UnsafeCompiler (getPropertyValues)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance(..), Value(..))
@@ -70,7 +72,7 @@ import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransac
 import Perspectives.Sidecar.StableIdMapping (ModelUri(..), Stable)
 import Perspectives.Sidecar.ToStable (toStable)
 import Perspectives.TypePersistence.LoadArc (loadCompileAndStoreArcFile_)
-import Test.PDRInstance (SynchronisationResult, noBus, pollUntil, pollUntilTestFinishes, testPouchdbUser, withPDRCached)
+import Test.PDRInstance (SynchronisationResult, noBus, pollUntil, pollUntilTestFinishes, settleAndSave, snapshotPDR, testPouchdbUser, withPDRCached)
 import Test.PDRInstance.Types (PDRInstance, runInPDR)
 
 type TopicLogLevelPair =
@@ -95,23 +97,29 @@ type ModelTest =
 type SinglePDRResults = Array SynchronisationResult
 
 data TestModelLoadMethod
-  = LoadModelFromRepository
+  = LoadModelFromRepository { modelUri :: String }
   | CompileModelFromSource
-      { sourcePath :: String
+      { modelUri :: String
+      , sourcePath :: String
       , modelUriReadable :: String
       , basedOnVersion :: Maybe String
       }
 
+-- | The models are loaded in the order in which they appear in `testModelLoadMethods`;
+-- | the entry for `testModel` must come last.
 type SinglePDRModelConfiguration =
   { suiteName :: String
   , snapshotDirectory :: String
+  , outputSnapshotDirectory :: Maybe String
   , testModel :: String
-  , testModelLoadMethod :: TestModelLoadMethod
+  , testModelLoadMethods :: Array TestModelLoadMethod
   , indexedTestContext :: String
   , testAppManager :: String
   , testsType :: String
   , testSucceededProperty :: String
   , testNameProperty :: String
+  -- | Upper limit on the time each test in the suite may take to report a result.
+  , testTimeLimit :: Milliseconds
   , setupLogConfiguration :: LogConfiguration
   , tests :: Array ModelTest
   }
@@ -127,12 +135,13 @@ cachedSinglePDRResults = unsafePerformEffect $ new []
 getSinglePDRResults :: SinglePDRModelConfiguration -> Aff SinglePDRResults
 getSinglePDRResults cfg = do
   let cacheKey = singlePDRCacheKey cfg
+  let pouchdbUser = testPouchdbUser "alice"
   cached <- liftEffect $ read cachedSinglePDRResults
   case find (\result -> result.cacheKey == cacheKey) cached of
     Just { results } -> pure results
     Nothing -> do
       results <- withPDRCached
-        (testPouchdbUser "alice")
+        pouchdbUser
         defaultRuntimeOptions
         (Just ansiRed)
         noBus
@@ -144,27 +153,7 @@ getSinglePDRResults cfg = do
           runInPDR pdr do
             infoTest "Loading test model"
 
-          case cfg.testModelLoadMethod of
-            LoadModelFromRepository -> runInPDR pdr do
-              runMonadPerspectivesTransaction' shareWithPeers (ENR $ EnumeratedRoleType sysUser)
-                $
-                  addModelToLocalStore_ [ cfg.testModel ] (RoleInstance "Ignored")
-            CompileModelFromSource { sourcePath, modelUriReadable, basedOnVersion } -> do
-              source <- readTextFile UTF8 sourcePath
-              runInPDR pdr do
-                infoTest "Compiling and storing test model from source"
-                compilationResult <- runMonadPerspectivesTransaction' shareWithPeers (ENR $ EnumeratedRoleType sysUser)
-                  ( loadCompileAndStoreArcFile_
-                      (ModelUri cfg.testModel :: ModelUri Stable)
-                      source
-                      true
-                      (unsafePartial modelUri2LocalName $ unversionedModelUri cfg.testModel)
-                      modelUriReadable
-                      basedOnVersion
-                  )
-                case compilationResult of
-                  Left errs -> throwError $ error ("Failed to compile and store test model: " <> show errs)
-                  Right _ -> pure unit
+          for_ cfg.testModelLoadMethods (loadModel pdr)
 
           testAppContext <- pollUntil 100 (Milliseconds 100.0)
             "Indexed test context to appear after loading test model"
@@ -176,21 +165,56 @@ getSinglePDRResults cfg = do
 
           result <- traverse (\testCase -> executeModelTest pdr testAppContext testCase.testContextTypeName testCase.logConfiguration cfg) cfg.tests
 
-          runInPDR pdr $ saveMarkedResources
+          settleAndSave pdr
+
+          case cfg.outputSnapshotDirectory of
+            Just outputSnapshotDirectory ->
+              snapshotPDR pouchdbUser.systemIdentifier pouchdbUser.perspectivesUser outputSnapshotDirectory
+            Nothing -> pure unit
 
           pure result
 
       liftEffect $ write (cached <> [ { cacheKey, results } ]) cachedSinglePDRResults
       pure results
 
+loadModel :: PDRInstance -> TestModelLoadMethod -> Aff Unit
+loadModel pdr = case _ of
+  LoadModelFromRepository { modelUri } -> runInPDR pdr do
+    infoTest ("Loading model from repository: " <> modelUri)
+    runMonadPerspectivesTransaction' shareWithPeers (ENR $ EnumeratedRoleType sysUser)
+      $ addModelToLocalStore_ [ modelUri ] (RoleInstance "Ignored")
+  CompileModelFromSource { modelUri, sourcePath, modelUriReadable, basedOnVersion } -> do
+    source <- readTextFile UTF8 sourcePath
+    runInPDR pdr do
+      infoTest ("Compiling and storing model from source: " <> sourcePath)
+      compilationResult <- runMonadPerspectivesTransaction' shareWithPeers (ENR $ EnumeratedRoleType sysUser)
+        ( loadCompileAndStoreArcFile_
+            (ModelUri modelUri :: ModelUri Stable)
+            source
+            true
+            (unsafePartial modelUri2LocalName $ unversionedModelUri modelUri)
+            modelUriReadable
+            basedOnVersion
+            Nothing
+        )
+      case compilationResult of
+        Left errs -> throwError $ error ("Failed to compile and store model " <> modelUri <> ": " <> show errs)
+        Right _ -> infoTest ("Successfully compiled and stored model " <> modelUri)
+
 singlePDRCacheKey :: SinglePDRModelConfiguration -> String
 singlePDRCacheKey cfg =
   let
-    loadMethodKey = case cfg.testModelLoadMethod of
-      LoadModelFromRepository -> "repository"
-      CompileModelFromSource { sourcePath } -> "compile:" <> sourcePath
+    loadMethodKey = intercalate "," $ map
+      ( case _ of
+          LoadModelFromRepository { modelUri } -> "repository:" <> modelUri
+          CompileModelFromSource { sourcePath } -> "compile:" <> sourcePath
+      )
+      cfg.testModelLoadMethods
+    outputSnapshotKey = case cfg.outputSnapshotDirectory of
+      Just outputSnapshotDirectory -> outputSnapshotDirectory
+      Nothing -> "no-output-snapshot"
   in
-    cfg.suiteName <> "|" <> loadMethodKey
+    cfg.suiteName <> "|" <> loadMethodKey <> "|" <> outputSnapshotKey
 
 executeModelTest
   :: PDRInstance
@@ -242,7 +266,10 @@ executeModelTest pdr testAppContext testContextTypeR logConfiguration cfg = do
         lift $ infoTest "Executing RunTest action"
         runContextAction (unwrap testTesterType) "RunTest" (unwrap theTest)
 
-  r <- pollUntilTestFinishes 100 (Milliseconds 100.0)
+  -- Polling stops as soon as the test reports a result; the suite configures the upper time limit.
+  let pollInterval = 200.0
+  let Milliseconds timeLimit = cfg.testTimeLimit
+  r <- pollUntilTestFinishes (max 1 (ceil (timeLimit / pollInterval))) (Milliseconds pollInterval)
     "Test to complete with a result"
     ( runInPDR pdr
         do
@@ -258,6 +285,8 @@ executeModelTest pdr testAppContext testContextTypeR logConfiguration cfg = do
                 Nothing -> pure (Left { testName, err: error "TestSucceeded property not found" })
             Nothing -> pure (Left { testName: "unknown testname", err: error "TestName property not found" })
     )
+
+  settleAndSave pdr
 
   runInPDR pdr do
     disableAllLogging

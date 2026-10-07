@@ -441,15 +441,15 @@ domain model://joopringelberg.nl#TwoPDRDestructiveTests@1.0
             bind tr to TestRole9
 
     external
-      property TestFinished (Boolean)
+      property TestExecuted (Boolean)
       property FillerExists (Boolean)
-      state TestFinished = TestFinished
+      state RemoveTheFiller = TestExecuted
         on entry
           -- Moves the role removal out of this transaction.
-          -- Because setting TestFinished also triggers state evaluation, the removal of the role 
+          -- Because setting TestExecuted also triggers state evaluation, the removal of the role 
           -- would not trigger a state change in the same transaction. So we delay the removal of the role.
-          do for Leader
-            after 200 Milliseconds remove as filler context >> Filler2
+          do for Leader once settled
+            remove as filler context >> Filler2
         state TestSucceeded = FillerExists and context >> ((exists TestRole9) and (not exists TestRole9 >> binding) and exists Filler2)
           on entry
             do for Follower
@@ -458,19 +458,19 @@ domain model://joopringelberg.nl#TwoPDRDestructiveTests@1.0
     user Leader filledBy (sys:TheWorld$PerspectivesUsers)
       aspect mm:Test$Leader
       perspective on extern
-        props (TestFinished) verbs (SetPropertyValue, Consult)
+        props (TestExecuted) verbs (SetPropertyValue, Consult)
       perspective on TestRole9
         only (Create, RemoveFiller, Fill)
       perspective on Filler2
         only (Create, Remove)
       action RunTest
         TestName = "Remove a role as filler" for extern
-        TestFinished = true for extern
+        TestExecuted = true for extern
 
     user Follower filledBy (sys:TheWorld$PerspectivesUsers)
       aspect mm:Test$Follower
       perspective on extern
-        props (FillerExists) verbs (SetPropertyValue, Consult)
+        props (FillerExists, TestExecuted) verbs (SetPropertyValue, Consult)
       perspective on TestRole9
         props (P) verbs (SetPropertyValue, Consult)
 
@@ -527,7 +527,7 @@ domain model://joopringelberg.nl#TwoPDRDestructiveTests@1.0
     user Follower filledBy (sys:TheWorld$PerspectivesUsers)
       aspect mm:Test$Follower
       perspective on extern
-        props (TestSucceeded) verbs (Consult)
+        props (TestSucceeded, TestFinished) verbs (Consult)
       perspective on TestRole10
         props (P) verbs (Consult)
       perspective on TestRole11
@@ -587,7 +587,7 @@ domain model://joopringelberg.nl#TwoPDRDestructiveTests@1.0
     user Follower filledBy (sys:TheWorld$PerspectivesUsers)
       aspect mm:Test$Follower
       perspective on extern
-        props (TestSucceeded) verbs (Consult)
+        props (TestSucceeded, TestFinished) verbs (Consult)
       perspective on TestRole12
         props (P) verbs (Consult)
       perspective on TestRole13

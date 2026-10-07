@@ -305,7 +305,7 @@ forceSaveEntiteit r entId = do
     Nothing -> modify \s -> s { entitiesToBeStored = delete r s.entitiesToBeStored }
     Just entiteit -> void $ saveCachedEntiteit r entId
 
--- | All items will be removed from `entitiesToBeStored`, whether succesfully stored or not..
+-- | Failed saves remain queued for a later persistence pass.
 saveMarkedResources :: MonadPerspectives Unit
 saveMarkedResources = do
   (toBeSaved :: Array ResourceToBeStored) <- gets _.entitiesToBeStored
@@ -318,7 +318,6 @@ saveMarkedResources = do
       ) >>= case _ of
       Left e -> do
         warnPersistence ("Could not save resource " <> show rs <> " because: " <> show e)
-        modify \s -> s { entitiesToBeStored = delete rs s.entitiesToBeStored }
       _ -> pure unit
 
 -- | Assumes the entity a has been cached. 
@@ -331,7 +330,6 @@ saveCachedEntiteit r entId = do
   mresult <- catchError
     ( do
         -- The cache is now blocked, so there is no way to modify the entity. It may be decached; but we have the modified entity in our hands, here.
-        modify \s -> s { entitiesToBeStored = delete r s.entitiesToBeStored }
         { database, documentName } <- resourceIdentifier2WriteDocLocator (unwrap $ identifier entiteit)
         try $ addDocument database entiteit documentName
     )
@@ -342,10 +340,11 @@ saveCachedEntiteit r entId = do
   case mresult of
     Left e -> do
       void $ cacheEntity (identifier entiteit) entiteit
-      pure entiteit
+      throwError e
     Right (rev :: Revision_) -> do
       entiteit' <- pure (changeRevision rev entiteit)
       void $ cacheEntity (identifier entiteit) entiteit'
+      modify \s -> s { entitiesToBeStored = delete r s.entitiesToBeStored }
       pure entiteit'
 
 -- | Updates the revision in cache (no change to the version in database).
@@ -376,4 +375,3 @@ addAttachment i attachmentName attachment mimetype = do
   -- Remove the document from the cache, so it will be retrieved again before it can be used - including the new revision and attachments.
   void $ removeInternally i
   pure $ maybe false identity ok
-

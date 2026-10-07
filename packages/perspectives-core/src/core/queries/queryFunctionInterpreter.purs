@@ -24,7 +24,6 @@ module Perspectives.Query.Interpreter where
 
 import Control.Alternative (guard)
 import Control.Bind (join)
-import Control.Monad.AvarMonadAsk (modify)
 import Control.Monad.Error.Class (catchError, throwError)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Writer (WriterT, execWriterT, tell)
@@ -51,19 +50,19 @@ import Perspectives.HiddenFunction (HiddenFunction)
 import Perspectives.HumanReadableType (translateType)
 import Perspectives.Identifiers (isExternalRole)
 import Perspectives.Instances.Combinators (available', not_)
-import Perspectives.Instances.Environment (_pushFrame)
 import Perspectives.Instances.ObjectGetters (Filled_(..), Filler_(..), binding, binding_, completeRuntimeType, context, contextModelName, contextType, contextType_, externalRole, filledBy, fills, getActiveRoleStates_, getActiveStates_, getAllFilledRoles_, getEnumeratedRoleInstances, getFilledRoles, getProperty, getUnlinkedRoleInstances, indexedContextName, indexedRoleName, roleModelName, roleType, roleType_)
-import Perspectives.Instances.Values (bool2Value, parseNumber, value2Date, value2Number)
+import Perspectives.Instances.Values (bool2Value, parseNumber)
+import Perspectives.Logging (errorCompiler)
 import Perspectives.ModelDependencies (roleWithId, socialEnvironment, socialEnvironmentPersons)
 import Perspectives.Names (lookupIndexedRole)
 import Perspectives.Parsing.Arc.Expression.RegExP (RegExP(..))
 import Perspectives.Parsing.Arc.Position (arcParserStartPosition)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistent (getPerspectRol)
-import Perspectives.PerspectivesState (addBinding, getPerspectivesUser, getVariableBindings, pushFrame, restoreFrame)
-import Perspectives.Query.Interpreter.Dependencies (Dependency(..), DependencyPath, addAsSupportingPaths, allPaths, appendPaths, applyValueFunction, composePaths, consOnMainPath, dependencyToValue, domain2Dependency, functionOnBooleans, functionOnStrings, singletonPath, snocOnMainPath, (#>>))
+import Perspectives.PerspectivesState (addBinding, addWarning, getPerspectivesUser, pushFrame, restoreFrame)
+import Perspectives.Query.Interpreter.Dependencies (Dependency(..), DependencyPath, addAsSupportingPaths, allPaths, appendPaths, applyValueFunction, composePaths, consOnMainPath, dependencyToValue, domain2Dependency, functionOnBooleans, singletonPath, snocOnMainPath, (#>>))
 import Perspectives.Query.QueryTypes (Domain(..), QueryFunctionDescription(..), RoleInContext(..), domain2PropertyRange, domain2roleType, range)
-import Perspectives.Query.UnsafeCompiler (compareRangeValues, lookup, mapDurationOperator, mapNumericOperator, orderFunction, performNumericOperation')
+import Perspectives.Query.UnsafeCompiler (compareRangeValues, lookup, mapDurationOperator, mapNumericOperator, performNumericOperation')
 import Perspectives.Representation.ADT (ADT(..), commonLeavesInADT, equalsOrSpecialises_)
 import Perspectives.Representation.CNF (toConjunctiveNormalForm)
 import Perspectives.Representation.CalculatedProperty (CalculatedProperty)
@@ -77,7 +76,7 @@ import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunctio
 import Perspectives.Representation.Range (Range(..), isDateOrTime, isPDuration)
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), propertytype2string)
 import Perspectives.Types.ObjectGetters (allRoleTypesInContext, contextAspectsClosure, contextTypeModelName', equalsOrSpecialisesRoleInContext, propertyAliases, roleTypeModelName', generalisesRoleType)
-import Prelude (Unit, bind, discard, eq, flip, notEq, pure, show, unit, void, ($), (&&), (+), (<#>), (<$>), (<<<), (<=), (<>), (==), (>=>), (>>=), (||))
+import Prelude (Unit, bind, discard, eq, flip, pure, show, unit, void, ($), (&&), (+), (<#>), (<$>), (<<<), (<=), (<>), (==), (>=>), (>>=), (||))
 import Simple.JSON (readJSON)
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -100,10 +99,9 @@ interpretUQD (UQD _ (BindVariable varName) f1 _ _ _) a = ArrayT do
   lift $ addBinding varName (toString <$> values)
   pure values
 interpretUQD (UQD _ WithFrame f1 _ _ _) a = do
-  old <- lift2MPQ getVariableBindings
-  void $ lift $ lift $ modify \s@{ variableBindings } -> s { variableBindings = (_pushFrame old) }
+  old <- lift2MPQ pushFrame
   x <- interpret f1 a
-  void $ lift $ lift $ modify \s@{ variableBindings } -> s { variableBindings = old }
+  lift2MPQ $ restoreFrame old
   pure x
 interpretUQD (UQD _ (UnaryCombinator ExistsF) f1 _ _ _) a = ArrayT do
   (r :: Array DependencyPath) <- runArrayT $ interpret f1 a
@@ -478,59 +476,65 @@ interpretBQDOtherFunctions (BQD _ (BinaryCombinator fun) f1 f2 ran _ _) a = case
 -- MQD
 -----------------------------------------------------------
 interpretMQD :: Partial => QueryFunctionDescription -> DependencyPath ~~> DependencyPath
-interpretMQD (MQD dom fun args ran _ _) a = do
-  functionName <- case fun of
-    (ExternalCoreRoleGetter f) -> pure f
-    (ExternalCorePropertyGetter f) -> pure f
-    otherwise -> throwError (error $ "Unknown function construction: " <> show fun)
-  (f :: HiddenFunction) <- pure $ unsafePartial $ fromJust $ lookupHiddenFunction functionName
-  (argValues :: Array DependencyPath) <- traverse (flip interpret a) args
-  (nrOfParameters :: Int) <- pure $ unsafePartial (fromJust $ lookupHiddenFunctionNArgs functionName)
-  -- Notice that the number of parameters given ignores the default argument (context or role) that the function is applied to anyway.
-  -- If we do have an extra argument value, supply it as the last argument instead of r.
-  (lastArgument :: String) <- case index argValues nrOfParameters of
-    Nothing -> pure $ toString a
-    Just v -> pure $ toString v
-  case unsafePartial $ fromJust $ lookupHiddenFunctionNArgs functionName of
-    0 -> do
-      r <- (unsafe1argFunction f) lastArgument
-      pure a { head = domain2Dependency ran r }
-    1 -> do
-      r <- (unsafe2argFunction f)
-        [ (toString (first argValues)) ]
-        lastArgument
-      pure a { head = domain2Dependency ran r }
-    2 -> do
-      r <- (unsafe3argFunction f)
-        [ (toString (first argValues)) ]
-        [ (toString (second argValues)) ]
-        lastArgument
-      pure a { head = domain2Dependency ran r }
-    3 -> do
-      r <- (unsafe4argFunction f)
-        [ (toString (first argValues)) ]
-        [ (toString (second argValues)) ]
-        [ (toString (third argValues)) ]
-        lastArgument
-      pure a { head = domain2Dependency ran r }
-    4 -> do
-      r <- (unsafe5argFunction f)
-        [ (toString (first argValues)) ]
-        [ (toString (second argValues)) ]
-        [ (toString (third argValues)) ]
-        [ (toString (fourth argValues)) ]
-        lastArgument
-      pure a { head = domain2Dependency ran r }
-    5 -> do
-      r <- (unsafe6argFunction f)
-        [ (toString (first argValues)) ]
-        [ (toString (second argValues)) ]
-        [ (toString (third argValues)) ]
-        [ (toString (fourth argValues)) ]
-        [ (toString (fifth argValues)) ]
-        lastArgument
-      pure a { head = domain2Dependency ran r }
-    otherwise -> throwError (error "Too many arguments for external core module: maximum is 4")
+interpretMQD (MQD dom fun args ran _ _) a = catchError
+  ( do
+      functionName <- case fun of
+        (ExternalCoreRoleGetter f) -> pure f
+        (ExternalCorePropertyGetter f) -> pure f
+        otherwise -> throwError (error $ "Unknown function construction: " <> show fun)
+      (f :: HiddenFunction) <- pure $ unsafePartial $ fromJust $ lookupHiddenFunction functionName
+      (argValues :: Array DependencyPath) <- traverse (flip interpret a) args
+      (nrOfParameters :: Int) <- pure $ unsafePartial (fromJust $ lookupHiddenFunctionNArgs functionName)
+      -- Notice that the number of parameters given ignores the default argument (context or role) that the function is applied to anyway.
+      -- If we do have an extra argument value, supply it as the last argument instead of r.
+      (lastArgument :: String) <- case index argValues nrOfParameters of
+        Nothing -> pure $ toString a
+        Just v -> pure $ toString v
+      case unsafePartial $ fromJust $ lookupHiddenFunctionNArgs functionName of
+        0 -> do
+          r <- (unsafe1argFunction f) lastArgument
+          pure a { head = domain2Dependency ran r }
+        1 -> do
+          r <- (unsafe2argFunction f)
+            [ (toString (first argValues)) ]
+            lastArgument
+          pure a { head = domain2Dependency ran r }
+        2 -> do
+          r <- (unsafe3argFunction f)
+            [ (toString (first argValues)) ]
+            [ (toString (second argValues)) ]
+            lastArgument
+          pure a { head = domain2Dependency ran r }
+        3 -> do
+          r <- (unsafe4argFunction f)
+            [ (toString (first argValues)) ]
+            [ (toString (second argValues)) ]
+            [ (toString (third argValues)) ]
+            lastArgument
+          pure a { head = domain2Dependency ran r }
+        4 -> do
+          r <- (unsafe5argFunction f)
+            [ (toString (first argValues)) ]
+            [ (toString (second argValues)) ]
+            [ (toString (third argValues)) ]
+            [ (toString (fourth argValues)) ]
+            lastArgument
+          pure a { head = domain2Dependency ran r }
+        5 -> do
+          r <- (unsafe6argFunction f)
+            [ (toString (first argValues)) ]
+            [ (toString (second argValues)) ]
+            [ (toString (third argValues)) ]
+            [ (toString (fourth argValues)) ]
+            [ (toString (fifth argValues)) ]
+            lastArgument
+          pure a { head = domain2Dependency ran r }
+        otherwise -> throwError (error "Too many arguments for external core module: maximum is 4")
+  )
+  ( \e -> do
+      lift $ lift $ errorCompiler $ "Error for external function " <> show fun <> ": " <> show e
+      ArrayT $ pure []
+  )
 
 -----------------------------------------------------------
 -- SQD
@@ -575,7 +579,22 @@ interpretSQD (SQD _ (RoleTypeConstant qname) _ _ _) a = pure $ consOnMainPath (R
 
 interpretSQD (SQD _ (ContextTypeConstant qname) _ _ _) a = pure $ consOnMainPath (CT qname) a
 
-interpretSQD (SQD _ (PublicRole individual) _ _ _) a = pure $ consOnMainPath (R individual) a
+interpretSQD (SQD _ (PublicRole individual assertedType) _ _ _) a = case assertedType of
+  Nothing -> pure $ consOnMainPath (R individual) a
+  Just typeAssertion -> ArrayT do
+    case readJSON typeAssertion of
+      Left e -> throwError $ error $ "Cannot read asserted public-role type: " <> show e
+      Right (expectedType :: ADT RoleInContext) -> do
+        matches <- (lift $ roleMatchesTypeFilter individual expectedType) :: AssumptionTracking Boolean
+        if matches then pure [ consOnMainPath (R individual) a ]
+        else do
+          lift $ addWarning
+            { message: "Public resource '" <> unwrap individual <> "' does not satisfy its asserted role type " <> show expectedType <> "; it was ignored."
+            , error: ""
+            , externalRoleId: ""
+            , contextName: ""
+            }
+          pure []
 
 interpretSQD (SQD _ (PublicContext individual) _ _ _) a = pure $ consOnMainPath (C individual) a
 

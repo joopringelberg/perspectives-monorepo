@@ -45,6 +45,7 @@ module Perspectives.Logging
   , ansiReset
   , ansiWhite
   , ansiYellow
+  , debugAction
   , debugBroker
   , debugCompiler
   , debugDelta
@@ -58,6 +59,7 @@ module Perspectives.Logging
   , debugSync
   , debugTest
   , debugUpgrade
+  , errorAction
   , errorBroker
   , errorCompiler
   , errorDelta
@@ -71,6 +73,7 @@ module Perspectives.Logging
   , errorSync
   , errorTest
   , errorUpgrade
+  , infoAction
   , infoBroker
   , infoDelta
   , infoInstall
@@ -84,6 +87,7 @@ module Perspectives.Logging
   , logWhen
   , noColor
   , pdrLog
+  , traceAction
   , traceBroker
   , traceDelta
   , traceInstall
@@ -95,6 +99,7 @@ module Perspectives.Logging
   , traceState
   , traceSync
   , traceTest
+  , warnAction
   , warnAuth
   , warnBroker
   , warnDelta
@@ -407,3 +412,22 @@ warnStartup = pdrLog STARTUP Warn
 
 errorStartup :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
 errorStartup = pdrLog STARTUP Error
+
+-----------------------------------------------------------
+-- ACTION-RELATED WARNINGS
+-----------------------------------------------------------
+traceAction :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
+traceAction = pdrLog ACTION Trace
+
+debugAction :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
+debugAction = pdrLog ACTION Debug
+
+infoAction :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
+infoAction = pdrLog ACTION Info
+
+warnAction :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
+warnAction = pdrLog ACTION Warn
+
+errorAction :: forall m. MonadPerspectivesWithState PerspectivesExtraState m => String -> m Unit
+errorAction = pdrLog ACTION Error
+-----------------------------------------------------------

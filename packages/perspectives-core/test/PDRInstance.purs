@@ -529,7 +529,17 @@ pollUntilTestFinishes maxAttempts interval description action = go
   maxAttempts
   ((Left { testName: description, err: error "pollUntilTestFinishes: initial state" }) :: SynchronisationResult)
   where
-  go 0 previousResult = pure previousResult
+  go 0 previousResult = pure case previousResult of
+    Left { testName, err } -> Left
+      { testName
+      , err: error $ "pollUntilTestFinishes timed out after " <> show maxAttempts <> " attempts of "
+          <> show (unwrap interval)
+          <> " ms waiting for: "
+          <> description
+          <> ". Last poll result: "
+          <> message err
+      }
+    Right _ -> previousResult
   go n _ = do
     result <- action
     case result of
@@ -873,17 +883,29 @@ waitUntilAllTransactionsComplete secs pdr = do
   let
     attempts = secs * 10 -- check every 100ms
     interval = Milliseconds 100.0
-    stableWindows = 3
+    -- A chain of `once settled` transactions raises the transaction flag between two links,
+    -- so a short stable window can mistake such a gap for quiescence.
+    stableWindows = 10
 
     loop :: Int -> Int -> Aff Unit
     loop 0 _ = throwError $ error "waitUntilAllTransactionsComplete timed out while waiting for quiescence"
     loop n stableCount = do
       delay interval
-      -- A non blocking check.
-      quiet <- runInPDR pdr noTransactionIsRunning
+      -- A non blocking check. Deliberately not through runInPDR, whose trace would swamp the log.
+      quiet <- runPerspectivesWithState noTransactionIsRunning pdr.stateAVar
       let nextStableCount = if quiet then stableCount + 1 else 0
       if nextStableCount >= stableWindows then
         runInPDR pdr $ debugTest ("waitUntilAllTransactionsComplete: PDR instance " <> pdr.name <> " is quiescent.")
       else loop (n - 1) nextStableCount
 
   loop attempts 0
+
+-- | Transactions scheduled with `once settled` run in fibers of their own, and the resources they
+-- | create (public resources, notably) are only cached and marked for storage. Without waiting for
+-- | quiescence and flushing the queue, that work is lost when the PDR instance is shut down.
+settleAndSave :: PDRInstance -> Aff Unit
+settleAndSave pdr = do
+  attempt (waitUntilAllTransactionsComplete 120 pdr) >>= case _ of
+    Left e -> runInPDR pdr $ infoTest ("settleAndSave: " <> message e)
+    Right _ -> pure unit
+  runInPDR pdr saveMarkedResources

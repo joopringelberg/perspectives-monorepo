@@ -28,6 +28,8 @@ import Effect.Aff.Class (liftAff)
 import Data.Array (delete)
 import Data.Either (Either(..))
 import Data.List (List(..))
+import Data.Maybe (Maybe(..))
+import Data.Newtype (unwrap)
 import Data.Tuple (Tuple(..))
 import Effect.Class (liftEffect)
 import Foreign.Object (empty)
@@ -38,7 +40,8 @@ import Node.Process (cwd)
 import Parsing (ParseError(..))
 import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.DomeinCache (storeDomeinFileInCache, storeDomeinFileInCouchdb)
-import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, defaultDomeinFileRecord)
+import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, defaultDomeinFileRecord, stampDomeinFileTypeVersion)
+import Perspectives.Identifiers (modelUriVersion)
 import Perspectives.InvertedQuery.Storable (StoredQueries)
 import Perspectives.Parsing.Arc (domain)
 import Perspectives.Parsing.Arc.AST (ContextE)
@@ -95,7 +98,11 @@ loadAndCompileArcFile_ filePath = catchError
                   { referredModels = delete id refModels
                   , arc = text
                   }
-                pure $ Right $ Tuple df invertedQueries
+                let
+                  stampedDf = case modelUriVersion (unwrap id) of
+                    Nothing -> df
+                    Just version -> stampDomeinFileTypeVersion version df
+                pure $ Right $ Tuple stampedDf invertedQueries
   \e -> pure $ Left [ Custom (show e) ]
 
 type Persister = ModelUri Readable -> DomeinFile Readable -> MonadPerspectives MultiplePerspectivesErrors

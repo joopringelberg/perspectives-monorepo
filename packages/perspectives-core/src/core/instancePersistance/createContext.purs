@@ -9,7 +9,6 @@ import Data.Show (show)
 import Foreign.Object (isEmpty)
 import Perspectives.ApiTypes (PropertySerialization(..))
 import Perspectives.Assignment.Update (getSubject, setProperty)
-import Perspectives.Authenticate (signDelta)
 import Perspectives.ContextAndRole (defaultContextRecord, defaultRolRecord)
 import Perspectives.CoreTypes (MonadPerspectivesTransaction, (###=))
 import Perspectives.Deltas (addCorrelationIdentifiersToTransactie, addCreatedRoleToTransaction)
@@ -29,11 +28,11 @@ import Perspectives.Representation.TypeIdentifiers (RoleType, externalRoleType)
 import Perspectives.ResourceIdentifiers (takeGuid)
 import Perspectives.StrippedDelta (stripResourceSchemes)
 import Perspectives.Sync.SignedDelta (SignedDelta)
+import Perspectives.Sync.VersionedDelta (signVersionedDelta)
 import Perspectives.Types.ObjectGetters (contextAspectsClosure, roleAspectsClosure)
 import Perspectives.TypesForDeltas (ContextDelta(..), ContextDeltaType(..), UniverseContextDelta(..), UniverseContextDeltaType(..), UniverseRoleDelta(..), UniverseRoleDeltaType(..))
 import Perspectives.Warning (PerspectivesWarning(..))
 import Prelude (bind, discard, pure, unit, void, ($), (<$>), (<<<), (>>=))
-import Simple.JSON (writeJSON)
 
 -- | Constructs an empty context, caches it.
 -- | The context contains a UniverseContextDelta, the external role contains a UniverseRoleDelta and ContextDelta.
@@ -64,8 +63,8 @@ constructEmptyContext contextInstanceId ctype localName externeProperties author
   allExternalRoleTypes <- lift $ lift (externalRoleType pspType ###= roleAspectsClosure)
   allContextTypes <- lift $ lift (pspType ###= contextAspectsClosure)
   subject <- lift $ getSubject
-  delta <- lift $ signDelta
-    ( writeJSON $ stripResourceSchemes $ UniverseContextDelta
+  delta <- lift $ signVersionedDelta
+    ( stripResourceSchemes $ UniverseContextDelta
         { id: contextInstanceId
         , contextType: pspType
         , deltaType: ConstructEmptyContext
@@ -86,8 +85,8 @@ constructEmptyContext contextInstanceId ctype localName externeProperties author
         }
     )
   lift $ lift $ void $ cacheEntity contextInstanceId contextInstance
-  delta' <- lift $ signDelta
-    ( writeJSON $ stripResourceSchemes $ UniverseRoleDelta
+  delta' <- lift $ signVersionedDelta
+    ( stripResourceSchemes $ UniverseRoleDelta
         { id: contextInstanceId
         , contextType: pspType
         , roleInstance: externalRole
@@ -102,8 +101,8 @@ constructEmptyContext contextInstanceId ctype localName externeProperties author
   -- The UniverseRoleDelta for the external role already uses version 0 on this resourceKey,
   -- so the ContextDelta must use version 1 to avoid a collision in the DeltaStore.
   contextDeltaVersion <- lift $ lift $ incrementResourceVersion (unwrap externalRole)
-  contextDelta <- lift $ signDelta
-    ( writeJSON $ stripResourceSchemes $ ContextDelta
+  contextDelta <- lift $ signVersionedDelta
+    ( stripResourceSchemes $ ContextDelta
         { contextInstance: contextInstanceId
         , contextType: pspType
         , roleType: externalRoleType pspType

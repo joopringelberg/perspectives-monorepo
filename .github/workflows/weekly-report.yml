@@ -17,87 +17,13 @@ jobs:
       contents: read
     
     steps:
-      - name: Get merged PRs from last week
-        id: get-prs
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Create report issue from PRs and commits
         uses: actions/github-script@v7
         with:
           script: |
-            const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-            
-            const { data: prs } = await github.rest.pulls.list({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              state: 'closed',
-              sort: 'updated',
-              direction: 'desc',
-              per_page: 100
-            });
-            
-            const mergedPRs = prs.filter(pr => 
-              pr.merged_at && 
-              new Date(pr.merged_at) > oneWeekAgo
-            );
-            
-            let prList = mergedPRs.map(pr => 
-              `- [#${pr.number}](${pr.html_url}): ${pr.title} (@${pr.user.login})`
-            ).join('\n');
-            
-            if (prList === '') {
-              prList = '- No PRs merged this week';
-            }
-            
-            return prList;
-          result-encoding: string
-          
-      - name: Create report issue
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const prList = ${{ toJSON(steps.get-prs.outputs.result) }};
-            const today = new Date().toISOString().slice(0, 10);
-            
-            const issueBody = [
-              '# Weekly Progress Report',
-              '',
-              '## Merged Pull Requests (Last 7 Days)',
-              '',
-              prList,
-              '',
-              '---',
-              '',
-              '@copilot Please analyze these merged PRs and create a **brief executive summary**.',
-              '',
-              '## Required Format:',
-              '',
-              '### 🎯 Top Achievements (Max 5)',
-              '- [Maximally two sentences per achievement]',
-              '',
-              '### 🐛 Key Bugs Fixed (Max 3)',
-              '- [Maximally two sentences per bug]',
-              '',
-              '### 📊 Impact (2-3 sentences total)',
-              '[Brief impact summary]',
-              '',
-              '### ⚠️ Concerns (If any, max 3)',
-              '- [Maximally two sentences per concern]',
-              '',
-              '### 🎯 Focus for Next Week (Max 3)',
-              '- [Maximally two sentences per focus area]',
-              '',
-              '**Guidelines:**',
-              '- Skip minor/trivial changes',
-              '- Maximally two sentences per bullet point',
-              '- Prioritize business impact over technical details',
-              '- Keep total report under 500 words',
-              'Store the report in perspectives-monorepo/reports',
-            ].join('\n');
-            
-            const issue = await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: `📊 Weekly Progress Report - ${today}`,
-              body: issueBody,
-              labels: ['report', 'weekly'],
-            });
-            
-            console.log(`Created issue #${issue.data.number}`);
+            const { createWeeklyReport } = require('./.github/scripts/weekly-report.cjs');
+            await createWeeklyReport({ github, context });

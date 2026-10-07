@@ -26,14 +26,16 @@ import Prelude
 
 import Control.Monad.AvarMonadAsk (gets)
 import Data.Array (elemIndex)
-import Data.Maybe (Maybe, isJust)
+import Data.Maybe (Maybe(..), isJust)
 import Data.Newtype (unwrap, wrap)
 import Persistence.Attachment (class Attachment)
 import Perspectives.CoreTypes (class Persistent, MonadPerspectives, ResourceToBeStored, removeInternally, resourceIdToBeStored)
+import Perspectives.Couchdb.Revision (rev)
 import Perspectives.DomeinFile (DomeinFile)
 import Perspectives.InstanceRepresentation (PerspectContext, PerspectRol)
 import Perspectives.Persistence.API (tryGetDocument)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance)
+import Perspectives.Representation.Class.Cacheable (tryReadEntiteitFromCache)
 import Perspectives.ResourceIdentifiers (resourceIdentifier2DocLocator)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri, Stable)
 
@@ -50,15 +52,18 @@ instance Decacheable PerspectRol RoleInstance where
   decache dfid = decache_ dfid
 
 decache_ :: forall v i. Attachment v => Decacheable v i => i -> MonadPerspectives Unit
-decache_ id = entityIsInDatabase id >>=
-  if _ then isWaitingToBeSaved (resourceIdToBeStored id) >>=
-    if _
-    -- Even though the entity is in the database, we have lined it up to be saved which 
-    -- at least suggests it has been changed in cache wrt the database version.
-    then pure unit
-    -- Remove the AVar from cache; not merely empty it.
-    else void $ removeInternally id
-  else pure unit
+decache_ id = do
+  stored <- entityIsInDatabase id
+  pending <- isWaitingToBeSaved (resourceIdToBeStored id)
+  if pending then pure unit
+  else if stored then void $ removeInternally id
+  else do
+    cached <- tryReadEntiteitFromCache id
+    -- A revision without a stored document is stale after database deletion.
+    -- Preserve genuinely new instances, which have not yet been persisted.
+    case cached of
+      Just entity | isJust (rev entity) -> void $ removeInternally id
+      _ -> pure unit
 
 isWaitingToBeSaved :: ResourceToBeStored -> MonadPerspectives Boolean
 isWaitingToBeSaved r = do
@@ -70,4 +75,3 @@ entityIsInDatabase id = do
   { database, documentName } <- resourceIdentifier2DocLocator (unwrap id)
   (mdoc :: Maybe a) <- tryGetDocument database documentName
   pure $ isJust mdoc
-

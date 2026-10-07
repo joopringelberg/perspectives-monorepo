@@ -55,7 +55,7 @@ import Perspectives.Parsing.Arc.Expression.AST (SimpleStep(..), Step(..))
 import Perspectives.Parsing.Arc.Identifiers (arcIdentifier, boolean, email, lowerCaseName, prefixedName, qualifiedName, reserved, stringUntilNewline)
 import Perspectives.Parsing.Arc.IndentParser (IP, arcPosition2Position, containsTab, entireBlock, entireBlock1, getArcParserState, getCurrentContext, getCurrentState, getObject, getPosition, getStateIdentifier, getSubject, inSubContext, isEof, isIndented, isNextLine, nestedBlock, protectObject, protectOnEntry, protectOnExit, protectSubject, sameOrOutdented', setObject, setOnEntry, setOnExit, setSubject, withArcParserState, withEntireBlock)
 import Perspectives.Parsing.Arc.Position (ArcPosition)
-import Perspectives.Parsing.Arc.Statement (assignment, letWithAssignment, twoReservedWords)
+import Perspectives.Parsing.Arc.Statement (assignment, letWithAssignment, stagedStatements, twoReservedWords)
 import Perspectives.Parsing.Arc.Statement.AST (Statements(..))
 import Perspectives.Parsing.Arc.Token (reservedIdentifier, token)
 import Perspectives.Persistent.PublicStore (PublicStore(..))
@@ -1129,7 +1129,7 @@ automaticEffectE = do
           effect <- case keyword of
             "letE" -> fail "letE does not allow assignment operators, so this will not have an effect. Did you mean 'letA'? "
             "letA" -> Let <$> letWithAssignment
-            _ -> Statements <<< fromFoldable <$> nestedBlock assignment
+            _ -> stagedStatements
           end <- getPosition
           { subject, object, onEntry, onExit, currentContext } <- getArcParserState
           case usr of
@@ -1548,7 +1548,7 @@ actionE = do
       kw <- option "" (lookAhead reservedIdentifier)
       effect <-
         if kw == "letA" then Let <$> letWithAssignment
-        else Statements <$> fromFoldable <$> entireBlock1 assignment
+        else stagedStatements
       end <- getPosition
       pure $ singleton $ CA $ ContextActionE { id, subject: s, object: currentContext, state, effect, start, end }
     Just s, Just o ->
@@ -1558,14 +1558,14 @@ actionE = do
         kw <- option "" (lookAhead reservedIdentifier)
         effect <-
           if kw == "letA" then Let <$> letWithAssignment
-          else Statements <$> fromFoldable <$> entireBlock1 assignment
+          else stagedStatements
         end <- getPosition
         pure $ singleton $ AC $ ActionE { id, subject: s, object: o, state: effectiveState, effect, start, end }
       else do
         kw <- option "" (lookAhead reservedIdentifier)
         effect <-
           if kw == "letA" then Let <$> letWithAssignment
-          else Statements <$> fromFoldable <$> entireBlock1 assignment
+          else stagedStatements
         end <- getPosition
         pure $ singleton $ AC $ ActionE { id, subject: s, object: o, state, effect, start, end }
   where

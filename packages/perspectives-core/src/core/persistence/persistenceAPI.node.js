@@ -185,31 +185,6 @@ export function documentsInDatabaseImpl( database, options ) {
   };
 };
 
-export function databaseInfoImpl ( database ) {
-  return function (onError, onSuccess) {
-    database.info( function(err, response)
-      {
-        if (err != null || (response != null && response.error != null))
-        {
-          var databaseError = err || response;
-          if (databaseError.status == null && databaseError.error === "not_found")
-          {
-            databaseError.status = 404;
-          }
-          onError( convertPouchError(databaseError) );
-        }
-        else
-        {
-          onSuccess(response);
-        }
-      });
-
-    return function (cancelError, cancelerError, cancelerSuccess) {
-      cancelerSuccess();
-    };
-  };
-};
-
 export function compactDatabaseImpl(db) {
   return function(onError, onSuccess) {
     db.compact()

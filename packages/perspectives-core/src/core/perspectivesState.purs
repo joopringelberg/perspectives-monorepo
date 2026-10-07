@@ -28,25 +28,26 @@ import Control.Monad.Error.Class (catchError, throwError)
 import Data.Array (cons)
 import Data.List (elem)
 import Data.Map (Map, empty, insert, lookup, values) as Map
-import Data.Maybe (Maybe(..), isNothing)
+import Data.Maybe (Maybe(..), isJust)
 import Data.Nullable (null)
 import Data.String (Pattern(..), stripSuffix)
 import Effect (Effect)
 import Effect.Aff.AVar (AVar, put, read, take, tryRead)
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
+import Effect.Ref (modify_, read, write) as Ref
 import Foreign (Foreign)
 import Foreign.Object (Object, empty, singleton)
 import Foreign.Object (lookup, insert, delete) as OBJ
 import LRUCache (Cache, clear, defaultCreateOptions, defaultGetOptions, delete, get, newCache, set)
 import Perspectives.AMQP.Stomp (StompClient, createStompClient)
-import Perspectives.CoreTypes (AssumptionRegister, BrokerService, ContextInstances, DeltaCache, DomeinCache, IndexedResource, IntegrityFix, JustInTimeModelLoad, LogConfig, LogLevel(..), LogTopic, MonadPerspectives, PerspectivesState, QueryInstances, RepeatingTransaction, ResourceDeltasCache, ResourceVersionCache, RolInstances, RoleInstanceDeltasCache, RuntimeOptions, TranslationTable, TypeFix, Warning)
+import Perspectives.CoreTypes (AssumptionRegister, BrokerService, ContextInstances, DeltaCache, DomeinCache, IndexedResource, IntegrityFix, JustInTimeModelLoad, LogConfig, LogLevel(..), LogTopic, MonadPerspectives, PerspectivesState, QueryInstances, RepeatingTransaction, ResourceDeltasCache, ResourceVersionCache, RolInstances, RoleInstanceDeltasCache, RuntimeOptions, TranslationTable, TypeFix, Warning, newPendingSettledStack)
 import Perspectives.DomeinFile (DomeinFile)
-import Perspectives.Instances.Environment (Environment, _pushFrame, addVariable, empty, lookup) as ENV
+import Perspectives.Instances.Environment (Environment, _pushFrame, addVariable, lookup) as ENV
 import Perspectives.Logging.DefaultLevels (defaultLogLevels)
 import Perspectives.Persistence.API (PouchdbUser)
 import Perspectives.Persistence.State (getSystemIdentifier)
-import Perspectives.Persistence.Types (Credential(..))
+import Perspectives.Persistence.Types (Credential(..), variableBindingsRef)
 import Perspectives.Representation.InstanceIdentifiers (PerspectivesUser(..), RoleInstance)
 import Perspectives.ResourceIdentifiers (createDefaultIdentifier)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri, Readable, Stable)
@@ -75,7 +76,6 @@ newPerspectivesState uinfo transFlag transactionWithTiming modelToLoad runtimeOp
   , resourceDeltasCache: newCache defaultCreateOptions
   , roleInstanceDeltasCache: newCache defaultCreateOptions
   , queryAssumptionRegister: empty
-  , variableBindings: ENV.empty
   , systemIdentifier: uinfo.systemIdentifier
   , perspectivesUser: PerspectivesUser $ createDefaultIdentifier uinfo.perspectivesUser
   , couchdbUrl: uinfo.couchdbUrl
@@ -113,6 +113,7 @@ newPerspectivesState uinfo transFlag transactionWithTiming modelToLoad runtimeOp
   , modelUris: Map.empty
   , logConfig: defaultLogLevels
   , logColor: Nothing
+  , pendingSettledTransactions: newPendingSettledStack unit
   }
 
 defaultRuntimeOptions :: RuntimeOptions
@@ -181,8 +182,9 @@ transactionFlag :: MonadPerspectives (AVar Boolean)
 transactionFlag = gets _.transactionFlag
 
 -- Non-blocking check to see if a transaction is currently running. 
+-- The flag is 'down' (the AVar is empty) exactly while a transaction runs.
 noTransactionIsRunning :: MonadPerspectives Boolean
-noTransactionIsRunning = transactionFlag >>= liftAff <<< map isNothing <<< tryRead
+noTransactionIsRunning = transactionFlag >>= liftAff <<< map isJust <<< tryRead
 
 nextTransactionNumber :: MonadPerspectives Int
 nextTransactionNumber = do
@@ -379,38 +381,42 @@ addWarning w = modify \s -> s { warnings = cons w s.warnings }
 -----------------------------------------------------------
 -- FUNCTIONS TO HANDLE VARIABLE BINDINGS
 -----------------------------------------------------------
+-- | Variable bindings are private to the fiber (the run of MonadPerspectives) that creates them;
+-- | see `runMonadPouchdbWithState`.
 getVariableBindings :: MonadPerspectives (ENV.Environment (Array String))
-getVariableBindings = gets _.variableBindings
+getVariableBindings = variableBindingsRef >>= liftEffect <<< Ref.read
+
+setVariableBindings :: ENV.Environment (Array String) -> MonadPerspectives Unit
+setVariableBindings env = variableBindingsRef >>= liftEffect <<< Ref.write env
 
 addBinding :: String -> Array String -> MonadPerspectives Unit
-addBinding varName qfd = void $ modify \s@{ variableBindings } -> s { variableBindings = ENV.addVariable varName qfd variableBindings }
+addBinding varName qfd = variableBindingsRef >>= liftEffect <<< Ref.modify_ (ENV.addVariable varName qfd)
 
 lookupVariableBinding :: String -> MonadPerspectives (Maybe (Array String))
 lookupVariableBinding varName = getVariableBindings >>= pure <<< (ENV.lookup varName)
 
 withFrame :: forall a. MonadPerspectives a -> MonadPerspectives a
 withFrame computation = do
-  old <- getVariableBindings
-  void $ modify \s -> s { variableBindings = (ENV._pushFrame old) }
+  old <- pushFrame
   catchError
     ( do
         r <- computation
-        void $ modify \s -> s { variableBindings = old }
+        restoreFrame old
         pure r
     )
     ( \e -> do
-        void $ modify \s -> s { variableBindings = old }
+        restoreFrame old
         throwError e
     )
 
 pushFrame :: MonadPerspectives (ENV.Environment (Array String))
 pushFrame = do
   old <- getVariableBindings
-  void $ modify \s -> s { variableBindings = (ENV._pushFrame old) }
+  setVariableBindings (ENV._pushFrame old)
   pure old
 
 restoreFrame :: ENV.Environment (Array String) -> MonadPerspectives Unit
-restoreFrame frame = void $ modify \s -> s { variableBindings = frame }
+restoreFrame = setVariableBindings
 
 -----------------------------------------------------------
 -- FUNCTIONS TO MODIFY LRUCACHES IN PERSPECTIVESSTATE

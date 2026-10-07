@@ -11,6 +11,7 @@ This index provides an overview of the technical documentation in `packages/pers
 | Document | Description |
 |---|---|
 | [Installation Initialization](installation-initialization.md) | What happens when a new Perspectives installation is created — covers both the PDR (PureScript) side and the Perspectives Language (PL) side, including the shared contexts that are bootstrapped on first run. |
+| [Rebooting the Perspectives Universe](reboot-perspectives-universe.md) | Local rehearsal and remote reboot runbook, including BigBang setup, database/document/attachment transfers for both repositories, destructive-operation safeguards, and current broker-signup limitations. |
 | [Model URI resolution](model-uri-resolution.md) | How `ModelUri` values are deterministically mapped to `models_*` and `cw_*` URLs (`modelUri2ModelUrl`, `modelUri2ManifestUrl`), including naming conventions, assumptions, and the reason tests may need an alternate mapping. |
 | [Public Resource Identifiers](public-resource-identifiers.md) | How `pub:` resource identifiers are parsed and used from ARC parsing to persistence, including support for both remote HTTP(S) publication targets and local PouchDB database names for tests. |
 | [PDR → Frontend Messaging](pdr-messaging.md) | The two mechanisms the PDR uses to push messages to the browser frontend: the status-message channel (`setPDRStatus`) and the reactive warning queue, plus how a developer wires up each one. |

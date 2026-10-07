@@ -45,6 +45,7 @@ import Perspectives.DependencyTracking.Array.Trans (ArrayT(..), runArrayT)
 import Perspectives.Extern.Utilities (formatDateTime)
 import Perspectives.HumanReadableType (translateType)
 import Perspectives.Identifiers (isExternalRole)
+import Perspectives.Instances.Combinators (closure_)
 import Perspectives.Instances.Me (isMe)
 import Perspectives.Instances.ObjectGetters (binding, binding_, context, contextType, contextType_, getActiveRoleStates, getActiveStates, roleType_)
 import Perspectives.Instances.Values (parseNumber)
@@ -73,7 +74,7 @@ import Perspectives.ResourceIdentifiers (createPublicIdentifier, guid)
 import Perspectives.TypePersistence.PerspectiveSerialisation.Data (PropertyFacets, RoleInstanceWithProperties, SerialisedPerspective(..), SerialisedPerspective', SerialisedProperty, ValuesWithVerbs)
 import Perspectives.Types.ObjectGetters (getContextAspectSpecialisations, indexedContextName)
 import Perspectives.Utilities (findM)
-import Prelude (append, bind, const, discard, eq, flip, map, not, pure, show, unit, void, ($), (<$>), (<<<), (<>), (==), (>=>), (>>=), (||))
+import Prelude (bind, const, discard, eq, flip, map, not, pure, show, unit, void, ($), (<$>), (<<<), (<>), (==), (>=>), (>>=), (||))
 import Simple.JSON (writeJSON)
 
 perspectiveForContextAndUser
@@ -244,7 +245,7 @@ serialisePerspective contextStates subjectStates cid userRoleType propertyRestri
       >>= pure <<< (filter (isExternalRole <<< unwrap))
       >>= lift <<< traverse getEnumeratedRole
       >>= pure <<< map (_.context <<< unwrap)
-      >>= \as -> lift $ ((append as) <<< concat <$> (for as (runArrayT <<< getContextAspectSpecialisations)))
+      >>= \as -> lift $ (concat <$> (for as (runArrayT <<< closure_ getContextAspectSpecialisations)))
         >>= (\as' -> pure $ nub as')
         >>= (traverse \t@(ContextType cType) -> Tuple cType <$> translateType t)
         >>= pure <<< fromFoldable

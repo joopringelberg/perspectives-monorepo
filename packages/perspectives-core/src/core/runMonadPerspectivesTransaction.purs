@@ -37,11 +37,13 @@ import Data.Tuple (Tuple(..))
 import Data.Unfoldable (replicate)
 import Effect.Aff.AVar (new, put, take, tryRead)
 import Effect.Aff.Class (liftAff)
+import Effect.AVar (AVar)
+import Effect.Class (liftEffect)
 import Effect.Exception (error)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CollectAffectedContexts (reEvaluatePublicFillerChanges)
 import Perspectives.ContextStateCompiler (enteringState, evaluateContextState, exitingState)
-import Perspectives.CoreTypes (MPT, MonadPerspectives, MonadPerspectivesTransaction, liftToInstanceLevel, (##=), (##>), (##>>))
+import Perspectives.CoreTypes (MPT, MonadPerspectives, MonadPerspectivesTransaction, PendingSettledStack, RepeatingTransaction(..), liftToInstanceLevel, popPendingSettledFrame, pushPendingSettledFrame, (##=), (##>), (##>>))
 import Perspectives.Deltas (TransactionPerUser, distributeTransaction)
 import Perspectives.DependencyTracking.Dependency (lookupActiveSupportedEffect)
 import Perspectives.Error.Pretty (humanizePerspectivesWarning)
@@ -51,7 +53,7 @@ import Perspectives.Identifiers (hasLocalName)
 import Perspectives.Instances.Combinators (exists')
 import Perspectives.Instances.Me (getMyType)
 import Perspectives.Instances.ObjectGetters (Filler_(..), context, contextType, filler2filledFromDatabase_, getActiveRoleStates, getActiveStates, roleType, roleType_)
-import Perspectives.Logging (debugState, traceState, warnState)
+import Perspectives.Logging (debugState, errorCompiler, traceState, warnState)
 import Perspectives.ModelDependencies (sysUser)
 import Perspectives.Persistent (tryRemoveEntiteit)
 import Perspectives.PerspectivesState (addBinding, addWarning, clearPublicRolesJustLoaded, decreaseTransactionLevel, getPublicRolesJustLoaded, increaseTransactionLevel, nextTransactionNumber, pushFrame, restoreFrame, transactionFlag, transactionLevel)
@@ -111,19 +113,39 @@ runMonadPerspectivesTransaction' share authoringRole a = (liftAff $ createTransa
     AA.modify \trns -> over Transaction (\tr -> tr { transactionNumber = transactionNumber }) trns
     padding <- lift transactionLevel
     lift $ debugState (padding <> "Starting " <> (if share then "" else "non-") <> "sharing transaction " <> show transactionNumber)
+    -- Push a fresh frame: "once settled" continuations scheduled during this transaction (including
+    -- anything it triggers, nested embedded transactions included) are collected here instead of being
+    -- dispatched immediately. See PendingSettledStack in coreTypes.purs.
+    (pendingSettledStack :: PendingSettledStack) <- lift (AA.gets _.pendingSettledTransactions :: MonadPerspectives PendingSettledStack)
+    lift $ liftEffect $ pushPendingSettledFrame pendingSettledStack
     catchError
       do
         -- Execute the value that accumulates Deltas in a Transaction.
         r <- a >>= phase1 share authoringRole
+        -- Only now that this transaction (and everything it triggered) has fully settled, hand the
+        -- continuations scheduled during it over to transactionWithTiming for dispatch.
+        dispatchSettledFrame pendingSettledStack
         -- 5. Raise the flag
         _ <- lift $ liftAff $ put true t
         lift $ debugState (padding <> "Ending transaction " <> show transactionNumber)
         pure r
       \e -> do
+        -- The transaction failed: discard any continuations it scheduled, but still pop the frame to
+        -- keep the stack balanced.
+        _ <- lift $ liftEffect $ popPendingSettledFrame pendingSettledStack
         -- 5. Raise the flag
         _ <- lift $ liftAff $ put true t
         lift $ debugState (padding <> "Ending transaction " <> show transactionNumber)
         throwError e
+
+  -- | Pops the current top frame and hands each of its entries over to transactionWithTiming,
+  -- | for forkTimedTransactions (in Main.purs) to actually run. Called only once this transaction's
+  -- | own phase1/phase2 (and everything nested inside it) have fully completed.
+  dispatchSettledFrame :: PendingSettledStack -> MonadPerspectivesTransaction Unit
+  dispatchSettledFrame pendingSettledStack = do
+    (frame :: Array RepeatingTransaction) <- lift $ liftEffect $ popPendingSettledFrame pendingSettledStack
+    (timingAVar :: AVar RepeatingTransaction) <- lift (AA.gets _.transactionWithTiming :: MonadPerspectives (AVar RepeatingTransaction))
+    for_ frame \rt -> lift $ liftAff $ put rt timingAVar
 
 -- | In phase1 we handle:
 -- | createdContexts, createdRoles, rolesToExit and ScheduledAssignments that are a ContextRemoval, a RoleUnbinding or a ExecuteDestructiveEffect.
@@ -631,53 +653,159 @@ runEmbeddedIfNecessary share authoringRole a = do
   else runMonadPerspectivesTransaction' share authoringRole a
 
 -----------------------------------------------------------
+-- AWAITING SETTLEMENT (depth-first, awaitable action invocation)
+-----------------------------------------------------------
+-- | Like `runMonadPerspectivesTransaction'`, but instead of handing this transaction's
+-- | `once settled` continuations to the asynchronous `transactionWithTiming` scheduler,
+-- | runs each of them to completion - including whatever they in turn schedule - before
+-- | returning. This gives depth-first, awaitable semantics for a single call chain
+-- | (one action directly invoking another), as opposed to the breadth-first interleaving
+-- | across independently-scheduled chains that the ordinary mechanism produces.
+runMonadPerspectivesTransactionAwaitingSettlement
+  :: forall o
+   . Boolean
+  -> RoleType
+  -> MonadPerspectivesTransaction o
+  -> (MonadPerspectives o)
+runMonadPerspectivesTransactionAwaitingSettlement share authoringRole a = (liftAff $ createTransaction authoringRole share) >>= liftAff <<< new >>= runReaderT whenFlagIsDown
+  where
+  whenFlagIsDown :: MonadPerspectivesTransaction o
+  whenFlagIsDown = do
+    t <- lift $ transactionFlag
+    lift $ liftAff $ void $ take t
+    transactionNumber <- lift $ nextTransactionNumber
+    AA.modify \trns -> over Transaction (\tr -> tr { transactionNumber = transactionNumber }) trns
+    padding <- lift transactionLevel
+    lift $ debugState (padding <> "Starting " <> (if share then "" else "non-") <> "sharing transaction (awaiting settlement) " <> show transactionNumber)
+    (pendingSettledStack :: PendingSettledStack) <- lift (AA.gets _.pendingSettledTransactions :: MonadPerspectives PendingSettledStack)
+    lift $ liftEffect $ pushPendingSettledFrame pendingSettledStack
+    catchError
+      do
+        r <- a >>= phase1 share authoringRole
+        -- Drain this transaction's own settled continuations now, synchronously, instead of
+        -- dispatching them to the asynchronous scheduler.
+        lift $ drainSettledFrame pendingSettledStack
+        _ <- lift $ liftAff $ put true t
+        lift $ debugState (padding <> "Ending transaction (awaiting settlement) " <> show transactionNumber)
+        pure r
+      \e -> do
+        _ <- lift $ liftEffect $ popPendingSettledFrame pendingSettledStack
+        _ <- lift $ liftAff $ put true t
+        lift $ debugState (padding <> "Ending transaction (awaiting settlement) " <> show transactionNumber)
+        throwError e
+
+  -- | Pops this transaction's own frame and runs each entry to completion, depth-first,
+  -- | before returning.
+  drainSettledFrame :: PendingSettledStack -> MonadPerspectives Unit
+  drainSettledFrame pendingSettledStack = do
+    (frame :: Array RepeatingTransaction) <- liftEffect $ popPendingSettledFrame pendingSettledStack
+    for_ frame runSettledEntryAwaitingSettlement
+
+-- | Runs a single scheduled continuation to completion, depth-first (including every
+-- | `once settled` continuation it in turn schedules), instead of handing it to the
+-- | asynchronous `transactionWithTiming` scheduler. Time-based continuations (which do not
+-- | arise from directly-awaited action chains) are handed to the regular scheduler instead,
+-- | since there is nothing sensible to await about a delay or a repeat.
+runSettledEntryAwaitingSettlement :: RepeatingTransaction -> MonadPerspectives Unit
+runSettledEntryAwaitingSettlement (SettledTransaction { transaction, authoringRole, capturedBindings }) = do
+  oldFrame <- pushFrame
+  for_ capturedBindings \(Tuple name values) -> addBinding name values
+  catchError
+    ( do
+        -- The draining transaction still holds the flag, so this must run embedded to avoid deadlock.
+        _ <- runEmbeddedIfNecessaryAwaitingSettlement shareWithPeers authoringRole transaction
+        restoreFrame oldFrame
+    )
+    \e -> do
+      restoreFrame oldFrame
+      throwError e
+runSettledEntryAwaitingSettlement rt = do
+  (timingAVar :: AVar RepeatingTransaction) <- (AA.gets _.transactionWithTiming :: MonadPerspectives (AVar RepeatingTransaction))
+  liftAff $ put rt timingAVar
+
+-- | Like `runEmbeddedIfNecessary`, but awaits this embedded transaction's full settlement -
+-- | i.e. every `once settled` continuation it (recursively) schedules - before returning,
+-- | giving depth-first semantics for one action directly invoking another.
+runEmbeddedIfNecessaryAwaitingSettlement
+  :: forall o
+   . Boolean
+  -> RoleType
+  -> MonadPerspectivesTransaction o
+  -> (MonadPerspectives o)
+runEmbeddedIfNecessaryAwaitingSettlement share authoringRole a = do
+  t <- transactionFlag
+  flagIsDown <- isNothing <$> (liftAff $ tryRead t)
+  if flagIsDown then do
+    _ <- liftAff $ put true t
+    increaseTransactionLevel
+    padding <- transactionLevel
+    debugState $ padding <> "Starting embedded " <> (if share then "" else "non-") <> "sharing transaction (awaiting settlement) because it was necessary."
+    catchError
+      do
+        result <- runMonadPerspectivesTransactionAwaitingSettlement share authoringRole a
+        decreaseTransactionLevel
+        _ <- liftAff $ take t
+        debugState $ padding <> "Ending transaction that needed to be embedded (awaiting settlement)."
+        pure result
+      \e -> do
+        decreaseTransactionLevel
+        _ <- liftAff $ take t
+        debugState $ padding <> ("Ending transaction that needed to be embedded (awaiting settlement) in failure. " <> show e)
+        throwError e
+  -- Otherwise, since a transaction is already running, we queue up behind it, awaiting settlement too.
+  else runMonadPerspectivesTransactionAwaitingSettlement share authoringRole a
+
+-----------------------------------------------------------
 -- EXECUTEEFFECT
 -----------------------------------------------------------
 executeEffect :: String -> String -> Array (Array String) -> MonadPerspectivesTransaction Unit
-executeEffect functionName origin values = do
-  (f :: HiddenFunction) <- pure $ unsafePartial $ fromJust $ lookupHiddenFunction functionName
-  (nrOfParameters :: Int) <- pure $ unsafePartial (fromJust $ lookupHiddenFunctionNArgs functionName)
-  -- Notice that the number of parameters given ignores the default argument (context or role) that the function is applied to anyway.
-  -- If we do have an extra argument value, supply it as the last argument instead of r.
-  (lastArgument :: String) <- case index values nrOfParameters of
-    Nothing -> pure origin
-    Just v -> pure (unsafePartial (unsafeIndex v 0))
-  case nrOfParameters of
-    0 -> (unsafeCoerce f :: String -> MPT Unit) lastArgument
-    1 -> (unsafeCoerce f :: (Array String -> String -> MPT Unit))
-      (unsafePartial (unsafeIndex values 0))
-      lastArgument
-    2 -> (unsafeCoerce f :: (Array String -> Array String -> String -> MPT Unit))
-      (unsafePartial (unsafeIndex values 0))
-      (unsafePartial (unsafeIndex values 1))
-      lastArgument
-    3 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> String -> MPT Unit))
-      (unsafePartial (unsafeIndex values 0))
-      (unsafePartial (unsafeIndex values 1))
-      (unsafePartial (unsafeIndex values 2))
-      lastArgument
-    4 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> Array String -> String -> MPT Unit))
-      (unsafePartial (unsafeIndex values 0))
-      (unsafePartial (unsafeIndex values 1))
-      (unsafePartial (unsafeIndex values 2))
-      (unsafePartial (unsafeIndex values 3))
-      lastArgument
-    5 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> Array String -> Array String -> String -> MPT Unit))
-      (unsafePartial (unsafeIndex values 0))
-      (unsafePartial (unsafeIndex values 1))
-      (unsafePartial (unsafeIndex values 2))
-      (unsafePartial (unsafeIndex values 3))
-      (unsafePartial (unsafeIndex values 4))
-      lastArgument
-    6 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> Array String -> Array String -> Array String -> String -> MPT Unit))
-      (unsafePartial (unsafeIndex values 0))
-      (unsafePartial (unsafeIndex values 1))
-      (unsafePartial (unsafeIndex values 2))
-      (unsafePartial (unsafeIndex values 3))
-      (unsafePartial (unsafeIndex values 4))
-      (unsafePartial (unsafeIndex values 5))
-      lastArgument
-    _ -> throwError (error "Too many arguments for external core module: maximum is 6")
+executeEffect functionName origin values = catchError
+  ( do
+      (f :: HiddenFunction) <- pure $ unsafePartial $ fromJust $ lookupHiddenFunction functionName
+      (nrOfParameters :: Int) <- pure $ unsafePartial (fromJust $ lookupHiddenFunctionNArgs functionName)
+      -- Notice that the number of parameters given ignores the default argument (context or role) that the function is applied to anyway.
+      -- If we do have an extra argument value, supply it as the last argument instead of r.
+      (lastArgument :: String) <- case index values nrOfParameters of
+        Nothing -> pure origin
+        Just v -> pure (unsafePartial (unsafeIndex v 0))
+      case nrOfParameters of
+        0 -> (unsafeCoerce f :: String -> MPT Unit) lastArgument
+        1 -> (unsafeCoerce f :: (Array String -> String -> MPT Unit))
+          (unsafePartial (unsafeIndex values 0))
+          lastArgument
+        2 -> (unsafeCoerce f :: (Array String -> Array String -> String -> MPT Unit))
+          (unsafePartial (unsafeIndex values 0))
+          (unsafePartial (unsafeIndex values 1))
+          lastArgument
+        3 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> String -> MPT Unit))
+          (unsafePartial (unsafeIndex values 0))
+          (unsafePartial (unsafeIndex values 1))
+          (unsafePartial (unsafeIndex values 2))
+          lastArgument
+        4 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> Array String -> String -> MPT Unit))
+          (unsafePartial (unsafeIndex values 0))
+          (unsafePartial (unsafeIndex values 1))
+          (unsafePartial (unsafeIndex values 2))
+          (unsafePartial (unsafeIndex values 3))
+          lastArgument
+        5 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> Array String -> Array String -> String -> MPT Unit))
+          (unsafePartial (unsafeIndex values 0))
+          (unsafePartial (unsafeIndex values 1))
+          (unsafePartial (unsafeIndex values 2))
+          (unsafePartial (unsafeIndex values 3))
+          (unsafePartial (unsafeIndex values 4))
+          lastArgument
+        6 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> Array String -> Array String -> Array String -> String -> MPT Unit))
+          (unsafePartial (unsafeIndex values 0))
+          (unsafePartial (unsafeIndex values 1))
+          (unsafePartial (unsafeIndex values 2))
+          (unsafePartial (unsafeIndex values 3))
+          (unsafePartial (unsafeIndex values 4))
+          (unsafePartial (unsafeIndex values 5))
+          lastArgument
+        _ -> throwError (error "Too many arguments for external core module: maximum is 6")
+  )
+  (\e -> errorCompiler $ "Error for ExternalDestructiveFunction in executeEffect: " <> show e)
 
 -----------------------------------------------------------
 -- DETECT STATE TRANSITIONS TRIGGERED BY PUBLIC RESOURCES

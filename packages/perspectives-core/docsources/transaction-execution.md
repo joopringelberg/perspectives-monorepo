@@ -2,7 +2,7 @@
 
 This document describes how Perspectives executes a transaction, covering the two entry paths (user-initiated and peer-received), the multi-phase processing loop, the design rationale, and observed design considerations.
 
-> **Source modules:** `Perspectives.RunMonadPerspectivesTransaction` (`runMonadPerspectivesTransaction.purs`), `Perspectives.Sync.HandleTransaction` (`handleTransaction.purs`), `Perspectives.AMQP.IncomingPost` (`incomingPost.purs`), `Perspectives.Sync.Transaction` (`transaction.purs`), `Perspectives.ContextStateCompiler`, `Perspectives.RoleStateCompiler`.
+> **Source modules:** `Perspectives.RunMonadPerspectivesTransaction` (`runMonadPerspectivesTransaction.purs`), `Perspectives.Sync.HandleTransaction` (`handleTransaction.purs`), `Perspectives.AMQP.IncomingPost` (`incomingPost.purs`), `Perspectives.Sync.Transaction` (`transaction.purs`), `Perspectives.ContextStateCompiler`, `Perspectives.RoleStateCompiler`, `Perspectives.Extern.RunAction` (`runActionExtern.purs`), `Perspectives.Assignment.RunAction` (`runAction.purs`).
 
 ---
 
@@ -73,10 +73,12 @@ After the non-sharing transaction finishes, `detectPublicStateChanges` is called
 1. Create a fresh `Transaction` with the given `authoringRole` and an empty record.
 2. **Lower the transaction flag** — an `AVar Boolean` that serialises concurrent transactions. Taking the value (lowering the flag) means "a transaction is now running". Callers block until the flag is available.
 3. Assign a unique, monotonically increasing `transactionNumber` (for logging).
-4. Execute the action (either the user action or `executeTransaction`), then immediately enter `phase1`.
-5. **Raise the flag** again on success or failure (guaranteed by an error boundary).
+4. **Push a fresh frame** onto the `PendingSettledStack` (see [§9](#9-once-settled-staged-actions-the-pendingsettledstack)).
+5. Execute the action (either the user action or `executeTransaction`), then immediately enter `phase1`.
+6. **Pop the frame** and, on success, hand its contents to `transactionWithTiming` for dispatch; on failure, discard it.
+7. **Raise the flag** again on success or failure (guaranteed by an error boundary).
 
-Nested ("embedded") transactions are supported via `runEmbeddedTransaction` / `runEmbeddedIfNecessary`. These explicitly raise the flag so that `runMonadPerspectivesTransaction'` can take it again. A nesting depth counter (`transactionLevel`) is maintained for log indentation.
+Nested ("embedded") transactions are supported via `runEmbeddedTransaction` / `runEmbeddedIfNecessary`. These explicitly raise the flag so that `runMonadPerspectivesTransaction'` can take it again. A nesting depth counter (`transactionLevel`) is maintained for log indentation. Because they go through the same `runMonadPerspectivesTransaction'` entry point, they push and pop their own `PendingSettledStack` frame too — see §9 for why this matters.
 
 ---
 
@@ -350,3 +352,93 @@ Client query subscriptions (`correlationIdentifiers`) are run at the very end of
 
 ### 8. `detectPublicStateChanges` runs outside the main transaction
 `detectPublicStateChanges` starts fresh non-sharing transactions after the main incoming-post transaction has completed. This means public-role state changes are processed asynchronously with respect to the peer transaction that caused them. If a peer transaction causes public roles to be loaded, and those roles affect local state conditions, those conditions will only be evaluated after the main transaction is fully committed. This is generally correct (the public data is now stable), but it means there can be a brief window between the peer transaction finishing and the public-state-triggered reactions completing.
+
+### 9. `once settled` staged actions: the `PendingSettledStack`
+
+ARC action bodies and automatic `do` effects in `on entry` or `on exit` transitions can split their statements into stages separated by `once settled`, with or without `letA` bindings:
+
+```arc
+letA
+  version <- create role cm:ModelManifest$Versions in ...
+in
+  Versions$Version = VersionNumber for version
+
+  once settled
+    Store = "Repository" for version >> binding
+
+  once settled
+    AutoUpload = true for version >> binding
+```
+
+Without `letA`, place `once settled` at the same indentation as the first stage's statements and indent the next stage beneath it. In `do for Author once settled`, the header delays the first stage; a `once settled` inside its body delays the next stage until the first has settled.
+
+Each stage is compiled into a separate `Updater` (`Perspectives.Representation.Action.ActionEffect`, see `Perspectives.Query.StatementCompiler.compileActionEffect`). At run time (`Perspectives.CompileActionEffect.compileActionEffectWith`), the first stage runs synchronously as part of the current transaction; every later stage is handed to `scheduleSettledTransaction` (`Perspectives.CompileTimeFacets`), which is supposed to run it only once the current logical transaction — including everything it triggers — has *settled*.
+
+**The bug (fixed 2026-09-24).** `scheduleSettledTransaction` used to `put` a `SettledTransaction` directly onto the global `transactionWithTiming` AVar the moment a stage finished, mid-action, before `phase1`/`phase2` of the *enclosing* transaction had even run. `forkTimedTransactions` (Main.purs) picks such entries up and runs them as an ordinary new `runMonadPerspectivesTransaction`, which serialises against every other transaction via `transactionFlag`. That looks race-free — except `runEmbeddedTransaction` (used whenever an automatic-action cascade needs an embedded *sharing* sub-transaction, e.g. to re-broadcast an own-user reaction while processing an incoming peer transaction) **momentarily raises `transactionFlag`** so it can take it down again itself. That raise is visible on the *global* AVar, not just to its own nested call — so a queued `SettledTransaction` sitting in `forkTimedTransactions`, waiting on the same flag, could slip through that window and run *before* the outer transaction's own cascade (e.g. a `ReadyToMake` state creating and binding the very role the settled stage targets) had finished. This surfaced as an intermittent `(NoRoleInstanceToSetProperty)` warning for properties set in a `once settled` stage that depends on a binding created earlier in the same automatic action.
+
+**The fix.** `scheduleSettledTransaction` no longer dispatches immediately. `PerspectivesState` now holds a `pendingSettledTransactions :: PendingSettledStack` (`Perspectives.CoreTypes`) — a mutable stack of frames, each an `Array RepeatingTransaction` of not-yet-dispatched `SettledTransaction`s (backed by an `Effect.Ref`, created via the same "pure factory + `unsafePerformEffect`" pattern already used for `LRUCache`). `scheduleSettledTransaction` appends to the *top* frame instead of touching the AVar.
+
+`runMonadPerspectivesTransaction'` (`whenFlagIsDown`) pushes a new, empty frame right after taking the transaction flag down, and pops it right before raising the flag again:
+- on success, *after* `phase1`/`phase2` have fully run, the popped frame's entries are `put` onto `transactionWithTiming` one by one (this is the only place that AVar is written to for settled stages now);
+- on failure, the popped frame is discarded (a failed transaction's staged continuations do not run).
+
+Because every `runMonadPerspectivesTransaction'` call — top-level *or* embedded — creates its own fresh `Transaction` record but shares the *same* `PendingSettledStack`, the push/pop pairs nest exactly like a call stack:
+- a stage scheduled while an **embedded** sub-transaction is running is appended to *that* sub-transaction's own frame, and is dispatched when *that* embedded call finishes (before it returns control to its caller) — well before the outer transaction's own frame is even considered for draining;
+- a stage scheduled by the **outer** action is only dispatched once phase1/phase2 of the *entire* outer transaction — including every embedded sub-transaction it triggered — has completed.
+
+In other words, `once settled` continuations are now both **chained** (stage *n+1* is only constructed once stage *n* has run) and **stacked** (an outer frame is only drained once every frame nested inside it has been drained first) — matching what the name always implied, rather than racing a global semaphore against unrelated flag-raise windows opened for a different purpose.
+
+See `Perspectives.CoreTypes` (`PendingSettledStack`, `newPendingSettledStack`, `pushPendingSettledFrame`, `popPendingSettledFrame`, `appendPendingSettled`), `Perspectives.CompileTimeFacets.scheduleSettledTransaction`, and `Perspectives.RunMonadPerspectivesTransaction.whenFlagIsDown`.
+
+### 10. `runContextAction` / `runRoleAction`: depth-first, awaited action invocation
+
+The ARC statements `runContextAction <ArcIdentifier> for <ArcIdentifier> in <step>` and `runRoleAction <ArcIdentifier> for <ArcIdentifier> on <step> in <step>` let one action directly invoke another, for a role filled by the local user ("me") — possibly a different role than the one authoring the calling action. Unlike the ordinary `once settled` dispatch described above, which is intentionally **breadth-first** across independently-scheduled chains (a newly-produced continuation queues behind whatever else is already waiting for the transaction flag), these statements give **depth-first** semantics: the call does not return to the calling action's next statement until the invoked action's entire chain — its synchronous stage *and* every `once settled` stage it (recursively) schedules — has fully settled.
+
+**Why a new QueryFunction was avoided.** `Perspectives.CompileAssignment` / `Perspectives.CompileRoleAssignment` sit upstream of `Perspectives.RunMonadPerspectivesTransaction` in the module graph (reached via `Perspectives.ContextStateCompiler`/`Perspectives.RoleStateCompiler`). Compiling these statements to a new `QueryFunction` handled directly in those compiler modules would import the transaction-embedding machinery into an upstream module and create a cycle. Instead, `Perspectives.Query.StatementCompiler` compiles both statements to the *existing* `QF.ExternalEffectFullFunction` call (`"RunContextActionEffect"` / `"RunRoleActionEffect"`), with the action name and the qualified user role type baked in as `QF.Constant PString` arguments and the context (and, for role actions, the object) supplied as the one "extra" argument that `ExternalEffectFullFunction`'s existing arity dispatch resolves to the resource instance. The real implementations are registered as hidden functions in `Perspectives.Extern.RunAction`, a module that — being looked up dynamically through `hiddenFunctionCache` rather than statically imported by the compiler — is free to depend on `Perspectives.RunMonadPerspectivesTransaction` without creating a cycle.
+
+**Runtime behaviour.** `runContextActionEffect` / `runRoleActionEffect` resolve the user role instance via `getMeInRoleAndContext`; if none is filled by the local user, they do nothing (this is the authorization boundary — there is no further perspective/verb check). Otherwise they invoke the target action through two new functions that mirror `runEmbeddedTransaction` / `runEmbeddedIfNecessary`, but replace their dispatch strategy:
+
+- `runMonadPerspectivesTransactionAwaitingSettlement` is a variant of `runMonadPerspectivesTransaction'` that, instead of calling `dispatchSettledFrame` (which hands the popped frame to `transactionWithTiming` for asynchronous pickup), calls `drainSettledFrame`, which runs each entry **synchronously**, via a recursive call to `runSettledEntryAwaitingSettlement`.
+- `runEmbeddedIfNecessaryAwaitingSettlement` is a variant of `runEmbeddedIfNecessary` that calls the above instead of `runMonadPerspectivesTransaction'`.
+
+Because `PendingSettledStack` push/pop already nests like a call stack (see §9), this composes correctly with the invoked action's own `once settled` stages without any special-casing: a stage scheduled while running inside this embedded, awaiting call is appended to *that call's own* frame, and `drainSettledFrame` (not the ordinary async dispatch) is what pops and runs it — before the embedding call returns to its caller. If the invoked action itself calls `runContextAction`/`runRoleAction` again, the same mechanism nests arbitrarily deep, always depth-first.
+
+**Scope.** Only the invoked action's own chain is drained synchronously. Anything scheduled on the *calling* action's own (outer, ordinary) transaction frame — e.g. unrelated automatic actions triggered elsewhere in the same transaction — is unaffected and still dispatched the ordinary, asynchronous, breadth-first way once that outer transaction settles.
+
+**Error handling and attribution.** A failure anywhere in the invoked chain propagates up to the generic `ExternalEffectFullFunction` error boundary in `Perspectives.CompileAssignment` / `Perspectives.CompileRoleAssignment`, which logs it and swallows it, exactly as for any other `callEffect` failure; the calling transaction is not aborted, and nothing already done deeper in the invoked chain is rolled back. The embedded transaction's `authoringRole` — and therefore the authoring role captured for its own `once settled` continuations — is the resolved *target* user role, not the calling action's authoring role.
+
+See `Perspectives.RunMonadPerspectivesTransaction` (`runMonadPerspectivesTransactionAwaitingSettlement`, `runEmbeddedIfNecessaryAwaitingSettlement`, `drainSettledFrame`, `runSettledEntryAwaitingSettlement`), `Perspectives.Extern.RunAction` (`runContextActionEffect`, `runRoleActionEffect`), and `Perspectives.Query.StatementCompiler` (the `RunContextAction` / `RunRoleAction` cases of `describeAssignmentStatement`).
+
+### 11. Variable bindings are private to a fiber
+
+Queries and actions use variable bindings: the PDR binds `currentcontext`, `currentactor`, `notifieduser` and `currentobject` before it runs a state's or action's effect, and `letA`/`letE` bind their own variables. These bindings live in an `Environment (Array String)` (`Perspectives.Instances.Environment`), a stack of frames: `pushFrame` opens a new scope, `addBinding` adds to the top frame, `lookupVariableBinding` searches from the top down, and `restoreFrame` returns to an earlier scope.
+
+**The bug (fixed 2026-10-06).** The environment used to be a single field, `variableBindings`, in `PerspectivesState`, and that state is shared by *every* fiber running against the PDR: API requests (including the calculated property getters that the GUI runs outside of any transaction), transactions forked by `forkTimedTransactions` (`once settled`, `after`, repeating), incoming post, the clocks, and so on. The transaction flag serialises *transactions*, but not the query evaluation that happens outside them. And the save/push/restore pattern (`withFrame`, `withFrame_` in the unsafe compiler, the `WithFrame` cases of the query interpreter and the assignment compilers, `runSettledTransaction` in Main.purs) spans `Aff` suspensions. So two fibers could interleave like this:
+
+1. fiber B pushes a frame (saving the environment as it is now);
+2. fiber A binds `currentcontext` (into B's frame, as it happens to be on top);
+3. B restores its saved environment — A's binding is gone, or an older, stale value for it is back.
+
+This surfaced in the browser during Reboot Universe: the `once settled` stages of `AddModel$External$CreateVersion` (repositoryTools) for one model wrote to the version role of *another* model that was being added concurrently, so Serialise and Utilities were never installed. In node the timing happened to be different, so the run succeeded.
+
+There was a second leak in the FFI: `ENV.empty` is a single, shared JavaScript object, and `ENV.addVariable` changes the top frame *in place*. A binding made without first pushing a frame was therefore written into one global object, visible to every fiber.
+
+**The fix.** The environment is no longer part of the state. The reader of `MonadPouchdb` (`Perspectives.Persistence.Types`) is now a `PouchdbContext`:
+
+```purescript
+type PouchdbContext f =
+  { state :: AVar (PouchdbState f)              -- shared by all fibers
+  , variableBindings :: Ref VariableBindings    -- private to this run
+  }
+```
+
+- `runMonadPouchdbWithState` (and therefore `runMonadPerspectives` / `runPerspectivesWithState`, the single way every fiber is started) creates a fresh `Ref` holding a fresh frame on top of `ENV.empty`. Two fibers therefore never share a frame object, even if they mutate it in place.
+- The `Parallel` instance gives each parallel branch its own `Ref` with a fresh frame on top of the parent's bindings.
+- `MonadAsk`/`MonadReader` still yield just the state `AVar`, so `Control.Monad.AvarMonadAsk` (`gets`, `modify`, …) and `HasPerspectivesState` are unaffected.
+- The binding functions in `Perspectives.PerspectivesState` (`getVariableBindings`, `setVariableBindings`, `addBinding`, `lookupVariableBinding`, `withFrame`, `pushFrame`, `restoreFrame`) read and write that `Ref` via `variableBindingsRef`. No code outside them touches the environment directly.
+
+**Consequence for deferred work.** A fiber now starts with *no* bindings at all. Work that is deferred to another fiber can therefore no longer (accidentally) see the scheduling fiber's bindings; it must capture what it needs when it is scheduled. `Perspectives.CompileTimeFacets` does this:
+- `scheduleSettledTransaction` (`once settled` time facets and later `letA` stages) captures `currentcontext`, `currentactor` and `notifieduser` (`contextVariableNames`) in addition to the `letA` variable names; `runSettledTransaction` (Main.purs) and `runSettledEntryAwaitingSettlement` rebind them in a new frame.
+- `after`, repeating (`Forever`) and `RepeatFor` time facets capture the same names and wrap the transaction with `withCapturedBindings`, which rebinds them in a new frame when the transaction eventually runs.
+
+See `Perspectives.Persistence.Types` (`PouchdbContext`, `runMonadPouchdbWithState`, `variableBindingsRef`), `Perspectives.PerspectivesState` (the variable binding functions), `Perspectives.CompileTimeFacets` (`contextVariableNames`, `captureBindings`, `withCapturedBindings`), and the regression tests in `test/variableBindings.purs` (part of `pnpm run test:layer1`).

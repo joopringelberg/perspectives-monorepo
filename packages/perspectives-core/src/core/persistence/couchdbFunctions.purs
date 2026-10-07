@@ -24,6 +24,7 @@ module Perspectives.Persistence.CouchdbFunctions
   ( addRoleToUser
   , concatenatePathSegments
   , createUser
+  , databaseExists
   , deleteUser
   , endReplication
   , ensureSecurityDocument
@@ -62,7 +63,7 @@ import Foreign.Object (singleton)
 import Perspectives.Couchdb (CouchdbStatusCodes, ReplicationDocument(..), ReplicationEndpoint(..), SecurityDocument(..), SelectorObject, coerceToJson, onAccepted, onAccepted', onAccepted_, toJson)
 import Perspectives.Couchdb.Revision (class Revision)
 import Perspectives.Identifiers (endsWithSegments)
-import Perspectives.Persistence.Authentication (AuthoritySource(..), defaultPerspectRequest, ensureAuthentication, requestAuthentication)
+import Perspectives.Persistence.Authentication (AuthoritySource(..), authenticatedPerspectRequest, authenticatedUrlRequest, ensureAuthentication, requestAuthentication)
 import Perspectives.Persistence.State (getCouchdbCredentials)
 import Perspectives.Persistence.Types (Credential(..), DatabaseName, MonadPouchdb, Url)
 import Perspectives.Representation.InstanceIdentifiers (PerspectivesUser(..))
@@ -92,29 +93,18 @@ setSecurityDocument :: forall f. Url -> DatabaseName -> SecurityDocument -> Mona
 setSecurityDocument base db doc = do
   -- Couchdb does not return recognizable "you are not authorized" information. Hence we authenticate anyway.
   requestAuthentication (Authority base)
-  rq <- defaultPerspectRequest
+  rq <- authenticatedPerspectRequest base
   -- Security documents have no versions.
   res <- liftAff $ AJ.request $ rq { method = Left PUT, url = (base <> db <> "/_security"), content = Just $ RequestBody.json (toJson $ unwrap doc) }
   liftAff $ onAccepted res [ StatusCode 200, StatusCode 201, StatusCode 202 ] "setSecurityDocument" (\_ -> pure unit)
 
--- | Returns a security document, even if none existed before.
--- | The latter is probably superfluous, as Couchdb returns a default design document anyway
--- | ("If the security object for a database has never been set, then the value returned will be empty." from the
--- | above reference). However, what is returned on a new database in an installation with a Server Admin, is:
--- | {"members":{"roles":["_admin"]},"admins":{"roles":["_admin"]}}
+-- | CouchDB always supplies a security document, including the default for a new database.
+-- | Authentication is retried if the browser's session cookie has expired.
 ensureSecurityDocument :: forall f. Url -> DatabaseName -> MonadPouchdb f SecurityDocument
-ensureSecurityDocument base db = do
-  rq <- defaultPerspectRequest
+ensureSecurityDocument base db = ensureAuthentication (Authority base) \_ -> do
+  rq <- authenticatedPerspectRequest base
   res <- liftAff $ AJ.request $ rq { method = Left GET, url = (base <> db <> "/_security") }
-  onAccepted_
-    ( \_ _ -> do
-        doc <- pure $ SecurityDocument
-          { admins: { names: Just [], roles: [ "_admin" ] }
-          , members: { names: Just [], roles: [ "_admin" ] }
-          }
-        setSecurityDocument base db doc
-        pure doc
-    )
+  onAccepted
     res
     [ StatusCode 200 ]
     "ensureSecurityDocument"
@@ -154,7 +144,7 @@ replicateContinuously (PerspectivesUser usr) couchdbUrl name source target selec
 -- | Authentication ensured.
 setReplicationDocument :: forall f. Url -> ReplicationDocument -> MonadPouchdb f Unit
 setReplicationDocument base (ReplicationDocument rd@{ _id }) = ensureAuthentication (Authority base) \_ -> do
-  rq <- defaultPerspectRequest
+  rq <- authenticatedPerspectRequest base
   rev <- retrieveDocumentVersion (base <> "_replicator/" <> _id)
   res <- liftAff $ AJ.request $ rq { method = Left PUT, url = (base <> "_replicator/" <> _id), content = Just $ RequestBody.json (toJson (rd { _rev = rev })) }
   onAccepted res [ StatusCode 200, StatusCode 201, StatusCode 202 ] "setReplicationDocument" (\_ -> pure unit)
@@ -206,7 +196,7 @@ type Password = String
 -- | Create a non-admin user.
 createUser :: forall f. Url -> User -> Password -> Array Role -> MonadPouchdb f Unit
 createUser base user password roles = ensureAuthentication (Authority base) \_ -> do
-  rq <- defaultPerspectRequest
+  rq <- authenticatedPerspectRequest base
   (content :: Json) <- pure
     ( toJson
         { _id: "org.couchdb.user:" <> unwrap user
@@ -233,7 +223,7 @@ getUserDocument base user = getDocumentFromUrl (base <> "_users/org.couchdb.user
 -- | Add a role to a user document.
 addRoleToUser :: forall f. Url -> User -> Role -> MonadPouchdb f Unit
 addRoleToUser base user role = do
-  rq <- defaultPerspectRequest
+  rq <- authenticatedPerspectRequest base
   -- Request the user document
   UserDocument urecord@{ roles } <- getUserDocument base user
   res <- liftAff $ AJ.request $ rq
@@ -245,7 +235,7 @@ addRoleToUser base user role = do
 
 removeRoleFromUser :: forall f. Url -> User -> Role -> MonadPouchdb f Unit
 removeRoleFromUser base user role = do
-  rq <- defaultPerspectRequest
+  rq <- authenticatedPerspectRequest base
   -- Request the user document
   UserDocument urecord@{ roles } <- getUserDocument base user
   res <- liftAff $ AJ.request $ rq
@@ -266,7 +256,7 @@ deleteUser base user = deleteDocument (base <> "_users/org.couchdb.user:" <> unw
 -----------------------------------------------------------
 setPassword :: forall f. Url -> User -> Password -> MonadPouchdb f Unit
 setPassword base user password = ensureAuthentication (Authority base) \_ -> do
-  rq <- defaultPerspectRequest
+  rq <- authenticatedPerspectRequest base
   (res :: (Either AJ.Error (Response Json))) <- liftAff $ AJ.request $ rq
     { method = Left GET
     , url = (base <> "_users/org.couchdb.user:" <> unwrap user)
@@ -288,7 +278,7 @@ changePassword r password = coerceToJson ((unsafeCoerce r) { password = password
 -----------------------------------------------------------
 getDocumentFromUrl :: forall d f. Revision d => ReadForeign d => String -> MonadPouchdb f d
 getDocumentFromUrl url = ensureAuthentication (Url url) \_ -> do
-  rq <- defaultPerspectRequest
+  rq <- authenticatedUrlRequest url
   res <- liftAff $ AJ.request $ rq { url = url }
   onAccepted
     res
@@ -312,7 +302,7 @@ deleteDocument url version' = ensureAuthentication (Url url) \_ -> do
   case mrev of
     Nothing -> pure false
     Just rev -> do
-      (rq :: (AJ.Request String)) <- defaultPerspectRequest
+      (rq :: (AJ.Request String)) <- authenticatedUrlRequest url
       res <- liftAff $ AJ.request $ rq { method = Left DELETE, url = (url <> "?rev=" <> rev) }
       onAccepted_
         (\_ _ -> pure false)
@@ -326,7 +316,7 @@ deleteDocument url version' = ensureAuthentication (Url url) \_ -> do
 -----------------------------------------------------------
 retrieveDocumentVersion :: forall f. Url -> MonadPouchdb f (Maybe String)
 retrieveDocumentVersion url = do
-  (rq :: (AJ.Request String)) <- defaultPerspectRequest
+  (rq :: (AJ.Request String)) <- authenticatedUrlRequest url
   res <- liftAff $ AJ.request $ rq { method = Left HEAD, url = url }
   onAccepted_
     (\_ _ -> pure Nothing)
@@ -354,7 +344,7 @@ version headers = case find (\rh -> toLower (name rh) == "etag") headers of
 -- Database names must comply to rules given in https://docs.couchdb.org/en/stable/api/database/common.html#db
 createDatabase :: forall f. DatabaseName -> MonadPouchdb f Unit
 createDatabase databaseUrl = ensureAuthentication (Url databaseUrl) \_ -> do
-  rq <- defaultPerspectRequest
+  rq <- authenticatedUrlRequest databaseUrl
   res <- liftAff $ AJ.request $ rq { method = Left PUT, url = databaseUrl }
   onAccepted' createStatusCodes res [ StatusCode 201 ] "createDatabase" (\_ -> pure unit)
   where
@@ -366,7 +356,7 @@ createDatabase databaseUrl = ensureAuthentication (Url databaseUrl) \_ -> do
 -----------------------------------------------------------
 documentExists :: forall f. Url -> MonadPouchdb f Boolean
 documentExists url = ensureAuthentication (Url url) \_ -> do
-  (rq :: (AJ.Request String)) <- defaultPerspectRequest
+  (rq :: (AJ.Request String)) <- authenticatedUrlRequest url
   res <- liftAff $ AJ.request $ rq { method = Left HEAD, url = url }
   onAccepted_
     ( \response _ ->
@@ -379,14 +369,22 @@ documentExists url = ensureAuthentication (Url url) \_ -> do
     (\_ -> pure true)
 
 databaseExists :: forall f. Url -> MonadPouchdb f Boolean
-databaseExists = documentExists
+databaseExists url = ensureAuthentication (Url url) \_ -> do
+  rq <- authenticatedUrlRequest url
+  res <- liftAff $ AJ.request $ rq { method = Left GET, url = url }
+  case res of
+    Right response | response.status == StatusCode 404 -> pure false
+    _ -> onAccepted res [ StatusCode 200 ] "databaseExists" \response ->
+      case readJSON response.body of
+        Left e -> throwError $ error ("databaseExists: error in decoding result: " <> show e)
+        Right (_ :: { db_name :: String, doc_count :: Int }) -> pure true
 
 -----------------------------------------------------------
 -- DELETEDATABASE
 -----------------------------------------------------------
 deleteDatabase :: forall f. Url -> MonadPouchdb f Unit
 deleteDatabase databaseUrl = ensureAuthentication (Url databaseUrl) \_ -> do
-  rq <- defaultPerspectRequest
+  rq <- authenticatedUrlRequest databaseUrl
   res <- liftAff $ AJ.request $ rq { method = Left DELETE, url = databaseUrl }
   onAccepted'
     deleteStatusCodes

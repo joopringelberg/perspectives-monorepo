@@ -46,6 +46,7 @@ import Test.Unit.Main (runTest)
 
 -- Pure parser (no MonadPerspectives at all)
 import Test.Parsing.Arc.Expression (theSuite) as TPAE
+import Test.Parsing.Arc.ActionStages (theSuite) as AS
 import Test.ObsoleteRepresentationCleanup (theSuite) as ORC
 
 -- Pure ArrayT combinator tests (no MonadPerspectives)
@@ -54,6 +55,8 @@ import Test.AMQP.IncomingPost (theSuite) as AIP
 import Test.Error.Pretty (theSuite) as TEP
 import Test.Query.ComparisonOperators (theSuite) as TQCO
 import Test.SidecarUniqueTypeNames (theSuite) as SUTN
+import Test.Persistence.Authentication (theSuite) as PA
+import Test.VariableBindings (theSuite) as VB
 
 -- Comprehensive unit tests for ExpandedADT, CNF, and ADT (with real assertions)
 import Test.Perspectives.Representation.AbstractDataTypeTests (theSuite) as ADTTESTS
@@ -72,12 +75,15 @@ main :: Effect Unit
 main = runTest do
   -- ── Truly pure (no MonadPerspectives / no IO) ──────────────────────────────
   TPAE.theSuite -- ARC expression parser
+  AS.theSuite -- Plain and letA action settlement stages
   ARRT.theSuite -- ArrayT combinators
   AIP.theSuite -- Incoming-post status message formatting
   TEP.theSuite -- Error pretty-printing helpers
   TQCO.theSuite -- Typed query comparison operators
   SUTN.theSuite -- Stable ID mapping regression tests
   ORC.theSuite -- Serialization regression for obsolete representation members
+  PA.theSuite
+  VB.theSuite -- Variable bindings are private to a fiber
 
   -- Read a file from the file-system, but otherwise pure (no MonadPerspectives / no HTTP)
   TPAM.theSuite -- ARC model parser (parses .arc files from the model/

@@ -29,8 +29,11 @@ module Test.SinglePDRDestructiveTests
 
 import Prelude
 
+import Data.Time.Duration (Milliseconds(..))
+
 import Data.Either (Either(..))
 import Data.Foldable (for_)
+import Data.Maybe (Maybe(..))
 import Effect (Effect)
 import Effect.Aff (launchAff_)
 import Effect.Class (liftEffect)
@@ -61,13 +64,15 @@ singlePDRDestructiveTestModelConfiguration :: SinglePDRModelConfiguration
 singlePDRDestructiveTestModelConfiguration =
   { suiteName: "Single-PDR destructive tests"
   , snapshotDirectory: destructiveSnapshotDirectory
+  , outputSnapshotDirectory: Nothing
   , testModel: destructiveTestModel
-  , testModelLoadMethod: LoadModelFromRepository
+  , testModelLoadMethods: [ LoadModelFromRepository { modelUri: destructiveTestModel } ]
   , indexedTestContext: destructiveIndexedTestContext
   , testAppManager: destructiveTestAppManager
   , testsType: destructiveTestsType
   , testSucceededProperty: destructiveTestSucceededProperty
   , testNameProperty: destructiveTestNameProperty
+  , testTimeLimit: Milliseconds 180000.0
   , setupLogConfiguration:
       { pdr:
           [ { topic: TEST, logLevel: Debug }
@@ -100,9 +105,8 @@ destructiveSnapshotDirectory :: String
 destructiveSnapshotDirectory = "test/pdr-snapshot/layer3-clean/alice"
 
 destructiveTests :: Array ModelTest
-destructiveTests = 
-  [ 
-    { testContextTypeName: test_RemoveRole, logConfiguration: emptyLogConfiguration }
+destructiveTests =
+  [ { testContextTypeName: test_RemoveRole, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_RemoveOneRoleInstance, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_DeleteTwoRoles, logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: test_DeleteProperty, logConfiguration: emptyLogConfiguration }

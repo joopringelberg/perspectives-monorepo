@@ -575,7 +575,7 @@ type SerialisedPerspective' =
 | `contextType` | `ContextType` | Qualified identifier of the context type. |
 | `contextInstance` | `ContextInstanceT` | The context instance from which the object role instances are computed. |
 | `contextIdToAddRoleInstanceTo` | `ContextInstanceT` | If the object is outside the user's context, the context where new instances should be added. |
-| `contextTypesToCreate` | `Record<string, ContextType>` | Context types that can be created via this perspective (key = translated name, value = qualified type). |
+| `contextTypesToCreate` | `Record<string, ContextType>` | Context types that can be created via this perspective: the allowed filler context types and all their recursive aspect specialisations, without duplicates (key = qualified type, value = translated name). |
 | `identifyingProperty` | `PropertyType` | The property whose value is used as a human-readable label for role instances. |
 | `roleInstances` | `Record<string, Roleinstancewithprops>` | The actual role instances, keyed by role instance identifier. |
 | `verbs` | `RoleVerb[]` | The role operations the user may perform, given the current context/subject state. |
