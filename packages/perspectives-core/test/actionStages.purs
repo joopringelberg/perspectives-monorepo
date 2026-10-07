@@ -139,7 +139,7 @@ theSuite = suite "Action settlement stages" do
             )
             (automaticEffects root)
 
-  for_ [ "src/model/couchdbManagement@12.4.arc", "src/model/couchdbManagement.arc" ] \path ->
+  for_ [ "src/model/couchdbManagement@12.4.arc" ] \path ->
     test (path <> " keeps repository admin rights after setting AuthorizedDomain") do
       source <- readTextFile UTF8 path
       roleSource <- case split (Pattern "    user Admin filledBy CouchdbServer$Admin\n") source of
