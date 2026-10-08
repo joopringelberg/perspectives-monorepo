@@ -104,20 +104,24 @@ newtype Transaction = Transaction
       )
   )
 
-data TransactionDestination = PublicDestination RoleInstance | Peer UnschemedResourceIdentifier
+-- | `Peer guid resource`: the unschemed guid identifies the peer (AMQP topic, wrapped-key recipient) and is the
+-- | sole basis for Eq and Ord, so that a peer known both as `pub:` and `def:` resource is a single destination.
+-- | The schemed `resource` is the TheWorld$PerspectivesUsers instance to read peer data (e.g. the transport key)
+-- | from; it may be a public (`pub:`) resource for a peer known only through published resources.
+data TransactionDestination = PublicDestination RoleInstance | Peer UnschemedResourceIdentifier PerspectivesUser
 
 instance Show TransactionDestination where
   show (PublicDestination r) = "(PublicDestination " <> show r <> ")"
-  show (Peer p) = "(Peer " <> show p <> ")"
+  show (Peer p r) = "(Peer " <> show p <> " " <> show r <> ")"
 
 instance Ord TransactionDestination where
-  compare (Peer p1) (Peer p2) = compare p1 p2
+  compare (Peer p1 _) (Peer p2 _) = compare p1 p2
   compare (PublicDestination p1) (PublicDestination p2) = compare p1 p2
-  compare (Peer p1) (PublicDestination p2) = compare p1 (unschemeRoleInstance p2)
-  compare (PublicDestination p1) (Peer p2) = compare (unschemeRoleInstance p1) p2
+  compare (Peer p1 _) (PublicDestination p2) = compare p1 (unschemeRoleInstance p2)
+  compare (PublicDestination p1) (Peer p2 _) = compare (unschemeRoleInstance p1) p2
 
 instance Eq TransactionDestination where
-  eq (Peer p1) (Peer p2) = eq p1 p2
+  eq (Peer p1 _) (Peer p2 _) = eq p1 p2
   eq (PublicDestination p1) (PublicDestination p2) = eq p1 p2
   eq _ _ = false
 

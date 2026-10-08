@@ -206,6 +206,8 @@ When the transaction is sharing (`share = true`), `distributeTransaction` is cal
 - For each `PublicDestination`: `expandDeltas` decorates the deltas with the public-resource storage URL, then `executeDeltas` applies them locally (writing to the public CouchDB store). These deltas are *not* sent anywhere.
 - `deltas` is cleared from the Transaction to prevent re-execution.
 
+See [Transaction Distribution to Peers](transaction-distribution.md) for details, including how `pub:` and `def:` PerspectivesUsers resources are handled.
+
 When `share = false`, `distributeTransaction` is skipped and `publicRoleTransactions` is an empty map.
 
 ### Step 2.4 – Physical removal of contexts and roles

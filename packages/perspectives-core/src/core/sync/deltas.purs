@@ -57,12 +57,13 @@ import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (Url, addDocument)
 import Perspectives.Persistence.DeltaStore (extractDeltaInfo, getDeltasForResource, storeDeltaFromSignedDelta)
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
-import Perspectives.Persistent (getPerspectRol, postDatabaseName)
+import Perspectives.Persistent (entityExists, getPerspectRol, postDatabaseName)
 import Perspectives.PerspectivesState (nextTransactionNumber, stompClient)
 import Perspectives.Query.UnsafeCompiler (getDynamicPropertyGetter)
 import Perspectives.Representation.ADT (ADT(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser(..), RoleInstance(..), Value(..), perspectivesUser2RoleInstance)
 import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..), RoleType(..))
+import Perspectives.ResourceIdentifiers (isInPublicScheme)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.Sync.DateTime (SerializableDateTime(..))
 import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
@@ -114,14 +115,15 @@ sendPeerTransactions customizedTransacties =
           }
       for_ recipientKeys \(Tuple recipient _) -> sendTransactieToUserUsingAMQP recipient encryptedTransaction
   where
-  peerGroups :: Map.Map String (Tuple TransactionForPeer (Array UnschemedResourceIdentifier))
+  peerGroups :: Map.Map String (Tuple TransactionForPeer (Array (Tuple UnschemedResourceIdentifier PerspectivesUser)))
   peerGroups =
     foldl collectPeerGroup Map.empty (Map.toUnfoldable customizedTransacties :: Array (Tuple TransactionDestination TransactionForPeer))
 
-  collectPeerGroup :: Map.Map String (Tuple TransactionForPeer (Array UnschemedResourceIdentifier)) -> Tuple TransactionDestination TransactionForPeer -> Map.Map String (Tuple TransactionForPeer (Array UnschemedResourceIdentifier))
+  collectPeerGroup :: Map.Map String (Tuple TransactionForPeer (Array (Tuple UnschemedResourceIdentifier PerspectivesUser))) -> Tuple TransactionDestination TransactionForPeer -> Map.Map String (Tuple TransactionForPeer (Array (Tuple UnschemedResourceIdentifier PerspectivesUser)))
   collectPeerGroup groups (Tuple destination transaction) = case destination of
-    Peer recipient ->
+    Peer guid resource ->
       let
+        recipient = Tuple guid resource
         transaction' = removeUnnecessaryKeys transaction
         serialised = writeJSON transaction'
       in
@@ -138,10 +140,11 @@ sendPeerTransactions customizedTransacties =
     in
       TransactionForPeer rec { publicKeys = ENCMAP.filterKeys (\k -> isJust $ elemIndex k occurringUsers) publicKeys }
 
-  recipientTransportKey :: UnschemedResourceIdentifier -> MonadPerspectives (Maybe (Tuple UnschemedResourceIdentifier RecipientKey))
-  recipientTransportKey recipient = do
-    let recipientRole = perspectivesUser2RoleInstance $ deltaAuthor2ResourceIdentifier $ PerspectivesUser $ unwrap recipient
-    mtransportKey <- recipientRole ##> getProperty (EnumeratedPropertyType perspectivesUsersTransportPublicKey)
+  -- | Reads the transport key from the schemed PerspectivesUsers resource that computeUserRoleBottom selected
+  -- | (a local `def:` copy if available, otherwise the published `pub:` resource).
+  recipientTransportKey :: Tuple UnschemedResourceIdentifier PerspectivesUser -> MonadPerspectives (Maybe (Tuple UnschemedResourceIdentifier RecipientKey))
+  recipientTransportKey (Tuple recipient resource) = do
+    mtransportKey <- perspectivesUser2RoleInstance resource ##> getProperty (EnumeratedPropertyType perspectivesUsersTransportPublicKey)
     case mtransportKey of
       Just (Value transportKey) -> pure $ Just $ Tuple recipient { recipient, transportKey }
       _ -> pure Nothing
@@ -152,7 +155,7 @@ sendPeerTransactions customizedTransacties =
 
 -- | If we have the visitor user, handle it by augmenting resources in the public store with the deltas.
 sendTransactie :: TransactionDestination -> TransactionForPeer -> MonadPerspectives (Maybe TransactionForPeer)
-sendTransactie (Peer _) _ = pure Nothing
+sendTransactie (Peer _ _) _ = pure Nothing
 sendTransactie (PublicDestination r) t = pure $ Just t
 
 -- | Send a transaction using the Couchdb Channel.
@@ -234,7 +237,7 @@ transactieForEachUser t@(Transaction tr@{ timeStamp, deltas, userRoleBottoms, pu
   addDeltaToCustomisedTransactie d@(SignedDelta { author }) destinations perspectivesSystem = for_
     destinations
     ( \destination -> case destination of
-        peer@(Peer perspectivesUser) ->
+        peer@(Peer perspectivesUser _) ->
           if not $ eq perspectivesUser (unschemePerspectivesUser author) then do
             trs <- get
             case Map.lookup peer trs of
@@ -262,6 +265,9 @@ addDomeinFileToTransactie dfId = AA.modify
 -- | Otherwise return an empty array.
 -- | Also return an empty array if the PerspectivesUser has been cancelled.
 -- | Also return an empty array for the fictive serialization user (def:#serializationuser), which is never a real peer.
+-- | A Peer destination carries the schemed PerspectivesUsers resource to read peer data from. When the chain bottoms
+-- | out in a public (`pub:`) PerspectivesUsers instance, we prefer the local `def:` copy if it exists (it is kept up to
+-- | date by the peer's own deltas); otherwise we use the public resource (e.g. a peer known only via a published context).
 computeUserRoleBottom :: RoleInstance -> MonadPerspectives (Array (Tuple RoleInstance TransactionDestination))
 computeUserRoleBottom rid =
   if unwrap rid == "def:#serializationuser" then pure []
@@ -269,9 +275,18 @@ computeUserRoleBottom rid =
     if _ then pure [ Tuple rid (PublicDestination rid) ]
     else perspectivesUsersRole_ rid >>= case _ of
       Nothing -> pure []
-      Just perspectivesUser -> ((perspectivesUser2RoleInstance perspectivesUser) ##> getProperty (EnumeratedPropertyType perspectivesUsersCancelled)) >>= case _ of
-        Just (Value "true") -> pure []
-        _ -> pure [ Tuple rid (Peer $ unschemePerspectivesUser perspectivesUser) ]
+      Just bottom -> do
+        perspectivesUser <- preferLocalPerspectivesUser bottom
+        ((perspectivesUser2RoleInstance perspectivesUser) ##> getProperty (EnumeratedPropertyType perspectivesUsersCancelled)) >>= case _ of
+          Just (Value "true") -> pure []
+          _ -> pure [ Tuple rid (Peer (unschemePerspectivesUser perspectivesUser) perspectivesUser) ]
+  where
+  preferLocalPerspectivesUser :: PerspectivesUser -> MonadPerspectives PerspectivesUser
+  preferLocalPerspectivesUser u@(PerspectivesUser s) =
+    if isInPublicScheme s then do
+      let local = deltaAuthor2ResourceIdentifier (PerspectivesUser $ unwrap $ unschemePerspectivesUser u)
+      entityExists (perspectivesUser2RoleInstance local) >>= if _ then pure local else pure u
+    else pure u
 
 -- | Add the delta at the end of the array, unless it is already in the transaction or there are no users (and ignore the own user).
 -- | Only include 

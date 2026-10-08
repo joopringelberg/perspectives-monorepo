@@ -32,6 +32,7 @@ This index provides an overview of the technical documentation in `packages/pers
 |---|---|
 | [Transaction Execution Process](transaction-execution.md) | How the PDR executes a transaction: the two entry paths (user-initiated vs. peer-received), the multi-phase processing loop (state evaluation → action execution → synchronisation), and the design rationale for the production-rule model. |
 | [Transaction Execution — Test Script Catalogue](transaction-execution-tests.md) | 26 human-readable test scripts, one per significant path through `runMonadPerspectivesTransaction`. Each script states the model setup, initial state, triggering action, and expected outcome. Intended as the specification from which ARC test models and PureScript test cases will be built. |
+| [Transaction Distribution to Peers](transaction-distribution.md) | How the deltas of a sharing transaction reach their recipients: `computeUserRoleBottom` and `TransactionDestination`, per-peer customisation, public destinations, grouping, encryption and AMQP sending. Explains how a peer known only through a published (`pub:`) PerspectivesUsers resource is addressed (prefer the local `def:` copy if it exists), and the remaining limitations. |
 | [Delta Ordering and Conflict Resolution](delta-ordering.md) | How the PDR achieves convergence in a distributed system where peers can modify the same resources concurrently. Covers the resource-version scheme, deterministic ordering via `executeDeltaWithVersionTracking`, and the pending-transaction store used to defer out-of-order deltas. |
 | [Context Serialisation for a Peer](context-serialisation-for-peer.md) | How a Perspectives context instance is serialised as a set of deltas so that a peer can reconstruct it locally. Central to the Invitation mechanism and to handing a complete context representation to a new installation. |
 
@@ -65,6 +66,7 @@ The table below lists every PureScript module that is referenced in at least one
 | `Perspectives.CoreTypes` | [The Query Subsystem](query-subsystem.md), [Structured Logging](structured-logging.md) |
 | `Perspectives.Conversations.Parser` | [Conversation Text Format and Parser](conversation-text-format.md) |
 | `Perspectives.Conversations.Renderer` | [Conversation Text Format and Parser](conversation-text-format.md) |
+| `Perspectives.Deltas` | [Transaction Distribution to Peers](transaction-distribution.md) |
 | `Perspectives.ErrorLogging` | [PDR → Frontend Messaging](pdr-messaging.md) |
 | `Perspectives.Logging` | [Structured Logging](structured-logging.md) |
 | `Perspectives.External.HiddenFunctionCache` | [The Query Subsystem](query-subsystem.md) |
@@ -100,10 +102,10 @@ The table below lists every PureScript module that is referenced in at least one
 | `Perspectives.Representation.TypeIdentifiers` | [PDR Client Data Structures](pdr-client-data-structures.md) |
 | `Perspectives.Representation.Verbs` | [PDR Client Data Structures](pdr-client-data-structures.md) |
 | `Perspectives.RoleStateCompiler` | [Context Serialisation for a Peer](context-serialisation-for-peer.md), [Transaction Execution Process](transaction-execution.md) |
-| `Perspectives.RunMonadPerspectivesTransaction` | [Transaction Execution Process](transaction-execution.md), [Transaction Execution — Test Script Catalogue](transaction-execution-tests.md) |
+| `Perspectives.RunMonadPerspectivesTransaction` | [Transaction Execution Process](transaction-execution.md), [Transaction Execution — Test Script Catalogue](transaction-execution-tests.md), [Transaction Distribution to Peers](transaction-distribution.md) |
 | `Perspectives.Sync.HandleTransaction` | [Delta Ordering and Conflict Resolution](delta-ordering.md), [Transaction Execution Process](transaction-execution.md) |
 | `Perspectives.Sync.LegacyDeltas` | [Delta Ordering and Conflict Resolution](delta-ordering.md) |
-| `Perspectives.Sync.Transaction` | [Transaction Execution Process](transaction-execution.md) |
+| `Perspectives.Sync.Transaction` | [Transaction Execution Process](transaction-execution.md), [Transaction Distribution to Peers](transaction-distribution.md) |
 | `Perspectives.SideCar.PhantomTypedNewtypes` | [Model URI resolution](model-uri-resolution.md) |
 | `Perspectives.TypePersistence.PerspectiveSerialisation.Data` | [PDR Client Data Structures](pdr-client-data-structures.md) |
 | `Perspectives.Types.ObjectGetters` | [Type Comparison](type-comparison.md) |

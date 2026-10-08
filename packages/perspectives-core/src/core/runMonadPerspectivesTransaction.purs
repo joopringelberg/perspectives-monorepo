@@ -355,7 +355,7 @@ phase2 share authoringRole r = do
                 -- If the URL is not computed, we log this and do nothing. In this installation, there probably should not be a proxy for the public role anyway; but we don't have a way of knowing that on constructing the context.
                 _ -> lift $ toReadable userType >>= \readableUserType -> debugState (padding <> "Cannot compute a URL to publish to for this user role type and instance: " <> show readableUserType <> " ('" <> show userId <> "')")
             Just (S _ _) -> throwError (error ("Attempt to acces QueryFunctionDescription of the url of a public role before the expression has been compiled. This counts as a system programming error. User type = " <> (show userType)))
-        Peer _ -> pure unit
+        Peer _ _ -> pure unit
     -- Remove the deltas; we don't want to execute them again.
     AA.modify (\t -> over Transaction (\tr -> tr { deltas = [] }) t)
     -- Now finally remove contexts and roles.
