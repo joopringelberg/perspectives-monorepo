@@ -236,3 +236,6 @@ If a future issue should explicitly signal that this guidance applies, include o
 
 ## Documentation language
 The codebase is documented in English, and all comments and documentation should be written in English to maintain consistency and accessibility for the global developer community.
+
+## ARC model semantics
+For tasks involving ARC model syntax or behavior—including parser, query, perspective, state, or transaction debugging—consult the detailed reference in [`.github/instructions/arc-language.instructions.md`](arc-language.instructions.md). The reference summarizes model semantics; confirm implementation-sensitive behavior in the cited parser/runtime sources and `docsources`.
