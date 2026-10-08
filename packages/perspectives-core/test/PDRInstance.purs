@@ -51,9 +51,10 @@ module Test.PDRInstance where
 
 import Prelude
 
-import Control.Monad.AvarMonadAsk (modify)
+import Control.Monad.AvarMonadAsk (gets, modify)
 import Control.Monad.Error.Class (throwError)
 import Control.Promise (Promise, toAffE)
+import Data.Array (null)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
@@ -74,7 +75,7 @@ import Perspectives.ApiTypes (PropertySerialization(..), RolSerialization(..))
 import Perspectives.Assignment.RunAction (runActionForObject, runContextAction)
 import Perspectives.Assignment.Update (setProperty)
 import Perspectives.Authenticate (getPrivateKey, getTransportPrivateKey)
-import Perspectives.CoreTypes (BrokerService, IndexedResource, IntegrityFix, JustInTimeModelLoad(..), LogLevel(..), LogTopic(..), MonadPerspectivesTransaction, RepeatingTransaction, RuntimeOptions, TypeFix, (##>))
+import Perspectives.CoreTypes (BrokerService, IndexedResource, IntegrityFix, JustInTimeModelLoad(..), LogLevel(..), LogTopic(..), MonadPerspectivesTransaction, RepeatingTransaction, ResourceToBeStored, RuntimeOptions, TypeFix, (##>))
 import Perspectives.CoreTypes (LogLevel(..)) as CT
 import Perspectives.Extern.Files (getPFileTextValue)
 import Perspectives.External.CoreModules (addAllExternalFunctions)
@@ -82,7 +83,7 @@ import Perspectives.Identifiers (buitenRol)
 import Perspectives.Instances.Builders (createAndAddRoleInstance)
 import Perspectives.Instances.Me (computeMe_)
 import Perspectives.Instances.ObjectGetters (binding, context, getEnumeratedRoleInstances, getProperty)
-import Perspectives.Logging (ansiReset, debugTest, infoTest)
+import Perspectives.Logging (ansiReset, debugTest, infoTest, warnTest)
 import Perspectives.ModelDependencies (connectedToAMQPBroker, identifiableFirstName, identifiableLastName, invitationGuestType, invitationMessageProp, inviteeType, inviterType, outgoingInvitationsType, serialisedInvitationProp, sysUser)
 import Perspectives.ModelTranslation (getCurrentLanguageFromIDB)
 import Perspectives.Names (getMySystem, getUserIdentifier)
@@ -903,9 +904,26 @@ waitUntilAllTransactionsComplete secs pdr = do
 -- | Transactions scheduled with `once settled` run in fibers of their own, and the resources they
 -- | create (public resources, notably) are only cached and marked for storage. Without waiting for
 -- | quiescence and flushing the queue, that work is lost when the PDR instance is shut down.
+-- |
+-- | The transaction flag is up in the gap between a transaction handing a `once settled` continuation to
+-- | the timing scheduler and the fiber that actually runs it, so quiescence can be signalled too early.
+-- | Hence we allow a grace period after quiescence, and then repeat waiting and saving until a round has
+-- | passed in which no transaction ran and nothing was left in the save queue.
 settleAndSave :: PDRInstance -> Aff Unit
-settleAndSave pdr = do
-  attempt (waitUntilAllTransactionsComplete 120 pdr) >>= case _ of
-    Left e -> runInPDR pdr $ infoTest ("settleAndSave: " <> message e)
-    Right _ -> pure unit
-  runInPDR pdr saveMarkedResources
+settleAndSave pdr = round (1 :: Int)
+  where
+  maxRounds = 5
+  gracePeriod = Milliseconds 3000.0
+
+  round :: Int -> Aff Unit
+  round n = do
+    attempt (waitUntilAllTransactionsComplete 120 pdr) >>= case _ of
+      Left e -> runInPDR pdr $ infoTest ("settleAndSave: " <> message e)
+      Right _ -> pure unit
+    delay gracePeriod
+    runInPDR pdr saveMarkedResources
+    transactionsQuiet <- runPerspectivesWithState noTransactionIsRunning pdr.stateAVar
+    (remaining :: Array ResourceToBeStored) <- runPerspectivesWithState (gets _.entitiesToBeStored) pdr.stateAVar
+    if transactionsQuiet && null remaining then runInPDR pdr $ debugTest ("settleAndSave: all resources saved after round " <> show n)
+    else if n >= maxRounds then runInPDR pdr $ warnTest ("settleAndSave: giving up after " <> show n <> " rounds. Not saved: " <> show remaining)
+    else round (n + 1)
