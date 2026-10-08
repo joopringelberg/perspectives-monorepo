@@ -63,7 +63,7 @@ import Perspectives.ExecuteInTopologicalOrder (executeInTopologicalOrder) as TOP
 import Perspectives.Extern.Couchdb (roleInstancesFromCouchdb)
 import Perspectives.Identifiers (domeinFileVersion, modelUri2LocalName, modelUriVersion)
 import Perspectives.Instances.Indexed (indexedContexts_, indexedRoles_)
-import Perspectives.InvertedQuery.Storable (saveInvertedQueries)
+import Perspectives.InvertedQuery.Storable (removeInvertedQueriesContributedByModel, saveInvertedQueries)
 import Perspectives.Logging (debugUpgrade, errorUpgrade, infoUpgrade)
 import Perspectives.ModelDependencies (domeinFileName, indexedContext, indexedRole, modelManifest, versionToInstall)
 import Perspectives.Parsing.Messages (MultiplePerspectivesErrors)
@@ -167,6 +167,9 @@ recompileModel model@(UninterpretedDomeinFile { _rev, _id, id, namespace, arc, _
         -- We have to add the _id here manually.
         df' <- pure $ DomeinFile drf { _id = _id, _attachments = _attachments }
         storeDomeinFileInCouchdbPreservingAttachments df'
+        -- Drop the inverted queries of the previous compilation first; otherwise queries that refer to types
+        -- that no longer exist (e.g. removed states) survive and break the runtime.
+        removeInvertedQueriesContributedByModel id
         saveInvertedQueries invertedQueries
         -- Right after recompiling the System model, add indexed resources.
         -- Even though we retrieve those indexed resources before running data upgrades, they may not be present in state because 
