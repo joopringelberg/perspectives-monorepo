@@ -888,13 +888,16 @@ pruneStaleAliases
   -> StableIdMapping
 pruneStaleAliases cur mapping =
   let
-    -- Collect alias keys that are now canonical (will be evicted from both alias and CUID maps)
-    staleCtx = filter (\k -> OBJ.member k mapping.contexts) (OBJ.keys cur.contexts)
-    staleRol = filter (\k -> OBJ.member k mapping.roles) (OBJ.keys cur.roles)
-    staleProp = filter (\k -> OBJ.member k mapping.properties) (OBJ.keys cur.properties)
-    staleView = filter (\k -> OBJ.member k mapping.views) (OBJ.keys cur.views)
-    staleSt = filter (\k -> OBJ.member k mapping.states) (OBJ.keys cur.states)
-    staleAct = filter (\k -> OBJ.member k mapping.actions) (OBJ.keys cur.actions)
+    -- Collect alias keys that are now canonical (will be evicted from both alias and CUID maps).
+    -- Identity entries (oldFqn -> oldFqn), as recorded when only a state's query changed, redirect nothing:
+    -- the type was not re-introduced, so it must keep its CUID.
+    isRedirect aliases k = OBJ.lookup k aliases /= Just k
+    staleCtx = filter (\k -> OBJ.member k mapping.contexts && isRedirect mapping.contexts k) (OBJ.keys cur.contexts)
+    staleRol = filter (\k -> OBJ.member k mapping.roles && isRedirect mapping.roles k) (OBJ.keys cur.roles)
+    staleProp = filter (\k -> OBJ.member k mapping.properties && isRedirect mapping.properties k) (OBJ.keys cur.properties)
+    staleView = filter (\k -> OBJ.member k mapping.views && isRedirect mapping.views k) (OBJ.keys cur.views)
+    staleSt = filter (\k -> OBJ.member k mapping.states && isRedirect mapping.states k) (OBJ.keys cur.states)
+    staleAct = filter (\k -> OBJ.member k mapping.actions && isRedirect mapping.actions k) (OBJ.keys cur.actions)
     removeAll ks obj = foldl (\acc k -> OBJ.delete k acc) obj ks
   in
     mapping

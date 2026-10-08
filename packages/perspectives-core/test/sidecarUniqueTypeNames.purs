@@ -51,3 +51,32 @@ theSuite = suite "Test.SidecarUniqueTypeNames" do
       OBJ.lookup actionFqn planned.mappingWithAliases.actions == Nothing
     liftAff $ assert "unchanged actions do not need a fresh CUID" $
       null planned.needCuids.actions
+
+  test "planCuidAssignments keeps the CUID of a state whose query changed and that has an identity alias" do
+    let
+      stateFqn = "model://perspectives.domains#BrokerServices$BrokerContract$Terminated"
+      oldSnapshot = { fqn: stateFqn, queryHash: "qfd-40ab9d05" }
+      newSnapshot = { fqn: stateFqn, queryHash: "qfd-11111111" }
+      mapping0 = emptyStableIdMapping
+        { stateKeys = OBJ.fromFoldable [ Tuple stateFqn oldSnapshot ]
+        , stateCuids = OBJ.fromFoldable [ Tuple stateFqn "fz9kcl0kmp" ]
+        -- Identity alias as recorded by an earlier recompilation in which only the query changed.
+        , states = OBJ.fromFoldable [ Tuple stateFqn stateFqn ]
+        }
+      cur =
+        { contexts: OBJ.empty
+        , roles: OBJ.empty
+        , properties: OBJ.empty
+        , views: OBJ.empty
+        , states: OBJ.fromFoldable [ Tuple stateFqn newSnapshot ]
+        , actions: OBJ.empty
+        , contextIndividuals: []
+        , roleIndividuals: []
+        , contextIndividualKeys: OBJ.empty
+        , roleIndividualKeys: OBJ.empty
+        }
+      planned = planCuidAssignments cur mapping0
+    liftAff $ assert "an identity alias must not evict the CUID of the state" $
+      OBJ.lookup stateFqn planned.mappingWithAliases.stateCuids == Just "fz9kcl0kmp"
+    liftAff $ assert "the state does not need a fresh CUID" $
+      null planned.needCuids.states

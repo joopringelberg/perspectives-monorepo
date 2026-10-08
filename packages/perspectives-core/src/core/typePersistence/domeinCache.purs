@@ -225,7 +225,7 @@ getVersionToInstall m@(ModelUri modelUri) = case unsafePartial modelUri2Manifest
         Just v -> do
           traceInstall ("Found version to install for model URI: " <> modelUri <> " and manifest name: " <> manifestName <> ": " <> unwrap v)
           pure $ Just { semver: unwrap v, versionedModelManifest: makeVersionedModelManifest (unwrap v) id }
-        Nothing -> do 
+        Nothing -> do
           traceInstall ("This manifest could not be found: " <> manifestName)
           pure Nothing
       _ -> pure Nothing
