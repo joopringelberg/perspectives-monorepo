@@ -191,12 +191,14 @@ main = launchAff_ do
           , Tuple "model://perspectives.domains#RepositoryRegistry" repositoryregistry
           , Tuple "model://joopringelberg.nl#AMQPtestModel" amqptestmodel
           , Tuple "model://joopringelberg.nl#AMQPtestSetup" amqptestsetup
+          , Tuple "model://perspectives.domains#BrokerServices" brokerservices
           ]
         for_
           [ "model://perspectives.domains#CouchdbManagement"
           , "model://perspectives.domains#RepositoryRegistry"
           , "model://joopringelberg.nl#AMQPtestModel"
           , "model://joopringelberg.nl#AMQPtestSetup"
+          , "model://perspectives.domains#BrokerServices"
           ]
           \modelUri -> do
             success <- recompileLocalModel (ModelUri modelUri)
@@ -211,3 +213,4 @@ foreign import couchdbmanagement :: String
 foreign import repositoryregistry :: String
 foreign import amqptestmodel :: String
 foreign import amqptestsetup :: String
+foreign import brokerservices :: String
