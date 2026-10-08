@@ -68,14 +68,14 @@ import Effect.Exception (message)
 import Foreign.Object (empty) as OBJ
 import Main (forkCreateIndexedResources, forkDatabasePersistence, forkJustInTimeModelLoader, forkReferentialIntegrityFixer, forkTimedTransactions)
 import Main.RecompileBasicModels (addIndexedNames)
-import Perspectives.AMQP.IncomingPost (incomingPost)
+import Perspectives.AMQP.IncomingPost (incomingPost, retrieveBrokerService)
 import Perspectives.AMQP.Stomp (deactivate)
 import Perspectives.AMQP.Stomp.Stub (InProcessBus, createInProcessBus, makeStompClientFactory)
 import Perspectives.ApiTypes (PropertySerialization(..), RolSerialization(..))
 import Perspectives.Assignment.RunAction (runActionForObject, runContextAction)
 import Perspectives.Assignment.Update (setProperty)
 import Perspectives.Authenticate (getPrivateKey, getTransportPrivateKey)
-import Perspectives.CoreTypes (BrokerService, IndexedResource, IntegrityFix, JustInTimeModelLoad(..), LogLevel(..), LogTopic(..), MonadPerspectivesTransaction, RepeatingTransaction, ResourceToBeStored, RuntimeOptions, TypeFix, (##>))
+import Perspectives.CoreTypes (BrokerService, IndexedResource, IntegrityFix, JustInTimeModelLoad(..), LogLevel(..), LogTopic(..), MonadPerspectives, MonadPerspectivesTransaction, RepeatingTransaction, ResourceToBeStored, RuntimeOptions, TypeFix, (##>))
 import Perspectives.CoreTypes (LogLevel(..)) as CT
 import Perspectives.Extern.Files (getPFileTextValue)
 import Perspectives.External.CoreModules (addAllExternalFunctions)
@@ -327,7 +327,13 @@ startPDRInstance pouchdbUser runtimeOptions mLogColor bus = do
 -- |
 -- | Use `withPDRCached` rather than calling this directly.
 startPDRInstanceFromSnapshot :: PouchdbUser -> RuntimeOptions -> Maybe String -> Maybe InProcessBus -> String -> Aff PDRInstance
-startPDRInstanceFromSnapshot pouchdbUser runtimeOptions mLogColor bus snapshotDir = do
+startPDRInstanceFromSnapshot pouchdbUser runtimeOptions mLogColor bus snapshotDir =
+  startPDRInstanceFromSnapshotWithHook pouchdbUser runtimeOptions mLogColor bus snapshotDir (pure unit)
+
+-- | As `startPDRInstanceFromSnapshot`, but runs `beforeSubscribe` after the broker service
+-- | has been established and before the incomingPost fiber subscribes to the queue.
+startPDRInstanceFromSnapshotWithHook :: PouchdbUser -> RuntimeOptions -> Maybe String -> Maybe InProcessBus -> String -> MonadPerspectives Unit -> Aff PDRInstance
+startPDRInstanceFromSnapshotWithHook pouchdbUser runtimeOptions mLogColor bus snapshotDir beforeSubscribe = do
   -- AVars required by PerspectivesState.
   transactionFlag <- new true
   brokerService <- (empty :: Aff (AVar BrokerService))
@@ -404,6 +410,12 @@ startPDRInstanceFromSnapshot pouchdbUser runtimeOptions mLogColor bus snapshotDi
         modify \(s@{ runtimeOptions: ro }) -> s { runtimeOptions = ro { privateKey = unsafeCoerce signingKey, transportPrivateKey = unsafeCoerce transportKey } }
         getSystemIdentifier >>= createUserDatabases
         getinstalledModelCuids fromLocalModels >>= setModelUris
+        -- As in Main: without an in-process bus, take the broker service from the restored BrokerContract,
+        -- or incomingPost will block forever on getBrokerService.
+        case bus of
+          Nothing -> retrieveBrokerService
+          Just _ -> pure unit
+        beforeSubscribe
     )
     state
 

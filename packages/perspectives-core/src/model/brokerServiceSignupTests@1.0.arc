@@ -1,9 +1,9 @@
 -- Copyright Joop Ringelberg and Cor Baars, 2026.
 -- CUID = bssu4gc7kx
 domain model://joopringelberg.nl#BrokerServiceSignupTests@1.0
-  use sys for model://perspectives.domains#System
+  use sys for model://perspectives.domains#System@7.0
   use mm for model://joopringelberg.nl#BrokerServiceSignupTests
-  use bs for model://perspectives.domains#BrokerServices
+  use bs for model://perspectives.domains#BrokerServices@7.0
 
   state ReadyToInstall = exists sys:PerspectivesSystem$Installer
     on entry

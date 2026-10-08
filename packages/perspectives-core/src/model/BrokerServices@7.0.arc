@@ -88,7 +88,7 @@ domain model://perspectives.domains#BrokerServices@7.0
       perspective on Contracts
         props (Name, Registered) verbs (Consult)
         props (Registered) verbs (SetPropertyValue)
-        in object state Terminated
+        in object state UnregisteredState
           perspective on Contracts >> binder Accounts
             only (RemoveContext)
           action DeleteMyContract
@@ -400,14 +400,15 @@ domain model://perspectives.domains#BrokerServices@7.0
         do for BrokerContract$Administrator
           Registered = false for extern
         -- Give the AccountHolder a chance to read the notification before we delete his account on the RabbitMQ server. We do this by waiting 1 Hour before we delete the account.
-        do for BrokerContract$Administrator after 1 Hours
+        do for BrokerContract$Administrator after 1 Minutes
           callEffect rabbit:DeleteAMQPaccount(
             extern >> ManagementEndpoint,
             Administrator >> AdminUserName,
             Administrator >> AdminPassword,
             AccountHolder >> AccountName)
-            -- Deleting the queue will cause it to be removed from the RabbitMQ server.
-            delete role Queues
+          -- Deleting the queue will cause it to be removed from the RabbitMQ server.
+          delete role Queues
+          Unregistered = true for extern
         notify AccountHolder
           "Your account at the BrokerService { extern >> Name } has been terminated."
 
@@ -441,8 +442,10 @@ domain model://perspectives.domains#BrokerServices@7.0
       property Registered (Boolean)
 
       property ContractTerminated (Boolean)
+      property Unregistered (Boolean)
 
       state Terminated = ContractTerminated
+      state UnregisteredState = Unregistered
 
       view Account (FirstNameOfAccountHolder, LastNameOfAccountHolder)
 
@@ -668,7 +671,7 @@ domain model://perspectives.domains#BrokerServices@7.0
       property QueueName (String)
         readableName
       on exit
-        do for BrokerContract$Administrator after 10 Seconds
+        do for BrokerContract$Administrator
           callEffect rabbit:DeleteQueue(
             context >> extern >> ManagementEndpoint,
             context >> Administrator >> AdminUserName,

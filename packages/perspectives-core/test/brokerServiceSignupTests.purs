@@ -7,22 +7,32 @@ import Data.Either (Either(..))
 import Data.Foldable (any, for_)
 import Data.Maybe (Maybe(..))
 import Data.Time.Duration (Milliseconds(..))
+import Data.Traversable (for)
+import Data.Tuple (Tuple(..))
 import Effect (Effect)
-import Effect.Aff (Aff, error, launchAff_)
+import Effect.Aff (Aff, bracket, error, launchAff_)
 import Effect.Class (liftEffect)
+import Node.Encoding (Encoding(..))
+import Node.FS.Aff (readTextFile)
+import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (LogLevel(..), LogTopic(..), (##=), (##>))
-import Perspectives.Instances.ObjectGetters (binding, context, getEnumeratedRoleInstances)
-import Perspectives.ModelDependencies (identifiableFirstName, identifiableLastName)
+import Perspectives.Instances.ObjectGetters (binding, context, getEnumeratedRoleInstances, getUnlinkedRoleInstances)
+import Perspectives.Identifiers (modelUri2LocalName, unversionedModelUri)
+import Perspectives.Logging (infoTest, traceTest)
+import Perspectives.ModelDependencies (identifiableFirstName, identifiableLastName, sysUser)
 import Perspectives.Names (lookupIndexedContext)
-import Perspectives.PerspectivesState (defaultRuntimeOptions)
+import Perspectives.PerspectivesState (defaultRuntimeOptions, setTopicLogLevel)
 import Perspectives.Query.UnsafeCompiler (getPropertyValues)
 import Perspectives.Representation.InstanceIdentifiers (Value(..))
-import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..), EnumeratedRoleType(..), IndexedContext(..), PropertyType(..))
+import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..), EnumeratedRoleType(..), IndexedContext(..), PropertyType(..), RoleType(..))
+import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransaction', shareWithPeers)
+import Perspectives.Sidecar.StableIdMapping (ModelUri(..), Stable, StableIdMapping)
 import Perspectives.Sidecar.ToStable (toStable)
-import Data.Traversable (for)
-import Test.PDRInstance (SynchronisationResult, noBus, pollUntil, snapshotExists, testPouchdbUser, withPDRCached)
-import Test.PDRInstance.Types (PDRInstance, runInPDR)
+import Perspectives.TypePersistence.LoadArc (loadCompileAndStoreArcFile_)
 import Test.LocalCouchdbTestSupport (addLocalCouchdbCredentials)
+import Test.PDRInstance (SynchronisationResult, noBus, pollUntil, snapshotExists, startPDRInstanceFromSnapshotWithHook, testPouchdbUser, withPDRCached)
+import Test.RabbitMQCtl (purgeOwnQueue)
+import Test.PDRInstance.Types (PDRInstance, runInPDR)
 import Test.SinglePDRScaffold (SinglePDRModelConfiguration, TestModelLoadMethod(..), emptyLogConfiguration, executeModelTest, loadModel)
 import Test.Unit (TestSuite, suite, test)
 import Test.Unit.Assert (assert)
@@ -35,7 +45,7 @@ main = launchAff_ do
 
 type SignupResults =
   { signupResult :: SynchronisationResult
-  , aliceSeesBob :: Boolean
+  , aliceSawBob :: Boolean
   }
 
 getSignupResults :: Aff SignupResults
@@ -45,36 +55,70 @@ getSignupResults = do
     $ throwError
     $ error ("Required Alice post-reboot snapshot is missing: " <> aliceSnapshotDirectory)
 
-  withPDRCached (testPouchdbUser "alice") defaultRuntimeOptions Nothing noBus aliceSnapshotDirectory \alice ->
-    withPDRCached (testPouchdbUser "bob") defaultRuntimeOptions Nothing noBus bobSnapshotDirectory \bob -> do
-      addLocalCouchdbCredentials alice
-      addLocalCouchdbCredentials bob
+  bracket
+    (startPDRInstanceFromSnapshotWithHook (testPouchdbUser "alice") defaultRuntimeOptions Nothing noBus aliceSnapshotDirectory purgeOwnQueue)
+    (_.shutdown)
+    \alice ->
+      withPDRCached (testPouchdbUser "bob") defaultRuntimeOptions Nothing noBus bobSnapshotDirectory \bob -> do
+        addLocalCouchdbCredentials alice
+        addLocalCouchdbCredentials bob
 
-      for_ signupTestModelConfiguration.testModelLoadMethods (loadModel bob)
-      bobTestApp <- pollUntil 100 (Milliseconds 100.0)
-        "Broker signup test app to appear in Bob's PDR"
-        ( runInPDR bob do
-            IndexedContext indexed <- toStable (IndexedContext signupTestModelConfiguration.indexedTestContext)
-            lookupIndexedContext indexed
-        )
+        -- Alice compiles first and coins the stable ids; Bob reuses her mapping so both
+        -- PDRs share the same CUIDs for the test model's types.
+        aliceMapping <- compileTestModel alice Nothing
+        for_ signupTestModelConfiguration.testModelLoadMethods (loadModel bob)
+        void $ compileTestModel bob (Just aliceMapping)
 
-      signupResult <- executeModelTest
-        bob
-        bobTestApp
-        signupTestContext
-        emptyLogConfiguration
-        signupTestModelConfiguration
+        for_ [ alice, bob ] \pdr -> runInPDR pdr do
+          for_ signupTestModelConfiguration.setupLogConfiguration.pdr \{ topic, logLevel } -> setTopicLogLevel topic logLevel
 
-      aliceObservedBob <- pollUntil 120 (Milliseconds 500.0)
-        "Alice to receive Bob's BrokerContract account-holder details"
-        do
-          seesBob <- aliceSeesBob alice
-          pure if seesBob then Just true else Nothing
+        bobTestApp <- pollUntil 100 (Milliseconds 100.0)
+          "Broker signup test app to appear in Bob's PDR"
+          ( runInPDR bob do
+              IndexedContext indexed <- toStable (IndexedContext signupTestModelConfiguration.indexedTestContext)
+              traceTest ("Looking up stable indexed context for signup test: " <> show indexed)
+              lookupIndexedContext indexed
+          )
 
-      pure { signupResult, aliceSeesBob: aliceObservedBob }
+        signupResult <- executeModelTest
+          bob
+          bobTestApp
+          signupTestContext
+          emptyLogConfiguration
+          signupTestModelConfiguration
 
-aliceSeesBob :: PDRInstance -> Aff Boolean
-aliceSeesBob pdr = runInPDR pdr do
+        runInPDR bob do
+          traceTest ("Signup result: " <> show signupResult)
+
+        aliceObservedBob <- pollUntil 120 (Milliseconds 500.0)
+          "Alice to receive Bob's BrokerContract account-holder details"
+          do
+            seesBob <- aliceHasBobAccount alice
+            pure if seesBob then Just true else Nothing
+
+        pure { signupResult, aliceSawBob: aliceObservedBob }
+
+compileTestModel :: PDRInstance -> Maybe StableIdMapping -> Aff StableIdMapping
+compileTestModel pdr mMapping = do
+  source <- readTextFile UTF8 testModelSource
+  runInPDR pdr do
+    infoTest ("Compiling and storing model from source: " <> testModelSource)
+    compilationResult <- runMonadPerspectivesTransaction' shareWithPeers (ENR $ EnumeratedRoleType sysUser)
+      ( loadCompileAndStoreArcFile_
+          (ModelUri testModel :: ModelUri Stable)
+          source
+          true
+          (unsafePartial modelUri2LocalName $ unversionedModelUri testModel)
+          testModelReadable
+          Nothing
+          mMapping
+      )
+    case compilationResult of
+      Left errs -> throwError $ error ("Failed to compile and store model " <> testModel <> ": " <> show errs)
+      Right (Tuple _ (Tuple _ mapping)) -> pure mapping
+
+aliceHasBobAccount :: PDRInstance -> Aff Boolean
+aliceHasBobAccount pdr = runInPDR pdr do
   IndexedContext myBrokersIndex <- toStable (IndexedContext myBrokersContext)
   mMyBrokers <- lookupIndexedContext myBrokersIndex
   case mMyBrokers of
@@ -88,7 +132,7 @@ aliceSeesBob pdr = runInPDR pdr do
 
       brokerServices <- myBrokers ##= getEnumeratedRoleInstances managedBrokersType >=> binding >=> context
       contractMatches <- for brokerServices \brokerService -> do
-        contracts <- brokerService ##= getEnumeratedRoleInstances accountsType >=> binding >=> context
+        contracts <- brokerService ##= getUnlinkedRoleInstances accountsType >=> binding >=> context
         details <- for contracts \contract -> do
           accountHolders <- contract ##= getEnumeratedRoleInstances accountHolderType >=> binding
           for accountHolders \accountHolder -> do
@@ -100,7 +144,7 @@ aliceSeesBob pdr = runInPDR pdr do
       pure $ any identity contractMatches
 
 signupSuite :: SignupResults -> TestSuite
-signupSuite { signupResult, aliceSeesBob } =
+signupSuite { signupResult, aliceSawBob } =
   suite "Broker Service signup tests" do
     case signupResult of
       Right { testName, testSucceeded } ->
@@ -111,7 +155,7 @@ signupSuite { signupResult, aliceSeesBob } =
           assert ("Broker Service signup failed: " <> show err) false
 
     test "Alice should see Bob's account-holder details" do
-      assert "Alice should receive Bob's account-holder details through the Broker Service" aliceSeesBob
+      assert "Alice should receive Bob's account-holder details through the Broker Service" aliceSawBob
 
 signupTestModelConfiguration :: SinglePDRModelConfiguration
 signupTestModelConfiguration =
@@ -120,24 +164,26 @@ signupTestModelConfiguration =
   , outputSnapshotDirectory: Nothing
   , testModel
   , testModelLoadMethods:
-      [ CompileModelFromSource
-          { modelUri: testModel
-          , sourcePath: testModelSource
-          , modelUriReadable: testModelReadable
-          , basedOnVersion: Nothing
-          }
+      -- Bob must have the models imported by the test model before compiling it.
+      -- The test model itself is compiled by `compileTestModel`.
+      [ LoadModelFromRepository { modelUri: rabbitMQModel }
+      , LoadModelFromRepository { modelUri: brokerServicesModel }
       ]
   , indexedTestContext: indexedTestApp
   , testAppManager
   , testsType
   , testSucceededProperty
   , testNameProperty
-  , testTimeLimit: Milliseconds 180000.0
+  , testTimeLimit: Milliseconds 60000.0
   , setupLogConfiguration:
       { pdr:
           [ { topic: TEST, logLevel: Trace }
           , { topic: BROKER, logLevel: Trace }
           , { topic: SYNC, logLevel: Trace }
+          -- , { topic: INSTALL, logLevel: Trace }
+          , { topic: RESOURCE, logLevel: Trace }
+          , { topic: STATE, logLevel: Trace }
+          -- , { topic: MODEL, logLevel: Warn }
           ]
       }
   , tests: [ { testContextTypeName: signupTestContext, logConfiguration: emptyLogConfiguration } ]
@@ -149,8 +195,15 @@ testModel = "model://joopringelberg.nl#bssu4gc7kx@1.0"
 testModelSource :: String
 testModelSource = "src/model/brokerServiceSignupTests@1.0.arc"
 
+-- As used in this test, we should use the unversioned uri!
 testModelReadable :: String
-testModelReadable = "model://joopringelberg.nl#BrokerServiceSignupTests@1.0"
+testModelReadable = "model://joopringelberg.nl#BrokerServiceSignupTests"
+
+rabbitMQModel :: String
+rabbitMQModel = "model://perspectives.domains#m203lt2idk@2.0"
+
+brokerServicesModel :: String
+brokerServicesModel = "model://perspectives.domains#zjuzxbqpgc@7.0"
 
 indexedTestApp :: String
 indexedTestApp = testModelReadable <> "$BrokerServiceSignupTestsApp"
