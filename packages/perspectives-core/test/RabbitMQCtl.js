@@ -20,3 +20,18 @@ export function purgeQueueImpl(vhost) {
     };
   };
 }
+
+// Runs rabbitmqctl with the given arguments. Returns an Effect (Promise String) with its output.
+export function rabbitmqctlImpl(args) {
+  return function () {
+    return new Promise(function (resolve, reject) {
+      execFile('rabbitmqctl', args, function (err, stdout, stderr) {
+        if (err) {
+          reject(new Error('rabbitmqctl ' + args.join(' ') + ' failed: ' + (stderr || err.message)));
+        } else {
+          resolve(stdout.trim());
+        }
+      });
+    });
+  };
+}

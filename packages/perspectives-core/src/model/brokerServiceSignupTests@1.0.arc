@@ -113,3 +113,32 @@ domain model://joopringelberg.nl#BrokerServiceSignupTests@1.0
             PublicServiceAvailable = true for extern
 
     context MyContract filledBy bs:BrokerContract
+
+  case EndSubscription
+    aspect mm:Test
+
+    external
+      -- MyContract is filled with the contract in use; when the contract is removed, its filler is gone.
+      state Success = (exists context >> MyContract) and (not exists context >> MyContract >> binding)
+        on entry
+          do for Tester once settled
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+
+      perspective on bs:BrokerContract$External
+        props (ContractTerminated) verbs (SetPropertyValue)
+
+      perspective on MyContract
+        only (CreateAndFill, Fill)
+
+      action RunTest
+        letA
+          contractinuse <- bs:MyBrokers >> ContractInUse
+        in
+          TestName = "Bob unsubscribes from Alice's Broker Service" for extern
+          bind contractinuse to MyContract
+          ContractTerminated = true for contractinuse
+
+    context MyContract filledBy bs:BrokerContract
