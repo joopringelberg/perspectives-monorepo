@@ -44,6 +44,12 @@ Extension for timing facets of automatic actions and notifications:
 * The keywords after, until, every, maximally and times get the same color as the other keywords in automatic actions.
 * The time constants Milliseconds, Seconds, Minutes, Hours and Days get the same color as simple values.
 
+### 1.3.0
+The YAML and JSON grammars now assign scopes to the timing, operator, query, and action terms.
+
+* **Timing and operators**: Color `once settled` as timing syntax and `in` as an operator keyword.
+* **Functions and query terms**: Color `runContextAction, runRoleAction, selectFrom, just, publicrole, publiccontext`, and `translate` as support-function operators.
+
 ## Requirements
 
 `js-yaml` is a local development requirement. `yo` and `vcse` are global requirements.

@@ -236,6 +236,10 @@
       "match": "\\b(after|until|every|maximally|times)\\b"
     },
     {
+      "name": "keyword.timing.arc",
+      "match": "\\bonce\\s+settled\\b"
+    },
+    {
       "name": "constant.boolean.arc",
       "match": "true|false"
     },
@@ -257,7 +261,7 @@
     },
     {
       "name": "support.function.operator.arc",
-      "match": "\\b(either|both|binds|matches|and|or|not|exists|available|boundBy|binder|context|extern|fills|filledBy|letE|letA|union|intersection|orElse|binding|this|me|indexedName|publicrole|publiccontext|isInState|contextinstance|roleinstance|specialisesRoleType|roleTypes|contextType|roleType|modelname|returns|translate)\\b"
+      "match": "\\b(either|both|binds|matches|and|or|not|exists|available|boundBy|binder|context|extern|fills|filledBy|letE|letA|union|intersection|orElse|binding|this|me|indexedName|publicrole|publiccontext|isInState|contextinstance|roleinstance|specialisesRoleType|roleTypes|contextType|roleType|modelname|returns|translate|selectFrom|just|runContextAction|runRoleAction)\\b"
     },
     {
       "match": "\\b(filter)(.*)(with)\\b",
@@ -296,7 +300,7 @@
     },
     {
       "name": "keyword.operator",
-      "match": "\\b(aspect|indexed)\\b"
+      "match": "\\b(aspect|indexed|in)\\b"
     },
     {
       "match": "\\b(use)\\b(.*)\\b(for)\\b",

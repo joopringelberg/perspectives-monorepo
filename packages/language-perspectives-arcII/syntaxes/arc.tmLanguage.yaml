@@ -151,6 +151,8 @@ patterns:
   ## TIMING
   - name: keyword.timing.arc
     match: \b(after|until|every|maximally|times)\b
+  - name: keyword.timing.arc
+    match: \bonce\s+settled\b
 
   ## BOOLEAN
   - name: constant.boolean.arc
@@ -178,7 +180,7 @@ patterns:
   ## OPERATORS
   # alphabetic operators (without `filter`).
   - name: support.function.operator.arc
-    match: \b(either|both|binds|matches|and|or|not|exists|available|boundBy|binder|context|extern)\b
+    match: \b(either|both|binds|matches|and|or|not|exists|available|boundBy|binder|context|extern|selectFrom|just|runContextAction|runRoleAction|publicrole|publiccontext|translate)\b
   # special pattern for `with` in `filter ... with`
   - match: \b(filter)(.*)(with)\b
     captures:
@@ -211,7 +213,7 @@ patterns:
 
   ## META: ASPECT, USE, INDEXED
   - name: keyword.operator
-    match: \b(aspect|indexed)\b
+    match: \b(aspect|indexed|in)\b
 
   - match: \b(use)\b(.*)\b(for)\b
     captures:
