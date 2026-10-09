@@ -31,7 +31,10 @@ module Test.Layer3Scaffold
   , TestModelLoadMethod(..)
   , getSynchronisationResults
   , getSynchronisationResultsOverAMQP
+  , getMeasuredSynchronisationResults
+  , performanceSnapshotsAvailable
   , executeModelTest
+  , executeMeasuredTrial
   , runSynchronisationSuite
   , runSynchronisationSuiteOverAMQP
   ) where
@@ -52,7 +55,7 @@ import Effect (Effect)
 import Effect.Aff (Aff, attempt, bracket, error, launchAff_, message)
 import Effect.Class (liftEffect)
 import Effect.Class.Console (log)
-import Effect.Ref (Ref, read, write)
+import Effect.Ref (Ref, new, read, write)
 import Foreign.Object (empty) as OBJ
 import Node.Encoding (Encoding(..))
 import Node.FS.Aff (readTextFile)
@@ -77,8 +80,9 @@ import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransac
 import Perspectives.Sidecar.StableIdMapping (ModelUri(..), Stable)
 import Perspectives.Sidecar.ToStable (toStable)
 import Perspectives.TypePersistence.LoadArc (loadCompileAndStoreArcFile_)
-import Test.PDRInstance (SynchronisationResult, connectPDRs, pollUntil, pollUntilTestFinishes, snapshotPDR, testPouchdbUser, withTwoPDRsCached, withTwoPDRsCachedNoBus)
+import Test.PDRInstance (SynchronisationResult, connectPDRs, pollUntil, pollUntilTestFinishes, snapshotExists, snapshotPDR, testPouchdbUser, withTwoPDRsCached, withTwoPDRsCachedNoBus)
 import Test.PDRInstance.Types (PDRInstance, runInPDR)
+import Test.PerformanceMeasurements (MeasurementHooks)
 import Test.Unit (TestSuite, suite, test)
 import Test.Unit.Assert (assert)
 import Test.Unit.Main (runTest)
@@ -202,21 +206,45 @@ getSynchronisationResults
   :: Ref (Maybe SynchronisationResults)
   -> SynchronisationModelConfiguration
   -> Aff SynchronisationResults
-getSynchronisationResults = getSynchronisationResultsInternal withTwoPDRsCached true
+getSynchronisationResults = getSynchronisationResultsInternal Nothing withTwoPDRsCached true
 
 getSynchronisationResultsOverAMQP
   :: Ref (Maybe SynchronisationResults)
   -> SynchronisationModelConfiguration
   -> Aff SynchronisationResults
-getSynchronisationResultsOverAMQP = getSynchronisationResultsInternal withTwoPDRsCachedNoBus false
+getSynchronisationResultsOverAMQP = getSynchronisationResultsInternal Nothing withTwoPDRsCachedNoBus false
+
+-- A measurement run never reads the suite's cached semantic results.
+-- Repetitions must run in separate processes: the scaffold's memory databases
+-- survive PDR shutdown, so merely creating another Ref is not isolation.
+getMeasuredSynchronisationResults
+  :: MeasurementHooks
+  -> Boolean
+  -> SynchronisationModelConfiguration
+  -> Aff SynchronisationResults
+getMeasuredSynchronisationResults hooks overAMQP cfg = do
+  available <- performanceSnapshotsAvailable cfg
+  unless available $ throwError $ error "Performance measurements require complete existing snapshots for both PDRs; bootstrap is disabled."
+  cacheRef <- liftEffect $ new Nothing
+  if overAMQP then
+    getSynchronisationResultsInternal (Just hooks) withTwoPDRsCachedNoBus false cacheRef cfg
+  else
+    getSynchronisationResultsInternal (Just hooks) withTwoPDRsCached true cacheRef cfg
+
+performanceSnapshotsAvailable :: SynchronisationModelConfiguration -> Aff Boolean
+performanceSnapshotsAvailable cfg = do
+  aliceExists <- snapshotExists cfg.snapshotDirAlice
+  bobExists <- snapshotExists cfg.snapshotDirBob
+  pure (aliceExists && bobExists)
 
 getSynchronisationResultsInternal
-  :: WithTwoPDRsCachedLike
+  :: Maybe MeasurementHooks
+  -> WithTwoPDRsCachedLike
   -> Boolean
   -> Ref (Maybe SynchronisationResults)
   -> SynchronisationModelConfiguration
   -> Aff SynchronisationResults
-getSynchronisationResultsInternal withTwoPDRsFn connectPeers cacheRef cfg = do
+getSynchronisationResultsInternal mHooks withTwoPDRsFn connectPeers cacheRef cfg = do
   cached <- liftEffect $ read cacheRef
   case cached of
     Just results -> pure results
@@ -315,7 +343,11 @@ getSynchronisationResultsInternal withTwoPDRsFn connectPeers cacheRef cfg = do
                   else pure (Just roles)
               )
 
-            let runATest = \{ testContextTypeName, logConfiguration } -> executeModelTest cfg pdrA pdrB testAppContextA alice bob testContextTypeName logConfiguration
+            let
+              runATest = \{ testContextTypeName, logConfiguration } -> case mHooks of
+                Nothing -> executeModelTest cfg pdrA pdrB testAppContextA alice bob testContextTypeName logConfiguration
+                Just hooks -> executeMeasuredTrial hooks testContextTypeName
+                  (executeModelTestInternal mHooks cfg pdrA pdrB testAppContextA alice bob testContextTypeName logConfiguration)
             traverse runATest cfg.tests
 
       liftEffect $ write (Just results) cacheRef
@@ -323,11 +355,33 @@ getSynchronisationResultsInternal withTwoPDRsFn connectPeers cacheRef cfg = do
       let
         alice = testPouchdbUser "alice"
         snapshotDirAlice = cfg.snapshotDirAlice <> "/snapshot-after-tests"
-      attempt (snapshotPDR alice.systemIdentifier alice.perspectivesUser snapshotDirAlice) >>= case _ of
-        Left err -> log $ "[withPDRCached] Warning: snapshot creation failed: " <> message err
-        Right _ -> log $ "[withPDRCached] Snapshot saved to: " <> snapshotDirAlice
+      case mHooks of
+        Just _ -> pure unit
+        Nothing -> attempt (snapshotPDR alice.systemIdentifier alice.perspectivesUser snapshotDirAlice) >>= case _ of
+          Left err -> log $ "[withPDRCached] Warning: snapshot creation failed: " <> message err
+          Right _ -> log $ "[withPDRCached] Snapshot saved to: " <> snapshotDirAlice
 
       pure results
+
+executeMeasuredTrial :: MeasurementHooks -> String -> Aff SynchronisationResult -> Aff SynchronisationResult
+executeMeasuredTrial hooks scenario action = do
+  liftEffect $ hooks.beginTrial scenario
+  outcome <- attempt action
+  case outcome of
+    Left err -> do
+      liftEffect $ hooks.endTrial "exception" false
+      throwError err
+    Right result -> do
+      liftEffect $ case result of
+        Left _ -> hooks.endTrial "completion-timeout" false
+        Right { testSucceeded } -> hooks.endTrial (if testSucceeded then "success" else "semantic-failure") testSucceeded
+      -- Do not begin another observation window after failure:
+      -- delayed incoming work cannot safely be attributed to it.
+      case result of
+        Left { err } -> throwError err
+        Right { testSucceeded } ->
+          if testSucceeded then pure result
+          else throwError $ error "Performance scenario failed; aborting the measured suite."
 
 executeModelTest
   :: SynchronisationModelConfiguration
@@ -339,7 +393,20 @@ executeModelTest
   -> String
   -> Maybe LogConfiguration
   -> Aff SynchronisationResult
-executeModelTest cfg pdrA pdrB testAppContextA _alice _bob testContextTypeR mLogConfiguration =
+executeModelTest = executeModelTestInternal Nothing
+
+executeModelTestInternal
+  :: Maybe MeasurementHooks
+  -> SynchronisationModelConfiguration
+  -> PDRInstance
+  -> PDRInstance
+  -> ContextInstance
+  -> PerspectivesUser
+  -> PerspectivesUser
+  -> String
+  -> Maybe LogConfiguration
+  -> Aff SynchronisationResult
+executeModelTestInternal mHooks cfg pdrA pdrB testAppContextA _alice _bob testContextTypeR mLogConfiguration =
   withSavedTwoPDRLogConfigs pdrA pdrB do
     case mLogConfiguration of
       Just logConfiguration -> applyLogConfigurationToPDRs pdrA pdrB logConfiguration
@@ -395,6 +462,7 @@ executeModelTest cfg pdrA pdrB testAppContextA _alice _bob testContextTypeR mLog
                 pure (Just roles)
       )
 
+    for_ mHooks \hooks -> liftEffect hooks.beginAction
     runInPDR pdrA
       do
         runMonadPerspectivesTransaction' shareWithPeers (ENR testLeaderType)
@@ -403,7 +471,8 @@ executeModelTest cfg pdrA pdrB testAppContextA _alice _bob testContextTypeR mLog
               runContextAction (unwrap testLeaderType) "RunTest" (unwrap theTest)
           )
 
-    pollUntilTestFinishes 100 (Milliseconds 100.0)
+    for_ mHooks \hooks -> liftEffect hooks.endAction
+    result <- pollUntilTestFinishes 100 (Milliseconds 100.0)
       "Bob to have a value for the test to succeed in pdrB"
       ( runInPDR pdrB do
           testNameProperty' <- toStable (EnumeratedPropertyType cfg.testNameProperty)
@@ -418,6 +487,8 @@ executeModelTest cfg pdrA pdrB testAppContextA _alice _bob testContextTypeR mLog
                 Nothing -> pure (Left { testName, err: error "TestSucceeded property not found" })
             Nothing -> pure (Left { testName: "unknown testname", err: error "TestName property not found" })
       )
+    for_ mHooks \hooks -> liftEffect hooks.endCompletion
+    pure result
 
 -- allOn :: Array TopicLogLevelPair
 -- allOn =
@@ -436,4 +507,3 @@ executeModelTest cfg pdrA pdrB testAppContextA _alice _bob testContextTypeR mLog
 --   , { topic: PARSER, logLevel: Trace }
 --   , { topic: COMPILER, logLevel: Trace }
 --   ]
-
