@@ -447,6 +447,99 @@ See `Perspectives.Persistence.Types` (`PouchdbContext`, `runMonadPouchdbWithStat
 
 ## Transaction performance experiments
 
+### Running the specialized two-PDR setup
+
+From `packages/perspectives-core`, with the normal pnpm/PureScript dependencies
+installed:
+
+```bash
+pnpm run test:performance:collector
+pnpm run test:performance --warmup 1 --repetitions 5 --output /tmp/pdr-memory.json
+pnpm run test:performance:amqp --warmup 1 --repetitions 5 --profile --output /tmp/pdr-amqp.json
+```
+
+The runner requires existing Alice and Bob snapshots at
+`test/pdr-snapshot/newdeltas/alice` and `test/pdr-snapshot/newdeltas/bob`, the same
+snapshots used by the destructive synchronization suite. These are local fixtures,
+not committed credentials. Prepare them using the existing two-PDR workflow
+before benchmarking. The AMQP variant additionally requires a reachable broker
+and snapshots with valid, mutually connected broker-service contracts. The memory
+variant establishes the peer connection during untimed setup. No benchmark
+creates a new universe or writes post-test snapshots.
+The existing AMQP scaffold enables broker trace logging. Explicitly equalize
+logging in the experiment configuration before attributing a cross-transport
+timing difference solely to network/broker work.
+
+Each warm-up or measured round runs the complete configured suite in a **fresh
+child process**, restoring both snapshots and compiling the model before any
+action timer starts. This avoids reusing cached test outcomes or mutated
+databases. Discarded warm-up rounds warm external services/filesystem caches,
+**not** the next process's JIT or PDR caches. The workload order is fixed;
+individual scenarios later in a round may benefit from earlier cache activity.
+The default runner does not isolate identical cold/warm actions within one PDR.
+For query-reuse experiments, define separately named preparatory and measured
+scenarios that exercise the same query paths within a round; scenario identifiers
+in a configuration must be unique.
+
+`scripts/performance-runner.mjs` accepts `--mode memory|amqp`, `--warmup`,
+`--repetitions`, `--timeout-ms`, `--profile` and `--output`. Defaults are one
+warm-up round, five measured rounds and a five-minute worker timeout. Output is
+JSON, both on stdout and in the output file (default `performance-report.json`).
+Use `/tmp` output paths to keep experimental data outside the repository.
+Any failed warm-up, semantic assertion, setup, timeout or worker execution makes
+the command exit nonzero; the report retains the outcomes and missing scenarios.
+
+Each scenario reports:
+
+- `senderActionMs`: Alice's synchronous `RunTest` transaction, including its
+  cascade and distribution, excluding test-context preparation.
+- `bobCompletionMs`: additional time after Alice returns until Bob's success
+  condition is observed; this includes polling, not pure receiver execution.
+- `endToEndMs`: time from Alice's action start through result observation.
+- Completion flags and status, distinguishing an elapsed failure/timeout from a
+  successfully observed result.
+
+Per-scenario summaries exclude warm-up rounds and report sample count, minimum,
+median, mean, nearest-rank p95, maximum and population standard deviation.
+Available elapsed failure timings are included, with separate success/failure
+counts; inspect these counts before comparing timing distributions.
+
+`--profile` enables incoming-operation spans only during the measured action
+window. Normal runtime execution has no active collector. Spans cover decryption,
+`executeTransaction`, the enclosing incoming transaction/cascade, and public-state
+processing. The enclosing cascade **includes** `executeTransaction`, so these
+durations must not be added together. Spans are wall-clock durations, including
+asynchronous waits; the enclosing cascade also includes acquiring the transaction
+flag. They are not CPU-time measurements. The session combines incoming activity in
+both PDRs, including automatic reaction traffic, rather than attributing every
+span solely to Bob. Counts include received messages, decrypted deltas,
+public-key entries, wrapped keys, ciphertext-string UTF-8 bytes and decrypted
+payload UTF-8 bytes. Ciphertext bytes are **not** total wire bytes. No payload,
+key material or peer identifier is retained.
+
+Profiles freeze at result observation or failure, not at global quiescence.
+Each span reports started (`count`), `completed`, `unfinished` and `failed`
+counts; `totalMs` includes completed spans only. Inspect unfinished counts before
+interpreting a phase total. An incoming message retains its original profiling
+session across asynchronous processing, so late phases cannot attach themselves
+to the following scenario's session.
+
+For function-level CPU attribution, build once and use Node's existing CPU
+profiler on the same runner:
+
+```bash
+pnpm run build:performance
+node --cpu-prof --cpu-prof-dir=/tmp scripts/performance-runner.mjs --warmup 0 --repetitions 1 --profile --output /tmp/pdr-profile.json
+```
+
+The forked workers inherit Node profiling flags. Inspect their profiles rather
+than only the orchestration process's profile, and correlate hot functions with
+the timed phases. CPU profiles also include untimed setup and do not measure
+asynchronous database/network wait time. Profiled and unprofiled runs should be
+compared separately because instrumentation adds overhead.
+
+### Comparing experiments
+
 Performance experiments must retain the two-PDR correctness checks: a fast sender
 is not useful if Bob has not received the intended changes. Snapshot restoration,
 connection establishment, model compilation and test-context preparation are

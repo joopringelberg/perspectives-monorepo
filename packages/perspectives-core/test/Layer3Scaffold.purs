@@ -32,7 +32,9 @@ module Test.Layer3Scaffold
   , getSynchronisationResults
   , getSynchronisationResultsOverAMQP
   , getMeasuredSynchronisationResults
+  , performanceSnapshotsAvailable
   , executeModelTest
+  , executeMeasuredTrial
   , runSynchronisationSuite
   , runSynchronisationSuiteOverAMQP
   ) where
@@ -78,7 +80,7 @@ import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransac
 import Perspectives.Sidecar.StableIdMapping (ModelUri(..), Stable)
 import Perspectives.Sidecar.ToStable (toStable)
 import Perspectives.TypePersistence.LoadArc (loadCompileAndStoreArcFile_)
-import Test.PDRInstance (SynchronisationResult, connectPDRs, pollUntil, pollUntilTestFinishes, snapshotPDR, testPouchdbUser, withTwoPDRsCached, withTwoPDRsCachedNoBus)
+import Test.PDRInstance (SynchronisationResult, connectPDRs, pollUntil, pollUntilTestFinishes, snapshotExists, snapshotPDR, testPouchdbUser, withTwoPDRsCached, withTwoPDRsCachedNoBus)
 import Test.PDRInstance.Types (PDRInstance, runInPDR)
 import Test.PerformanceMeasurements (MeasurementHooks)
 import Test.Unit (TestSuite, suite, test)
@@ -221,11 +223,19 @@ getMeasuredSynchronisationResults
   -> SynchronisationModelConfiguration
   -> Aff SynchronisationResults
 getMeasuredSynchronisationResults hooks overAMQP cfg = do
+  available <- performanceSnapshotsAvailable cfg
+  unless available $ throwError $ error "Performance measurements require complete existing snapshots for both PDRs; bootstrap is disabled."
   cacheRef <- liftEffect $ new Nothing
   if overAMQP then
     getSynchronisationResultsInternal (Just hooks) withTwoPDRsCachedNoBus false cacheRef cfg
   else
     getSynchronisationResultsInternal (Just hooks) withTwoPDRsCached true cacheRef cfg
+
+performanceSnapshotsAvailable :: SynchronisationModelConfiguration -> Aff Boolean
+performanceSnapshotsAvailable cfg = do
+  aliceExists <- snapshotExists cfg.snapshotDirAlice
+  bobExists <- snapshotExists cfg.snapshotDirBob
+  pure (aliceExists && bobExists)
 
 getSynchronisationResultsInternal
   :: Maybe MeasurementHooks
@@ -336,18 +346,8 @@ getSynchronisationResultsInternal mHooks withTwoPDRsFn connectPeers cacheRef cfg
             let
               runATest = \{ testContextTypeName, logConfiguration } -> case mHooks of
                 Nothing -> executeModelTest cfg pdrA pdrB testAppContextA alice bob testContextTypeName logConfiguration
-                Just hooks -> do
-                  liftEffect $ hooks.beginTrial testContextTypeName
-                  outcome <- attempt $ executeModelTestInternal mHooks cfg pdrA pdrB testAppContextA alice bob testContextTypeName logConfiguration
-                  case outcome of
-                    Left err -> do
-                      liftEffect $ hooks.endTrial "exception" false
-                      pure $ Left { testName: testContextTypeName, err }
-                    Right result -> do
-                      liftEffect $ case result of
-                        Left _ -> hooks.endTrial "completion-timeout" false
-                        Right { testSucceeded } -> hooks.endTrial (if testSucceeded then "success" else "semantic-failure") testSucceeded
-                      pure result
+                Just hooks -> executeMeasuredTrial hooks testContextTypeName
+                  (executeModelTestInternal mHooks cfg pdrA pdrB testAppContextA alice bob testContextTypeName logConfiguration)
             traverse runATest cfg.tests
 
       liftEffect $ write (Just results) cacheRef
@@ -362,6 +362,26 @@ getSynchronisationResultsInternal mHooks withTwoPDRsFn connectPeers cacheRef cfg
           Right _ -> log $ "[withPDRCached] Snapshot saved to: " <> snapshotDirAlice
 
       pure results
+
+executeMeasuredTrial :: MeasurementHooks -> String -> Aff SynchronisationResult -> Aff SynchronisationResult
+executeMeasuredTrial hooks scenario action = do
+  liftEffect $ hooks.beginTrial scenario
+  outcome <- attempt action
+  case outcome of
+    Left err -> do
+      liftEffect $ hooks.endTrial "exception" false
+      throwError err
+    Right result -> do
+      liftEffect $ case result of
+        Left _ -> hooks.endTrial "completion-timeout" false
+        Right { testSucceeded } -> hooks.endTrial (if testSucceeded then "success" else "semantic-failure") testSucceeded
+      -- Do not begin another observation window after failure:
+      -- delayed incoming work cannot safely be attributed to it.
+      case result of
+        Left { err } -> throwError err
+        Right { testSucceeded } ->
+          if testSucceeded then pure result
+          else throwError $ error "Performance scenario failed; aborting the measured suite."
 
 executeModelTest
   :: SynchronisationModelConfiguration

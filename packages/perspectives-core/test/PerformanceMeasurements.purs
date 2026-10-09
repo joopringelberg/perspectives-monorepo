@@ -22,6 +22,8 @@ foreign import endCompletion :: Effect Unit
 foreign import endTrial :: String -> Boolean -> Effect Unit
 foreign import amqpMode :: Effect Boolean
 foreign import publishResults :: Boolean -> Effect Unit
+foreign import publishFailure :: String -> Effect Unit
+foreign import configureScenarios :: Array String -> Effect Unit
 
 measurementHooks :: MeasurementHooks
 measurementHooks = { beginTrial, beginAction, endAction, endCompletion, endTrial }
