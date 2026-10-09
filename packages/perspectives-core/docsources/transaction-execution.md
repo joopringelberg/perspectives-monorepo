@@ -444,3 +444,102 @@ type PouchdbContext f =
 - `after`, repeating (`Forever`) and `RepeatFor` time facets capture the same names and wrap the transaction with `withCapturedBindings`, which rebinds them in a new frame when the transaction eventually runs.
 
 See `Perspectives.Persistence.Types` (`PouchdbContext`, `runMonadPouchdbWithState`, `variableBindingsRef`), `Perspectives.PerspectivesState` (the variable binding functions), `Perspectives.CompileTimeFacets` (`contextVariableNames`, `captureBindings`, `withCapturedBindings`), and the regression tests in `test/variableBindings.purs` (part of `pnpm run test:layer1`).
+
+## Transaction performance experiments
+
+Performance experiments must retain the two-PDR correctness checks: a fast sender
+is not useful if Bob has not received the intended changes. Snapshot restoration,
+connection establishment, model compilation and test-context preparation are
+setup costs, not action-processing costs. A sender action includes its synchronous
+state cascade and outgoing distribution; observing Bob's result also includes
+transport, queueing and the scaffold's polling interval. Do not subtract these
+overlapping measurements or label result-observation latency as receiver CPU time.
+
+Use the in-memory transport first to isolate runtime work, then repeat over
+RabbitMQ to assess delivery and queueing. Keep the model, snapshots, logging
+levels, machine, runtime versions and workload identical across comparisons.
+Report cold and warm runs separately: repeated actions may reuse compiled queries
+and cached instances, whereas restoring a snapshot resets runtime caches.
+Discard warm-up samples from aggregates, but still require them to pass their
+semantic assertions. Record failed or timed-out trials instead of silently
+excluding them. Median and tail latency are more informative than a single run;
+do not impose hardware-dependent timing thresholds in correctness tests.
+
+The existing `TwoPDRDestructiveTests@1.0.arc` model provides role, property,
+binding and context-removal workloads with receiver-side success conditions.
+For further experiments, supply a `SynchronisationModelConfiguration` for a model
+with the same Leader/Follower/RunTest contract. Vary one dimension at a time:
+
+| Experiment | Comparison | What to measure |
+|---|---|---|
+| Structural neighbourhood | New recipient versus an established recipient; shallow versus deep filler paths | Delta count, payload size, sender latency, receiver latency |
+| Author metadata | One versus multiple authors; first contact versus repeated contact | Key-metadata size and signature/key processing |
+| Query reuse | First action versus repeated equivalent actions | Compilation/cache-miss work and state-cascade latency |
+| Fan-out | One versus several equivalent recipients, then recipients with different permissions | Dependency/property collection and distribution time |
+| Persistence and replay | New deltas versus duplicates; ordered delivery versus version gaps | Delta/version-store work and pending recovery, with correctness checks |
+
+### Optimization proposals, not changes to synchronization semantics
+
+These are hypotheses to test, not measured speedups. Establish a baseline and
+retain authorization, signature, resource-version and receiver-result checks
+before accepting an optimization.
+
+1. **Measure query-cache misses before adding another cache.**
+   `src/core/typePersistence/storableInvertedQuery.purs:getQueriesFromCache`
+   already caches the compiled results produced by `compileBoth`, including empty
+   results. The earlier assumption that all inverted queries are compiled anew is
+   therefore no longer generally true. Profile misses and other compilation paths
+   (including calculated getters and state/action compilers) separately.
+   Any further compiled-function cache must be per PDR, bounded and invalidated
+   when contributing models are installed, replaced or removed. Cache executable
+   functions, not query results or captured fiber-local variable bindings.
+   Test model updates and cross-PDR isolation as well as cold/warm speed.
+
+2. **Reduce repeated dependency collection for equivalent recipients.**
+   `src/core/sync/collectAffectedContexts.purs` collects paths, assumptions and
+   properties for peers. Reuse work within one transaction only when the
+   perspective, context, state-dependent permissions and resulting visibility
+   agree. Role type alone is not a safe grouping key: `selfonly`, `authoronly`,
+   author identity and instance-specific state can produce different payloads.
+   Compare final visible deltas for every recipient, including negative tests
+   proving private information is not shared.
+   `src/core/sync/deltas.purs:sendPeerTransactions` already groups identical
+   serialized transactions and encrypts once with multiple wrapped recipient
+   keys; the remaining opportunity is *before* that grouping, not removing
+   necessary per-recipient key wrapping.
+
+3. **Omit known structural neighbourhoods only with evidence of receipt.**
+   Having a role in a context on the sender does not prove that every recipient
+   installation has received that context, its external role and the required
+   historical deltas. First measure how much of the payload is repeated
+   neighbourhood data. A future acknowledged, per-installation resource/version
+   inventory could allow omission, with full bootstrap on first contact, after
+   snapshot restoration, on a newly added installation and after recovery.
+   Exercise out-of-order delivery and missing-resource recovery before relying on
+   such knowledge; preserve the deltas needed for authorization and version-gap
+   handling.
+
+4. **Avoid re-sending author keys only with an authenticated knowledge protocol.**
+   `src/core/sync/deltas.purs:removeUnnecessaryKeys` already excludes authors that
+   do not occur in a peer's deltas. Further savings require proof that the
+   recipient installation knows the exact signing-key version and its identity
+   evidence, not just that it has met the user. Test first contact, key rotation,
+   multiple installations, lost acknowledgments and restored snapshots.
+   Missing keys must trigger safe retrieval/retry, never skipped verification.
+   Measure both byte savings and verification cost before introducing the
+   inventory/acknowledgment overhead.
+
+5. **Reduce repeated parsing and persistence lookups within a received batch.**
+   `src/core/sync/handleTransaction.purs` extracts ordering information, checks
+   gaps, verifies authors and applies resource-versioned deltas. Investigate
+   decoding each envelope once and reusing immutable metadata, and batching
+   independent reads of resource versions. Maintain ordered writes and duplicate
+   handling; do not parallelize authorization or mutation against evolving
+   context/role state. Profile database work separately from cryptography and
+   state cascades before choosing the next implementation.
+
+Finally, long transaction-flag hold time explains GUI blocking but is not itself
+permission to split a transaction. Yielding between safe computation steps may
+improve responsiveness; splitting or reordering mutations can change state
+transitions, destructive scheduling and `once settled` behavior. Verify those
+semantics and browser responsiveness independently of Node benchmark throughput.
