@@ -35,6 +35,7 @@ import Data.Either (Either(..))
 import Data.List.NonEmpty (head)
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
+import Data.Set (size)
 import Data.String (take)
 import Data.Traversable (for, traverse)
 import Effect.Aff.Class (liftAff)
@@ -45,12 +46,14 @@ import Perspectives.AMQP.Stomp (StructuredMessage, acknowledge, markHandled, mes
 import Perspectives.Assignment.Update (setProperty)
 import Perspectives.Authenticate (decryptForRecipient, getTransportPrivateKey)
 import Perspectives.CoreTypes (BrokerService, MonadPerspectives, MonadPerspectivesQuery, (##>))
+import Perspectives.Data.EncodableMap (keys)
 import Perspectives.Identifiers (buitenRol)
 import Perspectives.Instances.ObjectGetters (context, externalRole, getProperty)
 import Perspectives.Logging (debugBroker, traceBroker, warnBroker)
 import Perspectives.ModelDependencies (accountHolder, accountHolderName, accountHolderPassword, accountHolderQueueName, brokerEndpoint, brokerServiceContractInUse, brokerServiceExchange, connectedToAMQPBroker, myBrokers, sysUser)
 import Perspectives.Names (getMySystem, lookupIndexedContext)
 import Perspectives.Persistence.API (cleanupDeletedDocs, deleteDocument, documentsInDatabase, excludeDocs, getDocument_)
+import Perspectives.Performance (ProfileSession, captureSession, countDecrypted, countEncrypted, profile, sessionEnabled)
 import Perspectives.Persistent (postDatabaseName)
 import Perspectives.PerspectivesState (getBrokerService, getCurrentLanguage, getPerspectivesUser, getStompClientFactory, pushMessage, removeMessage, setBrokerService, setStompClient, stompClient, transactionLevel)
 import Perspectives.Query.UnsafeCompiler (getPropertyFunction, getRoleInstances)
@@ -61,7 +64,7 @@ import Perspectives.RunMonadPerspectivesTransaction (detectPublicStateChanges, r
 import Perspectives.Sync.HandleTransaction (executeTransaction)
 import Perspectives.Sync.OutgoingTransaction (OutgoingTransaction(..))
 import Perspectives.Sync.TransactionForPeer (EncryptedTransactionForPeer(..), TransactionForPeer)
-import Prelude (Unit, bind, pure, show, unit, void, ($), (*>), (<$>), (<>), (==), (>), (>>=), (<<<), (>=>), (>>>), discard, map)
+import Prelude (Unit, bind, pure, show, unit, void, when, ($), (*>), (<$>), (<>), (==), (>), (>>=), (<<<), (>=>), (>>>), discard, map)
 import Simple.JSON (readJSON, writeJSON)
 
 incomingPost :: MonadPerspectives Unit
@@ -114,12 +117,14 @@ incomingPost = do
             showPendingIncomingTransactions pendingCount
             padding <- transactionLevel
             debugBroker $ padding <> "Executing incoming post transaction from author " <> unwrap (unwrap body).author <> " and timestamp " <> show (unwrap body).timeStamp
-            transaction <- decryptTransaction body
-            runMonadPerspectivesTransaction'
-              false
-              (ENR $ EnumeratedRoleType sysUser)
-              (executeTransaction transaction)
-            detectPublicStateChanges
+            profileSession <- liftEffect captureSession
+            transaction <- profile profileSession "decrypt" (decryptTransaction profileSession body)
+            profile profileSession "incomingCascade" $
+              runMonadPerspectivesTransaction'
+                false
+                (ENR $ EnumeratedRoleType sysUser)
+                (profile profileSession "executeTransaction" (executeTransaction transaction))
+            profile profileSession "publicStates" detectPublicStateChanges
             remainingCount <- markHandled markHandled_
             showPendingIncomingTransactions remainingCount
 
@@ -148,15 +153,19 @@ incomingPost = do
         void $ for transactions \(OutgoingTransaction { _id, receiver, transaction }) -> liftEffect $ sendToTopic stompClient receiver _id (writeJSON transaction)
       _ -> pure unit
 
-  decryptTransaction :: EncryptedTransactionForPeer -> MonadPerspectives TransactionForPeer
-  decryptTransaction (EncryptedTransactionForPeer { encryptedDeltas, author, perspectivesSystem, timeStamp, publicKeys }) = do
+  decryptTransaction :: ProfileSession -> EncryptedTransactionForPeer -> MonadPerspectives TransactionForPeer
+  decryptTransaction profileSession (EncryptedTransactionForPeer { encryptedDeltas, author, perspectivesSystem, timeStamp, publicKeys }) = do
+    profiling <- liftEffect $ sessionEnabled profileSession
+    when profiling $ liftEffect $ countEncrypted profileSession encryptedDeltas.ciphertext (length encryptedDeltas.wrappedKeys)
     currentUser <- getPerspectivesUser
     transportPrivateKey <- getTransportPrivateKey
     case transportPrivateKey, Arr.head (Arr.filter (\wrappedKey -> unwrap wrappedKey.recipient == takeGuid (unwrap currentUser)) encryptedDeltas.wrappedKeys) of
       Just privateKey, Just wrappedKey -> do
         payload <- liftAff $ decryptForRecipient encryptedDeltas.ciphertext encryptedDeltas.iv wrappedKey.wrappedKey privateKey
         case readJSON payload of
-          Right (transaction :: TransactionForPeer) -> pure transaction
+          Right (transaction :: TransactionForPeer) -> do
+            when profiling $ liftEffect $ countDecrypted profileSession payload (length (unwrap transaction).deltas) (size $ keys (unwrap transaction).publicKeys)
+            pure transaction
           Left e -> throwError (error $ "Could not decode decrypted transaction payload: " <> show e)
       _, _ -> throwError (error $ "No wrapped transport key found for recipient " <> show currentUser)
 
