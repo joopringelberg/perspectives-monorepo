@@ -27,28 +27,53 @@ module Test.Layer3ScaffoldTests
 
 import Prelude
 
+import Data.Array (length, null)
 import Data.Maybe (Maybe(..))
-import Perspectives.CoreTypes (LogLevel(..), LogTopic(..))
-import Perspectives.Logging (ansiMagenta, ansiRed)
-import Perspectives.ModelDependencies (sysMe)
-import Perspectives.Names (lookupIndexedRole)
+import Data.Time.Duration (Milliseconds(..))
+import Perspectives.CoreTypes (LogLevel(..), LogTopic(..), (##=))
+import Perspectives.Instances.ObjectGetters (binding_, getUnlinkedRoleInstances)
+import Perspectives.Logging (ansiMagenta, ansiRed, infoTest)
+import Perspectives.ModelDependencies (mySocialEnvironment, socialEnvironmentPersons, sysMe)
+import Perspectives.Names (lookupIndexedContext, lookupIndexedRole)
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistent (tryGetPerspectRol)
 import Perspectives.PerspectivesState (defaultRuntimeOptions, setTopicLogLevel)
-import Test.PDRInstance (noBus, testPouchdbUser, withPDR, withTwoPDRs, connectPDRs)
+import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..))
+import Test.PDRInstance (connectPDRs, noBus, pollUntil, testPouchdbUser, withPDR, withTwoPDRs)
 import Test.PDRInstance.Types (runInPDR)
-import Test.Unit (TestSuite, suiteSkip, test)
+import Test.Unit (TestSuite, suite, test, testOnly)
 import Test.Unit.Assert (assert)
-import Perspectives.Instances.ObjectGetters (binding_)
 
 scaffoldTests :: TestSuite
-scaffoldTests = suiteSkip "PDRInstance scaffold" do
+scaffoldTests = suite "PDRInstance scaffold" do
 
   test "start a single PDR instance and read its system identifier" do
     let user = testPouchdbUser "alice"
     withPDR user defaultRuntimeOptions (Just ansiRed) noBus \pdr -> do
       sysId <- runInPDR pdr getSystemIdentifier
       assert "system identifier should equal alice_macbook" (sysId == "alice_macbook")
+  
+  testOnly "Start a single PDR instance and count the number of Person instances that are created" do
+    let user = testPouchdbUser "alice"
+    withPDR user defaultRuntimeOptions (Just ansiRed) noBus \pdr -> do
+      runInPDR pdr $ setTopicLogLevel TEST Info
+      instancesOfMe <- pollUntil 100 (Milliseconds 100.0)
+        "Polling for Person instances..." $ do
+          runInPDR pdr $ do
+            -- Replace the following line with the actual code to count Person instances
+            -- Get the indexed context sys:MySocialEnvironment
+            mMySocialEnvironment <- lookupIndexedContext mySocialEnvironment
+            case mMySocialEnvironment of
+              Just mySocialEnvironment -> do
+                -- Then get the Persons instance in that context
+                persons <- mySocialEnvironment ##= getUnlinkedRoleInstances (EnumeratedRoleType socialEnvironmentPersons)
+                infoTest $ "Found persons: " <> (show $ length persons)
+                -- pollUntil stops at the first `Just`, so only succeed once there is a Person.
+                pure $ if null persons then Nothing else Just persons
+              Nothing -> do
+                infoTest "No MySocialEnvironment found"
+                pure Nothing
+      assert "Person count should be 1 initially" ( length instancesOfMe == 1)
 
   test "start two PDR instances with distinct identifiers" do
     withTwoPDRs
