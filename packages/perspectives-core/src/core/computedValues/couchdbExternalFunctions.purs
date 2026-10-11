@@ -105,7 +105,7 @@ import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable, Stable
 import Perspectives.Sidecar.ToStable (toStable)
 import Perspectives.Sync.HandleTransaction (executeTransaction)
 import Perspectives.Sync.Transaction (Transaction(..), UninterpretedTransactionForPeer(..))
-import Prelude (Unit, bind, const, discard, eq, flip, pure, show, unit, void, ($), (&&), (*>), (<$>), (/=), (<<<), (<>), (==), (>>=))
+import Prelude (Unit, bind, const, discard, eq, flip, pure, show, unit, unless, void, ($), (&&), (*>), (<$>), (/=), (<<<), (<>), (==), (>>=))
 import Simple.JSON (read_, write, writeJSON)
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -405,7 +405,12 @@ installModelLocally (Tuple dfrecord@{ id, namespace, referredModels, invertedQue
       , unversionedModelname: unversionedModelUri $ unwrap id
       , versionedModelManifest: Nothing
       }
-  assertNoDependencyConflicts unversionedModelname versionedModelName dfrecord.modelDependencies
+  -- When installing model:System for the first time there are no installed models yet, hence no conflicts possible.
+  -- Moreover, the check reads ModelsInUse from the system context, which requires the types of model:System. These are
+  -- not available before this DomeinFile is cached below, so the check would trigger a nested just-in-time load
+  -- (and installation, including initSystem) of this very model.
+  unless (isInitialLoad' && unversionedModelname == DEP.systemModelName)
+    $ assertNoDependencyConflicts unversionedModelname versionedModelName dfrecord.modelDependencies
   -- Store the model in Couchdb, that is: in the local store of models.
   -- Save it with the revision of the local version that we have, if any (do not use the repository version).
   { documentName: unversionedDocumentName } <- lift $ resourceIdentifier2WriteDocLocator unversionedModelname
