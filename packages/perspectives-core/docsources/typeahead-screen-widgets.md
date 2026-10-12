@@ -5,6 +5,37 @@ This document describes the three typeahead screen widgets introduced in the Per
 
 ---
 
+## Conditional tabs
+
+In tabbed screens, including the `what` section of a who/what/where screen,
+`when` can wrap one or more tabs:
+
+```arc
+what
+  tab "Manifest" default
+    row
+      form External
+  when not (extern >> Published)
+    tab "Compile"
+      row
+        form External
+```
+
+Conditional blocks may appear before, between, or after ordinary tabs, and may
+be nested. Their expressions are evaluated against the current context, using
+the same query semantics as `when` inside a row or column. A tab is omitted when
+its condition does not evaluate to true or when no contents remain visible.
+Properties of the external role must be reached through `extern`, as above.
+Titles, default flags, and tab order are preserved for visible tabs. A `when`
+around master/detail items in `who`, `what`, or `where` remains supported.
+
+The parser lowers each conditional tab to a tab whose contents are wrapped in
+the existing `WhenElement` representation. Both screen serialisation paths
+evaluate these wrappers and remove empty tabs; no new client-side element type
+or stored model format is required.
+
+---
+
 ## Background
 
 When a user fills a role in MyContexts, the list of candidates is usually small enough to show as a

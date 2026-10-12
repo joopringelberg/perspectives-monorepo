@@ -177,7 +177,8 @@ contextualiseScreenElementDef (WhenElementD (WhenDef { condition, elements })) =
   case head shouldBeShown of
     Just (Value "true") -> do
       elements' <- catMaybes <$> (for elements contextualiseScreenElementDef)
-      pure $ Just $ WhenElementD (WhenDef { condition, elements: elements' })
+      if null elements' then pure Nothing
+      else pure $ Just $ WhenElementD (WhenDef { condition, elements: elements' })
     _ -> pure Nothing
 
 contextualiseRowDef :: RowDef -> InContext (Maybe RowDef)

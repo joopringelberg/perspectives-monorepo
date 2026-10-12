@@ -289,6 +289,9 @@ modelURIReadable = "model://perspectives.domains#CouchdbManagement$VersionedMode
 versionedModelManifestModelCuid :: String
 versionedModelManifestModelCuid = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$ModelCuid"
 
+versionedModelManifestPublished :: String
+versionedModelManifestPublished = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$Published"
+
 modelDependency :: String
 modelDependency = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$ModelDependency"
 

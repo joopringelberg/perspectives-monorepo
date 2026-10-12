@@ -43,7 +43,7 @@ import Prelude
 
 import Control.Monad.Reader (runReaderT)
 import Control.Monad.Trans.Class (lift)
-import Data.Array (catMaybes, concat, difference, filter, filterA, head)
+import Data.Array (catMaybes, concat, difference, filter, filterA, head, null)
 import Data.Maybe (Maybe(..), fromMaybe, isJust, maybe)
 import Data.Newtype (class Newtype, unwrap)
 import Data.Traversable (traverse)
@@ -363,7 +363,10 @@ instance AddPerspectives What where
   addPerspectives (FreeFormScreen { tabs, rows, columns }) user ctxt = do
     tabs' <- case tabs of
       Nothing -> pure Nothing
-      Just t -> Just <$> traverse (\a -> addPerspectives a user ctxt) t
+      Just t -> do
+        populated <- traverse (\a -> addPerspectives a user ctxt) t
+        let visible = filter (\(TabDef { elements }) -> not $ null elements) populated
+        pure $ if null visible then Nothing else Just visible
     rows' <- case rows of
       Nothing -> pure Nothing
       Just t -> Just <$> traverse (\a -> addPerspectives a user ctxt) t
@@ -409,7 +412,7 @@ instance addPerspectivesScreenElementDef :: AddPerspectives ScreenElementDef whe
 
 instance addPerspectivesTabDef :: AddPerspectives TabDef where
   addPerspectives (TabDef r) user ctxt = do
-    elements <- traverse (\a -> addPerspectives a user ctxt) r.elements
+    elements <- catMaybes <$> traverse (traverseScreenElement user ctxt) r.elements
     contextType <- lift $ contextType_ ctxt
     (translatedTitle :: String) <- lift (translationOf (unsafePartial typeUri2ModelUri_ $ unwrap contextType) r.title)
     pure $ TabDef { title: translatedTitle, isDefault: r.isDefault, elements }
@@ -527,7 +530,8 @@ traverseScreenElement user ctxt a = case a of
     case head shouldBeShown of
       Just (Value "true") -> do
         elements' <- catMaybes <$> traverse (traverseScreenElement user ctxt) elements
-        pure $ Just $ WhenElementD (WhenDef { condition, elements: elements' })
+        if null elements' then pure Nothing
+        else pure $ Just $ WhenElementD (WhenDef { condition, elements: elements' })
       _ -> pure Nothing
   (other :: ScreenElementDef) -> Just <$> addPerspectives other user ctxt
 

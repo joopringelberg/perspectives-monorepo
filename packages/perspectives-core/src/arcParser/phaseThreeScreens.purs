@@ -25,7 +25,7 @@ import Control.Monad.State (gets) as State
 import Control.Monad.State.Class (gets)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Writer (WriterT, execWriterT, tell)
-import Data.Array (catMaybes, cons, drop, elemIndex, filter, filterA, find, findIndex, foldM, fromFoldable, head, length, nub, null)
+import Data.Array (catMaybes, cons, drop, elemIndex, filter, filterA, find, findIndex, foldM, fromFoldable, head, length, nub, null, zip)
 import Data.Array.Partial (head) as ARRP
 import Data.Foldable (for_)
 import Data.List (List) as LIST
@@ -48,7 +48,7 @@ import Perspectives.Parsing.Arc.Expression (endOf, startOf)
 import Perspectives.Parsing.Arc.Expression.AST (SimpleStep(..), Step(..))
 import Perspectives.Parsing.Arc.PhaseThree.TypeLookup (lookForUnqualifiedPropertyType, lookForUnqualifiedPropertyType_)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseThree, getsDF, lift2, modifyDF, throwError, withDomeinFile)
-import Perspectives.Parsing.Arc.Position (ArcPosition)
+import Perspectives.Parsing.Arc.Position (ArcPosition(..))
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Query.ExpressionCompiler (compileExpression, compileStep, qualifyLocalRoleName)
 import Perspectives.Query.QueryTypes (Domain(..), domain2roleType, functional, range, roleInContext2Role)
@@ -57,7 +57,7 @@ import Perspectives.Representation.Class.PersistentType (getCalculatedRole, getE
 import Perspectives.Representation.Class.Property (hasFacet, rangeOfPropertyType)
 import Perspectives.Representation.Class.Role (allProperties, displayName, perspectivesOfRoleType, roleADTOfRoleType, roleTypeIsFunctional)
 import Perspectives.Representation.ExplicitSet (ExplicitSet(..), elements_)
-import Perspectives.Representation.Perspective (Perspective(..), perspectiveSupportsRoleVerbs)
+import Perspectives.Representation.Perspective (Perspective(..), perspectiveSupportsProperty, perspectiveSupportsRoleVerbs)
 import Perspectives.Representation.Range (Range(..))
 import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FieldConstraintDef, FormDef(..), MarkDownDef(..), PropertyRestrictions, PropertyValueFillers, RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), ScreenMap, TabDef(..), TableDef(..), TableFormDef(..), TableFormOrWhenDef(..), TypeAheadFillerDef(..), TypeAheadFormDef(..), What(..), WhenDef(..), WhenTableFormDef(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef)
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..), optimistic, pessimistic)
@@ -66,7 +66,8 @@ import Perspectives.Representation.Verbs (allPropertyVerbs, roleVerbList2Verbs)
 import Perspectives.Representation.View (View(..))
 import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.Types.ObjectGetters (equalsOrGeneralisesRoleType_, getContextActionFromUnqualifiedName)
-import Prelude (Unit, bind, discard, eq, flip, map, not, pure, unit, ($), (<#>), (<$>), (<*>), (<<<), (==), (>>=))
+import Perspectives.PerspectivesState (addWarning)
+import Prelude (Unit, bind, discard, eq, flip, map, not, pure, show, unit, ($), (<>), (<#>), (<$>), (<*>), (<<<), (==), (>>=))
 
 -- | Extract action names from markdown text using the [[action: name| text]] syntax.
 extractMarkDownActionNames :: String -> Array String
@@ -321,7 +322,7 @@ handleScreens screenEs = do
             otherwise -> throwError $ NotUniquelyIdentifyingPropertyType start' (ENP $ EnumeratedPropertyType prop) candidates
 
   widgetCommonFields :: RoleType -> AST.WidgetCommonFields -> ThreeValuedLogic -> PhaseThree WidgetCommonFieldsDef
-  widgetCommonFields subjectRoleType { title: title', perspective, fillFrom, typeAheadFillFromRole, fillPropertyValues, withProps, withoutProps, withoutVerbs, roleVerbs, fieldConstraints: fieldConstraints', start: start', end: end' } isFunctionalWidget = do
+  widgetCommonFields subjectRoleType { title: title', perspective, fillFrom, typeAheadFillFromRole, fillPropertyValues, withProps, withPropsPositions, withoutProps, withoutVerbs, roleVerbs, fieldConstraints: fieldConstraints', start: start', end: end' } isFunctionalWidget = do
     -- From a RoleIdentification that represents the object,
     -- find the relevant Perspective.
     -- A ScreenElement can only be defined for a named Enumerated or Calculated Role. This means that `perspective` is constructed with the
@@ -395,6 +396,7 @@ handleScreens screenEs = do
         withoutAndRequired <- case withProps, withoutProps of
           Just withSel, Nothing -> do
             included <- propertiesInPropsOrView withSel perspective objectRoleType start'
+            warnOnPropertiesOutsidePerspective pspve included withPropsPositions
             let
               excluded = filter
                 ( \p -> case elemIndex p included of
@@ -450,6 +452,23 @@ handleScreens screenEs = do
           CR r -> lift2 (roleADTOfRoleType objectRoleType >>= allProperties <<< map roleInContext2Role)
         Empty -> pure []
         PSet as -> pure as
+
+    warnOnPropertiesOutsidePerspective
+      :: Perspective
+      -> Array PropertyType
+      -> LIST.List { propertyName :: String, position :: ArcPosition }
+      -> PhaseThree Unit
+    warnOnPropertiesOutsidePerspective perspective' included properties =
+      for_ (zip (fromFoldable properties) included)
+        \(Tuple { propertyName, position: ArcPosition { line, column } } propertyType) ->
+          if perspectiveSupportsProperty perspective' propertyType then pure unit
+          else
+            lift2 $ addWarning
+              { message: "This user does not have a perspective that includes '" <> propertyName <> "', in line " <> show line <> " column " <> show column
+              , error: ""
+              , externalRoleId: ""
+              , contextName: ""
+              }
 
     compileFillPropertyValues :: LIST.List AST.FillPropertyValueE -> RoleType -> RoleIdentification -> PhaseThree (Maybe PropertyValueFillers)
     compileFillPropertyValues fillProperties objectRoleType perspectiveIdentification = do

@@ -81,10 +81,12 @@ data PerspectivesWarning
   | RunContextStateAutomaticAction ContextInstance StateIdentifier
   | RunRoleStateAutomaticAction RoleInstance StateIdentifier
   | RoleIsFunctional EnumeratedRoleType ContextInstance RoleInstance
+  | RefusingToOverwritePublishedModelRelease String
 
 instance showPerspectivesWarning :: Show PerspectivesWarning where
   show (ModelLacksModelId dfid) = "(ModelLacksModelId) The model '" <> dfid <> "' lacks a value for the property ModelIdentification on its Model instance."
   show (ModelLacksUrl dfid) = "(ModelLacksUrl) The model '" <> dfid <> "' lacks a value for the property Url on its Model instance."
+  show (RefusingToOverwritePublishedModelRelease documentName) = "(RefusingToOverwritePublishedModelRelease) Refusing to overwrite published model release '" <> documentName <> "'. Publish a new version instead."
   show (PropertySynchronizationIncomplete prop source destinations) = "(PropertySynchronizationIncomplete) Modifications to property:\n\t'" <> (unwrap prop) <> "'\n by:\n\t'" <> roletype2string source <> "'\n cannot be sent to:\n\t* " <> intercalate "\n\t* " (map roletype2string destinations) <> "."
   show (RoleSynchronizationIncomplete role source destinations) = "(RoleSynchronizationIncomplete) New (and removed) instances of role type:\n\t'" <> (unwrap role) <> "'\n by:\n\t'" <> roletype2string source <> "'\n cannot be sent to:\n\t* " <> intercalate "\n\t* " (map roletype2string destinations) <> "."
   show (RoleBindingSynchronizationIncomplete role source destinations) = "(RoleBindingSynchronizationIncomplete) Filling (and emptying) instances of role type:\n\t'" <> (unwrap role) <> "'\n by:\n\t'" <> roletype2string source <> "'\n cannot be communicated with:\n\t* " <> intercalate "\n\t* " (map roletype2string destinations) <> "."

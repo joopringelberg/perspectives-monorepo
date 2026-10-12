@@ -1491,29 +1491,46 @@ withoutProperties = basedOnView <|> basedOnProps
 
 -- | Inclusive counterpart for withoutProperties.
 -- | Parses either `with view <ArcIdentifier>` or `with props (<ArcIdentifier>{, <ArcIdentifier>}*)`.
-withProperties :: IP PropsOrView
-withProperties = basedOnView <|> basedOnProps
+withPropertiesAndPositions
+  :: IP
+       { selection :: PropsOrView
+       , properties :: List { propertyName :: String, position :: ArcPosition }
+       }
+withPropertiesAndPositions = basedOnView <|> basedOnProps
   where
-  basedOnView :: IP PropsOrView
+  basedOnView :: IP { selection :: PropsOrView, properties :: List { propertyName :: String, position :: ArcPosition } }
   basedOnView = do
     { subject, object, state } <- getArcParserState
     case subject, object of
       Just _, Just _ -> do
         view <- reserved "view" *> (View <$> arcIdentifier)
         sameOrOutdented'
-        pure view
+        pure { selection: view, properties: Nil }
       _, _ -> fail "User role and object of perspective must be given, "
 
-  basedOnProps :: IP PropsOrView
+  basedOnProps :: IP { selection :: PropsOrView, properties :: List { propertyName :: String, position :: ArcPosition } }
   basedOnProps = do
     { subject, object, state } <- getArcParserState
     case subject, object of
       Just _, Just _ -> do
         _ <- getPosition
-        props <- option AllProperties (reserved "props" *> (Properties <$> token.parens (arcIdentifier `sepBy` token.symbol ",")))
+        mProperties <- optionMaybe (reserved "props" *> token.parens (propertyNamesAndPositions `sepBy` token.symbol ","))
+        let
+          properties = case mProperties of
+            Nothing -> Nil
+            Just namedProperties -> namedProperties
+          selection = case mProperties of
+            Nothing -> AllProperties
+            Just namedProperties -> Properties (map _.propertyName namedProperties)
         sameOrOutdented'
-        pure props
+        pure { selection, properties }
       _, _ -> fail "User role and object of perspective must be given, "
+
+  propertyNamesAndPositions :: IP { propertyName :: String, position :: ArcPosition }
+  propertyNamesAndPositions = do
+    position <- getPosition
+    propertyName <- arcIdentifier
+    pure { propertyName, position }
 
 allPropertyVerbs :: List PropertyVerb
 allPropertyVerbs = (Consult : (RemovePropertyValue : (DeleteProperty : (AddPropertyValue : (SetPropertyValue : Nil)))))
@@ -1643,10 +1660,8 @@ classicScreenE title start = do
   context <- getCurrentContext
   keyword <- scanIdentifier
   case keyword of
-    "tab" -> do
-      tabs <- Just <$> nestedBlock tabE
-      end <- getPosition
-      pure $ ClassicScreen $ FreeFormScreenE { title, tabs, rows: Nothing, columns: Nothing, subject, context, start, end }
+    "tab" -> tabScreen subject context
+    "when" -> tabScreen subject context
     "row" -> do
       rows <- Just <$> nestedBlock rowE
       end <- getPosition
@@ -1655,7 +1670,12 @@ classicScreenE title start = do
       columns <- Just <$> nestedBlock columnE
       end <- getPosition
       pure $ ClassicScreen $ FreeFormScreenE { title, tabs: Nothing, columns, rows: Nothing, subject, context, start, end }
-    _ -> fail "Expected: tab, row, column, "
+    _ -> fail "Expected: tab, when, row, column. "
+  where
+  tabScreen subject context = do
+    tabs <- Just <<< concat <$> nestedBlock tabOrWhenE
+    end <- getPosition
+    pure $ ClassicScreen $ FreeFormScreenE { title, tabs, rows: Nothing, columns: Nothing, subject, context, start, end }
 
 whoWhatWhereScreenE :: ArcPosition -> IP ScreenE
 whoWhatWhereScreenE start = do
@@ -1678,6 +1698,7 @@ whatE = reserved "what" *>
     keyword <- scanIdentifier
     case keyword of
       "tab" -> classicSubscreenE start
+      "when" -> try (classicSubscreenE start) <|> whatProperE
       "row" -> classicSubscreenE start
       "column" -> classicSubscreenE start
       "markdown" -> whatProperE
@@ -1742,6 +1763,19 @@ tableFormE = withPos do
 tabE :: IP TabE
 tabE = reserved "tab" *> (TabE <$> token.stringLiteral <*> option false (reserved "default" *> pure true) <*> nestedBlock (defer \_ -> screenElementE))
 
+-- | Lower conditional tabs to conditional contents; contextualisation removes empty tabs.
+tabOrWhenE :: IP (List TabE)
+tabOrWhenE = withPos do
+  keyword <- scanIdentifier
+  case keyword of
+    "when" -> do
+      reserved "when"
+      condition <- step
+      context <- getCurrentContext
+      tabs <- concat <$> nestedBlock (defer \_ -> tabOrWhenE)
+      pure $ map (\(TabE title isDefault elements) -> TabE title isDefault (singleton $ WhenElement $ WhenE condition context elements)) tabs
+    _ -> singleton <$> tabE
+
 rowE :: IP RowE
 rowE = reserved "row" *> (RowE <$> nestedBlock (defer \_ -> screenElementE))
 
@@ -1789,14 +1823,17 @@ widgetCommonFields = do
       mFillFrom <- optionMaybe (reserved "fillfrom" *> step)
       -- Parse at most one selector: either `with …` or `without …`.
       mSelection <- optionMaybe
-        ( (Right <$> (reserved "with" *> withoutProperties))
+        ( (Right <$> (reserved "with" *> withPropertiesAndPositions))
             <|>
               (Left <$> (reserved "without" *> withoutProperties))
         )
       let
         withProps = case mSelection of
-          Just (Right p) -> Just p
+          Just (Right { selection }) -> Just selection
           _ -> Nothing
+        withPropsPositions = case mSelection of
+          Just (Right { properties }) -> properties
+          _ -> Nil
         withoutProps = case mSelection of
           Just (Left p) -> Just p
           _ -> Nothing
@@ -1813,6 +1850,7 @@ widgetCommonFields = do
         , typeAheadFillFromRole: Nothing
         , fillPropertyValues
         , withProps
+        , withPropsPositions
         , withoutProps
         , withoutVerbs
         , roleVerbs: _.roleVerbs <<< unwrap <$> mroleVerbs
@@ -1829,6 +1867,7 @@ widgetCommonFields = do
         , typeAheadFillFromRole: Nothing
         , fillPropertyValues: Nil
         , withProps: Nothing
+        , withPropsPositions: Nil
         , withoutProps: Nothing
         , withoutVerbs: Nil
         , roleVerbs: Nothing
@@ -1883,14 +1922,17 @@ tableFormFields perspective = do
       mTypeAheadFillFromRole <- optionMaybe (reserved "typeaheadfillfrom" *> arcIdentifier)
       -- Parse at most one selector: either `with …` or `without …`.
       mSelection <- optionMaybe
-        ( (Right <$> (reserved "with" *> withProperties))
+        ( (Right <$> (reserved "with" *> withPropertiesAndPositions))
             <|>
               (Left <$> (reserved "without" *> withoutProperties))
         )
       let
         withProps = case mSelection of
-          Just (Right p) -> Just p
+          Just (Right { selection }) -> Just selection
           _ -> Nothing
+        withPropsPositions = case mSelection of
+          Just (Right { properties }) -> properties
+          _ -> Nil
         withoutProps = case mSelection of
           Just (Left p) -> Just p
           _ -> Nothing
@@ -1910,6 +1952,7 @@ tableFormFields perspective = do
         , typeAheadFillFromRole: mTypeAheadFillFromRole
         , fillPropertyValues
         , withProps
+        , withPropsPositions
         , withoutProps
         , withoutVerbs
         , roleVerbs: _.roleVerbs <<< unwrap <$> mroleVerbs
@@ -1926,6 +1969,7 @@ tableFormFields perspective = do
         , typeAheadFillFromRole: Nothing
         , fillPropertyValues: Nil
         , withProps: Nothing
+        , withPropsPositions: Nil
         , withoutProps: Nothing
         , withoutVerbs: Nil
         , roleVerbs: Nothing
@@ -1953,20 +1997,20 @@ markdownE = do
   case s of
     (Simple (ArcIdentifier pos id)) -> do
       widgetFields <- widgetCommonFields
-      condition <- optionMaybe (reserved "when" *> arcIdentifier)
+      condition <- optionMaybe (try (sameOrIndented *> reserved "when") *> arcIdentifier)
       sameOrOutdented'
       end <- getPosition
       pure $ MarkDownPerspective { widgetFields, condition, start, end }
     Simple (Value pos PMarkDown _) -> do
       text <- step
-      condition <- optionMaybe (reserved "when" *> step)
+      condition <- optionMaybe (try (sameOrIndented *> reserved "when") *> step)
       context <- getCurrentContext
       sameOrOutdented'
       end <- getPosition
       pure $ MarkDownConstant { text, condition, context, start, end }
     _ -> do
       text <- step
-      condition <- optionMaybe (reserved "when" *> step)
+      condition <- optionMaybe (try (sameOrIndented *> reserved "when") *> step)
       context <- getCurrentContext
       sameOrOutdented'
       end <- getPosition

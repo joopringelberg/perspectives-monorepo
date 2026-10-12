@@ -54,14 +54,14 @@ import Perspectives.DomeinCache (AttachmentFiles, lookupStableModelUri_)
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.Error.Boundaries (handleExternalFunctionError, handleExternalStatementError)
 import Perspectives.Error.Pretty (renderMultiplePerspectivesErrors, renderPerspectivesError)
-import Perspectives.ErrorLogging (logPerspectivesError)
+import Perspectives.ErrorLogging (logPerspectivesError, warnModeller)
 import Perspectives.Extern.Couchdb (createVersionedModelManifestDependency, retrieveModelFromLocalStore, updateModel)
 import Perspectives.Extern.Files (getPFileTextValue)
 import Perspectives.External.HiddenFunctionCache (HiddenFunctionDescription)
 import Perspectives.Identifiers (ModelUriString, isModelUri, modelUri2LocalName, modelUri2ModelUrl, unversionedModelUri)
 import Perspectives.Instances.ObjectGetters (context)
 import Perspectives.InvertedQuery.Storable (StoredQueries)
-import Perspectives.ModelDependencies (modelURIReadable, sysUser, versionedModelManifestModelCuid) as MD
+import Perspectives.ModelDependencies (modelURIReadable, sysUser, versionedModelManifestModelCuid, versionedModelManifestPublished) as MD
 import Perspectives.ModelTranslation (augmentModelTranslation, emptyTranslationTable, generateFirstTranslation, generateTranslationTable, parseTranslation_pass1, parseTranslation_pass2, writeReadableTranslationYaml, writeTranslationYaml) as MT
 import Perspectives.ModelTranslation.Representation (ModelTranslation(..))
 import Perspectives.Parsing.Arc.PhaseTwoDefs (withStableDomeinFile)
@@ -72,13 +72,14 @@ import Perspectives.Query.UnsafeCompiler (getPropertyValues)
 import Perspectives.Representation.Class.Cacheable (cacheEntity, tryReadEntiteitFromCache)
 import Perspectives.Representation.InstanceIdentifiers (RoleInstance, Value(..))
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
-import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..))
+import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..))
 import Perspectives.RunMonadPerspectivesTransaction (runEmbeddedTransaction)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.Sidecar.StableIdMapping (ModelUri(..), StableIdMapping, loadStableMapping, Stable) as Sidecar
 import Perspectives.Sidecar.StableIdMapping (fromRepository)
 import Perspectives.TCP.Configuration (buildTCPConfiguration) as TCP
 import Perspectives.TypePersistence.LoadArc (loadAndCompileArcFile_)
+import Perspectives.Warning (PerspectivesWarning(..))
 import Simple.JSON (readJSON, readJSON_, writeJSON)
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -157,20 +158,25 @@ uploadToRepository modelUri_ arcSource_ basedOnVersion_ versionedModelManifest =
     ( case head modelUri_, head arcSource_, head basedOnVersion_ of
         Just modelUri, Just arcSource, mbasedOnVersion -> do
           let split = unsafePartial modelUri2ModelUrl modelUri
-          mmodelCuid <- lift (versionedModelManifest ##> getPropertyValues (CP $ CalculatedPropertyType MD.versionedModelManifestModelCuid))
-          mmodelUriReadable <- lift (versionedModelManifest ##> getPropertyValues (CP $ CalculatedPropertyType MD.modelURIReadable))
-          case mmodelCuid, mmodelUriReadable of
-            Nothing, _ -> lift $ addWarning { message: "Parsing$UploadToRepository: no model CUID given!", error: "", externalRoleId: "", contextName: "" }
-            _, Nothing -> lift $ addWarning { message: "Parsing$UploadToRepository: no model URI Readable given!", error: "", externalRoleId: "", contextName: "" }
-            Just (Value modelCuid), Just (Value modelUriReadable) -> do
-              r <- loadAndCompileArcFile_ ((Sidecar.ModelUri modelUri) :: Sidecar.ModelUri Sidecar.Stable) arcSource false modelCuid modelUriReadable mbasedOnVersion
-              case r of
-                Left m -> do
-                  rendered <- lift $ renderMultiplePerspectivesErrors m
-                  logPerspectivesError $ Custom ("uploadToRepository: " <> rendered)
-                -- Here we will have a tuple of the DomeinFile and an instance of StoredQueries plus the updated mapping.
-                Right (Tuple df@(DomeinFile { id, namespace }) (Tuple invertedQueries mapping')) -> do
-                  void $ uploadToRepository_ split df invertedQueries mapping' (Just versionedModelManifest)
+          isPublished <- lift (versionedModelManifest ##> getPropertyValues (ENP $ EnumeratedPropertyType MD.versionedModelManifestPublished))
+          if isPublished == Just (Value "true") then do
+            lift $ warnModeller (RefusingToOverwritePublishedModelRelease split.documentName)
+            throwError $ error ("Refusing to overwrite published model release " <> split.documentName <> ". Publish a new version instead.")
+          else do
+            mmodelCuid <- lift (versionedModelManifest ##> getPropertyValues (CP $ CalculatedPropertyType MD.versionedModelManifestModelCuid))
+            mmodelUriReadable <- lift (versionedModelManifest ##> getPropertyValues (CP $ CalculatedPropertyType MD.modelURIReadable))
+            case mmodelCuid, mmodelUriReadable of
+              Nothing, _ -> lift $ addWarning { message: "Parsing$UploadToRepository: no model CUID given!", error: "", externalRoleId: "", contextName: "" }
+              _, Nothing -> lift $ addWarning { message: "Parsing$UploadToRepository: no model URI Readable given!", error: "", externalRoleId: "", contextName: "" }
+              Just (Value modelCuid), Just (Value modelUriReadable) -> do
+                r <- loadAndCompileArcFile_ ((Sidecar.ModelUri modelUri) :: Sidecar.ModelUri Sidecar.Stable) arcSource false modelCuid modelUriReadable mbasedOnVersion
+                case r of
+                  Left m -> do
+                    rendered <- lift $ renderMultiplePerspectivesErrors m
+                    logPerspectivesError $ Custom ("uploadToRepository: " <> rendered)
+                  -- Here we will have a tuple of the DomeinFile and an instance of StoredQueries plus the updated mapping.
+                  Right (Tuple df@(DomeinFile { id, namespace }) (Tuple invertedQueries mapping')) -> do
+                    void $ uploadToRepository_ split df invertedQueries mapping' (Just versionedModelManifest)
         _, _, _ -> logPerspectivesError $ Custom ("uploadToRepository lacks arguments")
     )
     >>= handleExternalStatementError "model://perspectives.domains#Parsing$UploadToRepository"
@@ -183,10 +189,6 @@ type URL = String
 uploadToRepository_ :: { repositoryUrl :: String, documentName :: String } -> DomeinFile Sidecar.Stable -> StoredQueries -> Sidecar.StableIdMapping -> Maybe RoleInstance -> MonadPerspectivesTransaction Unit
 uploadToRepository_ splitName (DomeinFile df) invertedQueries mapping versionedModelManifest = do
   -- Get the attachment info
-  (mremoteDf :: Maybe DocWithAttachmentInfo) <- lift $ tryGetDocument_ splitName.repositoryUrl splitName.documentName
-  case mremoteDf of
-    Just _ -> throwError $ error ("Refusing to overwrite published model release " <> splitName.documentName <> ". Publish a new version instead.")
-    Nothing -> pure unit
   attachments <- lift $ defaultAttachments empty
   -- Get the revision (if any) from the remote database.
   (mVersion :: Maybe String) <- lift $ retrieveDocumentVersion splitName.repositoryUrl splitName.documentName

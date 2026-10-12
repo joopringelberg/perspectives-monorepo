@@ -543,6 +543,7 @@ type WidgetCommonFields =
   , fillPropertyValues :: List FillPropertyValueE
   -- Alternative to withoutProps: explicitly include properties/views
   , withProps :: Maybe PropsOrView
+  , withPropsPositions :: List { propertyName :: String, position :: ArcPosition }
   , withoutProps :: Maybe PropsOrView
   , withoutVerbs :: List PropertyVerbE
   -- Must be a subset of the roleVerbs of the perspective
