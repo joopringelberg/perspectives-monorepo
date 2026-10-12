@@ -14,6 +14,189 @@ But when a user *creates a new connection* (for example via an Invitation), the 
 
 ---
 
+## Communicated context of an elementary change
+
+This section inventories the **current implementation**, not a proposed
+minimal-disclosure algorithm. An elementary change's own deltas describe the
+changed property, binding, role membership/existence, or context existence.
+Its *communicated context* is the additional stored deltas selected to let a
+recipient reconstruct the supporting structures and values. It need not be
+confined to the context containing the changed instance.
+
+### Common inclusion rules
+
+The following vocabulary applies to the cases below:
+
+| Rule | Included information |
+|---|---|
+| **Structural support for a role** | The deltas at the resource keys of the role, its containing context, and that context's external role. These normally establish existence and context membership. No unrelated roles or properties are included merely because they belong to that context. |
+| **Query-path support** | Structural support for private roles on the query's main and supporting dependency paths; stored binding deltas for adjacent roles that are actually bound; stored property deltas where a value dependency is followed by its property-bearing role. Supporting paths can include filter criteria and calculated-property dependencies. |
+| **Perspective-property support** | Query-path support for the permitted properties of the object roles, including the filler chain needed to reach the role that locally represents a property. Calculated properties communicate their underlying dependencies, not a newly authored delta for the calculated result. |
+| **Perspective closure** | Query-path and property support for every non-`authorOnly` perspective of the receiving user type, including aspects, evaluated from the specified context. This is a perspective-selected representation, not a dump of every context member. |
+
+These are selections from the **DeltaStore**, not synthetic snapshots.
+`getDeltasForResource` returns all stored versions at an exact resource key.
+In particular, selecting a property value path retrieves the whole stored
+history for that role/property key: the `val` argument to `addPropertyDelta`
+does not filter the returned deltas. Likewise, structural and binding support
+can include historical changes, not just creation or the latest binding.
+Sub-resource histories are not included by a structural lookup alone.
+
+Normal inverted-query support checks perspective states: a context state
+sanctions users in that context; a subject state sanctions the matching user
+instances; an object state sanctions the matching object instances.
+`computeProperties` separately considers the states granting each property.
+Its undefined-state branch only serialises the existing object paths, however,
+and does not evaluate the property calculation. Full perspective-closure
+serialisation uses `propertiesInPerspective` and does **not** perform this
+same per-instance state check; it must not be described as a state-filtered
+minimal snapshot.
+
+`authorOnly` perspectives are skipped by full serialisation (and are not
+inverted for ordinary synchronisation); `authorOnly` properties are skipped
+by `getPropertyValues`/`computeProperties`. A `selfOnly` perspective routes
+each path and its properties to the user role at that path's head.
+A `selfOnly` property similarly routes property support to its object role
+alone. These restrictions apply to perspective/property support, not as a
+blanket post-filter on every structural delta selected elsewhere.
+
+Dependency serialisation skips `pub:` roles and binding/property pairs
+involving them: public resources are fetched from their public endpoint.
+The specialised assumption path has its own handling rather than that general
+public-resource filter.
+
+Sources: [dependency serialisation](../src/core/assignment/serialiseAsDeltas.purs)
+(`serialiseDependency`, lines 337–422; `getPropertyValues`, 295–320);
+[stored history](../src/core/persistence/deltaStore.purs)
+(`getDeltasForResource`, 271–292);
+[state-sensitive collection](../src/core/sync/collectAffectedContexts.purs)
+(`runForwardsComputation`, 690–759; `computeProperties`, 765–828).
+
+### Trigger catalogue
+
+| Elementary change / circumstance | Conditions for extra communication | Declarative inclusion rule |
+|---|---|---|
+| **Create/add a role instance to a context** | An active perspective query uses that role, either as its object or along the path to its object. `addRoleInstanceToContext` enables forward collection. | Include support for the continuation from the new role to the perspective objects and their permitted properties. If the role itself is the object, include structural support even if its properties have no values. The role's `ConstructEmptyRole` and membership deltas describe the elementary creation itself, rather than extra context. |
+| **First fill of a role: binding/binder navigation** | A perspective uses the binding or reverse-binding relation, also through roles recursively filled by the changed role and its filler chain. | Include support for the resulting perspective-query continuations and their properties. This can introduce roles in other contexts, not only the filled role's context. |
+| **First fill: the filler must be constructible** | The selected actual filler is private; recipients are those found by the binding-query computation. No property value on the filler is required. | Include structural support for that filler and its containing context/external role, independently of property-path support. Public fillers are excluded from this additional lookup. |
+| **First fill: an enumerated user becomes a peer** | The filled type has kind `UserRole`, the instance is not `me`, and it is not the fictive `def:#serializationuser`. | Include the perspective closure of that user type from the filled role's context. If the type has no modelled self-perspective, try to add a minimal self-perspective so the receiver obtains its own role. Self-perspectives additionally request `PublicKey` and `TransportPublicKey`, bringing the identity filler telescope into the dependency paths. |
+| **First fill: properties acquired through a filler** | The filled role, or a role it recursively fills, is itself a perspective object. | Include permitted property support for those objects, even when the perspective ends at the filled role and therefore has no forward binding step. This accounts for properties already present on a newly attached filler. |
+| **Binding change exposes a calculated user** | A stored calculated-user detection query has both directions compiled, yields context(s) and user instance(s), and the user is not `me`. Filter-based queries must yield a matching candidate. | Include the context/external-role resource histories and the perspective closure for each context/user combination, using the **calculated** user type. This call uses `noNewPeer`: it does not add the fallback minimal self-perspective. |
+| **Replace a filler** | The resolved replacement differs from the existing filler. Replacement is deferred; its detection and later installation have distinct collection paths. | Binding-query detection can include continuation/property support; when the new filler is installed, `changeRoleBinding` applies enumerated-new-peer and perspective-object property support. Unlike first fill, it has no independent structural lookup for the replacement filler. Old-filler `ReplaceBinding` queries add recipients without forward support. |
+| **Remove a filler** | The role has a filler. `removeBinding_` performs binding-query collection with forward collection enabled while the old binding still exists. | Include support for the paths and properties still found through that binding, before it is severed. This can resend the information being disconnected; removal does not imply that extra context is suppressed. There is no new-filler lookup or enumerated-new-peer serialisation for a pure unbinding. |
+| **Set/add/remove/delete a property: ordinary perspective** | The actual property-bearing role or a role it recursively fills is a perspective object with access to the original or replacing property. | Include support for that property's calculation, subject to its property-state and privacy rules. This may include bindings, fillers, structural deltas and prior deltas for the changed property, but not all unrelated perspective properties. |
+| **Property change makes a filtered perspective object visible** | An applicable object query starts with a filter, yields active perspective holders, and does not take the earlier `selfOnly` perspective/property branch. The changed property can be only the filter criterion, not a displayed property. | Include structural support for the matching object and support for **all** properties in that perspective, rather than only the changed property. |
+| **Property change exposes a filter-based calculated user** | Property-query detection identifies a calculated-user query whose forward part starts with a filter and yields non-local users. | Include the same context/external-role histories and calculated-user perspective closure as for binding-based calculated-user detection. |
+| **Create a context with a public user proxy** | Context construction creates public-role proxy instances for a non-public context. | In addition to the context's own creation deltas, include the perspective closure for each proxy, for publication. This uses `noNewPeer`, so no fallback self-perspective is added. Initial roles, bindings and properties also invoke their own mutation paths. |
+| **Any elementary change causes entry into a visibility-granting state** | Transaction state evaluation enters a state with a compiled perspective-on-entry and eligible users; `authorOnly` entries are excluded. This is an indirect consequence, not necessarily immediate mutation-time collection. | Context entry supplies the newly granted object/property support to eligible users; subject-role entry supplies the perspective objects/properties to that subject instance only; object-role entry supplies support for that entering object instance only, to eligible perspective holders. |
+| **Delete a role / remove all instances of a role** | Synchronised assignment removal schedules each selected role and computes recipients with forward collection disabled. The lower-level `SaveUserData.removeAllRoleInstances` instead directly removes each instance without collecting outgoing deltas. | No normal continuation/property expansion is requested. Nevertheless, specialised self-only collection and calculated-user binding detection in synchronised removal do not obey the forward flag and can still select extra support; see the qualification below. |
+| **Delete a context** | Context removal sends `RemoveExternalRoleInstance` to its user roles and the supplied holders of perspectives on its embedding role. Its roles are subsequently removed. | No direct perspective-closure or structural snapshot is added by context-removal scheduling. Member-removal special paths and state/action consequences may independently add deltas. |
+
+Sources for the catalogue:
+
+- [Assignment.Update](../src/core/assignment/update.purs):
+  `addRoleInstanceToContext` (130–205), `addProperty` (270–327),
+  `removeProperty` (366–404), `deleteProperty` (415–456),
+  `setProperty` (468–526).
+- [SaveUserData](../src/core/instancePersistance/saveUserData.purs):
+  `scheduleContextRemoval` (167–219),
+  `statesAndPeersForRoleInstanceToRemove` (329–344),
+  `replaceBindingWithMode` (469–488),
+  `setFirstBindingWithMode` (524–628), `handleNewPeer` (644–651),
+  `removeBinding_` (669–737), `changeRoleBinding` (750–785).
+- [CollectAffectedContexts](../src/core/sync/collectAffectedContexts.purs):
+  `usersWithPerspectiveOnRoleInstance` (85–200),
+  `usersWithPerspectiveOnRoleBinding'` (420–568),
+  `handleNewCalculatedUsersForBinding` (589–615),
+  `addDeltasForPerspectiveObjects` (621–657),
+  `aisInPropertyDelta` (928–976),
+  `addDeltasForPropertyChange` (985–1070).
+- [Instance builders](../src/core/instances/instanceBuilders.purs):
+  context construction's proxy serialisation (134–155).
+- [Assignment compiler](../src/core/assignment/compileAssignment.purs):
+  selected-role removal scheduling (86–90);
+  `SaveUserData.removeAllRoleInstances` (433–436) is the direct-removal helper.
+- [ContextStateCompiler](../src/core/assignment/contextStateCompiler.purs)
+  (218–235) and [RoleStateCompiler](../src/core/assignment/roleStateCompiler.purs)
+  (236–272): perspective-on-entry serialisation.
+
+### Special paths and timing qualifications
+
+**Self-only query support.** Role-instance detection communicates only the
+matching user instance's calculated paths and permitted properties. Binding
+detection additionally communicates the assumptions used on its backward
+path to that peer: selected role sets with structural support, fillers and
+binding histories, reverse-bound role sets and their binding histories,
+property-bearing roles and property histories, and context support.
+`Me`, external-role assumptions, and context/role state assumptions add no
+separate deltas. See `createDeltasFromAssumption` (838–903).
+Consequently, the comment that role-removal recipient detection “adds no
+deltas” is not an unconditional implementation guarantee: self-only handlers
+and calculated-user detection bypass the `runForwards` flag.
+
+**No before/after visibility proof.** “New peer” and “new calculated user”
+name collection paths, not an established difference between old and new
+visible sets. `handleNewPeer` does not check for another role of the same peer
+in the context. Calculated-user detection serialises every non-local result
+it finds, without subtracting prior results. Filtered-object expansion checks
+the result at collection time, not whether that result was previously
+invisible. Removal/replacement detection can also run these paths.
+
+**Which values are visible at collection time?** Property set/add saves the
+new values before computing peers; remove/delete computes peers and support
+before deleting the old values. Therefore remove/delete can serialise old
+support rather than the post-removal visible set. Calculated-property
+inverted queries in `aisInPropertyDelta` add recipients but do not immediately
+serialise the whole calculated-property perspective; its new change delta is
+added after recipient computation. State transitions and automatic actions
+can produce further support later in the transaction.
+
+The first-fill binding delta is stored before enumerated-new-peer
+serialisation, allowing that serialisation to retrieve it. Earlier
+binding-query collection in the same function occurs before this storage;
+the phases must not be treated as one atomic snapshot.
+
+### What redundancy is actually avoided?
+
+- Setting an unchanged property set, filling with the same resolved filler,
+  and adding an already present linked role skip the mutation path.
+- Dependency serialisation remembers roles within one `serialiseDependencies`
+  invocation; the memory is not shared across all paths or recipients.
+- `addDelta` filters out `me`, suppresses outgoing collection while executing
+  incoming deltas, and rejects an equal `DeltaInTransaction` already in the
+  transaction (same signed delta and same filtered recipient array). Different
+  recipient arrays are not merged by that test.
+- Distribution also deduplicates signed deltas within each destination's
+  `TransactionForPeer`; this removes overlap in one outgoing transaction,
+  not repeats across transactions.
+- Role-removal deltas are suppressed when the containing context is being
+  removed; binding-removal deltas are suppressed when the role is being
+  removed. These guards avoid redundant **change** deltas, not a general
+  communicated-context expansion.
+
+There is **no general sender-side “the peer already knows this context”
+test** in these collection rules. In the motivating example, an existing role
+of the same peer in the newly attached context does not by itself suppress
+enumerated-new-peer or calculated-user serialisation. Proving and subtracting
+previous knowledge would be an additional optimisation, not current behavior.
+Nor does history replay deduplication prove that only the minimum necessary
+resource versions were sent.
+
+Sources: [Deltas](../src/core/sync/deltas.purs), `addDelta` (295–320);
+[TransactionForPeer](../src/core/sync/transactionForPeer.purs),
+`addToTransactionForPeer`; [SaveUserData](../src/core/instancePersistance/saveUserData.purs),
+`synchroniseRoleRemoval` (348–373), `removeBinding_` (705–735).
+
+Local query correlation identifiers and state-evaluation records are not
+extra peer deltas. Deletion cleanup and automatic actions are separate
+elementary changes, whose deltas and support should be accounted for
+separately. Public-key information attached to `TransactionForPeer` is
+verification metadata, not itself communicated context in the delta sense.
+Explicit `ser:SerialiseFor` and API serialisation requests also use the
+serializer, but are not automatic support around an elementary mutation.
+
+---
+
 ## Entry Point: `ser:SerialiseFor`
 
 In a Perspectives model the serialisation is triggered by the external function call:
