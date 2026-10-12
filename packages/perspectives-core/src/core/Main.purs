@@ -973,14 +973,19 @@ retrieveAllCredentials = do
   (roleInstances :: Array RoleInstance) <- entitiesDatabaseName >>= \db -> getSafeViewOnDatabase db "defaultViews/credentialsView" (NoKey :: Keys String)
   userNameGetter <- getterFromPropertyType (CP $ CalculatedPropertyType userWithCredentialsUsername)
   rows :: Array (Tuple String Credential) <- foldM
-    ( \rows' roleId -> (try (roleId ##>> getPropertyFromTelescope (EnumeratedPropertyType userWithCredentialsPassword))) >>=
+    -- Password and AuthorizedDomain are optional properties: a role without them simply has no credentials (to be skipped silently).
+    ( \rows' roleId -> (try (roleId ##= getPropertyFromTelescope (EnumeratedPropertyType userWithCredentialsPassword))) >>=
         handlePerspectRolError' "retrieveAllCredentials_Password" rows'
-          \pw -> (try (roleId ##>> getPropertyFromTelescope (EnumeratedPropertyType userWithCredentialsAuthorizedDomain))) >>=
-            handlePerspectRolError' "retrieveAllCredentials_AuthorizedDomain" rows'
-              ( \authorizedDomain -> (try (roleId ##>> userNameGetter)) >>=
-                  handlePerspectRolError' "retrieveAllCredentials_Username" rows'
-                    (\username -> pure $ cons (Tuple (unwrap authorizedDomain) (Credential (takeGuid (unwrap username)) (unwrap pw))) rows')
-              )
+          \pws -> case head pws of
+            Nothing -> pure rows'
+            Just pw -> (try (roleId ##= getPropertyFromTelescope (EnumeratedPropertyType userWithCredentialsAuthorizedDomain))) >>=
+              handlePerspectRolError' "retrieveAllCredentials_AuthorizedDomain" rows'
+                ( \authorizedDomains -> case head authorizedDomains of
+                    Nothing -> pure rows'
+                    Just authorizedDomain -> (try (roleId ##>> userNameGetter)) >>=
+                      handlePerspectRolError' "retrieveAllCredentials_Username" rows'
+                        (\username -> pure $ cons (Tuple (unwrap authorizedDomain) (Credential (takeGuid (unwrap username)) (unwrap pw))) rows')
+                )
     )
     []
     roleInstances
