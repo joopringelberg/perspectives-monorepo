@@ -1,3 +1,8 @@
+---
+name: explore-monorepo
+description: explore-monorepo
+disable-model-invocation: true
+---
 Use the Explore agent, {{thoroughness}}.
 
 Repository context:

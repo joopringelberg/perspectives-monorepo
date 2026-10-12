@@ -1,3 +1,8 @@
+---
+name: short-explore-prompts
+description: short-explore-prompts
+disable-model-invocation: true
+---
 Use the Explore agent, quick: inspect packages/perspectives-core, trace where transaction recipients are selected, and return the likely fix point plus the nearest validating test.
 
 Use the Explore agent, quick: find the code path that sends transactions and tell me where recipients are selected.

@@ -1,0 +1,14 @@
+{
+	"mcpServers": {
+		"perspectives-purescript-tools": {
+			"type": "local",
+			"command": "node",
+			"args": [
+				"/Users/joopringelberg/Code/purescript-mcp-tools/index.js"
+			],
+			"tools": [
+				"*"
+			]
+		}
+	}
+}
