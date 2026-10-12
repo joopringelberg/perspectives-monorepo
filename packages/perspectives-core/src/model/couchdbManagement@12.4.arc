@@ -1170,6 +1170,7 @@ domain model://perspectives.domains#CouchdbManagement@12.4
       -- Whether the model is loaded internally immediately. 
       property ApplyInSession (Boolean)
       property IsTheOnlyVersion = (binder Versions >> context >> Versions >>= count) == 1
+      property Published (Boolean)
 
       on exit
         do for Author
@@ -1307,7 +1308,7 @@ domain model://perspectives.domains#CouchdbManagement@12.4
       aspect sys:ContextWithNotification$NotifiedUser
       perspective on extern
         props (DomeinFileName, Version, ArcSource, LastUpload) verbs (Consult)
-        props (ArcFile, ArcFeedback, Description, IsRecommended, Build, Patch, LastChangeDT, MustUpload, AutoUpload, Store, ApplyInSession) verbs (Consult, SetPropertyValue)
+        props (ArcFile, ArcFeedback, Description, IsRecommended, Build, Patch, LastChangeDT, MustUpload, AutoUpload, Store, ApplyInSession, Published) verbs (Consult, SetPropertyValue)
         -- It may happen that MustUpload is not set to false and then the Manifest sticks to (a substate of) AfterSuccesfulParse.
         -- That means that no further change will cause one of the sustates to be re-entered. Hence we do not upload the model, store it in the local database or apply it immediately.
         -- The Author can set MustUpload to false to exit AfterSuccesfulParse.
@@ -1372,40 +1373,41 @@ domain model://perspectives.domains#CouchdbManagement@12.4
           tab "Manifest"
             row
               form External
-                with props (DomeinFileName, Version, LastUpload, Description, IsRecommended, Build, Patch)
+                with props (DomeinFileName, Version, LastUpload, Description, IsRecommended, Build, Patch, Published)
             row 
               form BasedOnVersion
                 -- with props (VersionName, ModelURI) verbs (Consult)
-          tab "Compile"
-            row
-              markdown <### Compile your model
-                        Select the `ArcFile` control and press enter. Then upload your file. There are rules:
+          when not (extern >> Published)
+            tab "Compile"
+              row
+                markdown <### Compile your model
+                          Select the `ArcFile` control and press enter. Then upload your file. There are rules:
 
-                        * It's domain declaration *must* be in the repository Domain (or namespace. If you are not sure about that: move twice up to the wider context and 
-                        read the Domain of the Repository).
-                        * Its local name *must* equal the name of the manifest (move up to the wider context to read that).
-                        ---
-                        Compiling will take some time. Watch the `ArcFeedback` field for possible errors and correct them.
-                        On succes, the compiled model is uploaded automatically to the repository.
-                        Don't forget to update the model in your local installation!
-                      >
-            row
-              form External
-                with props (ArcFile, ArcFeedback, LastUpload, LastChangeDT)
-            row 
-              markdown <#### Where to store
-                        Storage: choose from 
-                        * **Not**: the model is not stored anywhere, but only compiled.
-                        * **Locally**: the model is stored in the local store, so it is available for you only.
-                        * **Repository**: the model is stored in the repository, so it is available for all users.
-                        
-                        #### Compiling and applying immediately
-                        **Apply immediately**: choose whether the model is loaded into the current session.
-                        **Auto upload** means that the model is automatically compiled when you upload it.
-                      >
-            row
-              form External
-                with props (AutoUpload, Store, ApplyInSession)
+                          * It's domain declaration *must* be in the repository Domain (or namespace. If you are not sure about that: move twice up to the wider context and 
+                          read the Domain of the Repository).
+                          * Its local name *must* equal the name of the manifest (move up to the wider context to read that).
+                          ---
+                          Compiling will take some time. Watch the `ArcFeedback` field for possible errors and correct them.
+                          On succes, the compiled model is uploaded automatically to the repository.
+                          Don't forget to update the model in your local installation!
+                        >
+              row
+                form External
+                  with props (ArcFile, ArcFeedback, LastUpload, LastChangeDT)
+              row 
+                markdown <#### Where to store
+                          Storage: choose from 
+                          * **Not**: the model is not stored anywhere, but only compiled.
+                          * **Locally**: the model is stored in the local store, so it is available for you only.
+                          * **Repository**: the model is stored in the repository, so it is available for all users.
+                          
+                          #### Compiling and applying immediately
+                          **Apply immediately**: choose whether the model is loaded into the current session.
+                          **Auto upload** means that the model is automatically compiled when you upload it.
+                        >
+              row
+                form External
+                  with props (AutoUpload, Store, ApplyInSession)
           tab "Translate"
             row
               markdown <## Translate your model
