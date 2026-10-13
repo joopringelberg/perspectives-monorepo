@@ -182,6 +182,26 @@ export function restoreSnapshotImpl(systemIdentifier) {
   };
 }
 
+// Destroy the six in-memory PouchDB databases belonging to `systemIdentifier`.
+//
+// The memory adapter (memdown) keeps all databases in a process-wide store keyed
+// by name, so databases outlive the PDR instance that created them. Without this,
+// a later PDR instance for the same user would silently reopen the previous
+// instance's databases (e.g. `setupUser` would find model:System already
+// installed and skip creating the initial instances).
+//
+// PureScript type: String -> Effect (Promise Unit)
+export function destroyUserDatabasesImpl(systemIdentifier) {
+  return function () {
+    return (async () => {
+      const suffixes = ['_entities', '_post', '_models', '_invertedqueries', '_deltastore', '_resourceversions'];
+      for (const suffix of suffixes) {
+        await new PouchDB(systemIdentifier + suffix, { adapter: 'memory' }).destroy();
+      }
+    })();
+  };
+}
+
 // Returns true iff a completed snapshot exists at `snapshotDir`.
 // Checks for the sentinel file written last by snapshotPDRImpl and the files
 // required by the current snapshot layout.

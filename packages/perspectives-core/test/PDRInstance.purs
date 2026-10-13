@@ -157,6 +157,14 @@ restoreSnapshot systemIdentifier perspectivesUser snapshotDir =
 snapshotExists :: String -> Aff Boolean
 snapshotExists = liftEffect <<< snapshotExistsImpl
 
+-- | Destroy the in-memory PouchDB databases of `systemIdentifier`.
+-- | In-memory databases are shared process-wide by name and survive `shutdown`,
+-- | so every PDR instance start must call this to begin with empty databases.
+foreign import destroyUserDatabasesImpl :: String -> Effect (Promise Unit)
+
+destroyUserDatabases :: String -> Aff Unit
+destroyUserDatabases = toAffE <<< destroyUserDatabasesImpl
+
 -- | Convenience constructor for an in-memory (no CouchDB) PouchdbUser.
 -- | The `perspectivesUser` is the bare name; `systemIdentifier` gets a
 -- | "_macbook" suffix to mimic the convention used elsewhere.
@@ -183,6 +191,8 @@ testPouchdbUser userName =
 -- | longer needed.  Use `withPDR` / `withTwoPDRs` to get automatic cleanup.
 startPDRInstance :: PouchdbUser -> RuntimeOptions -> Maybe String -> Maybe InProcessBus -> Aff PDRInstance
 startPDRInstance pouchdbUser runtimeOptions mLogColor bus = do
+  -- Start from empty databases, discarding those of any earlier instance for this user.
+  destroyUserDatabases pouchdbUser.systemIdentifier
   -- AVars required by PerspectivesState.
   transactionFlag <- new true
   brokerService <- (empty :: Aff (AVar BrokerService))
@@ -334,6 +344,8 @@ startPDRInstanceFromSnapshot pouchdbUser runtimeOptions mLogColor bus snapshotDi
 -- | has been established and before the incomingPost fiber subscribes to the queue.
 startPDRInstanceFromSnapshotWithHook :: PouchdbUser -> RuntimeOptions -> Maybe String -> Maybe InProcessBus -> String -> MonadPerspectives Unit -> Aff PDRInstance
 startPDRInstanceFromSnapshotWithHook pouchdbUser runtimeOptions mLogColor bus snapshotDir beforeSubscribe = do
+  -- The snapshot must be restored into empty databases, not on top of those of an earlier instance.
+  destroyUserDatabases pouchdbUser.systemIdentifier
   -- AVars required by PerspectivesState.
   transactionFlag <- new true
   brokerService <- (empty :: Aff (AVar BrokerService))
