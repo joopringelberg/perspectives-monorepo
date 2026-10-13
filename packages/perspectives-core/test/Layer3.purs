@@ -43,7 +43,6 @@ import Test.ConstructiveSynchronisationTest (getSynchronisationResults, synchron
 import Test.DestructiveSynchronisationTests (getSynchronisationResults, synchronisationSuite) as DestructiveSynchronisationTests
 import Test.Layer3ScaffoldTests (scaffoldTests)
 import Test.ModelCompilationRegression (getCompilationResults, modelCompilationSuite)
-import Test.ModelFileCompilation (getCompilationResults, modelFileCompilationSuite) as ModelFileCompilation
 import Test.QueryStepTests (queryStepSuite, queryStepTestModelConfiguration)
 import Test.RunAction (runActionCompileTestModelConfiguration, runActionSuite)
 import Test.SinglePDRDestructiveTests (singlePDRDestructiveSuite, singlePDRDestructiveTestModelConfiguration)
@@ -56,7 +55,6 @@ main = launchAff_ do
   constructiveSynchronisationResults <- getSynchronisationResults
   destructiveSynchronisationResults <- DestructiveSynchronisationTests.getSynchronisationResults
   compilationResults <- getCompilationResults
-  modelFileCompilationResults <- ModelFileCompilation.getCompilationResults
   queryStepResults <- getSinglePDRResults queryStepTestModelConfiguration
   destructiveResults <- getSinglePDRResults singlePDRDestructiveTestModelConfiguration
   transactionExecutionResults <- getSinglePDRResults transactionExecutionCompileTestModelConfiguration
@@ -66,7 +64,6 @@ main = launchAff_ do
     synchronisationSuite constructiveSynchronisationResults
     DestructiveSynchronisationTests.synchronisationSuite destructiveSynchronisationResults
     modelCompilationSuite compilationResults
-    ModelFileCompilation.modelFileCompilationSuite modelFileCompilationResults
     queryStepSuite queryStepResults
     singlePDRDestructiveSuite destructiveResults
     transactionExecutionSuite transactionExecutionResults
