@@ -148,19 +148,17 @@ These scripts verify that phase 1 recurses correctly when an action produces new
 
 ---
 
-## Group 3 — Deferred Destructive Operations (Step 1.9)
+## Group 3 — Deferred Operations and State Re-evaluation 
 
-### T10 — RoleUnbinding deferred until phase-1 base case
+### T10 — State evaluation postponed until role removal
 
-**Path exercised:** Step 1.9 — `RoleUnbinding` is accumulated during an `on entry` action but executed only after all recursive phase-1 iterations are complete.
+**Path exercised:** A state condition that depends on the absence of a role scheduled for removal is postponed while that role is untouchable, then re-evaluated after physical removal.
 
-**Model setup:** Context type `C` with roles `Filler`, `Filled` (filled by `Filler`), and `Result`.  The root state of `C` has an `on entry` action: `unbind Filled`.  The root state of `Filled` has an `on exit` action: set `Result.WasUnbound = true`.
+**Model setup:** `RoleT10$TestStarted` schedules `ThirdRoleT10` for removal. `ThirdRoleT10` sets `ThirdRoleRemoved` on exit, after it has been marked untouchable. This activates a nested state on `SecondRoleT10` whose condition is `not exists ThirdRoleT10`.
 
-**Initial state:** Instances of `C`, `Filler`, and `Filled` exist.  `Filled` is bound to `Filler`.
+**Triggering action:** `RunTest` creates `ThirdRoleT10`.
 
-**Triggering action:** The user creates a fresh instance of `C` (or modifies a property that triggers the state; the point is that the root state of `C` is entered for the first time).
-
-**Expected outcome:** The `unbind` happens *after* any constructive `on entry` actions on newly created resources complete.  `Filled.WasUnbound` is `true`.  The order of observable events is: all constructive steps first, then the unbind.
+**Expected outcome:** While `ThirdRoleT10` is untouchable, the absence condition is postponed rather than evaluated as true. After the role is physically removed, the postponed condition is re-evaluated, setting `SecondRoleT10Fired` and `TestSucceeded`.
 
 ---
 
@@ -431,7 +429,7 @@ These scripts directly test the two conflicting design goals.
 | T07 | 1 (recursion) | `on entry` creates role → phase-1 recurse |
 | T08 | 1 (recursion) | `on exit` creates role → phase-1 recurse |
 | T09 | 1 (recursion) | Context removal cascades through roles |
-| T10 | 1.9 | `RoleUnbinding` deferred to phase-1 base case |
+| T10 | 2.5 | State evaluation postponed until a role is removed |
 | T11 | 1.9 | `ExecuteDestructiveEffect` deferred to phase-1 base case |
 | T12 | 2.4 | Full context removal lifecycle |
 | T13 | 2.1 | Property change → state entry in phase 2 |

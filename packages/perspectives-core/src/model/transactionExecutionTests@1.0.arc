@@ -399,16 +399,12 @@ domain model://joopringelberg.nl#TransactionExecutionTests@1.0
     external
       property SecondRoleT10Fired (Boolean)
       property ThirdRoleRemoved (Boolean)
-      state TestSucceeded = SecondRoleT10Fired and ThirdRoleRemoved
-        on entry
-          do for Tester
-            TestSucceeded = true
 
     user Tester filledBy (sys:TheWorld$PerspectivesUsers)
       aspect mm:Test$Tester
 
       perspective on extern
-        props (SecondRoleT10Fired, ThirdRoleRemoved) verbs (SetPropertyValue, Consult)
+        props (TestSucceeded, SecondRoleT10Fired, ThirdRoleRemoved) verbs (SetPropertyValue, Consult)
 
       perspective on RoleT10
         only (Create)
@@ -420,7 +416,7 @@ domain model://joopringelberg.nl#TransactionExecutionTests@1.0
         only (Create, Remove)
       
       action RunTest
-        TestName = "T10 - Role removal deferred" for extern
+        TestName = "T10 - State evaluation postponed until role removal" for extern
         create role ThirdRoleT10 
 
     thing RoleT10
@@ -428,18 +424,22 @@ domain model://joopringelberg.nl#TransactionExecutionTests@1.0
         on entry
           do for Tester
             remove role context >> ThirdRoleT10
-            ThirdRoleRemoved = true for context >> extern
 
     thing SecondRoleT10
       -- This state can only be entered after state RoleT10$TestStarted has been entered.
       state Role10Fired = context >> extern >> ThirdRoleRemoved
-        -- Subsequently, state TestStarted can only be entered if the removal of ThirdRoleT10 has been deferred.
-        state TestStarted = (exists context >> ThirdRoleT10)
+        -- The absence condition is postponed while ThirdRoleT10 is untouchable,
+        -- then becomes true after its physical removal.
+        state TestStarted = not exists context >> ThirdRoleT10
           on entry
             do for Tester
               SecondRoleT10Fired = true for context >> extern
+              TestSucceeded = true for context >> extern
     
     thing ThirdRoleT10
+      on exit
+        do for Tester
+          ThirdRoleRemoved = true for context >> extern
 
   ------------------------------------------------------------------------------
   ---- T11 — ExecuteDestructiveEffect deferred until phase-1 base case (SKIPPED)
