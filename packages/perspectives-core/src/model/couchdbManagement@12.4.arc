@@ -599,7 +599,7 @@ domain model://perspectives.domains#CouchdbManagement@12.4
     user Owner filledBy (CouchdbServer$Accounts, CouchdbServer$Admin)
       property BespokeDatabaseUrl = context >> extern >> DatabaseLocation
       perspective on External
-        props (Public, Description, Name) verbs (Consult, SetPropertyValue)
+        props (Public, Description, Name, DatabaseName) verbs (Consult, SetPropertyValue)
         props (DatabaseLocation) verbs (Consult)
       perspective on Owner
         props (LastName) verbs (Consult)
@@ -731,7 +731,7 @@ domain model://perspectives.domains#CouchdbManagement@12.4
       perspective on Manifests
         only (Create, Fill, Delete, Remove, RemoveContext, DeleteContext, CreateAndFill)
         props (DomeinFileName, LocalModelName, EnteredModelCuid) verbs (SetPropertyValue, Consult)
-        props (Description, ModelCuid) verbs (Consult)
+        props (Description, ModelCuid, Name) verbs (Consult)
         in object state ReadyToMake
           props (ModelCuid) verbs (SetPropertyValue)
       

@@ -27,7 +27,7 @@ domain model://perspectives.domains#BodiesWithAccounts@5.0
       perspective on Accounts
         only (Create, Fill, Remove, RemoveFiller)
         props (FirstName, LastName) verbs (SetPropertyValue)
-        props (UserName) verbs (Consult)
+        props (FirstName, LastName, UserName) verbs (Consult)
 
         -- We limit visibility of the Password to the (initial) situation that it
         -- does not exist.

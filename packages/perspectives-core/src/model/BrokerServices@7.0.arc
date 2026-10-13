@@ -92,7 +92,7 @@ domain model://perspectives.domains#BrokerServices@7.0
 
     user Manager = sys:Me
       perspective on ManagedBrokers
-        only (Create, Fill, CreateAndFill, Remove)
+        only (Create, Fill, CreateAndFill, RemoveContext)
         props (Name) verbs (Consult)
         props (StorageLocation, GivenIdentifier) verbs (Consult, SetPropertyValue)
       action AddNewBroker
