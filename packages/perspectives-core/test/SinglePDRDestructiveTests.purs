@@ -72,7 +72,7 @@ singlePDRDestructiveTestModelConfiguration =
   , testsType: destructiveTestsType
   , testSucceededProperty: destructiveTestSucceededProperty
   , testNameProperty: destructiveTestNameProperty
-  , testTimeLimit: Milliseconds 180000.0
+  , testTimeLimit: Milliseconds 30000.0
   , setupLogConfiguration:
       { pdr:
           [ { topic: TEST, logLevel: Debug }
@@ -102,7 +102,7 @@ destructiveTestNameProperty :: String
 destructiveTestNameProperty = "model://joopringelberg.nl#SinglePDRDestructiveTests$Test$External$TestName"
 
 destructiveSnapshotDirectory :: String
-destructiveSnapshotDirectory = "test/pdr-snapshot/layer3-clean/alice"
+destructiveSnapshotDirectory = "test/pdr-snapshot/newdeltas/alice"
 
 destructiveTests :: Array ModelTest
 destructiveTests =

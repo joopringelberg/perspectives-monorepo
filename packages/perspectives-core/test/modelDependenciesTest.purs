@@ -48,7 +48,7 @@ modelDependenciesConfiguration =
   , testsType: modelDependenciesTestsType
   , testSucceededProperty: repositoryToolsTestSucceededProperty
   , testNameProperty: repositoryToolsTestNameProperty
-  , testTimeLimit: Milliseconds 180000.0
+  , testTimeLimit: Milliseconds 60000.0
   , setupLogConfiguration: --emptyLogConfiguration
       { pdr:
           [ { topic: TEST, logLevel: Trace }

@@ -45,7 +45,7 @@ transactionExecutionTestModelConfiguration =
   , testsType: transactionExecutionTestsType
   , testSucceededProperty: transactionExecutionTestSucceededProperty
   , testNameProperty: transactionExecutionTestNameProperty
-  , testTimeLimit: Milliseconds 180000.0
+  , testTimeLimit: Milliseconds 30000.0
   , setupLogConfiguration:
       { pdr:
           [ { topic: TEST, logLevel: Debug }
@@ -90,11 +90,12 @@ transactionExecutionTestNameProperty :: String
 transactionExecutionTestNameProperty = "model://joopringelberg.nl#TransactionExecutionTests$Test$External$TestName"
 
 transactionExecutionSnapshotDirectory :: String
-transactionExecutionSnapshotDirectory = "test/pdr-snapshot/layer3-clean/alice"
+transactionExecutionSnapshotDirectory = "test/pdr-snapshot/newdeltas/alice"
 
 transactionExecutionTests :: Array ModelTest
 transactionExecutionTests =
-  [ { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T01", logConfiguration: emptyLogConfiguration }
+  [ 
+  { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T01", logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T02", logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T03", logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T04", logConfiguration: emptyLogConfiguration }

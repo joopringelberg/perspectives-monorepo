@@ -126,4 +126,4 @@ modelFilePaths =
 -- | Directory where the PDR snapshot is cached between test runs.
 -- | Delete this directory to force a full PDR rebuild on the next run.
 snapshotDirectory :: String
-snapshotDirectory = "test/pdr-snapshot/universe/alice"
+snapshotDirectory = "test/pdr-snapshot/newdeltas/alice"

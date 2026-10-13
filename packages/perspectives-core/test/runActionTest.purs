@@ -70,7 +70,7 @@ runActionConfiguration =
   , testsType: "model://joopringelberg.nl#TestRunAction$TestApp$Tests"
   , testSucceededProperty: "model://joopringelberg.nl#TestRunAction$Test$External$TestSucceeded"
   , testNameProperty: "model://joopringelberg.nl#TestRunAction$Test$External$TestName"
-  , testTimeLimit: Milliseconds 180000.0
+  , testTimeLimit: Milliseconds 30000.0
   , setupLogConfiguration:
       { pdr:
           [ { topic: TEST, logLevel: Trace }
@@ -99,7 +99,7 @@ runActionTestModel :: String
 runActionTestModel = "model://joopringelberg.nl#bintlf0se3@1.0"
 
 runActionSnapshotDirectory :: String
-runActionSnapshotDirectory = "test/pdr-snapshot/universe/alice"
+runActionSnapshotDirectory = "test/pdr-snapshot/newdeltas/alice"
 
 runActionTests :: Array ModelTest
 runActionTests =

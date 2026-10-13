@@ -61,7 +61,7 @@ queryStepTestModelConfiguration =
   , testsType
   , testSucceededProperty
   , testNameProperty
-  , testTimeLimit: Milliseconds 180000.0
+  , testTimeLimit: Milliseconds 30000.0
   , setupLogConfiguration:
       { pdr:
           [ { topic: TEST, logLevel: Debug }
@@ -90,7 +90,7 @@ testNameProperty :: String
 testNameProperty = "model://joopringelberg.nl#StateTestModel$Test$External$TestName"
 
 snapshotDirectory :: String
-snapshotDirectory = "test/pdr-snapshot/layer3-clean/alice"
+snapshotDirectory = "test/pdr-snapshot/newdeltas/alice"
 
 allTests :: Array ModelTest
 allTests =
