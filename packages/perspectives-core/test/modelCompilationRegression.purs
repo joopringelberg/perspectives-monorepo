@@ -31,8 +31,6 @@
 -- | PouchDB so that models compiled later can resolve cross-model type
 -- | references from models compiled earlier.
 -- |
--- | Uses `testOnly` because it requires network access to
--- |   https://perspectives.domains/models_perspectives_domains
 -- | Run manually with:
 -- |   pnpm run test:layer3
 
