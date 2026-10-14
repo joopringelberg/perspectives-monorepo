@@ -301,7 +301,9 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
                 errorOther (show $ TypeErrorBoundary "Api.GetRoleBinders" (show err))
                 sendResponse (Error corrId (show $ TypeErrorBoundary "Api.GetRoleBinders" (show err))) setter
               Right (EnumeratedRole { context: filledContextType }) -> do
-                void $ runMonadPerspectivesTransaction' false authoringRole (lift $ retrieveDomeinFile (ModelUri $ unsafePartial typeUri2ModelUri_ (unwrap fillerType)))
+                withTransactionPriority UserTransaction
+                  $ void
+                  $ runMonadPerspectivesTransaction' false authoringRole (lift $ retrieveDomeinFile (ModelUri $ unsafePartial typeUri2ModelUri_ (unwrap fillerType)))
                 registerSupportedEffect corrId setter (getFilledRoles filledContextType (EnumeratedRoleType predicate)) (RoleInstance subject) onlyOnce
           filledContextType -> (try $ getContext (ContextType filledContextType)) >>=
             case _ of
@@ -309,7 +311,9 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
                 errorOther (show $ ContextErrorBoundary "Api.GetRoleBinders" (show err))
                 sendResponse (Error corrId (show $ ContextErrorBoundary "Api.GetRoleBinders" (show err))) setter
               Right _ -> do
-                void $ runMonadPerspectivesTransaction' false authoringRole (lift $ retrieveDomeinFile (ModelUri $ unsafePartial typeUri2ModelUri_ (unwrap fillerType)))
+                withTransactionPriority UserTransaction
+                  $ void
+                  $ runMonadPerspectivesTransaction' false authoringRole (lift $ retrieveDomeinFile (ModelUri $ unsafePartial typeUri2ModelUri_ (unwrap fillerType)))
                 registerSupportedEffect corrId setter (getFilledRoles (ContextType filledContextType) (EnumeratedRoleType predicate)) (RoleInstance subject) onlyOnce
     Api.GetRol -> do
       (f :: RoleGetter) <- (getRoleFunction predicate)
@@ -880,7 +884,9 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
             errorOther (show $ RolErrorBoundary "Api.CheckBinding" (show err))
             sendResponse (Error corrId (show $ RolErrorBoundary "Api.CheckBinding" (show err))) setter
           Right (PerspectRol { pspType }) -> do
-            void $ runMonadPerspectivesTransaction' false authoringRole (lift $ retrieveDomeinFile (ModelUri $ unsafePartial typeUri2ModelUri_ (unwrap pspType)))
+            withTransactionPriority UserTransaction
+              $ void
+              $ runMonadPerspectivesTransaction' false authoringRole (lift $ retrieveDomeinFile (ModelUri $ unsafePartial typeUri2ModelUri_ (unwrap pspType)))
             ok <- checkBinding typeOfRoleToBindTo (RoleInstance object)
             sendResponse (Result corrId [ (show ok) ]) setter
     Api.GetMostGeneralAllowedBindingType -> catchError

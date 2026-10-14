@@ -77,8 +77,9 @@ unsubscribe requests retain their order in the API consumer. Reads can observe
 intermediate state, as before, and subscriptions are refreshed at transaction end;
 this is not snapshot isolation. Some apparently read-only requests
 (`GetRoleBinders` and model-loading `CheckBinding`) explicitly run transactions and
-can still wait for the flag. Public-resource state evaluation discovered by a
-read is scheduled separately as background work rather than blocking later reads.
+still wait for user admission and the flag. Public-resource state evaluation
+discovered by a read is scheduled separately as background work rather than
+blocking later reads.
 
 This reduces waiting between transactions, not the duration of an individual
 transaction or a long synchronous JavaScript computation. Clients must await a

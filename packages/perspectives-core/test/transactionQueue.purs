@@ -69,7 +69,7 @@ theSuite = suite "Transaction admission and API responsiveness" do
             , onlyOnce: true
             } :: RequestRecord
         -- An invalid import exercises the mutation lane without accessing persistence.
-        runMonadPerspectives (handleRequest $ request ImportTransaction mutationDone) state
+        runMonadPerspectives (handleRequest $ request ImportContexts mutationDone) state
         runMonadPerspectives (handleRequest $ request GetSystemIdentifier readDone) state
         take readDone
         waiting <- isNothing <$> tryRead mutationDone
