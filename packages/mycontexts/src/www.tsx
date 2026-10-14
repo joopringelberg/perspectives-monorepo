@@ -169,7 +169,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
     PDRproxy.then(pproxy => {
       if (this.systemMessageMounted) {
         this.systemMessageUnsubscriber = pproxy.subscribeSystemMessages(
-          systemMessage => this.setState({ systemMessage })
+          systemMessage => this.setState({ systemMessage }, this.checkScreenSize)
         );
       }
     });
