@@ -8,12 +8,11 @@ module Test.TransactionQueue where
 
 import Prelude
 
-import Control.Monad.AvarMonadAsk (gets)
 import Control.Monad.Free (Free)
 import Control.Monad.Reader (ask)
-import Data.Either (isLeft)
+import Data.Either (Either(..), isLeft)
+import Data.Foldable (for_)
 import Data.Maybe (Maybe(..), isNothing)
-import Data.Map as Map
 import Effect (Effect)
 import Effect.Aff (forkAff, joinFiber, killFiber, throwError, try)
 import Effect.Aff.AVar (empty, put, take, tryRead)
@@ -22,14 +21,27 @@ import Effect.AVar as AVar
 import Effect.AVar (AVar)
 import Effect.Exception (error)
 import Foreign (Foreign, unsafeToForeign)
+import Foreign.Object as Object
 import Perspectives.Api (handleRequest, requestInducesTransaction)
 import Perspectives.ApiTypes (RequestRecord, RequestType(..))
+import Perspectives.ContextAndRole (defaultRolRecord)
 import Perspectives.CoreTypes (runMonadPerspectives)
-import Perspectives.PerspectivesState (addBinding, lookupVariableBinding, transactionFlag, withTransactionPriority)
+import Perspectives.DomeinCache (storeDomeinFileInCache)
+import Perspectives.DomeinFile (DomeinFile(..), defaultDomeinFileRecord)
+import Perspectives.InstanceRepresentation (PerspectRol(..))
+import Perspectives.Parsing.Arc.Position (ArcPosition(..))
+import Perspectives.PerspectivesState (addBinding, lookupVariableBinding, transactionFlag, transactionNumber, withTransactionPriority)
+import Perspectives.Representation.Class.Cacheable (cacheEntity)
+import Perspectives.Representation.Context (ContextKind(..), defaultContext)
+import Perspectives.Representation.EnumeratedRole (defaultEnumeratedRole)
+import Perspectives.Representation.InstanceIdentifiers (RoleInstance(..))
+import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), RoleKind(..))
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.TransactionQueue (TransactionPriority(..), newTransactionQueue, withPriority)
+import Simple.JSON (read)
 import Test.Perspectives.Utils (runP)
 import Test.Unit (TestF, suite, test)
-import Test.Unit.Assert (equal)
+import Test.Unit.Assert (assert, equal)
 import Test.Unit.Main (runTest)
 
 main :: Effect Unit
@@ -55,8 +67,8 @@ theSuite = suite "Transaction admission and API responsiveness" do
     equal true (requestInducesTransaction SetProperty)
     equal true (requestInducesTransaction SetPreferredUserRoleType)
     equal true (requestInducesTransaction EvaluateRoleInstance)
-    equal true (requestInducesTransaction GetRoleBinders)
-    equal true (requestInducesTransaction CheckBinding)
+    equal false (requestInducesTransaction GetRoleBinders)
+    equal false (requestInducesTransaction CheckBinding)
     equal false (requestInducesTransaction GetProperty)
     equal false (requestInducesTransaction GetScreen)
     equal false (requestInducesTransaction Unsubscribe)
@@ -85,29 +97,57 @@ theSuite = suite "Transaction admission and API responsiveness" do
         pure waiting
     equal true readWasIndependent
 
-  test "a queued role-binder query neither blocks reads nor registers after unsubscribe" do
-    cancelled <- runP do
+  test "role-binder and binding queries respond without admission or a transaction" do
+    runP do
+      let
+        model = "model://test.example#PureQueries"
+        contextType = model <> "$Context"
+        roleType = contextType <> "$Role"
+        roleId = RoleInstance "def:pure-query-role"
+        origin = ArcPosition { line: 0, column: 0 }
+      void $ storeDomeinFileInCache (ModelUri model) $ DomeinFile defaultDomeinFileRecord
+        { id = ModelUri model
+        , namespace = ModelUri model
+        , contexts = Object.singleton contextType (defaultContext contextType "Context" Domain Nothing origin Nothing)
+        , enumeratedRoles = Object.singleton roleType (defaultEnumeratedRole roleType "Role" RoleInContext contextType origin)
+        }
+      void $ cacheEntity roleId $ PerspectRol defaultRolRecord
+        { id = roleId, pspType = EnumeratedRoleType roleType }
       state <- ask
+      flag <- transactionFlag
       liftAff do
         entered <- empty
         release <- empty
-        subscriptionDone <- empty
-        readDone <- empty
+        completed <- empty
         blocker <- forkAff $ runMonadPerspectives
-          (withTransactionPriority BackgroundTransaction $ liftAff (put unit entered *> take release))
+          (withTransactionPriority BackgroundTransaction $ liftAff (take flag *> put unit entered *> take release *> put true flag))
           state
         take entered
-        runMonadPerspectives (handleRequest $ requestRecord GetRoleBinders 1 subscriptionDone) state
-        runMonadPerspectives (handleRequest $ requestRecord Unsubscribe 1 subscriptionDone) state
-        runMonadPerspectives (handleRequest $ requestRecord GetSystemIdentifier 2 readDone) state
-        take readDone
+        for_
+          [ { kind: GetRoleBinders, subject: "def:pure-query-role", object: "", expected: [] }
+          , { kind: GetRoleBinders, subject: "def:pure-query-role", object: contextType, expected: [] }
+          , { kind: CheckBinding, subject: "", object: "def:pure-query-role", expected: [ "true" ] }
+          ]
+          \query -> do
+            response <- empty
+            let
+              request = (requestRecord query.kind 3 completed)
+                { subject = query.subject
+                , predicate = roleType
+                , object = query.object
+                , reactStateSetter = Just $ unsafeToForeign \value -> void $ AVar.tryPut (value :: Foreign) response
+                }
+            runMonadPerspectives (handleRequest request) state
+            result <- take response
+            case read result of
+              Right (value :: { responseType :: String, result :: Array String }) -> do
+                equal "APIresult" value.responseType
+                equal query.expected value.result
+              Left errors -> assert (show errors) false
+        number <- runMonadPerspectives transactionNumber state
+        equal 0 number
         put unit release
         joinFiber blocker
-        runMonadPerspectives (withTransactionPriority BackgroundTransaction (pure unit)) state
-        pending <- runMonadPerspectives (gets _.pendingApiSubscriptions) state
-        noCallback <- isNothing <$> tryRead subscriptionDone
-        pure (Map.isEmpty pending && noCallback)
-    equal true cancelled
 
   test "admission preserves the caller's variable bindings" do
     binding <- runP do

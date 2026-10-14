@@ -75,10 +75,10 @@ the sequential API consumer could leave them behind a mutation waiting for that
 flag. They can now be dispatched while a mutation waits or runs; ordinary reads
 and unsubscribe requests retain their order in the API consumer. Reads can observe
 intermediate state, as before, and subscriptions are refreshed at transaction end;
-this is not snapshot isolation. Some apparently read-only requests
-(`GetRoleBinders` and model-loading `CheckBinding`) explicitly run transactions and
-use the asynchronous user lane too. Pending role-binder subscriptions are marked
-cancelled on unsubscribe, preventing late registration. Public-resource state evaluation
+this is not snapshot isolation. `GetRoleBinders` and `CheckBinding` retrieve their
+models directly without starting a transaction and follow the ordinary read path.
+Role-binder subscriptions and unsubscribe requests therefore remain ordered in the
+API consumer. Public-resource state evaluation
 discovered by a read is scheduled separately as background work rather than
 blocking later reads; its failures are logged rather than sent to a completed request.
 
