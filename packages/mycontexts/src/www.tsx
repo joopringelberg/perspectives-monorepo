@@ -56,6 +56,7 @@ interface WWWComponentState {
   openContextUserType?: RoleType
   screen?: ScreenDefinition;
   endUserMessage: UserMessagingMessage;
+  systemMessage: string;
   choiceMessage: ChoiceMessage;
   actions?: Record<string, string>;
   roleOnClipboard?: RoleOnClipboard;
@@ -87,6 +88,8 @@ interface WWWComponentState {
 class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponentState> {
   getScreenUnsubscriber: Unsubscriber | undefined;
   getMeForContextUnsubscriber: Unsubscriber | undefined;
+  systemMessageUnsubscriber?: () => void;
+  systemMessageMounted = false;
   // Every open or close advances this generation. Late proxy callbacks can
   // therefore never replace the conversation selected most recently.
   helpRequestId = 0;
@@ -109,6 +112,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
       , systemUser: '' as RoleInstanceT
       , screen: undefined
       , endUserMessage: {title: ''}
+      , systemMessage: ''
       , choiceMessage: {title: '', choices: {}, chosen: () => {}}
       , isOnline: false
       , openContext: mycontextStartPage
@@ -161,6 +165,14 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
 
   componentDidMount() {
     const component = this;
+    this.systemMessageMounted = true;
+    PDRproxy.then(pproxy => {
+      if (this.systemMessageMounted) {
+        this.systemMessageUnsubscriber = pproxy.subscribeSystemMessages(
+          systemMessage => this.setState({ systemMessage })
+        );
+      }
+    });
     SharedWorkerChannelPromise.then( pdrHandler => {
       getInstallationData().then( installationData => {
         const systemIdentifier = "def:#" + installationData.perspectivesUserId! + installationData.deviceName! as ContextInstanceT;
@@ -316,6 +328,8 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
   }
 
   componentWillUnmount() {
+    this.systemMessageMounted = false;
+    this.systemMessageUnsubscriber?.();
     this.helpRequestId += 1;
     window.removeEventListener('resize', this.checkScreenSize);
     document.removeEventListener('keydown', this.handleKeyboardNavigation);
@@ -1143,6 +1157,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
     return (
       <nav aria-label="History navigation"> {/* Add nav landmark */}
         <Navbar id="bottom-navbar" fixed="bottom" bg="body" expand="xs" className="justify-content-between py-0 px-3 border-top">
+          <div className="d-flex align-items-center justify-content-between w-50">
           <Navbar.Brand 
             onClick={e => {window.history.back(); e.stopPropagation();}} 
             onKeyDown={(e) => {if (e.key === ' ' || e.key === 'Enter') window.history.back(); e.stopPropagation();}} 
@@ -1167,6 +1182,16 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
             aria-label={i18next.t("bottom_goForward", {ns: 'mycontexts'})}>
               <i className="bi bi-arrow-right text-body"></i>
           </Navbar.Brand>
+          </div>
+          <div
+            id="system-message"
+            className="w-50 small text-end ps-2"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            style={{ overflowWrap: 'anywhere' }}>
+            {component.state.systemMessage}
+          </div>
         </Navbar>
       </nav>
       );

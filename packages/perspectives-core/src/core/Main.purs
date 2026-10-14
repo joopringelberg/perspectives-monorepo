@@ -30,7 +30,7 @@ import Data.DateTime (DateTime, date)
 import Data.DateTime.Instant (Instant, instant, unInstant)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
-import Data.Function.Uncurried (Fn2, runFn2)
+import Data.Function.Uncurried (Fn3, runFn3)
 import Data.Map (delete, insert)
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
@@ -166,7 +166,7 @@ runPDR_ usr rawPouchdbUser options callback = do
       typeToBeFixed <- empty
       userIntegrityChoice <- empty
       -- Here we retrieve a Promise for a function in the SharedWorker that will send status messages to all clients.
-      statusMessageChannel :: Fn2 String String Unit <- toAff Proxy.pdrStatusMessageChannel
+      statusMessageChannel :: Fn3 String String String Unit <- toAff Proxy.pdrStatusMessageChannel
 
       state <- do
         lang <- getCurrentLanguageFromIDB
@@ -186,7 +186,7 @@ runPDR_ usr rawPouchdbUser options callback = do
                 lang
             )
         -- The status message sending function is stored in PerspectivesState. It is accessed by pushMessage and removeMessage.
-        new (state' { setPDRStatus = ((runFn2 statusMessageChannel) :: String -> String -> Unit) })
+        new (state' { setPDRStatus = ((runFn3 statusMessageChannel) :: String -> String -> String -> Unit) })
 
       -- Store state globally so log-configuration helpers can be called from JavaScript.
       liftEffect $ Ref.write (Just state) globalStateRef

@@ -309,7 +309,7 @@ type PerspectivesExtraState =
 
   , conversations :: ConversationCache
 
-  , setPDRStatus :: String -> String -> Unit
+  , setPDRStatus :: String -> String -> String -> Unit
 
   , typeToBeFixed :: AVar TypeFix
 

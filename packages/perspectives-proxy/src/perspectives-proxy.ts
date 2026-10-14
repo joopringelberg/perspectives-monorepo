@@ -359,7 +359,7 @@ class SharedWorkerChannel
       }
       else
       {
-        proxy.cursor.setPDRStatus( e.data as { action: "push" | "remove"; message: string } );
+        proxy.cursor.setPDRStatus( e.data as { action: "push" | "remove"; message: string; target?: "overlay" | "navbar" } );
       }
     }
   }
@@ -638,6 +638,11 @@ export class PerspectivesProxy
   close()
   {
     this.channel.close();
+  }
+
+  // Subscribe to nonblocking system status, including any message received before mounting.
+  subscribeSystemMessages(receive: (message: string) => void): () => void {
+    return this.cursor.subscribeSystemMessages(receive);
   }
 
   // Returns a promise for unsuscriber information of the form: {subject: req.subject, corrId: req.corrId}
@@ -2001,6 +2006,14 @@ class Cursor {
   private PDRStatus: string = "Processing...";
   private messages: Message[] = [];
   private queuePromise = Promise.resolve();
+  private systemMessage = "";
+  private systemMessageListeners = new Set<(message: string) => void>();
+
+  subscribeSystemMessages(receive: (message: string) => void): () => void {
+    this.systemMessageListeners.add(receive);
+    receive(this.systemMessage);
+    return () => { this.systemMessageListeners.delete(receive); };
+  }
 
   constructor() {
     // Create the overlay element once
@@ -2093,7 +2106,12 @@ class Cursor {
   }
 
   // PDR status messages become active immediately, use a fixed id so remove matches reliably.
-  setPDRStatus({ action, message }: { action: "push" | "remove"; message: string }) {
+  setPDRStatus({ action, message, target = "overlay" }: { action: "push" | "remove"; message: string; target?: "overlay" | "navbar" }) {
+    if (target === "navbar") {
+      this.systemMessage = action === "push" ? message : "";
+      this.systemMessageListeners.forEach(receive => receive(this.systemMessage));
+      return;
+    }
     const STATUS_ID = Cursor.STATUS_ID;
     if (action === "push") {
       this.enqueue(() => {

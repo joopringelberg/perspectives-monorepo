@@ -26,7 +26,7 @@ There are two distinct mechanisms:
 
 | Mechanism | Direction | Timing | Purpose |
 |---|---|---|---|
-| **`setPDRStatus`** (push / remove) | PDR → all clients | Real-time, out-of-band | Show / hide a loading overlay with a status message |
+| **`setPDRStatus`** (push / remove) | PDR → all clients | Real-time, out-of-band | Show / hide a loading overlay or nonblocking navbar status |
 | **`warnings`** accumulation | PDR → responding client | Piggybacked on API response | Deliver non-fatal diagnostic messages; also used for restoration notifications with navigation links |
 
 A third, generalised extension of `setPDRStatus` — the **`requestUserIntegrityChoice`** dialog — blocks the PDR fiber until the user has made a yes/no choice; it is described separately below.
@@ -51,22 +51,24 @@ pushMessage :: String -> MonadPerspectives Unit
 removeMessage :: String -> MonadPerspectives Unit
 ```
 
-Both functions call `getPDRStatusSetter` to retrieve the `setPDRStatus` function stored inside `PerspectivesState`, then invoke it with the appropriate action string (`"push"` or `"remove"`) and the message text.
+Both functions call `getPDRStatusSetter` to retrieve the `setPDRStatus` function stored inside `PerspectivesState`, then invoke it with the appropriate action string (`"push"` or `"remove"`), message text and `"overlay"` target.
+
+For nonblocking progress, use `pushSystemMessage :: String -> MonadPerspectives Unit` and `removeSystemMessage :: MonadPerspectives Unit`. These select the `"navbar"` target, which neither shows the overlay nor changes the cursor. Incoming-post processing uses this target to display “Working on n incoming messages”, clearing it automatically when the pending count reaches zero. Active transactions are not preempted.
 
 ```purescript
 -- From perspectivesState.purs:
-getPDRStatusSetter :: MonadPerspectives (String -> String -> Unit)
+getPDRStatusSetter :: MonadPerspectives (String -> String -> String -> Unit)
 getPDRStatusSetter = gets _.setPDRStatus
 
 pushMessage :: String -> MonadPerspectives Unit
 pushMessage msg = do
   setPDRStatus <- getPDRStatusSetter
-  pure $ setPDRStatus "push" msg
+  pure $ setPDRStatus "push" msg "overlay"
 
 removeMessage :: String -> MonadPerspectives Unit
 removeMessage msg = do
   setPDRStatus <- getPDRStatusSetter
-  pure $ setPDRStatus "remove" msg
+  pure $ setPDRStatus "remove" msg "overlay"
 ```
 
 #### The `setPDRStatus` field in `PerspectivesState`
@@ -74,25 +76,25 @@ removeMessage msg = do
 `PerspectivesState` (defined in `coreTypes.purs`) carries:
 
 ```purescript
-, setPDRStatus :: String -> String -> Unit
+, setPDRStatus :: String -> String -> String -> Unit
 ```
 
 Its default value (set in `perspectivesState.purs`) is a no-op:
 
 ```purescript
-, setPDRStatus: \_ _ -> unit
+, setPDRStatus: \_ _ _ -> unit
 ```
 
 During startup (`runPDR` in `Main.purs`), the field is replaced with a real implementation obtained from the SharedWorker:
 
 ```purescript
 -- Main.purs (simplified):
-statusMessageChannel :: Fn2 String String Unit <- toAff Proxy.pdrStatusMessageChannel
+statusMessageChannel :: Fn3 String String String Unit <- toAff Proxy.pdrStatusMessageChannel
 -- ...
-new (state' { setPDRStatus = ((runFn2 statusMessageChannel) :: String -> String -> Unit) })
+new (state' { setPDRStatus = ((runFn3 statusMessageChannel) :: String -> String -> String -> Unit) })
 ```
 
-`Proxy.pdrStatusMessageChannel` is a `Promise (Fn2 String String Unit)` declared as a foreign import in `proxy.purs` and resolved in `proxy.js`.
+`Proxy.pdrStatusMessageChannel` is a `Promise (Fn3 String String String Unit)` declared as a foreign import in `proxy.purs` and resolved in `proxy.js`.
 
 ### JS bridge (`proxy.js`)
 
@@ -121,10 +123,10 @@ self.onconnect = function(e) {
   pdr.receivePDRStatusMessageChannel(sendPDRStatusMessage);
 };
 
-// Broadcasts {responseType: "PDRMessage", action, message} to ALL connected tabs.
-function sendPDRStatusMessage(action, message) {
+// Broadcasts status to ALL connected tabs.
+function sendPDRStatusMessage(action, message, target = "overlay") {
   Object.values(subscribingPages).forEach(function(channel) {
-    channel.postMessage({ responseType: "PDRMessage", action, message });
+    channel.postMessage({ responseType: "PDRMessage", action, message, target });
   });
 }
 ```
@@ -145,15 +147,16 @@ else if (e.data.responseType === "PDRMessage") {
   if (e.data.action === "requestUserIntegrityChoice") {
     // Special case — see Mechanism 3 below.
   } else {
-    proxy.cursor.setPDRStatus(e.data as { action: "push" | "remove"; message: string });
+    proxy.cursor.setPDRStatus(e.data as { action: "push" | "remove"; message: string; target?: "overlay" | "navbar" });
   }
 }
 ```
 
-`Cursor.setPDRStatus` maps the action to the overlay:
+`Cursor.setPDRStatus` maps the default (or `"overlay"`) target to the overlay. The `"navbar"` target instead updates retained system-message text and notifies subscribers registered through `PDRproxy.subscribeSystemMessages`. Subscribers receive the current text immediately and a cleanup function; removes deliver an empty string. Navbar and overlay lifecycles are independent. MyContexts renders the text as a polite live status in half of the bottom navbar, leaving navigation controls in the other half.
 
 ```typescript
 // Cursor (perspectives-proxy.ts):
+// Overlay branch; navbar messages return before reaching this branch.
 setPDRStatus({ action, message }: { action: "push" | "remove"; message: string }) {
   const STATUS_ID = Cursor.STATUS_ID;   // fixed string "PDR_STATUS"
   if (action === "push") {
@@ -285,7 +288,7 @@ This is a generalised extension of Mechanism 1, used when the PDR must block the
 ```
 PDR fiber
   │
-  ├─ calls setPDRStatus("requestUserIntegrityChoice", jsonPayload)
+  ├─ calls setPDRStatus("requestUserIntegrityChoice", jsonPayload, "overlay")
   │      ─────────────────────────────────────────────────────────►  SharedWorker
   │                                                                     │
   │                                                                     ├─ postMessage({responseType:"PDRMessage",
@@ -313,7 +316,7 @@ requestUserChoice :: PerspectivesWarning -> String -> String -> MonadPerspective
 requestUserChoice warning yesOption noOption = do
   setPDRStatus <- getPDRStatusSetter
   let payload = writeJSON { message: show warning, yesOption, noOption }
-  _ <- pure $ setPDRStatus "requestUserIntegrityChoice" payload
+  _ <- pure $ setPDRStatus "requestUserIntegrityChoice" payload "overlay"
   choiceAVar <- getUserIntegrityChoiceAVar
   liftAff $ AVar.take choiceAVar   -- blocks until the frontend responds
 ```
@@ -407,7 +410,7 @@ The following sequence happens once per PDR startup (`runPDR` in `Main.purs`):
 
 1. `pdrStatusMessageChannel` (a `Promise`) is exported from `proxy.js` and imported as a PureScript foreign import in `proxy.purs`.
 2. The SharedWorker calls `pdr.receivePDRStatusMessageChannel(sendPDRStatusMessage)` on each new client connection. This resolves the `pdrStatusMessageChannel` Promise with the `sendPDRStatusMessage` broadcast function.
-3. In `Main.purs`, `toAff Proxy.pdrStatusMessageChannel` awaits that Promise and unwraps the JS function as `Fn2 String String Unit`.
+3. In `Main.purs`, `toAff Proxy.pdrStatusMessageChannel` awaits that Promise and unwraps the JS function as `Fn3 String String String Unit`.
 4. The function is stored as `setPDRStatus` in the newly created `PerspectivesState` record.
 5. From this point on, any MonadPerspectives code can call `pushMessage` / `removeMessage` and the message will be broadcast to all connected browser tabs.
 
@@ -428,7 +431,7 @@ myLongOperation = do
   removeMessage "Loading model..."
 ```
 
-> **Important:** always pair every `pushMessage` with a matching `removeMessage` using the **exact same string**. The client matches messages by their text identifier. An unmatched push will leave the loading overlay visible indefinitely.
+> **Important:** pair `pushMessage` with `removeMessage`, and `pushSystemMessage` with `removeSystemMessage`. Each target holds one status slot: pushes replace its text and removes clear it, independently of request overlays. An unmatched push leaves that status visible indefinitely.
 
 ### Add a warning to the current API response
 
@@ -465,5 +468,6 @@ The first argument must be a `PerspectivesWarning` constructor whose `show` inst
 | You want to… | Use |
 |---|---|
 | Show a spinner / status text while a long operation runs | `pushMessage` / `removeMessage` |
+| Show progress without blocking the GUI | `pushSystemMessage` / `removeSystemMessage` |
 | Notify the modeller of a non-fatal inconsistency detected during an API call | `addWarning` / `warnModeller` |
 | Block until the end user answers a yes/no question | `requestUserChoice` (see `userInteraction.purs`) |

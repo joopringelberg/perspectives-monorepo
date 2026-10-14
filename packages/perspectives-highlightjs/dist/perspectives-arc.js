@@ -209,7 +209,7 @@ const meta = {
 // SCREEN ELEMENTS (base04)
 const screenKeywords = {
     scope: base04,
-    begin: /\b(screen|tab|row|column|form|markdown|table|chat|messages|media|who|what|where|master|detail|when|fillfrom)\b/
+    begin: /\b(screen|tab|row|column|form|markdown|table|chat|messages|media|who|what|where|master|detail|when|fillfrom|typeaheadfiller|typeaheadform|typeaheadfillfrom)\b/
 };
 const use = {
     begin: [lexeme("use"), /.*/, lexeme("for")],

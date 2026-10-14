@@ -55,7 +55,7 @@ import Perspectives.Names (getMySystem, lookupIndexedContext)
 import Perspectives.Persistence.API (cleanupDeletedDocs, deleteDocument, documentsInDatabase, excludeDocs, getDocument_)
 import Perspectives.Performance (ProfileSession, captureSession, countDecrypted, countEncrypted, profile, sessionEnabled)
 import Perspectives.Persistent (postDatabaseName)
-import Perspectives.PerspectivesState (getBrokerService, getCurrentLanguage, getPerspectivesUser, getStompClientFactory, pushMessage, removeMessage, setBrokerService, setStompClient, stompClient, transactionLevel, withTransactionPriority)
+import Perspectives.PerspectivesState (getBrokerService, getCurrentLanguage, getPerspectivesUser, getStompClientFactory, pushMessage, pushSystemMessage, removeMessage, removeSystemMessage, setBrokerService, setStompClient, stompClient, transactionLevel, withTransactionPriority)
 import Perspectives.Query.UnsafeCompiler (getPropertyFunction, getRoleInstances)
 import Perspectives.Representation.InstanceIdentifiers (RoleInstance(..), Value(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), RoleType(..))
@@ -225,16 +225,16 @@ showPendingIncomingTransactions pendingCount =
   if pendingCount > 0 then do
     language <- getCurrentLanguage
     debugBroker $ "There are " <> show pendingCount <> " pending incoming transactions"
-    pushMessage (pendingIncomingPostMessage language pendingCount)
+    pushSystemMessage (pendingIncomingPostMessage language pendingCount)
   else do
     debugBroker "There are no pending incoming transactions"
-    removeMessage "pending incoming transactions"
+    removeSystemMessage
 
 pendingIncomingPostMessage :: String -> Int -> String
 pendingIncomingPostMessage language pendingCount =
   if take 2 language == "nl" then
-    show pendingCount <> " nog niet verwerkte gegevensberichten"
+    "Bezig met " <> show pendingCount <> (if pendingCount == 1 then " inkomend bericht" else " inkomende berichten")
   else if pendingCount == 1 then
-    "1 unprocessed data message"
+    "Working on 1 incoming message"
   else
-    show pendingCount <> " unprocessed data messages"
+    "Working on " <> show pendingCount <> " incoming messages"

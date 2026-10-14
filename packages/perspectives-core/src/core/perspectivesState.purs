@@ -110,7 +110,7 @@ newPerspectivesState uinfo transFlag transactionWithTiming modelToLoad runtimeOp
   , currentLanguage
   , translations: empty
   , conversations: (empty :: Object Foreign)
-  , setPDRStatus: \_ _ -> unit
+  , setPDRStatus: \_ _ _ -> unit
   , typeToBeFixed
   , modelUnderCompilation: Nothing
   , modelUris: Map.empty
@@ -306,20 +306,31 @@ setCurrentLanguage lang = modify \s -> s { currentLanguage = lang }
 modelsDatabaseName :: MonadPerspectives String
 modelsDatabaseName = getSystemIdentifier >>= pure <<< (_ <> "_models")
 
-getPDRStatusSetter :: MonadPerspectives (String -> String -> Unit)
+getPDRStatusSetter :: MonadPerspectives (String -> String -> String -> Unit)
 getPDRStatusSetter = gets _.setPDRStatus
 
-type PDRStatusMessage = { action :: String, message :: String }
+type PDRStatusMessage = { action :: String, message :: String, target :: String }
 
 pushMessage :: String -> MonadPerspectives Unit
 pushMessage msg = do
   setPDRStatus <- getPDRStatusSetter
-  pure $ setPDRStatus "push" msg
+  pure $ setPDRStatus "push" msg "overlay"
 
 removeMessage :: String -> MonadPerspectives Unit
 removeMessage msg = do
   setPDRStatus <- getPDRStatusSetter
-  pure $ setPDRStatus "remove" msg
+  pure $ setPDRStatus "remove" msg "overlay"
+
+-- | Show progress without blocking GUI interaction or requiring acknowledgement.
+pushSystemMessage :: String -> MonadPerspectives Unit
+pushSystemMessage msg = do
+  setPDRStatus <- getPDRStatusSetter
+  pure $ setPDRStatus "push" msg "navbar"
+
+removeSystemMessage :: MonadPerspectives Unit
+removeSystemMessage = do
+  setPDRStatus <- getPDRStatusSetter
+  pure $ setPDRStatus "remove" "" "navbar"
 
 getTypeToBeFixed :: MonadPerspectives (AVar TypeFix)
 getTypeToBeFixed = gets _.typeToBeFixed
