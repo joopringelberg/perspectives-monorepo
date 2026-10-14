@@ -72,14 +72,15 @@ existing settlement/timing requirements but compete as background work once read
 
 Ordinary value requests do not take the transaction flag. Previously, however,
 the sequential API consumer could leave them behind a mutation waiting for that
-flag. They can now be dispatched while a mutation waits or runs; reads and
-unsubscribe requests retain their order in the API consumer. Reads can observe
+flag. They can now be dispatched while a mutation waits or runs; ordinary reads
+and unsubscribe requests retain their order in the API consumer. Reads can observe
 intermediate state, as before, and subscriptions are refreshed at transaction end;
 this is not snapshot isolation. Some apparently read-only requests
 (`GetRoleBinders` and model-loading `CheckBinding`) explicitly run transactions and
-still wait for user admission and the flag. Public-resource state evaluation
+use the asynchronous user lane too. Pending role-binder subscriptions are marked
+cancelled on unsubscribe, preventing late registration. Public-resource state evaluation
 discovered by a read is scheduled separately as background work rather than
-blocking later reads.
+blocking later reads; its failures are logged rather than sent to a completed request.
 
 This reduces waiting between transactions, not the duration of an individual
 transaction or a long synchronous JavaScript computation. Clients must await a

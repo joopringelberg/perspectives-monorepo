@@ -275,6 +275,8 @@ type PerspectivesExtraState =
   -- Do not confuse with transactionNumber! This member is used in runMonadPerspectivesTransaction.
   , transactionFlag :: AVar Boolean
   , transactionQueue :: TransactionQueue
+  -- Cancellation flags for role-binder subscriptions awaiting asynchronous registration.
+  , pendingApiSubscriptions :: Map CorrelationIdentifier Boolean
 
   , transactionWithTiming :: AVar RepeatingTransaction
 

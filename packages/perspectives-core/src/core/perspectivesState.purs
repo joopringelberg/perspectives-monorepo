@@ -97,6 +97,7 @@ newPerspectivesState uinfo transFlag transactionWithTiming modelToLoad runtimeOp
   , warnings: []
   , transactionFlag: transFlag
   , transactionQueue: newTransactionQueue unit
+  , pendingApiSubscriptions: Map.empty
   , transactionWithTiming
   , modelToLoad
   , transactionFibers: Map.empty
