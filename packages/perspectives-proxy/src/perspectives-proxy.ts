@@ -156,11 +156,215 @@ interface RequestRecord {
   reactStateSetter?: (response: any) => void;
   corrId?: number;
   trackingNumber?: number;
-  // When true, cursor.wait() is not called for this request. Use for background
-  // subscriptions that auto-subscribe on mount (e.g. subscribeSelectedRoleFromClipboard)
-  // so that rapid component remounts during window resize do not trigger the loading overlay.
+  // Explicitly classify a request as background, regardless of its subscription mode.
   noWaitCursor?: boolean;
 }
+
+export type RequestTimingCategory = "foreground" | "background" | "status" | "silent";
+
+export type RequestTimingSample = {
+  id: string;
+  trackingNumber?: number;
+  request: string;
+  category: RequestTimingCategory;
+  startedAt: number;
+  visibleAt?: number;
+  visibleDelayMs?: number;
+  completedAt?: number;
+  durationMs?: number;
+  staleAt?: number;
+  status: "pending" | "visible" | "completed" | "failed" | "stale";
+};
+
+export type RequestTimingSummary = {
+  request: string;
+  category: RequestTimingCategory;
+  count: number;
+  completedCount: number;
+  failedCount: number;
+  pendingCount: number;
+  visibleCount: number;
+  staleCount: number;
+  averageMs?: number;
+  p50Ms?: number;
+  p95Ms?: number;
+  maximumMs?: number;
+};
+
+type RequestTimingHandle = {
+  id: string;
+  startedAt: number;
+  completed: boolean;
+};
+
+const DISPLAY_DELAY_MS = 1000;
+const AUTO_CLEAR_MS = 15_000;
+const TIMING_STORAGE_KEY = "perspectives.requestTimings.v1";
+const MAX_TIMING_SAMPLES = 500;
+
+function classifyRequest(req?: Partial<RequestRecord>): RequestTimingCategory {
+  if (!req || !req.request || req.request === "Unsubscribe") {
+    return "silent";
+  }
+
+  // Continuous requests remain active after their first result and must not block the UI.
+  if (req.noWaitCursor || req.onlyOnce === false) {
+    return "background";
+  }
+
+  return "foreground";
+}
+
+class RequestTimingDiagnostics {
+  private fallbackEntries: RequestTimingSample[] = [];
+  private storageDisabled = false;
+
+  start(request: string, category: RequestTimingCategory, trackingNumber?: number): RequestTimingHandle {
+    const startedAt = Date.now();
+    const handle = {
+      id: `${startedAt}-${crypto.randomUUID()}`,
+      startedAt,
+      completed: false
+    };
+    this.append({
+      id: handle.id,
+      trackingNumber,
+      request,
+      category,
+      startedAt,
+      status: "pending"
+    });
+    return handle;
+  }
+
+  markVisible(handle: RequestTimingHandle): void {
+    const visibleAt = Date.now();
+    this.update(handle.id, sample => {
+      if (sample.completedAt == null) {
+        sample.visibleAt = visibleAt;
+        sample.visibleDelayMs = visibleAt - sample.startedAt;
+        sample.status = "visible";
+      }
+    });
+  }
+
+  markStale(handle: RequestTimingHandle): void {
+    const staleAt = Date.now();
+    this.update(handle.id, sample => {
+      if (sample.completedAt == null) {
+        sample.staleAt = staleAt;
+        sample.status = "stale";
+      }
+    });
+  }
+
+  complete(handle: RequestTimingHandle, failed = false): void {
+    if (handle.completed) return;
+    handle.completed = true;
+    const completedAt = Date.now();
+    this.update(handle.id, sample => {
+      sample.completedAt = completedAt;
+      sample.durationMs = completedAt - sample.startedAt;
+      sample.status = failed ? "failed" : "completed";
+    });
+  }
+
+  dump(): RequestTimingSample[] {
+    return this.read().map(sample => ({...sample}));
+  }
+
+  summary(): RequestTimingSummary[] {
+    const groups = new Map<string, RequestTimingSample[]>();
+    for (const sample of this.read()) {
+      const key = `${sample.category}\u0000${sample.request}`;
+      const group = groups.get(key);
+      if (group) group.push(sample);
+      else groups.set(key, [sample]);
+    }
+
+    return Array.from(groups.values()).map(samples => {
+      const durations = samples
+        .flatMap(sample => sample.durationMs == null ? [] : [sample.durationMs])
+        .sort((left, right) => left - right);
+      const percentile = (fraction: number) =>
+        durations.length === 0 ? undefined : durations[Math.ceil(durations.length * fraction) - 1];
+
+      return {
+        request: samples[0].request,
+        category: samples[0].category,
+        count: samples.length,
+        completedCount: durations.length,
+        failedCount: samples.filter(sample => sample.status === "failed").length,
+        pendingCount: samples.filter(sample => sample.completedAt == null).length,
+        visibleCount: samples.filter(sample => sample.visibleAt != null).length,
+        staleCount: samples.filter(sample => sample.staleAt != null).length,
+        averageMs: durations.length === 0
+          ? undefined
+          : Math.round(durations.reduce((sum, duration) => sum + duration, 0) / durations.length),
+        p50Ms: percentile(0.5),
+        p95Ms: percentile(0.95),
+        maximumMs: durations.at(-1)
+      };
+    }).sort((left, right) => (right.p95Ms ?? -1) - (left.p95Ms ?? -1));
+  }
+
+  clear(): void {
+    this.write([]);
+  }
+
+  private append(sample: RequestTimingSample): void {
+    this.write([...this.read(), sample].slice(-MAX_TIMING_SAMPLES));
+  }
+
+  private update(id: string, updater: (sample: RequestTimingSample) => void): void {
+    const entries = this.read();
+    const sample = entries.find(entry => entry.id === id);
+    if (!sample) return;
+    updater(sample);
+    this.write(entries);
+  }
+
+  private read(): RequestTimingSample[] {
+    if (this.storageDisabled || typeof localStorage === "undefined") {
+      return this.fallbackEntries;
+    }
+
+    try {
+      const serialised = localStorage.getItem(TIMING_STORAGE_KEY);
+      if (serialised == null) return this.fallbackEntries;
+      const parsed: unknown = JSON.parse(serialised);
+      if (!Array.isArray(parsed)) {
+        console.warn("[Cursor] Ignoring invalid persisted request timing data");
+        return this.fallbackEntries;
+      }
+      this.fallbackEntries = parsed as RequestTimingSample[];
+    } catch (error) {
+      this.disableStorage("read", error);
+    }
+    return this.fallbackEntries;
+  }
+
+  private write(entries: RequestTimingSample[]): void {
+    this.fallbackEntries = entries.slice(-MAX_TIMING_SAMPLES);
+    if (this.storageDisabled || typeof localStorage === "undefined") return;
+
+    try {
+      localStorage.setItem(TIMING_STORAGE_KEY, JSON.stringify(this.fallbackEntries));
+    } catch (error) {
+      this.disableStorage("write", error);
+    }
+  }
+
+  private disableStorage(operation: "read" | "write", error: unknown): void {
+    this.storageDisabled = true;
+    console.warn(
+      `[Cursor] Cannot ${operation} installation request timings; diagnostics will only last for this page`,
+      error
+    );
+  }
+}
+
+const requestTimingDiagnostics = new RequestTimingDiagnostics();
 
 const defaultRequest =
   {
@@ -647,12 +851,15 @@ export class PerspectivesProxy
     const cursor = this.cursor;
     const proxy = this;
     req.trackingNumber = PerspectivesProxy.index++;
+    const requestCategory = classifyRequest(req);
+    const timing = cursor.beginRequest(req, requestCategory);
     // Handle errors here. Use `errorHandler` if provided by the PerspectivesProxy method.
     // Log errors to the console anyway for the developer.
     const handleErrors = function(response : Response) // response = PerspectivesApiTypes.ResponseRecord
     {
       // Log a result has been received.
       // console.log( "Response received for request: " + req.trackingNumber + " of type " + req.request );
+      cursor.completeRequest(timing, response.responseType === "APIerror");
       // Restore cursor shape
       cursor.restore(req);
       if (response.responseType === "APIerror")
@@ -689,22 +896,29 @@ export class PerspectivesProxy
     //   console.warn( "Request misses values: " + JSON.stringify(fullRequest) );
     // }
 
-    // Set cursor shape
-    if ( !(req.request == "Unsubscribe") && !req.noWaitCursor )
-      {
-        cursor.wait(req);
-      }
-    if (req.request === "Unsubscribe"){
-      // If we had been waiting for a response, we can now restore the cursor shape.
-      cursor.restore(req);
+    // Only foreground calls use the blocking overlay; all categories are timed.
+    if (requestCategory === "foreground") {
+      cursor.wait(req, timing);
     }
-    return this.channel.send( fullRequest );
+    return this.channel.send(fullRequest).catch(error => {
+      cursor.completeRequest(timing, true);
+      cursor.restore(req);
+      throw error;
+    });
   }
 
   // unsubscribe from the channel.
   unsubscribe (req : RequestRecord)
   {
-    this.channel.unsubscribe(req);
+    const unsubscribeRequest = {...req, trackingNumber: PerspectivesProxy.index++};
+    const timing = this.cursor.beginRequest(unsubscribeRequest, "silent");
+    try {
+      this.channel.unsubscribe(req);
+      this.cursor.completeRequest(timing);
+    } catch (error) {
+      this.cursor.completeRequest(timing, true);
+      throw error;
+    }
   }
 
   setUserMessageChannel( channel : UserMessageChannel )
@@ -1920,6 +2134,33 @@ export class PerspectivesProxy
   }
 
   /**
+   * Return the request timings retained for this installation.
+   * Call from the browser console: console.table(pdr.getRequestTimingDiagnostics())
+   */
+  getRequestTimingDiagnostics(): RequestTimingSample[]
+  {
+    return requestTimingDiagnostics.dump();
+  }
+
+  /**
+   * Summarise retained timings by request and category.
+   * Call from the browser console: console.table(pdr.summarizeRequestTimingDiagnostics())
+   */
+  summarizeRequestTimingDiagnostics(): RequestTimingSummary[]
+  {
+    return requestTimingDiagnostics.summary();
+  }
+
+  /**
+   * Remove all retained request timings for this installation.
+   * Call from the browser console: pdr.clearRequestTimingDiagnostics()
+   */
+  clearRequestTimingDiagnostics(): void
+  {
+    requestTimingDiagnostics.clear();
+  }
+
+  /**
    * Set the log threshold for a specific PDR topic.
    * Messages at this level or above will be emitted; messages below will be suppressed.
    * Call from browser console: pdr.setLogLevelForTopic("SYNC", "DEBUG")
@@ -2001,6 +2242,7 @@ class Cursor {
   private PDRStatus: string = "Processing...";
   private messages: Message[] = [];
   private queuePromise = Promise.resolve();
+  private statusTiming?: RequestTimingHandle;
 
   constructor() {
     // Create the overlay element once
@@ -2096,6 +2338,10 @@ class Cursor {
   setPDRStatus({ action, message }: { action: "push" | "remove"; message: string }) {
     const STATUS_ID = Cursor.STATUS_ID;
     if (action === "push") {
+      if (!this.statusTiming) {
+        this.statusTiming = requestTimingDiagnostics.start("PDRStatus", "status");
+        requestTimingDiagnostics.markVisible(this.statusTiming);
+      }
       this.enqueue(() => {
         const existingIndex = this.messages.findIndex(msg => msg.identifier === STATUS_ID);
         if (existingIndex >= 0) {
@@ -2112,6 +2358,10 @@ class Cursor {
         document.body.style.cursor = "wait";
       });
     } else if (action === "remove") {
+      if (this.statusTiming) {
+        requestTimingDiagnostics.complete(this.statusTiming);
+        this.statusTiming = undefined;
+      }
       this.removeMessage(STATUS_ID);
     }
   }
@@ -2273,33 +2523,49 @@ class Cursor {
     }
   }
 
-  wait(request: RequestRecord) {
+  beginRequest(request: RequestRecord, category: RequestTimingCategory): RequestTimingHandle {
+    return requestTimingDiagnostics.start(
+      request.request ?? "unknown",
+      category,
+      request.trackingNumber
+    );
+  }
+
+  completeRequest(timing: RequestTimingHandle, failed = false): void {
+    requestTimingDiagnostics.complete(timing, failed);
+  }
+
+  wait(request: RequestRecord, timing: RequestTimingHandle) {
     const component = this;
     const identifier = request.trackingNumber!.toString();
 
     // Add the message (not yet shown) and arm a safety timeout
     this.enqueue(() => {
-      const msg: Message = { identifier, text: "Processing...", startedAt: Date.now(), req: request };
+      const msg: Message = { identifier, text: "Processing...", startedAt: timing.startedAt, req: request };
       this.messages.unshift(msg);
 
-      // Auto-clear after 60s with a warning (tune as needed)
       msg.timeoutId = window.setTimeout(() => {
+        requestTimingDiagnostics.markStale(timing);
+
         console.warn("[Cursor] Auto-clearing stale request", {
           identifier,
           request,
-          startedAt: msg.startedAt
+          startedAt: msg.startedAt,
+          elapsedMs: Date.now() - timing.startedAt
         });
         component.removeMessage(identifier);
-      }, 15_000);
+      }, AUTO_CLEAR_MS);
     });
 
-    // After 400ms, if still pending, display it
+    // After 1000ms, if still pending, display it
     setTimeout(() => {
       component.enqueue(() => {
         const index = component.messages.findIndex(msg => msg.identifier === identifier);
         if (index >= 0) {
           const message = component.messages[index];
           const statusIndex = component.messages.findIndex(m => m.identifier === Cursor.STATUS_ID);
+
+          requestTimingDiagnostics.markVisible(timing);
 
           if (statusIndex >= 0) {
             // Keep status on top; place this message right after it
@@ -2315,7 +2581,7 @@ class Cursor {
           }
         }
       });
-    }, 400);
+    }, DISPLAY_DELAY_MS);
   }
   
   restore(request: RequestRecord) {
