@@ -186,6 +186,7 @@ import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedPrope
 import Perspectives.ResourceIdentifiers.Parser (pouchdbDatabaseName)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri, Readable, Stable)
 import Perspectives.Sync.Transaction (Transaction)
+import Perspectives.TransactionQueue (TransactionQueue)
 import Prelude (class Eq, class Monad, class Monoid, class Ord, class Semigroup, class Show, Unit, bind, compare, eq, pure, show, unit, ($), (<$>), (<<<), (<>), (*>), (>>=))
 import Simple.JSON (class ReadForeign, class WriteForeign)
 import Unsafe.Coerce (unsafeCoerce)
@@ -273,6 +274,7 @@ type PerspectivesExtraState =
 
   -- Do not confuse with transactionNumber! This member is used in runMonadPerspectivesTransaction.
   , transactionFlag :: AVar Boolean
+  , transactionQueue :: TransactionQueue
 
   , transactionWithTiming :: AVar RepeatingTransaction
 

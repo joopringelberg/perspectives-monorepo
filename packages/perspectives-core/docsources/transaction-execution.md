@@ -54,6 +54,36 @@ runMonadPerspectivesTransaction authoringRole action
 
 Called from the PDR API when the end user performs a change (e.g. creating a role, setting a property, removing a context).
 
+#### Admission priority and GUI reads
+
+State-changing API requests are forked from the API consumer and admitted through a
+per-PDR queue before dispatch. Incoming peer transactions and asynchronous timed
+and `once settled` transactions use the background lane of the same queue. Each
+lane is FIFO; waiting GUI mutations take precedence, but after four user
+admissions a waiting background job is admitted to prevent synchronization
+starvation. An active job is never preempted. Each admission yields to the worker
+message loop so a synchronously executable backlog cannot monopolize it.
+
+The queue surrounds outer work, not the transaction runner: embedded transactions
+retain their parent's admission, and the transaction flag still serializes state
+changes. Synchronous automatic actions and explicitly awaited action chains settle
+before the next outer job is admitted. Asynchronous continuations retain their
+existing settlement/timing requirements but compete as background work once ready.
+
+Ordinary value requests do not take the transaction flag. Previously, however,
+the sequential API consumer could leave them behind a mutation waiting for that
+flag. They can now be dispatched while a mutation waits or runs; reads and
+unsubscribe requests retain their order in the API consumer. Reads can observe
+intermediate state, as before, and subscriptions are refreshed at transaction end;
+this is not snapshot isolation. Some apparently read-only requests
+(`GetRoleBinders` and model-loading `CheckBinding`) explicitly run transactions and
+can still wait for the flag. Public-resource state evaluation discovered by a
+read is scheduled separately as background work rather than blocking later reads.
+
+This reduces waiting between transactions, not the duration of an individual
+transaction or a long synchronous JavaScript computation. Clients must await a
+mutation's response before issuing a read that depends on that mutation.
+
 ### Path B – Incoming Peer Transaction (`Perspectives.AMQP.IncomingPost`)
 
 ```

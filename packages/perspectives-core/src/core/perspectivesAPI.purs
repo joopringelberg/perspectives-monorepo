@@ -30,9 +30,10 @@ import Control.Coroutine.Aff (produce')
 import Control.Monad.AvarMonadAsk (gets)
 import Control.Monad.Except (runExceptT)
 import Control.Monad.Rec.Class (forever)
+import Control.Monad.Reader (ask)
 import Control.Monad.Trans.Class (lift)
 import Control.Plus ((<|>))
-import Data.Array (catMaybes, elemIndex, foldM, head)
+import Data.Array (catMaybes, elemIndex, foldM, head, null)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.List.Types (NonEmptyList)
@@ -41,7 +42,8 @@ import Data.Newtype (class Newtype, unwrap)
 import Data.Traversable (for, traverse)
 import Data.Tuple (Tuple(..))
 import Effect (Effect)
-import Effect.Aff (catchError, try)
+import Effect.Aff (catchError, forkAff, try)
+import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
 import Foreign (Foreign, ForeignError, unsafeToForeign)
 import Foreign.Object (empty, fromFoldable)
@@ -53,7 +55,7 @@ import Perspectives.Assignment.SerialiseAsDeltas (noNewPeer, serialisedAsDeltasF
 import Perspectives.Assignment.Update (RoleProp(..), addProperty, deleteProperty, getPropertyBearingRoleInstance, saveFile, setPreferredUserRoleType, setProperty)
 import Perspectives.Checking.PerspectivesTypeChecker (checkBinding)
 import Perspectives.Conversation (getHelpConversation)
-import Perspectives.CoreTypes (MP, MonadPerspectives, MonadPerspectivesTransaction, PropertyValueGetter, RoleGetter, liftToInstanceLevel, (##=), (##>), (##>>), (###=))
+import Perspectives.CoreTypes (MP, MonadPerspectives, MonadPerspectivesTransaction, PropertyValueGetter, RoleGetter, liftToInstanceLevel, runMonadPerspectives, (##=), (##>), (##>>), (###=))
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..), runArrayT)
 import Perspectives.DependencyTracking.Dependency (registerSupportedEffect, unregisterSupportedEffect)
 import Perspectives.DomeinCache (retrieveDomeinFile)
@@ -77,7 +79,7 @@ import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (getAttachment, toFile)
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistent (getPerspectContext, getPerspectRol, saveMarkedResources)
-import Perspectives.PerspectivesState (getPerspectivesUser, getWarnings, resetWarnings)
+import Perspectives.PerspectivesState (getPerspectivesUser, getPublicRolesJustLoaded, getWarnings, resetWarnings, withTransactionPriority)
 import Perspectives.Proxy (createRequestEmitter, retrieveRequestEmitter)
 import Perspectives.Query.QueryTypes (roleInContext2Role)
 import Perspectives.Query.UnsafeCompiler (getDynamicPropertyGetter, getDynamicPropertyGetterFromLocalName, getPropertyFromTelescope, getPropertyValues, getPublicUrl, getRoleFunction, getRoleInstances)
@@ -95,10 +97,11 @@ import Perspectives.SaveUserData (FillBindingMode(..), findMostGeneralAllowedFil
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.Sync.HandleTransaction (executeTransaction)
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..))
+import Perspectives.TransactionQueue (TransactionPriority(..))
 import Perspectives.TypePersistence.ContextSerialisation (screenForContextAndUser, serialisedTableFormForContextAndUser)
 import Perspectives.TypePersistence.PerspectiveSerialisation (getReadableName, perspectiveForContextAndUser, perspectivesForContextAndUser, settingsPerspective)
 import Perspectives.Types.ObjectGetters (isDatabaseQueryRole, localRoleSpecialisation, lookForRoleType, lookForUnqualifiedRoleType, lookForUnqualifiedViewType, propertiesOfRole, rolesWithPerspectiveOnRoleAndProperty, string2EnumeratedRoleType, string2RoleType)
-import Prelude (Unit, bind, discard, identity, map, negate, pure, show, unit, void, ($), (&&), (/=), (<$>), (<<<), (<>), (==), (>=>), (>>=))
+import Prelude (Unit, bind, discard, identity, map, negate, pure, show, unit, void, ($), (&&), (/=), (<$>), (<<<), (<>), (==), (>=>), (>>=), (*>))
 import Simple.JSON (read, readJSON_, unsafeStringify, writeJSON)
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -150,18 +153,61 @@ decodeRequest f = case read f of
 
 consumeRequest :: Consumer Request MonadPerspectives Unit
 consumeRequest = forever do
-  (Request request@{ corrId, reactStateSetter }) <- await
-  lift
-    ( catchError
-        ( do
-            dispatchOnRequest request
-            detectPublicStateChanges
-        )
-        ( \e -> do
-            errorOther (show (ApiErrorBoundary ((showRequestRecord request) <> ": " <> (show e))))
-            sendResponse (Error corrId ("Request could not be handled, because: " <> (show e))) (mkApiEffect reactStateSetter)
-        )
-    )
+  (Request request) <- await
+  lift $ handleRequest request
+
+handleRequest :: RequestRecord -> MonadPerspectives Unit
+handleRequest request@{ corrId, reactStateSetter } = do
+  state <- ask
+  let
+    onError e = do
+      errorOther (show (ApiErrorBoundary ((showRequestRecord request) <> ": " <> (show e))))
+      sendResponse (Error corrId ("Request could not be handled, because: " <> (show e))) (mkApiEffect reactStateSetter)
+    dispatch = catchError (dispatchOnRequest request) onError
+    checkPublicStates = catchError detectPublicStateChanges onError
+  if requestInducesTransaction request.request then
+    -- Keep mutations FIFO in the user lane, without blocking the API consumer.
+    liftAff $ void $ forkAff $ runMonadPerspectives
+      (withTransactionPriority UserTransaction (dispatch *> checkPublicStates))
+      state
+  else do
+    dispatch
+    -- Loading public resources can induce a transaction; do not block later reads on it.
+    publicRoles <- getPublicRolesJustLoaded
+    if null publicRoles then pure unit
+    else liftAff $ void $ forkAff $ runMonadPerspectives
+      (withTransactionPriority BackgroundTransaction checkPublicStates)
+      state
+
+requestInducesTransaction :: Api.RequestType -> Boolean
+requestInducesTransaction = case _ of
+  Api.RemoveRoleFromClipboard -> true
+  Api.CreateContext -> true
+  Api.CreateContext_ -> true
+  Api.ImportTransaction -> true
+  Api.ImportContexts -> true
+  Api.RemoveRole -> true
+  Api.RemoveContext -> true
+  Api.DeleteRole -> true
+  Api.CreateRole -> true
+  Api.CreateRole_ -> true
+  Api.Bind -> true
+  Api.Bind_ -> true
+  Api.FillWithProvidedType -> true
+  Api.FillWithRequiredType -> true
+  Api.RemoveBinding -> true
+  Api.SetProperty -> true
+  Api.SaveConversationBranch -> true
+  Api.AddProperty -> true
+  Api.DeleteProperty -> true
+  Api.SaveFile -> true
+  Api.Action -> true
+  Api.ContextAction -> true
+  Api.SetPreferredUserRoleType -> true
+  Api.Save -> true
+  Api.EvaluateRoleInstance -> true
+  Api.RestoreContextForUser -> true
+  _ -> false
 
 dispatchOnRequest :: RequestRecord -> MonadPerspectives Unit
 dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, corrId, contextDescription, rolDescription, authoringRole: as, onlyOnce } = do
