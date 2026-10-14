@@ -27,7 +27,7 @@ module Perspectives.Api where
 import Control.Alternative (guard)
 import Control.Coroutine (Consumer, Producer, await, runProcess, transform, ($$), ($~))
 import Control.Coroutine.Aff (produce')
-import Control.Monad.AvarMonadAsk (gets, modify)
+import Control.Monad.AvarMonadAsk (gets)
 import Control.Monad.Except (runExceptT)
 import Control.Monad.Rec.Class (forever)
 import Control.Monad.Reader (ask)
@@ -37,7 +37,6 @@ import Data.Array (catMaybes, elemIndex, foldM, head, null)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.List.Types (NonEmptyList)
-import Data.Map as Map
 import Data.Maybe (Maybe(..), fromJust, isJust, maybe)
 import Data.Newtype (class Newtype, unwrap)
 import Data.Traversable (for, traverse)
@@ -50,7 +49,7 @@ import Foreign (Foreign, ForeignError, unsafeToForeign)
 import Foreign.Object (empty, fromFoldable)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.ApiTypes (ApiEffect, RequestType(..)) as Api
-import Perspectives.ApiTypes (ContextSerialization(..), ContextsSerialisation(..), CorrelationIdentifier, PropertySerialization(..), RecordWithCorrelationidentifier(..), Request(..), RequestRecord, Response(..), ResponseWithWarnings(..), RolSerialization(..), ApiEffect, mkApiEffect, showRequestRecord)
+import Perspectives.ApiTypes (ContextSerialization(..), ContextsSerialisation(..), PropertySerialization(..), RecordWithCorrelationidentifier(..), Request(..), RequestRecord, Response(..), ResponseWithWarnings(..), RolSerialization(..), ApiEffect, mkApiEffect, showRequestRecord)
 import Perspectives.Assignment.RunAction (runAction, runContextAction)
 import Perspectives.Assignment.SerialiseAsDeltas (noNewPeer, serialisedAsDeltasFor_)
 import Perspectives.Assignment.Update (RoleProp(..), addProperty, deleteProperty, getPropertyBearingRoleInstance, saveFile, setPreferredUserRoleType, setProperty)
@@ -102,7 +101,7 @@ import Perspectives.TransactionQueue (TransactionPriority(..))
 import Perspectives.TypePersistence.ContextSerialisation (screenForContextAndUser, serialisedTableFormForContextAndUser)
 import Perspectives.TypePersistence.PerspectiveSerialisation (getReadableName, perspectiveForContextAndUser, perspectivesForContextAndUser, settingsPerspective)
 import Perspectives.Types.ObjectGetters (isDatabaseQueryRole, localRoleSpecialisation, lookForRoleType, lookForUnqualifiedRoleType, lookForUnqualifiedViewType, propertiesOfRole, rolesWithPerspectiveOnRoleAndProperty, string2EnumeratedRoleType, string2RoleType)
-import Prelude (Unit, bind, discard, identity, map, negate, pure, show, unit, void, when, ($), (&&), (/=), (<$>), (<<<), (<>), (==), (>=>), (>>=), (*>))
+import Prelude (Unit, bind, discard, identity, map, negate, pure, show, unit, void, ($), (&&), (/=), (<$>), (<<<), (<>), (==), (>=>), (>>=), (*>))
 import Simple.JSON (read, readJSON_, unsafeStringify, writeJSON)
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -164,21 +163,13 @@ handleRequest request@{ corrId, reactStateSetter } = do
     logError e = errorOther (show (ApiErrorBoundary ((showRequestRecord request) <> ": " <> (show e))))
     onError e = do
       logError e
-      unlessSubscriptionCancelled corrId $
-        sendResponse (Error corrId ("Request could not be handled, because: " <> (show e))) (mkApiEffect reactStateSetter)
+      sendResponse (Error corrId ("Request could not be handled, because: " <> (show e))) (mkApiEffect reactStateSetter)
     dispatch = catchError (dispatchOnRequest request) onError
     checkPublicStates = catchError detectPublicStateChanges onError
-  if requestInducesTransaction request.request then do
-    when (request.request == Api.GetRoleBinders) $
-      modify \s -> s { pendingApiSubscriptions = Map.insert corrId false s.pendingApiSubscriptions }
+  if requestInducesTransaction request.request then
     -- Keep transaction-inducing requests FIFO without blocking the API consumer.
     liftAff $ void $ forkAff $ runMonadPerspectives
-      ( withTransactionPriority UserTransaction do
-          unlessSubscriptionCancelled corrId dispatch
-          when (request.request == Api.GetRoleBinders) $
-            modify \s -> s { pendingApiSubscriptions = Map.delete corrId s.pendingApiSubscriptions }
-          checkPublicStates
-      )
+      (withTransactionPriority UserTransaction (dispatch *> checkPublicStates))
       state
   else do
     dispatch
@@ -189,15 +180,8 @@ handleRequest request@{ corrId, reactStateSetter } = do
       (withTransactionPriority BackgroundTransaction (catchError detectPublicStateChanges logError))
       state
 
-unlessSubscriptionCancelled :: CorrelationIdentifier -> MonadPerspectives Unit -> MonadPerspectives Unit
-unlessSubscriptionCancelled corrId action = do
-  cancelled <- gets \s -> Map.lookup corrId s.pendingApiSubscriptions
-  if cancelled == Just true then pure unit else action
-
 requestInducesTransaction :: Api.RequestType -> Boolean
 requestInducesTransaction = case _ of
-  Api.GetRoleBinders -> true
-  Api.CheckBinding -> true
   Api.RemoveRoleFromClipboard -> true
   Api.CreateContext -> true
   Api.CreateContext_ -> true
@@ -318,18 +302,16 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
                 errorOther (show $ TypeErrorBoundary "Api.GetRoleBinders" (show err))
                 sendResponse (Error corrId (show $ TypeErrorBoundary "Api.GetRoleBinders" (show err))) setter
               Right (EnumeratedRole { context: filledContextType }) -> do
-                void $ runMonadPerspectivesTransaction' false authoringRole (lift $ retrieveDomeinFile (ModelUri $ unsafePartial typeUri2ModelUri_ (unwrap fillerType)))
-                unlessSubscriptionCancelled corrId $
-                  registerSupportedEffect corrId setter (getFilledRoles filledContextType (EnumeratedRoleType predicate)) (RoleInstance subject) onlyOnce
+                void $ retrieveDomeinFile (ModelUri $ unsafePartial typeUri2ModelUri_ (unwrap fillerType))
+                registerSupportedEffect corrId setter (getFilledRoles filledContextType (EnumeratedRoleType predicate)) (RoleInstance subject) onlyOnce
           filledContextType -> (try $ getContext (ContextType filledContextType)) >>=
             case _ of
               Left err -> do
                 errorOther (show $ ContextErrorBoundary "Api.GetRoleBinders" (show err))
                 sendResponse (Error corrId (show $ ContextErrorBoundary "Api.GetRoleBinders" (show err))) setter
               Right _ -> do
-                void $ runMonadPerspectivesTransaction' false authoringRole (lift $ retrieveDomeinFile (ModelUri $ unsafePartial typeUri2ModelUri_ (unwrap fillerType)))
-                unlessSubscriptionCancelled corrId $
-                  registerSupportedEffect corrId setter (getFilledRoles (ContextType filledContextType) (EnumeratedRoleType predicate)) (RoleInstance subject) onlyOnce
+                void $ retrieveDomeinFile (ModelUri $ unsafePartial typeUri2ModelUri_ (unwrap fillerType))
+                registerSupportedEffect corrId setter (getFilledRoles (ContextType filledContextType) (EnumeratedRoleType predicate)) (RoleInstance subject) onlyOnce
     Api.GetRol -> do
       (f :: RoleGetter) <- (getRoleFunction predicate)
       registerSupportedEffect corrId setter f (ContextInstance subject) onlyOnce
@@ -899,7 +881,7 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
             errorOther (show $ RolErrorBoundary "Api.CheckBinding" (show err))
             sendResponse (Error corrId (show $ RolErrorBoundary "Api.CheckBinding" (show err))) setter
           Right (PerspectRol { pspType }) -> do
-            void $ runMonadPerspectivesTransaction' false authoringRole (lift $ retrieveDomeinFile (ModelUri $ unsafePartial typeUri2ModelUri_ (unwrap pspType)))
+            void $ retrieveDomeinFile (ModelUri $ unsafePartial typeUri2ModelUri_ (unwrap pspType))
             ok <- checkBinding typeOfRoleToBindTo (RoleInstance object)
             sendResponse (Result corrId [ (show ok) ]) setter
     Api.GetMostGeneralAllowedBindingType -> catchError
@@ -1066,9 +1048,7 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
       )
       \e -> sendResponse (Error corrId (show e)) setter
 
-    Api.Unsubscribe -> do
-      modify \s -> s { pendingApiSubscriptions = Map.update (\_ -> Just true) corrId s.pendingApiSubscriptions }
-      unregisterSupportedEffect corrId
+    Api.Unsubscribe -> unregisterSupportedEffect corrId
     Api.WrongRequest -> sendResponse (Error corrId subject) setter
     _ -> sendResponse (Error corrId ("Perspectives could not handle this request: '" <> (showRequestRecord r) <> "'")) (mkApiEffect reactStateSetter)
   where
