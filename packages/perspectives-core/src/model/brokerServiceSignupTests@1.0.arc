@@ -4,6 +4,7 @@ domain model://joopringelberg.nl#BrokerServiceSignupTests@1.0
   use sys for model://perspectives.domains#System@7.0
   use mm for model://joopringelberg.nl#BrokerServiceSignupTests
   use bs for model://perspectives.domains#BrokerServices@7.0
+  use cm for model://perspectives.domains#CouchdbManagement@12.4
 
   state ReadyToInstall = exists sys:PerspectivesSystem$Installer
     on entry
@@ -113,6 +114,28 @@ domain model://joopringelberg.nl#BrokerServiceSignupTests@1.0
             PublicServiceAvailable = true for extern
 
     context MyContract filledBy bs:BrokerContract
+
+  case CreateCouchdbAccount
+    aspect mm:Test
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+
+      perspective on cm:CouchdbServer$Accounts
+        only (Create, Fill)
+
+      action RunTest
+        letA
+          bob <- (filter bs:MyBrokers >> ManagedBrokers >> binding >> context >> Accounts >> binding >> context >> AccountHolder >> binding
+            with (FirstName == "bob") and (LastName == "bob_last")) >>= first
+          server <- cm:MyCouchdbApp >> CouchdbServers >> binding >> context >>= first
+          account <- create role cm:CouchdbServer$Accounts in server
+        in
+          TestName = "Alice creates Bob's Couchdb Server account" for extern
+          bind_ bob to account
+
+          once settled
+            TestSucceeded = true for extern
 
   case EndSubscription
     aspect mm:Test

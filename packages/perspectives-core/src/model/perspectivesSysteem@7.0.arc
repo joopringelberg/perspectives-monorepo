@@ -463,7 +463,7 @@ domain model://perspectives.domains#System@7.0
       -- We can actually only show properties that are in that perspective.
       perspective on ModelsInUse
         only (Create, CreateAndFill, Fill, RemoveFiller, Remove)
-        props (ModelName, Description, Version, Patch, Build, ShouldNotBeRemoved) verbs (Consult)
+        props (ModelName, Description, Version, Patch, Build, ShouldNotBeRemoved, ModelToRemove) verbs (Consult)
         props (InstalledPatch, InstalledBuild, UpdateOnBuild, DetachedFiller) verbs (SetPropertyValue)
         in object state Filled
           action Detach
