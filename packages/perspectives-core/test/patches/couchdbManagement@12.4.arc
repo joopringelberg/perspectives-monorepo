@@ -154,9 +154,8 @@ domain model://perspectives.domains#CouchdbManagement@12.4
                 callEffect cdb:MakeDatabasePublic( Url, "cw_servers_and_repositories" )
                 -- As the databases are now ready, we can create and publish the CouchdbServer.
                 create_ context CouchdbServer bound to origin
-                once settled
-                  ServerUrl = Url for origin >> binding 
-                  CouchdbPort = CouchdbServers$CouchdbPort for origin >> binding 
+                ServerUrl = Url for origin >> binding
+                CouchdbPort = CouchdbServers$CouchdbPort for origin >> binding
 
       state NoAdmin = (exists binding) and (exists AdminPassword) and (exists AdminUserName) and not exists binding >> context >> CouchdbServer$Admin
         on entry
