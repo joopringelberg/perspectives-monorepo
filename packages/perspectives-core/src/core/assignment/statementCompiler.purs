@@ -64,7 +64,7 @@ import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..)) as QF
 import Perspectives.Representation.Range (Range(..))
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..), pessimistic)
-import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedPropertyType, EnumeratedRoleType(..), PropertyType(..), RoleKind(..), RoleType(..), roletype2string)
+import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleKind(..), RoleType(..), roletype2string)
 import Perspectives.Representation.Verbs (PropertyVerb(..), RoleVerb(..)) as Verbs
 import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.Types.ObjectGetters (externalRole, generalisesRoleType_, hasPerspectiveOnPropertyWithVerb, isDatabaseQueryRole, isEnumeratedProperty)
@@ -601,8 +601,9 @@ compileActionEffect originDomain currentcontextDomain userRoleTypes statements =
         otherwise -> (lift2 $ humanizePerspectivesError $ NotARoleDomain otherwise start end) >>= throwError
       (candidates :: Array PropertyType) <- filter isEnumeratedProperty <$> (lookForUnqualifiedPropertyType propertyIdentifier) rt
       case head candidates of
+        Nothing -> (lift2 $ humanizePerspectivesError (RoleHasNoEnumeratedProperty rt propertyIdentifier start end)) >>= throwError
         Just (ENP et) | length candidates == 1 -> pure et
-        otherwise -> (lift2 $ humanizePerspectivesError (RoleHasNoEnumeratedProperty rt propertyIdentifier start end)) >>= throwError
+        otherwise -> (lift2 $ humanizePerspectivesError (NotUniquelyIdentifyingPropertyType start (ENP $ EnumeratedPropertyType propertyIdentifier) candidates)) >>= throwError
 
     -- | If the name is already qualified, use it as-is; otherwise look for an EnumeratedRole with matching
     -- | local name in the Domain.
@@ -665,4 +666,3 @@ compileActionEffect originDomain currentcontextDomain userRoleTypes statements =
         --   Nothing -> pure (SQD originDomain (QF.DataTypeGetter QF.ContextF) currentcontextDomain True True)
         --   Just embeddingContext -> pure (SQD originDomain (QF.DataTypeGetter QF.ContextF) (CDOM $ ST embeddingContext) True True)
         (Just (stp :: Step)) -> ensureContext subjects stp
-
