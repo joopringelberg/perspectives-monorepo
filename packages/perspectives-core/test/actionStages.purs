@@ -21,11 +21,11 @@ module Test.Parsing.Arc.ActionStages where
 
 import Prelude
 
-import Data.Array (concat, fromFoldable, head, length)
+import Data.Array (concat, filter, fromFoldable, head, length)
 import Data.Either (Either(..))
 import Data.Foldable (any, for_)
 import Data.Maybe (Maybe(..))
-import Data.String (Pattern(..), joinWith, split)
+import Data.String (Pattern(..), contains, joinWith, split)
 import Data.String.CodeUnits (drop)
 import Effect (Effect)
 import Effect.Aff (Aff)
@@ -35,8 +35,8 @@ import Parsing.String (eof)
 import Perspectives.Parsing.Arc (domain, userRoleE)
 import Perspectives.Parsing.Arc.AST (ActionE(..), AutomaticEffectE(..), ContextActionE(..), ContextE(..), ContextPart(..), RoleE(..), RolePart(..), StateE(..), StateQualifiedPart(..))
 import Perspectives.Parsing.Arc.IndentParser (runIndentParser)
-import Perspectives.Parsing.Arc.Expression.AST (BinaryStep(..), Operator(..), Step(..), SimpleStep(..), UnaryStep(..))
-import Perspectives.Parsing.Arc.Statement.AST (Assignment(..), LetStep(..), Statements(..))
+import Perspectives.Parsing.Arc.Expression.AST (BinaryStep(..), Operator(..), Step(..), SimpleStep(..), UnaryStep(..), VarBinding(..))
+import Perspectives.Parsing.Arc.Statement.AST (Assignment(..), LetABinding(..), LetStep(..), Statements(..))
 import Test.Unit (TestSuite, suite, test)
 import Test.Unit.Assert (assert, equal)
 import Test.Unit.Main (runTest)
@@ -138,6 +138,22 @@ theSuite = suite "Action settlement stages" do
                 _ -> false
             )
             (automaticEffects root)
+
+  for_ [ "src/model/couchdbManagement@12.4.arc" ] \path ->
+    test (path <> " captures server coordinates before binding the local server role") do
+      source <- readTextFile UTF8 path
+      parsed <- runIndentParser source (domain <* eof)
+      case parsed of
+        Left err -> assert (show err) false
+        Right root ->
+          equal 2 (length (filter capturesServerCoordinates (automaticEffects root)))
+
+  test "received Couchdb servers do not trigger local admin provisioning" do
+    source <- readTextFile UTF8 "src/model/couchdbManagement@12.4.arc"
+    assert "NoAdmin must require locally entered admin credentials" $
+      contains
+        (Pattern "state NoAdmin = (exists binding) and (exists AdminPassword) and (exists AdminUserName)")
+        source
 
   for_ [ "src/model/couchdbManagement@12.4.arc" ] \path ->
     test (path <> " keeps repository admin rights after setting AuthorizedDomain") do
@@ -291,6 +307,25 @@ propertyName :: Assignment -> String
 propertyName = case _ of
   PropertyAssignment { propertyIdentifier } -> propertyIdentifier
   _ -> ""
+
+capturesServerCoordinates :: Statements -> Boolean
+capturesServerCoordinates = case _ of
+  Let
+    ( LetStep
+        { bindings:
+            [ Expr (VarBinding "serverurl" _)
+            , Expr (VarBinding "couchdbport" _)
+            , Stat "server" (CreateRole _)
+            ]
+        , stages:
+            [ [ Bind_ _
+              , PropertyAssignment { propertyIdentifier: "Url", valueExpression: Simple (Variable _ "serverurl") }
+              , PropertyAssignment { propertyIdentifier: "CouchdbPort", valueExpression: Simple (Variable _ "couchdbport") }
+              ]
+            ]
+        }
+    ) -> true
+  _ -> false
 
 adminLifecycleStates :: RolePart -> Array StateE
 adminLifecycleStates = case _ of

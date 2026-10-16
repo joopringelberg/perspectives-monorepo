@@ -58,6 +58,6 @@ requestUserChoice :: PerspectivesWarning -> String -> String -> MonadPerspective
 requestUserChoice warning yesOption noOption = do
   setPDRStatus <- getPDRStatusSetter
   let payload = writeJSON { message: show warning, yesOption, noOption }
-  _ <- pure $ setPDRStatus "requestUserIntegrityChoice" payload
+  _ <- pure $ setPDRStatus "requestUserIntegrityChoice" payload "overlay"
   choiceAVar <- getUserIntegrityChoiceAVar
   liftAff $ AVar.take choiceAVar

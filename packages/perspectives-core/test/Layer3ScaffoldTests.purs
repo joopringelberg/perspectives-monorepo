@@ -41,19 +41,19 @@ import Perspectives.PerspectivesState (defaultRuntimeOptions, setTopicLogLevel)
 import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..))
 import Test.PDRInstance (connectPDRs, noBus, pollUntil, testPouchdbUser, withPDR, withTwoPDRs)
 import Test.PDRInstance.Types (runInPDR)
-import Test.Unit (TestSuite, suite, test, testOnly)
+import Test.Unit (TestSuite, suite, test, testOnly, testSkip)
 import Test.Unit.Assert (assert)
 
 scaffoldTests :: TestSuite
 scaffoldTests = suite "PDRInstance scaffold" do
 
-  test "start a single PDR instance and read its system identifier" do
+  testSkip "start a single PDR instance and read its system identifier" do
     let user = testPouchdbUser "alice"
     withPDR user defaultRuntimeOptions (Just ansiRed) noBus \pdr -> do
       sysId <- runInPDR pdr getSystemIdentifier
       assert "system identifier should equal alice_macbook" (sysId == "alice_macbook")
   
-  testOnly "Start a single PDR instance and count the number of Person instances that are created" do
+  test "Start a single PDR instance and count the number of Person instances that are created" do
     let user = testPouchdbUser "alice"
     withPDR user defaultRuntimeOptions (Just ansiRed) noBus \pdr -> do
       runInPDR pdr $ setTopicLogLevel TEST Info
@@ -75,7 +75,7 @@ scaffoldTests = suite "PDRInstance scaffold" do
                 pure Nothing
       assert "Person count should be 1 initially" ( length instancesOfMe == 1)
 
-  test "start two PDR instances with distinct identifiers" do
+  testSkip "start two PDR instances with distinct identifiers" do
     withTwoPDRs
       (testPouchdbUser "alice")
       defaultRuntimeOptions
@@ -90,7 +90,7 @@ scaffoldTests = suite "PDRInstance scaffold" do
         assert "PDR-B system identifier should equal bob_macbook" (sysB == "bob_macbook")
         assert "PDR-A and PDR-B should have distinct identifiers" (sysA /= sysB)
 
-  test "start two PDR instances and connect them" do
+  testSkip "start two PDR instances and connect them" do
     withTwoPDRs
       (testPouchdbUser "alice")
       defaultRuntimeOptions

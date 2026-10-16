@@ -162,7 +162,7 @@ domain model://joopringelberg.nl#RepositoryTools@1.0
         in
           TestName = "ManageCouchdb - create a server registration." for extern
           Url = "https://perspectives.domains/" for server
-          CouchdbPort = "5987" for server
+          CouchdbServers$CouchdbPort = "5987" for server
           AdminUserName = mm:RepositoryToolsApp >> extern >> CouchdbServerAdminName orElse "alice" for server
           AdminPassword = mm:RepositoryToolsApp >> extern >> CouchdbServerAdminPassword orElse "alice" for server
 

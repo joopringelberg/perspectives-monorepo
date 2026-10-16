@@ -25,6 +25,7 @@ module Perspectives.PerspectivesState where
 import Control.Alt (map)
 import Control.Monad.AvarMonadAsk (gets, modify)
 import Control.Monad.Error.Class (catchError, throwError)
+import Control.Monad.Reader (ReaderT(..), runReaderT)
 import Data.Array (cons)
 import Data.List (elem)
 import Data.Map (Map, empty, insert, lookup, values) as Map
@@ -47,10 +48,11 @@ import Perspectives.Instances.Environment (Environment, _pushFrame, addVariable,
 import Perspectives.Logging.DefaultLevels (defaultLogLevels)
 import Perspectives.Persistence.API (PouchdbUser)
 import Perspectives.Persistence.State (getSystemIdentifier)
-import Perspectives.Persistence.Types (Credential(..), variableBindingsRef)
+import Perspectives.Persistence.Types (Credential(..), MonadPouchdb(..), variableBindingsRef)
 import Perspectives.Representation.InstanceIdentifiers (PerspectivesUser(..), RoleInstance)
 import Perspectives.ResourceIdentifiers (createDefaultIdentifier)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri, Readable, Stable)
+import Perspectives.TransactionQueue (TransactionPriority, newTransactionQueue, withPriority)
 import Prelude (Unit, bind, discard, pure, unit, void, ($), (+), (<<<), (>>=), (<>), (==))
 
 newPerspectivesState
@@ -94,6 +96,7 @@ newPerspectivesState uinfo transFlag transactionWithTiming modelToLoad runtimeOp
   , databases: empty
   , warnings: []
   , transactionFlag: transFlag
+  , transactionQueue: newTransactionQueue unit
   , transactionWithTiming
   , modelToLoad
   , transactionFibers: Map.empty
@@ -107,7 +110,7 @@ newPerspectivesState uinfo transFlag transactionWithTiming modelToLoad runtimeOp
   , currentLanguage
   , translations: empty
   , conversations: (empty :: Object Foreign)
-  , setPDRStatus: \_ _ -> unit
+  , setPDRStatus: \_ _ _ -> unit
   , typeToBeFixed
   , modelUnderCompilation: Nothing
   , modelUris: Map.empty
@@ -180,6 +183,12 @@ transactionNumber = gets _.transactionNumber
 
 transactionFlag :: MonadPerspectives (AVar Boolean)
 transactionFlag = gets _.transactionFlag
+
+-- | Preserve the caller's variable bindings while admitting outer transaction work.
+withTransactionPriority :: forall a. TransactionPriority -> MonadPerspectives a -> MonadPerspectives a
+withTransactionPriority priority (MonadPouchdb action) = MonadPouchdb $ ReaderT \ctx -> do
+  state <- read ctx.state
+  withPriority state.transactionQueue priority (runReaderT action ctx)
 
 -- Non-blocking check to see if a transaction is currently running. 
 -- The flag is 'down' (the AVar is empty) exactly while a transaction runs.
@@ -297,20 +306,31 @@ setCurrentLanguage lang = modify \s -> s { currentLanguage = lang }
 modelsDatabaseName :: MonadPerspectives String
 modelsDatabaseName = getSystemIdentifier >>= pure <<< (_ <> "_models")
 
-getPDRStatusSetter :: MonadPerspectives (String -> String -> Unit)
+getPDRStatusSetter :: MonadPerspectives (String -> String -> String -> Unit)
 getPDRStatusSetter = gets _.setPDRStatus
 
-type PDRStatusMessage = { action :: String, message :: String }
+type PDRStatusMessage = { action :: String, message :: String, target :: String }
 
 pushMessage :: String -> MonadPerspectives Unit
 pushMessage msg = do
   setPDRStatus <- getPDRStatusSetter
-  pure $ setPDRStatus "push" msg
+  pure $ setPDRStatus "push" msg "overlay"
 
 removeMessage :: String -> MonadPerspectives Unit
 removeMessage msg = do
   setPDRStatus <- getPDRStatusSetter
-  pure $ setPDRStatus "remove" msg
+  pure $ setPDRStatus "remove" msg "overlay"
+
+-- | Show progress without blocking GUI interaction or requiring acknowledgement.
+pushSystemMessage :: String -> MonadPerspectives Unit
+pushSystemMessage msg = do
+  setPDRStatus <- getPDRStatusSetter
+  pure $ setPDRStatus "push" msg "navbar"
+
+removeSystemMessage :: MonadPerspectives Unit
+removeSystemMessage = do
+  setPDRStatus <- getPDRStatusSetter
+  pure $ setPDRStatus "remove" "" "navbar"
 
 getTypeToBeFixed :: MonadPerspectives (AVar TypeFix)
 getTypeToBeFixed = gets _.typeToBeFixed

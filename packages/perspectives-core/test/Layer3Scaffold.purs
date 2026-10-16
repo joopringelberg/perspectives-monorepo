@@ -25,6 +25,7 @@ module Test.Layer3Scaffold
   ( TopicLogLevelPair
   , LogConfiguration
   , emptyLogConfiguration
+  , applyLogConfigurationToPDRs
   , ModelTest
   , SynchronisationResults
   , SynchronisationModelConfiguration

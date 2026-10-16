@@ -30,7 +30,7 @@ import Data.DateTime (DateTime, date)
 import Data.DateTime.Instant (Instant, instant, unInstant)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
-import Data.Function.Uncurried (Fn2, runFn2)
+import Data.Function.Uncurried (Fn3, runFn3)
 import Data.Map (delete, insert)
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
@@ -82,7 +82,7 @@ import Perspectives.Persistence.State (getSystemIdentifier, withCouchdbUrl)
 import Perspectives.Persistence.Types (Credential(..))
 import Perspectives.Persistent (entitiesDatabaseName, invertedQueryDatabaseName, postDatabaseName, saveMarkedResources)
 import Perspectives.Persistent.FromViews (getSafeViewOnDatabase)
-import Perspectives.PerspectivesState (addBinding, defaultRuntimeOptions, disableAllLogging, disableTopicLogging, modelsDatabaseName, newPerspectivesState, pushFrame, pushMessage, removeMessage, resetCaches, restoreFrame, setModelUris, setTopicLogLevel)
+import Perspectives.PerspectivesState (addBinding, defaultRuntimeOptions, disableAllLogging, disableTopicLogging, modelsDatabaseName, newPerspectivesState, pushFrame, pushMessage, removeMessage, resetCaches, restoreFrame, setModelUris, setTopicLogLevel, withTransactionPriority)
 import Perspectives.Proxy (handleClientRequest, receivePDRStatusMessageChannel, pdrStatusMessageChannel, registerPutUserIntegrityChoice) as Proxy
 import Perspectives.Query.UnsafeCompiler (getPropertyFromTelescope, getPropertyFunction, getRoleFunction, getterFromPropertyType)
 import Perspectives.ReferentialIntegrity (fixReferences)
@@ -100,6 +100,7 @@ import Perspectives.Sidecar.StableIdMapping (fromLocalModels)
 import Perspectives.Sync.Channel (endChannelReplication)
 import Perspectives.Sync.DateTime (SerializableDateTime(..))
 import Perspectives.Sync.Transaction (UninterpretedTransactionForPeer(..))
+import Perspectives.TransactionQueue (TransactionPriority(..))
 import Perspectives.SystemClocks (forkedSystemClocks)
 import Prelude (Unit, bind, discard, pure, show, unit, void, ($), (+), (-), (<), (<$>), (<<<), (<>), (>), (>=>), (>>=))
 import Simple.JSON (read, write) as JSON
@@ -165,7 +166,7 @@ runPDR_ usr rawPouchdbUser options callback = do
       typeToBeFixed <- empty
       userIntegrityChoice <- empty
       -- Here we retrieve a Promise for a function in the SharedWorker that will send status messages to all clients.
-      statusMessageChannel :: Fn2 String String Unit <- toAff Proxy.pdrStatusMessageChannel
+      statusMessageChannel :: Fn3 String String String Unit <- toAff Proxy.pdrStatusMessageChannel
 
       state <- do
         lang <- getCurrentLanguageFromIDB
@@ -185,7 +186,7 @@ runPDR_ usr rawPouchdbUser options callback = do
                 lang
             )
         -- The status message sending function is stored in PerspectivesState. It is accessed by pushMessage and removeMessage.
-        new (state' { setPDRStatus = ((runFn2 statusMessageChannel) :: String -> String -> Unit) })
+        new (state' { setPDRStatus = ((runFn3 statusMessageChannel) :: String -> String -> String -> Unit) })
 
       -- Store state globally so log-configuration helpers can be called from JavaScript.
       liftEffect $ Ref.write (Just state) globalStateRef
@@ -354,7 +355,7 @@ forkTimedTransactions repeatingTransactionAVar state = do
         ( do
             delay (fromDuration startMoment)
             unregisterTransactionFiber instanceId stateId state
-            _ <- runPerspectivesWithState (runMonadPerspectivesTransaction authoringRole transaction) state
+            _ <- runPerspectivesWithState (runTimedTransaction authoringRole transaction) state
             pure unit
         )
       registerTransactionFiber f instanceId stateId state
@@ -402,12 +403,15 @@ forkTimedTransactions repeatingTransactionAVar state = do
       put unit registered
       forkTimedTransactions repeatingTransactionAVar state
   where
+  runTimedTransaction authoringRole transaction =
+    withTransactionPriority BackgroundTransaction (runMonadPerspectivesTransaction authoringRole transaction)
+
   runSettledTransaction authoringRole capturedBindings transaction = do
     oldFrame <- pushFrame
     for_ capturedBindings \(Tuple name values) -> addBinding name values
     catchError
       ( do
-          r <- runMonadPerspectivesTransaction authoringRole transaction
+          r <- runTimedTransaction authoringRole transaction
           restoreFrame oldFrame
           pure r
       )
@@ -424,13 +428,13 @@ forkTimedTransactions repeatingTransactionAVar state = do
     delay (fromDuration interval)
     case mendMoment of
       Nothing -> do
-        _ <- runPerspectivesWithState (runMonadPerspectivesTransaction authoringRole transaction) state
+        _ <- runPerspectivesWithState (runTimedTransaction authoringRole transaction) state
         repeatUnlimited t mendMoment
       Just endMoment -> do
         n <- liftEffect $ now
         -- If not past the endMoment:
         if n < endMoment then do
-          _ <- runPerspectivesWithState (runMonadPerspectivesTransaction authoringRole transaction) state
+          _ <- runPerspectivesWithState (runTimedTransaction authoringRole transaction) state
           repeatUnlimited t mendMoment
         else pure unit
 
@@ -446,7 +450,7 @@ forkTimedTransactions repeatingTransactionAVar state = do
       Nothing -> do
         if counter > 0 then do
           -- If not past the endMoment:
-          _ <- runPerspectivesWithState (runMonadPerspectivesTransaction authoringRole transaction) state
+          _ <- runPerspectivesWithState (runTimedTransaction authoringRole transaction) state
           repeatN t (counter - 1) mendMoment
         else pure unit
       Just endMoment -> do
@@ -455,7 +459,7 @@ forkTimedTransactions repeatingTransactionAVar state = do
         if n < endMoment then do
           if counter > 0 then do
             -- If not past the endMoment:
-            _ <- runPerspectivesWithState (runMonadPerspectivesTransaction authoringRole transaction) state
+            _ <- runPerspectivesWithState (runTimedTransaction authoringRole transaction) state
             repeatN t (counter - 1) mendMoment
           else pure unit
         else pure unit

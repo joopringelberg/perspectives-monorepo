@@ -72,6 +72,8 @@ domain model://perspectives.domains#CouchdbManagement@12.4
         only (CreateAndFill, RemoveContext, DeleteContext, Create, Fill)
         props (Name) verbs (Consult)
         props (Url, CouchdbServers$CouchdbPort, AdminUserName, AdminPassword, Name) verbs (SetPropertyValue)
+      perspective on CouchdbServers >> binding
+        props (ServerUrl, CouchdbServer$External$CouchdbPort) verbs (Consult, SetPropertyValue)
       perspective on Manager
         props (FirstName, LastName) verbs (Consult)
         
@@ -152,8 +154,10 @@ domain model://perspectives.domains#CouchdbManagement@12.4
                 callEffect cdb:MakeDatabasePublic( Url, "cw_servers_and_repositories" )
                 -- As the databases are now ready, we can create and publish the CouchdbServer.
                 create_ context CouchdbServer bound to origin
+                ServerUrl = Url for origin >> binding
+                CouchdbPort = CouchdbServers$CouchdbPort for origin >> binding
 
-      state NoAdmin = (exists binding) and not exists binding >> context >> CouchdbServer$Admin
+      state NoAdmin = (exists binding) and (exists AdminPassword) and (exists AdminUserName) and not exists binding >> context >> CouchdbServer$Admin
         on entry
           do for Manager
             -- Manager 
@@ -182,8 +186,8 @@ domain model://perspectives.domains#CouchdbManagement@12.4
     aspect sys:ContextWithNotification
     external
       -- The location of the CouchdbServer_. 
-      property ServerUrl (functional) = binder CouchdbServers >> Url
-      property CouchdbPort (functional) = binder CouchdbServers >> CouchdbServers$CouchdbPort
+      property ServerUrl (String)
+      property CouchdbPort (String)
       property Name (String)
         readableName
 
@@ -191,42 +195,18 @@ domain model://perspectives.domains#CouchdbManagement@12.4
       -- If we do not refer to my indexed version of the CouchdbApp, this condition will fail because another user
       -- will have shared his App, too!
       state AdminReceivesServer = (not exists filter cm:MyCouchdbApp >> CouchdbServers with filledBy origin) and exists (filter context >> Admin with filledBy me)
-        perspective of Admin 
-          perspective on extern >> binder CouchdbServers
-            -- selfonly
-            only (Create, Fill)
-            props (Url, CouchdbServers$CouchdbPort) verbs (Consult, SetPropertyValue)
-        perspective of Accounts
-          perspective on extern >> binder CouchdbServers
-            -- selfonly
-            only (Create, Fill)
         on entry
           do for Admin
-            letA
-              server <- create role CouchdbServers in cm:MyCouchdbApp
-            in 
-              bind_ origin to server
-              Url = ServerUrl for server
-              CouchdbPort = CouchdbPort for server
+            bind origin to CouchdbServers in cm:MyCouchdbApp
           notify Admin
             "You now have an account with CouchdbServer {Name}"
 
       state AccountsReceivesServer = (not exists filter cm:MyCouchdbApp >> CouchdbServers with filledBy origin) and exists (filter context >> Accounts with filledBy me)
-        perspective of Accounts 
-          perspective on extern >> binder CouchdbServers
-            only (Create, Fill)
-            props (Url, CouchdbServers$CouchdbPort) verbs (Consult, SetPropertyValue)
         on entry
           do for Accounts
-            letA
-              server <- create role CouchdbServers in cm:MyCouchdbApp
-            in 
-              bind_ origin to server
-              Url = ServerUrl for server
-              CouchdbPort = CouchdbPort for server
+            bind origin to CouchdbServers in cm:MyCouchdbApp
           notify Accounts
             "You now have an account with CouchdbServer {Name}"
-
         
       -- Exiting CouchdbServer$External
       on exit
@@ -259,6 +239,9 @@ domain model://perspectives.domains#CouchdbManagement@12.4
       action CreateRepository
         create role Repositories
 
+      perspective on extern >> binder CouchdbServers
+        only (CreateAndFill)
+
       perspective on Accounts
         all roleverbs
         props (FirstName, LastName) verbs (Consult)
@@ -278,7 +261,7 @@ domain model://perspectives.domains#CouchdbManagement@12.4
         props (FirstName, LastName) verbs (Consult)
 
       perspective on External
-        props (ServerUrl, CouchdbPort, ServerUrl) verbs (Consult)
+        props (ServerUrl, CouchdbPort) verbs (Consult)
         props (Name) verbs (SetPropertyValue, Consult)
 
       perspective on Repositories
@@ -386,8 +369,11 @@ domain model://perspectives.domains#CouchdbManagement@12.4
         -- Add FirstName to make sure the filler of this role is sent to the peer himself!
         props (FirstName, Password, AuthorizedDomain) verbs (Consult)
 
+      perspective on extern >> binder CouchdbServers
+        only (CreateAndFill)
+
       perspective on External
-        props (ServerUrl, Name) verbs (Consult)
+        props (ServerUrl, CouchdbPort, Name) verbs (Consult)
 
       perspective on Admin
         props (FirstName, LastName) verbs (Consult)
@@ -599,7 +585,7 @@ domain model://perspectives.domains#CouchdbManagement@12.4
     user Owner filledBy (CouchdbServer$Accounts, CouchdbServer$Admin)
       property BespokeDatabaseUrl = context >> extern >> DatabaseLocation
       perspective on External
-        props (Public, Description, Name) verbs (Consult, SetPropertyValue)
+        props (Public, Description, Name, DatabaseName) verbs (Consult, SetPropertyValue)
         props (DatabaseLocation) verbs (Consult)
       perspective on Owner
         props (LastName) verbs (Consult)
@@ -731,7 +717,7 @@ domain model://perspectives.domains#CouchdbManagement@12.4
       perspective on Manifests
         only (Create, Fill, Delete, Remove, RemoveContext, DeleteContext, CreateAndFill)
         props (DomeinFileName, LocalModelName, EnteredModelCuid) verbs (SetPropertyValue, Consult)
-        props (Description, ModelCuid) verbs (Consult)
+        props (Description, ModelCuid, ModelManifest$External$Name) verbs (Consult)
         in object state ReadyToMake
           props (ModelCuid) verbs (SetPropertyValue)
       
@@ -1170,6 +1156,7 @@ domain model://perspectives.domains#CouchdbManagement@12.4
       -- Whether the model is loaded internally immediately. 
       property ApplyInSession (Boolean)
       property IsTheOnlyVersion = (binder Versions >> context >> Versions >>= count) == 1
+      property Published (Boolean)
 
       on exit
         do for Author
@@ -1307,7 +1294,7 @@ domain model://perspectives.domains#CouchdbManagement@12.4
       aspect sys:ContextWithNotification$NotifiedUser
       perspective on extern
         props (DomeinFileName, Version, ArcSource, LastUpload) verbs (Consult)
-        props (ArcFile, ArcFeedback, Description, IsRecommended, Build, Patch, LastChangeDT, MustUpload, AutoUpload, Store, ApplyInSession) verbs (Consult, SetPropertyValue)
+        props (ArcFile, ArcFeedback, Description, IsRecommended, Build, Patch, LastChangeDT, MustUpload, AutoUpload, Store, ApplyInSession, Published) verbs (Consult, SetPropertyValue)
         -- It may happen that MustUpload is not set to false and then the Manifest sticks to (a substate of) AfterSuccesfulParse.
         -- That means that no further change will cause one of the sustates to be re-entered. Hence we do not upload the model, store it in the local database or apply it immediately.
         -- The Author can set MustUpload to false to exit AfterSuccesfulParse.
@@ -1372,40 +1359,41 @@ domain model://perspectives.domains#CouchdbManagement@12.4
           tab "Manifest"
             row
               form External
-                with props (DomeinFileName, Version, LastUpload, Description, IsRecommended, Build, Patch)
+                with props (DomeinFileName, Version, LastUpload, Description, IsRecommended, Build, Patch, Published)
             row 
               form BasedOnVersion
                 -- with props (VersionName, ModelURI) verbs (Consult)
-          tab "Compile"
-            row
-              markdown <### Compile your model
-                        Select the `ArcFile` control and press enter. Then upload your file. There are rules:
+          when not (extern >> Published)
+            tab "Compile"
+              row
+                markdown <### Compile your model
+                          Select the `ArcFile` control and press enter. Then upload your file. There are rules:
 
-                        * It's domain declaration *must* be in the repository Domain (or namespace. If you are not sure about that: move twice up to the wider context and 
-                        read the Domain of the Repository).
-                        * Its local name *must* equal the name of the manifest (move up to the wider context to read that).
-                        ---
-                        Compiling will take some time. Watch the `ArcFeedback` field for possible errors and correct them.
-                        On succes, the compiled model is uploaded automatically to the repository.
-                        Don't forget to update the model in your local installation!
-                      >
-            row
-              form External
-                with props (ArcFile, ArcFeedback, LastUpload, LastChangeDT)
-            row 
-              markdown <#### Where to store
-                        Storage: choose from 
-                        * **Not**: the model is not stored anywhere, but only compiled.
-                        * **Locally**: the model is stored in the local store, so it is available for you only.
-                        * **Repository**: the model is stored in the repository, so it is available for all users.
-                        
-                        #### Compiling and applying immediately
-                        **Apply immediately**: choose whether the model is loaded into the current session.
-                        **Auto upload** means that the model is automatically compiled when you upload it.
-                      >
-            row
-              form External
-                with props (AutoUpload, Store, ApplyInSession)
+                          * It's domain declaration *must* be in the repository Domain (or namespace. If you are not sure about that: move twice up to the wider context and 
+                          read the Domain of the Repository).
+                          * Its local name *must* equal the name of the manifest (move up to the wider context to read that).
+                          ---
+                          Compiling will take some time. Watch the `ArcFeedback` field for possible errors and correct them.
+                          On succes, the compiled model is uploaded automatically to the repository.
+                          Don't forget to update the model in your local installation!
+                        >
+              row
+                form External
+                  with props (ArcFile, ArcFeedback, LastUpload, LastChangeDT)
+              row 
+                markdown <#### Where to store
+                          Storage: choose from 
+                          * **Not**: the model is not stored anywhere, but only compiled.
+                          * **Locally**: the model is stored in the local store, so it is available for you only.
+                          * **Repository**: the model is stored in the repository, so it is available for all users.
+                          
+                          #### Compiling and applying immediately
+                          **Apply immediately**: choose whether the model is loaded into the current session.
+                          **Auto upload** means that the model is automatically compiled when you upload it.
+                        >
+              row
+                form External
+                  with props (AutoUpload, Store, ApplyInSession)
           tab "Translate"
             row
               markdown <## Translate your model

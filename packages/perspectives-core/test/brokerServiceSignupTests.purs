@@ -2,20 +2,17 @@ module Test.BrokerServiceSignupTests where
 
 import Prelude
 
+import Control.Monad.AvarMonadAsk (gets)
 import Control.Monad.Error.Class (throwError)
-import Data.Array (catMaybes, head)
+import Data.Array (catMaybes, head, null)
 import Data.Either (Either(..), isRight)
-import Data.Foldable (any, for_)
-import Data.Maybe (Maybe(..))
+import Data.Foldable (any, elem, for_)
+import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Time.Duration (Milliseconds(..))
-import Perspectives.Assignment.Update (setProperty)
-import Perspectives.Cuid2 (cuid2)
-import Perspectives.RunMonadPerspectivesTransaction (doNotShareWithPeers)
 import Data.Traversable (for)
 import Data.Tuple (Tuple(..))
 import Effect (Effect)
 import Effect.Aff (Aff, attempt, bracket, error, launchAff_)
-import Control.Monad.AvarMonadAsk (gets)
 import Effect.Aff.AVar (tryRead)
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
@@ -23,28 +20,31 @@ import Foreign.Object (fromFoldable)
 import Node.Encoding (Encoding(..))
 import Node.FS.Aff (readTextFile)
 import Partial.Unsafe (unsafePartial)
+import Perspectives.AMQP.RabbitMQManagement (virtualHost)
+import Perspectives.Assignment.Update (setProperty)
 import Perspectives.CoreTypes (LogLevel(..), LogTopic(..), MonadPerspectives, (##=), (##>))
+import Perspectives.Cuid2 (cuid2)
 import Perspectives.DataUpgrade.PatchModels (patchModels)
 import Perspectives.DataUpgrade.RecompileLocalModels (recompileLocalModel)
 import Perspectives.Identifiers (modelUri2LocalName, unversionedModelUri)
 import Perspectives.Instances.ObjectGetters (binding, context, getEnumeratedRoleInstances, getUnlinkedRoleInstances)
-import Perspectives.Logging (infoTest, traceTest)
-import Perspectives.ModelDependencies (identifiableFirstName, identifiableLastName, sysUser)
-import Perspectives.AMQP.RabbitMQManagement (virtualHost)
+import Perspectives.Logging (ansiCyan, ansiRed, infoTest, traceTest)
+import Perspectives.ModelDependencies (identifiableFirstName, identifiableLastName, mySocialEnvironment, socialEnvironmentPersons, sysUser)
 import Perspectives.Names (lookupIndexedContext)
 import Perspectives.PerspectivesState (defaultRuntimeOptions, setTopicLogLevel)
 import Perspectives.Query.UnsafeCompiler (getPropertyValues)
 import Perspectives.Representation.InstanceIdentifiers (Value(..))
 import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..), EnumeratedRoleType(..), IndexedContext(..), PropertyType(..), RoleType(..))
-import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransaction', shareWithPeers)
+import Perspectives.RunMonadPerspectivesTransaction (doNotShareWithPeers, runMonadPerspectivesTransaction', shareWithPeers)
 import Perspectives.Sidecar.StableIdMapping (ModelUri(..), Stable, StableIdMapping)
 import Perspectives.Sidecar.ToStable (toStable)
 import Perspectives.TypePersistence.LoadArc (loadCompileAndStoreArcFile_)
 import Test.LocalCouchdbTestSupport (addLocalCouchdbCredentials)
+import Test.Layer3Scaffold (LogConfiguration, ModelTest, applyLogConfigurationToPDRs)
 import Test.PDRInstance (SynchronisationResult, noBus, pollUntil, snapshotExists, startPDRInstanceFromSnapshotWithHook, testPouchdbUser, withPDRCached)
 import Test.PDRInstance.Types (PDRInstance, runInPDR)
 import Test.RabbitMQCtl (addAdminUser, deleteUser, purgeOwnQueue, queueExists, userExists)
-import Test.SinglePDRScaffold (SinglePDRModelConfiguration, TestModelLoadMethod(..), LogConfiguration, emptyLogConfiguration, executeModelTest, loadModel)
+import Test.SinglePDRScaffold (TestModelLoadMethod(..), emptyLogConfiguration, executeModelTest, loadModel)
 import Test.Unit (TestSuite, suite, test)
 import Test.Unit.Assert (assert)
 import Test.Unit.Main (runTest)
@@ -57,6 +57,7 @@ main = launchAff_ do
 type SignupResults =
   { signupResults :: Array SynchronisationResult
   , aliceSawBob :: Boolean
+  , bobCouchdbOutcome :: Maybe CouchdbOutcome
   -- Bob's RabbitMQ account and queue, as they were while he was subscribed.
   , bobCredentials :: Maybe BrokerCredentials
   -- Set after the EndSubscription test; Nothing if we could not check.
@@ -64,6 +65,11 @@ type SignupResults =
   }
 
 type BrokerCredentials = { login :: String, queueId :: String }
+
+type CouchdbOutcome =
+  { hasAliceServer :: Boolean
+  , hasOwnAccount :: Boolean
+  }
 
 type TerminationOutcome =
   { aliceContractGone :: Boolean
@@ -79,29 +85,39 @@ getSignupResults = do
     $ error ("Required Alice post-reboot snapshot is missing: " <> aliceSnapshotDirectory)
 
   bracket
-    (startPDRInstanceFromSnapshotWithHook (testPouchdbUser "alice") defaultRuntimeOptions Nothing noBus aliceSnapshotDirectory purgeOwnQueue)
+    (startPDRInstanceFromSnapshotWithHook (testPouchdbUser "alice") defaultRuntimeOptions (Just ansiCyan) noBus aliceSnapshotDirectory purgeOwnQueue)
     (_.shutdown)
     \alice ->
-      withPDRCached (testPouchdbUser "bob") defaultRuntimeOptions Nothing noBus bobSnapshotDirectory \bob -> do
+      withPDRCached (testPouchdbUser "bob") defaultRuntimeOptions (Just ansiRed) noBus bobSnapshotDirectory \bob -> do
         addLocalCouchdbCredentials alice
         addLocalCouchdbCredentials bob
+
+        applyLogConfigurationToPDRs alice bob signupTestModelConfiguration.setupLogConfiguration
+
+        -- CouchdbManagement has been patched in the universe snapshots already
+        patchSomeModels alice
+        patchSomeModels bob
 
         -- Alice compiles first and coins the stable ids; Bob reuses her mapping so both
         -- PDRs share the same CUIDs for the test model's types.
         aliceMapping <- compileTestModel alice Nothing
-        
+
         for_ signupTestModelConfiguration.testModelLoadMethods (loadModel bob)
 
         void $ compileTestModel bob (Just aliceMapping)
-
-        for_ [ alice, bob ] \pdr -> runInPDR pdr do
-          for_ signupTestModelConfiguration.setupLogConfiguration.pdr \{ topic, logLevel } -> setTopicLogLevel topic logLevel
 
         bobTestApp <- pollUntil 100 (Milliseconds 100.0)
           "Broker signup test app to appear in Bob's PDR"
           ( runInPDR bob do
               IndexedContext indexed <- toStable (IndexedContext signupTestModelConfiguration.indexedTestContext)
               traceTest ("Looking up stable indexed context for signup test: " <> show indexed)
+              lookupIndexedContext indexed
+          )
+
+        aliceTestApp <- pollUntil 100 (Milliseconds 100.0)
+          "Broker signup test app to appear in Alice's PDR"
+          ( runInPDR alice do
+              IndexedContext indexed <- toStable (IndexedContext signupTestModelConfiguration.indexedTestContext)
               lookupIndexedContext indexed
           )
 
@@ -112,19 +128,26 @@ getSignupResults = do
         addAdminUser virtualHost rabbitAdminName adminPassword
 
         results <- for signupTestModelConfiguration.tests \testCase -> do
-          -- Alice's PDR shares the process output with Bob's; her state transitions and broker traffic explain what she does on termination.
+          let
+            testPdr =
+              if testCase.testContextTypeName == createCouchdbAccountTestContext then alice
+              else bob
+            testApp =
+              if testCase.testContextTypeName == createCouchdbAccountTestContext then aliceTestApp
+              else bobTestApp
+
           when (testCase.testContextTypeName == endSubscriptionTestContext) $ giveAliceAdminCredentials alice adminPassword
-          when (testCase.testContextTypeName == endSubscriptionTestContext) $ runInPDR alice do
-            setTopicLogLevel STATE Debug
-            setTopicLogLevel BROKER Debug
+          applyLogConfigurationToPDRs alice bob
+            (fromMaybe signupTestModelConfiguration.setupLogConfiguration testCase.logConfiguration)
+
           result <- executeModelTest
-            bob
-            bobTestApp
+            testPdr
+            testApp
             testCase.testContextTypeName
-            testCase.logConfiguration
+            emptyLogConfiguration
             signupTestModelConfiguration
 
-          runInPDR bob do
+          runInPDR testPdr do
             traceTest ("Broker Service test result: " <> show result)
 
           -- Check synchronisation before a later test can terminate the subscription.
@@ -137,14 +160,29 @@ getSignupResults = do
                   pure if seesBob then Just true else Nothing
             else pure false
 
+          couchdbOutcome <-
+            if testCase.testContextTypeName == createCouchdbAccountTestContext then do
+              settled <- attempt $ pollUntil 120 (Milliseconds 500.0)
+                "Bob to receive Alice's Couchdb Server and his own Accounts role"
+                do
+                  outcome <- getBobCouchdbOutcome bob
+                  pure
+                    if outcome.hasAliceServer && outcome.hasOwnAccount then Just outcome
+                    else Nothing
+              case settled of
+                Right outcome -> pure $ Just outcome
+                Left _ -> Just <$> getBobCouchdbOutcome bob
+            else pure Nothing
+
           -- Remember Bob's account and queue before a later test terminates the subscription.
           credentials <-
             if testCase.testContextTypeName == signupTestContext then runInPDR bob currentBrokerCredentials
             else pure Nothing
 
-          pure { result, aliceSawBob, credentials }
+          pure { result, aliceSawBob, couchdbOutcome, credentials }
 
         let bobCredentials = head $ catMaybes $ map _.credentials results
+        let bobCouchdbOutcome = head $ catMaybes $ map _.couchdbOutcome results
 
         -- Termination must remove the contract on Alice's side and the user and queue from RabbitMQ.
         afterTermination <- case bobCredentials of
@@ -172,7 +210,7 @@ getSignupResults = do
 
         void $ attempt $ deleteUser rabbitAdminName
 
-        pure { signupResults: map _.result results, aliceSawBob: any _.aliceSawBob results, bobCredentials, afterTermination }
+        pure { signupResults: map _.result results, aliceSawBob: any _.aliceSawBob results, bobCouchdbOutcome, bobCredentials, afterTermination }
 
 rabbitAdminName :: String
 rabbitAdminName = "bssu_test_admin"
@@ -197,6 +235,19 @@ giveAliceAdminCredentials pdr password = runInPDR pdr do
           setProperty [ administrator ] adminPassword Nothing [ Value password ]
         infoTest ("Gave Alice's administrator " <> show administrator <> " the credentials of RabbitMQ administrator " <> rabbitAdminName)
 
+patchSomeModels :: PDRInstance -> Aff Unit
+patchSomeModels pdr = runInPDR pdr do
+  setTopicLogLevel UPGRADE Debug
+  patchModels (fromFoldable 
+    [ Tuple "model://perspectives.domains#CouchdbManagement" couchdbmanagement 
+    , Tuple "model://perspectives.domains#System" system
+    ]
+    )
+  success <- recompileLocalModel (ModelUri "model://perspectives.domains#CouchdbManagement")
+  infoTest ("Patched and recompiled CouchdbManagement in snapshot: " <> show success)
+  successSystem <- recompileLocalModel (ModelUri "model://perspectives.domains#System")
+  infoTest ("Patched and recompiled System in snapshot: " <> show successSystem)
+
 -- | The credentials of the broker service this PDR is currently reading post from.
 currentBrokerCredentials :: MonadPerspectives (Maybe BrokerCredentials)
 currentBrokerCredentials = do
@@ -204,7 +255,10 @@ currentBrokerCredentials = do
   mbs <- liftAff $ tryRead bsAVar
   pure $ mbs <#> \{ login, queueId } -> { login, queueId }
 
+foreign import couchdbmanagement :: String
 foreign import brokerservices :: String
+
+foreign import system :: String
 
 compileTestModel :: PDRInstance -> Maybe StableIdMapping -> Aff StableIdMapping
 compileTestModel pdr mMapping = do
@@ -251,19 +305,47 @@ aliceHasBobAccount pdr = runInPDR pdr do
 
       pure $ any identity contractMatches
 
+getBobCouchdbOutcome :: PDRInstance -> Aff CouchdbOutcome
+getBobCouchdbOutcome pdr = runInPDR pdr do
+  IndexedContext myCouchdbAppIndex <- toStable (IndexedContext myCouchdbApp)
+  mMyCouchdbApp <- lookupIndexedContext myCouchdbAppIndex
+  mMySocialEnvironment <- lookupIndexedContext mySocialEnvironment
+  case mMyCouchdbApp, mMySocialEnvironment of
+    Just myCouchdbAppContext, Just mySocialEnvironmentContext -> do
+      couchdbServersType <- toStable (EnumeratedRoleType couchdbServersRole)
+      accountsType <- toStable (EnumeratedRoleType couchdbServerAccountsRole)
+      servers <- myCouchdbAppContext ##= getEnumeratedRoleInstances couchdbServersType >=> binding >=> context
+      accounts <- join <$> for servers (_ ##= getUnlinkedRoleInstances accountsType)
+      accountFillers <- join <$> for accounts (_ ##= binding)
+      ownPersons <- mySocialEnvironmentContext ##= getUnlinkedRoleInstances (EnumeratedRoleType socialEnvironmentPersons)
+      pure
+        { hasAliceServer: not $ null servers
+        , hasOwnAccount: any (flip elem ownPersons) accountFillers
+        }
+    _, _ -> pure { hasAliceServer: false, hasOwnAccount: false }
+
 signupSuite :: SignupResults -> TestSuite
-signupSuite { signupResults, aliceSawBob, afterTermination } =
+signupSuite { signupResults, aliceSawBob, bobCouchdbOutcome, afterTermination } =
   suite "Broker Service signup tests" do
     for_ signupResults \result -> case result of
       Right { testName, testSucceeded } ->
-        test (testName <> " should succeed in Bob's PDR") do
-          assert ("Test '" <> testName <> "' should succeed in Bob's PDR") testSucceeded
+        test (testName <> " should succeed in its PDR") do
+          assert ("Test '" <> testName <> "' should succeed in its PDR") testSucceeded
       Left { testName, err } ->
         test ("test '" <> testName <> "' failed with error") do
           assert ("Broker Service test failed: " <> show err) false
 
     test "Alice should see Bob's account-holder details" do
       assert "Alice should receive Bob's account-holder details through the Broker Service" aliceSawBob
+
+    case bobCouchdbOutcome of
+      Nothing -> test "Bob's Couchdb Server account outcome should be known" do
+        assert "The Couchdb Server account test was not executed" false
+      Just { hasAliceServer, hasOwnAccount } -> do
+        test "Bob should receive Alice's Couchdb Server" do
+          assert "Alice's Couchdb Server did not appear in Bob's Couchdb Management app" hasAliceServer
+        test "Bob should receive an Accounts role filled with his own Persons instance" do
+          assert "Bob's Couchdb Server account is absent or filled with another Persons instance" hasOwnAccount
 
     case afterTermination of
       Nothing -> test "Bob's RabbitMQ credentials should be known before terminating" do
@@ -276,7 +358,24 @@ signupSuite { signupResults, aliceSawBob, afterTermination } =
         test "Bob's queue should be deleted from RabbitMQ after termination" do
           assert "Bob's RabbitMQ queue still exists" rabbitQueueGone
 
-signupTestModelConfiguration :: SinglePDRModelConfiguration
+-- pdrA is Alice; pdrB is Bob, regardless of which PDR executes the test.
+type SignupModelConfiguration =
+  { suiteName :: String
+  , snapshotDirectory :: String
+  , outputSnapshotDirectory :: Maybe String
+  , testModel :: String
+  , testModelLoadMethods :: Array TestModelLoadMethod
+  , indexedTestContext :: String
+  , testAppManager :: String
+  , testsType :: String
+  , testSucceededProperty :: String
+  , testNameProperty :: String
+  , testTimeLimit :: Milliseconds
+  , setupLogConfiguration :: LogConfiguration
+  , tests :: Array ModelTest
+  }
+
+signupTestModelConfiguration :: SignupModelConfiguration
 signupTestModelConfiguration =
   { suiteName: "Broker Service signup tests"
   , snapshotDirectory: bobSnapshotDirectory
@@ -294,30 +393,45 @@ signupTestModelConfiguration =
   , testSucceededProperty
   , testNameProperty
   , testTimeLimit: Milliseconds 60000.0
-  , setupLogConfiguration:
-      { pdr:
-          [ { topic: TEST, logLevel: Trace }
-          -- , { topic: INSTALL, logLevel: Trace }
-          -- , { topic: MODEL, logLevel: Warn }
-          ]
-      }
+  , setupLogConfiguration: emptyConfiguration
   , tests:
-      [ { testContextTypeName: signupTestContext, logConfiguration: debugConfiguration }
-      , { testContextTypeName: endSubscriptionTestContext, logConfiguration: debugConfiguration }
+      [ { testContextTypeName: signupTestContext, logConfiguration: Just debugConfiguration }
+      , { testContextTypeName: createCouchdbAccountTestContext, logConfiguration: Just emptyConfiguration }
+      , { testContextTypeName: endSubscriptionTestContext, logConfiguration: Just emptyConfiguration }
       ]
   }
 
+emptyConfiguration :: LogConfiguration
+emptyConfiguration =
+      { pdrA:
+          [ { topic: TEST, logLevel: Trace }
+          ]
+      , pdrB:
+          [ { topic: TEST, logLevel: Trace }
+          ]
+      }
 debugConfiguration :: LogConfiguration
 debugConfiguration =
-  { pdr:
+  { pdrA:
       [
         -- { topic: TEST, logLevel: Trace }
-        { topic: BROKER, logLevel: Trace }
-      , { topic: SYNC, logLevel: Trace }
+      --   { topic: BROKER, logLevel: Trace }
+      -- , { topic: SYNC, logLevel: Trace }
+      -- , { topic: DELTA, logLevel: Trace }
       -- , { topic: INSTALL, logLevel: Trace }
-      , { topic: RESOURCE, logLevel: Trace }
-      , { topic: STATE, logLevel: Trace }
+      -- , { topic: RESOURCE, logLevel: Trace }
+      -- , { topic: STATE, logLevel: Trace }
       -- , { topic: MODEL, logLevel: Warn }
+      {topic: UPGRADE, logLevel: Trace}
+      ]
+  , pdrB:
+      [ 
+      --   { topic: BROKER, logLevel: Trace }
+      -- , { topic: SYNC, logLevel: Trace }
+      -- , { topic: DELTA, logLevel: Trace }
+      -- , { topic: RESOURCE, logLevel: Trace }
+      -- , { topic: STATE, logLevel: Trace }
+      {topic: UPGRADE, logLevel: Trace}
       ]
   }
 
@@ -355,6 +469,9 @@ testNameProperty = testModelReadable <> "$Test$External$TestName"
 signupTestContext :: String
 signupTestContext = testModelReadable <> "$SignUpToBrokerService"
 
+createCouchdbAccountTestContext :: String
+createCouchdbAccountTestContext = testModelReadable <> "$CreateCouchdbAccount"
+
 endSubscriptionTestContext :: String
 endSubscriptionTestContext = testModelReadable <> "$EndSubscription"
 
@@ -375,3 +492,12 @@ brokerServiceAccountsRole = "model://perspectives.domains#BrokerServices$BrokerS
 
 brokerContractAccountHolderRole :: String
 brokerContractAccountHolderRole = "model://perspectives.domains#BrokerServices$BrokerContract$AccountHolder"
+
+myCouchdbApp :: String
+myCouchdbApp = "model://perspectives.domains#CouchdbManagement$MyCouchdbApp"
+
+couchdbServersRole :: String
+couchdbServersRole = "model://perspectives.domains#CouchdbManagement$CouchdbManagementApp$CouchdbServers"
+
+couchdbServerAccountsRole :: String
+couchdbServerAccountsRole = "model://perspectives.domains#CouchdbManagement$CouchdbServer$Accounts"

@@ -51,10 +51,9 @@ self.onconnect = function(e)
 };
 
 // Send the message through all channels: each client must be informed.
-function sendPDRStatusMessage( action, message )
+function sendPDRStatusMessage( action, message, target = "overlay" )
 {
   Object.values(subscribingPages).forEach( function( channel ){
-    channel.postMessage( {responseType: "PDRMessage", action: action, message: message} );
+    channel.postMessage( {responseType: "PDRMessage", action: action, message: message, target: target} );
   });
 }
-

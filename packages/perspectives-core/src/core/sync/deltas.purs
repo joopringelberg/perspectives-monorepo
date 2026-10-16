@@ -306,7 +306,12 @@ addDelta (DeltaInTransaction deltarecord@{ users, delta }) = do
   else do
     newUserBottoms <- lift (concat <$> for users' computeUserRoleBottom)
     newDelta <- pure (DeltaInTransaction deltarecord { users = users' })
+    let SignedDelta { author, encryptedDelta } = delta
     lift $ infoDelta $ "Adding a delta to transaction for users " <> show users' <> " with user role bottoms " <> show newUserBottoms
+      <> ", author "
+      <> show author
+      <> ", delta "
+      <> show (extractDeltaInfo encryptedDelta)
     AA.modify
       ( over Transaction \t@{ deltas, userRoleBottoms } ->
           let

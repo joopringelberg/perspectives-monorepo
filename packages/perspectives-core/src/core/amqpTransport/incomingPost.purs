@@ -55,7 +55,7 @@ import Perspectives.Names (getMySystem, lookupIndexedContext)
 import Perspectives.Persistence.API (cleanupDeletedDocs, deleteDocument, documentsInDatabase, excludeDocs, getDocument_)
 import Perspectives.Performance (ProfileSession, captureSession, countDecrypted, countEncrypted, profile, sessionEnabled)
 import Perspectives.Persistent (postDatabaseName)
-import Perspectives.PerspectivesState (getBrokerService, getCurrentLanguage, getPerspectivesUser, getStompClientFactory, pushMessage, removeMessage, setBrokerService, setStompClient, stompClient, transactionLevel)
+import Perspectives.PerspectivesState (getBrokerService, getCurrentLanguage, getPerspectivesUser, getStompClientFactory, pushMessage, pushSystemMessage, removeMessage, removeSystemMessage, setBrokerService, setStompClient, stompClient, transactionLevel, withTransactionPriority)
 import Perspectives.Query.UnsafeCompiler (getPropertyFunction, getRoleInstances)
 import Perspectives.Representation.InstanceIdentifiers (RoleInstance(..), Value(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), RoleType(..))
@@ -64,6 +64,7 @@ import Perspectives.RunMonadPerspectivesTransaction (detectPublicStateChanges, r
 import Perspectives.Sync.HandleTransaction (executeTransaction)
 import Perspectives.Sync.OutgoingTransaction (OutgoingTransaction(..))
 import Perspectives.Sync.TransactionForPeer (EncryptedTransactionForPeer(..), TransactionForPeer)
+import Perspectives.TransactionQueue (TransactionPriority(..))
 import Prelude (Unit, bind, pure, show, unit, void, when, ($), (*>), (<$>), (<>), (==), (>), (>>=), (<<<), (>=>), (>>>), discard, map)
 import Simple.JSON (readJSON, writeJSON)
 
@@ -119,12 +120,13 @@ incomingPost = do
             debugBroker $ padding <> "Executing incoming post transaction from author " <> unwrap (unwrap body).author <> " and timestamp " <> show (unwrap body).timeStamp
             profileSession <- liftEffect captureSession
             transaction <- profile profileSession "decrypt" (decryptTransaction profileSession body)
-            profile profileSession "incomingCascade" $
-              runMonadPerspectivesTransaction'
-                false
-                (ENR $ EnumeratedRoleType sysUser)
-                (profile profileSession "executeTransaction" (executeTransaction transaction))
-            profile profileSession "publicStates" detectPublicStateChanges
+            withTransactionPriority BackgroundTransaction do
+              profile profileSession "incomingCascade" $
+                runMonadPerspectivesTransaction'
+                  false
+                  (ENR $ EnumeratedRoleType sysUser)
+                  (profile profileSession "executeTransaction" (executeTransaction transaction))
+              profile profileSession "publicStates" detectPublicStateChanges
             remainingCount <- markHandled markHandled_
             showPendingIncomingTransactions remainingCount
 
@@ -133,7 +135,9 @@ incomingPost = do
     mySystem <- getMySystem
     padding <- transactionLevel
     debugBroker $ padding <> "Setting connection state to " <> show c
-    void $ runMonadPerspectivesTransaction' false (ENR $ EnumeratedRoleType sysUser) (setProperty [ RoleInstance $ buitenRol mySystem ] (EnumeratedPropertyType connectedToAMQPBroker) Nothing [ Value $ show c ])
+    withTransactionPriority BackgroundTransaction
+      $ void
+      $ runMonadPerspectivesTransaction' false (ENR $ EnumeratedRoleType sysUser) (setProperty [ RoleInstance $ buitenRol mySystem ] (EnumeratedPropertyType connectedToAMQPBroker) Nothing [ Value $ show c ])
     pure unit
 
   -- | Send all transactions that have accumulated in the post database while we had no connection to the Broker.
@@ -221,16 +225,16 @@ showPendingIncomingTransactions pendingCount =
   if pendingCount > 0 then do
     language <- getCurrentLanguage
     debugBroker $ "There are " <> show pendingCount <> " pending incoming transactions"
-    pushMessage (pendingIncomingPostMessage language pendingCount)
+    pushSystemMessage (pendingIncomingPostMessage language pendingCount)
   else do
     debugBroker "There are no pending incoming transactions"
-    removeMessage "pending incoming transactions"
+    removeSystemMessage
 
 pendingIncomingPostMessage :: String -> Int -> String
 pendingIncomingPostMessage language pendingCount =
   if take 2 language == "nl" then
-    show pendingCount <> " nog niet verwerkte gegevensberichten"
+    "Bezig met " <> show pendingCount <> (if pendingCount == 1 then " inkomend bericht" else " inkomende berichten")
   else if pendingCount == 1 then
-    "1 unprocessed data message"
+    "Working on 1 incoming message"
   else
-    show pendingCount <> " unprocessed data messages"
+    "Working on " <> show pendingCount <> " incoming messages"

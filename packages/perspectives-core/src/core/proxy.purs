@@ -9,7 +9,7 @@ module Perspectives.Proxy
 
 import Control.Coroutine.Aff (Emitter, Step(..))
 import Control.Promise (Promise)
-import Data.Function.Uncurried (Fn2)
+import Data.Function.Uncurried (Fn3)
 import Effect (Effect)
 import Effect.Uncurried (EffectFn1, EffectFn3, runEffectFn1, runEffectFn3)
 import Foreign (Foreign)
@@ -44,7 +44,7 @@ foreign import retrieveRequestEmitterImpl
 retrieveRequestEmitter :: Emitter Effect Foreign Unit -> Effect Unit
 retrieveRequestEmitter = runEffectFn1 retrieveRequestEmitterImpl
 
-foreign import pdrStatusMessageChannel :: Promise (Fn2 String String Unit)
+foreign import pdrStatusMessageChannel :: Promise (Fn3 String String String Unit)
 
 -- | Called by the PDR during startup to register the function that delivers
 -- | the end-user's integrity choice (Boolean) into the userIntegrityChoice AVar.

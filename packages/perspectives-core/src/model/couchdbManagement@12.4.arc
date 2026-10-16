@@ -72,6 +72,8 @@ domain model://perspectives.domains#CouchdbManagement@12.4
         only (CreateAndFill, RemoveContext, DeleteContext, Create, Fill)
         props (Name) verbs (Consult)
         props (Url, CouchdbServers$CouchdbPort, AdminUserName, AdminPassword, Name) verbs (SetPropertyValue)
+      perspective on CouchdbServers >> binding
+        props (ServerUrl, CouchdbServer$External$CouchdbPort) verbs (Consult, SetPropertyValue)
       perspective on Manager
         props (FirstName, LastName) verbs (Consult)
         
@@ -152,8 +154,10 @@ domain model://perspectives.domains#CouchdbManagement@12.4
                 callEffect cdb:MakeDatabasePublic( Url, "cw_servers_and_repositories" )
                 -- As the databases are now ready, we can create and publish the CouchdbServer.
                 create_ context CouchdbServer bound to origin
+                ServerUrl = Url for origin >> binding
+                CouchdbPort = CouchdbServers$CouchdbPort for origin >> binding
 
-      state NoAdmin = (exists binding) and not exists binding >> context >> CouchdbServer$Admin
+      state NoAdmin = (exists binding) and (exists AdminPassword) and (exists AdminUserName) and not exists binding >> context >> CouchdbServer$Admin
         on entry
           do for Manager
             -- Manager 
@@ -182,8 +186,8 @@ domain model://perspectives.domains#CouchdbManagement@12.4
     aspect sys:ContextWithNotification
     external
       -- The location of the CouchdbServer_. 
-      property ServerUrl (functional) = binder CouchdbServers >> Url
-      property CouchdbPort (functional) = binder CouchdbServers >> CouchdbServers$CouchdbPort
+      property ServerUrl (String)
+      property CouchdbPort (String)
       property Name (String)
         readableName
 
@@ -191,42 +195,18 @@ domain model://perspectives.domains#CouchdbManagement@12.4
       -- If we do not refer to my indexed version of the CouchdbApp, this condition will fail because another user
       -- will have shared his App, too!
       state AdminReceivesServer = (not exists filter cm:MyCouchdbApp >> CouchdbServers with filledBy origin) and exists (filter context >> Admin with filledBy me)
-        perspective of Admin 
-          perspective on extern >> binder CouchdbServers
-            -- selfonly
-            only (Create, Fill)
-            props (Url, CouchdbServers$CouchdbPort) verbs (Consult, SetPropertyValue)
-        perspective of Accounts
-          perspective on extern >> binder CouchdbServers
-            -- selfonly
-            only (Create, Fill)
         on entry
           do for Admin
-            letA
-              server <- create role CouchdbServers in cm:MyCouchdbApp
-            in 
-              bind_ origin to server
-              Url = ServerUrl for server
-              CouchdbPort = CouchdbPort for server
+            bind origin to CouchdbServers in cm:MyCouchdbApp
           notify Admin
-            "You now have an account with CouchdbServer {Name}"
+            "You now are Admin of CouchdbServer {Name}"
 
       state AccountsReceivesServer = (not exists filter cm:MyCouchdbApp >> CouchdbServers with filledBy origin) and exists (filter context >> Accounts with filledBy me)
-        perspective of Accounts 
-          perspective on extern >> binder CouchdbServers
-            only (Create, Fill)
-            props (Url, CouchdbServers$CouchdbPort) verbs (Consult, SetPropertyValue)
         on entry
           do for Accounts
-            letA
-              server <- create role CouchdbServers in cm:MyCouchdbApp
-            in 
-              bind_ origin to server
-              Url = ServerUrl for server
-              CouchdbPort = CouchdbPort for server
+            bind origin to CouchdbServers in cm:MyCouchdbApp
           notify Accounts
             "You now have an account with CouchdbServer {Name}"
-
         
       -- Exiting CouchdbServer$External
       on exit
@@ -259,6 +239,9 @@ domain model://perspectives.domains#CouchdbManagement@12.4
       action CreateRepository
         create role Repositories
 
+      perspective on extern >> binder CouchdbServers
+        only (CreateAndFill)
+
       perspective on Accounts
         all roleverbs
         props (FirstName, LastName) verbs (Consult)
@@ -278,7 +261,7 @@ domain model://perspectives.domains#CouchdbManagement@12.4
         props (FirstName, LastName) verbs (Consult)
 
       perspective on External
-        props (ServerUrl, CouchdbPort, ServerUrl) verbs (Consult)
+        props (ServerUrl, CouchdbPort) verbs (Consult)
         props (Name) verbs (SetPropertyValue, Consult)
 
       perspective on Repositories
@@ -386,8 +369,11 @@ domain model://perspectives.domains#CouchdbManagement@12.4
         -- Add FirstName to make sure the filler of this role is sent to the peer himself!
         props (FirstName, Password, AuthorizedDomain) verbs (Consult)
 
+      perspective on extern >> binder CouchdbServers
+        only (CreateAndFill)
+
       perspective on External
-        props (ServerUrl, Name) verbs (Consult)
+        props (ServerUrl, CouchdbPort, Name) verbs (Consult)
 
       perspective on Admin
         props (FirstName, LastName) verbs (Consult)
@@ -731,7 +717,7 @@ domain model://perspectives.domains#CouchdbManagement@12.4
       perspective on Manifests
         only (Create, Fill, Delete, Remove, RemoveContext, DeleteContext, CreateAndFill)
         props (DomeinFileName, LocalModelName, EnteredModelCuid) verbs (SetPropertyValue, Consult)
-        props (Description, ModelCuid, Name) verbs (Consult)
+        props (Description, ModelCuid, ModelManifest$External$Name) verbs (Consult)
         in object state ReadyToMake
           props (ModelCuid) verbs (SetPropertyValue)
       
