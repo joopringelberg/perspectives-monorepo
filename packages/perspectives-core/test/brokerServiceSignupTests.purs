@@ -92,9 +92,11 @@ getSignupResults = do
         addLocalCouchdbCredentials alice
         addLocalCouchdbCredentials bob
 
+        applyLogConfigurationToPDRs alice bob signupTestModelConfiguration.setupLogConfiguration
+
         -- CouchdbManagement has been patched in the universe snapshots already
-        -- patchCouchdbManagement alice
-        -- patchCouchdbManagement bob
+        patchSomeModels alice
+        patchSomeModels bob
 
         -- Alice compiles first and coins the stable ids; Bob reuses her mapping so both
         -- PDRs share the same CUIDs for the test model's types.
@@ -103,8 +105,6 @@ getSignupResults = do
         for_ signupTestModelConfiguration.testModelLoadMethods (loadModel bob)
 
         void $ compileTestModel bob (Just aliceMapping)
-
-        applyLogConfigurationToPDRs alice bob signupTestModelConfiguration.setupLogConfiguration
 
         bobTestApp <- pollUntil 100 (Milliseconds 100.0)
           "Broker signup test app to appear in Bob's PDR"
@@ -235,12 +235,18 @@ giveAliceAdminCredentials pdr password = runInPDR pdr do
           setProperty [ administrator ] adminPassword Nothing [ Value password ]
         infoTest ("Gave Alice's administrator " <> show administrator <> " the credentials of RabbitMQ administrator " <> rabbitAdminName)
 
-patchCouchdbManagement :: PDRInstance -> Aff Unit
-patchCouchdbManagement pdr = runInPDR pdr do
+patchSomeModels :: PDRInstance -> Aff Unit
+patchSomeModels pdr = runInPDR pdr do
   setTopicLogLevel UPGRADE Debug
-  patchModels (fromFoldable [ Tuple "model://perspectives.domains#CouchdbManagement" couchdbmanagement ])
+  patchModels (fromFoldable 
+    [ Tuple "model://perspectives.domains#CouchdbManagement" couchdbmanagement 
+    , Tuple "model://perspectives.domains#System" system
+    ]
+    )
   success <- recompileLocalModel (ModelUri "model://perspectives.domains#CouchdbManagement")
   infoTest ("Patched and recompiled CouchdbManagement in snapshot: " <> show success)
+  successSystem <- recompileLocalModel (ModelUri "model://perspectives.domains#System")
+  infoTest ("Patched and recompiled System in snapshot: " <> show successSystem)
 
 -- | The credentials of the broker service this PDR is currently reading post from.
 currentBrokerCredentials :: MonadPerspectives (Maybe BrokerCredentials)
@@ -251,6 +257,8 @@ currentBrokerCredentials = do
 
 foreign import couchdbmanagement :: String
 foreign import brokerservices :: String
+
+foreign import system :: String
 
 compileTestModel :: PDRInstance -> Maybe StableIdMapping -> Aff StableIdMapping
 compileTestModel pdr mMapping = do
@@ -387,9 +395,9 @@ signupTestModelConfiguration =
   , testTimeLimit: Milliseconds 60000.0
   , setupLogConfiguration: emptyConfiguration
   , tests:
-      [ { testContextTypeName: signupTestContext, logConfiguration: Just emptyConfiguration }
-      , { testContextTypeName: createCouchdbAccountTestContext, logConfiguration: Just debugConfiguration }
-      -- , { testContextTypeName: endSubscriptionTestContext, logConfiguration: Just debugConfiguration }
+      [ { testContextTypeName: signupTestContext, logConfiguration: Just debugConfiguration }
+      , { testContextTypeName: createCouchdbAccountTestContext, logConfiguration: Just emptyConfiguration }
+      , { testContextTypeName: endSubscriptionTestContext, logConfiguration: Just emptyConfiguration }
       ]
   }
 
@@ -407,20 +415,23 @@ debugConfiguration =
   { pdrA:
       [
         -- { topic: TEST, logLevel: Trace }
-        { topic: BROKER, logLevel: Trace }
-      , { topic: SYNC, logLevel: Trace }
-      , { topic: DELTA, logLevel: Trace }
+      --   { topic: BROKER, logLevel: Trace }
+      -- , { topic: SYNC, logLevel: Trace }
+      -- , { topic: DELTA, logLevel: Trace }
       -- , { topic: INSTALL, logLevel: Trace }
-      , { topic: RESOURCE, logLevel: Trace }
-      , { topic: STATE, logLevel: Trace }
+      -- , { topic: RESOURCE, logLevel: Trace }
+      -- , { topic: STATE, logLevel: Trace }
       -- , { topic: MODEL, logLevel: Warn }
+      {topic: UPGRADE, logLevel: Trace}
       ]
   , pdrB:
-      [ { topic: BROKER, logLevel: Trace }
-      , { topic: SYNC, logLevel: Trace }
-      , { topic: DELTA, logLevel: Trace }
-      , { topic: RESOURCE, logLevel: Trace }
-      , { topic: STATE, logLevel: Trace }
+      [ 
+      --   { topic: BROKER, logLevel: Trace }
+      -- , { topic: SYNC, logLevel: Trace }
+      -- , { topic: DELTA, logLevel: Trace }
+      -- , { topic: RESOURCE, logLevel: Trace }
+      -- , { topic: STATE, logLevel: Trace }
+      {topic: UPGRADE, logLevel: Trace}
       ]
   }
 
