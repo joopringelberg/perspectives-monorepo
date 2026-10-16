@@ -86,7 +86,7 @@ import Perspectives.Sync.VersionedDelta (DeltaEnvelope(..), parseIncomingDelta)
 import Perspectives.Types.ObjectGetters (contextAspectsClosure, hasAspect, isPublic, roleAspectsClosure, publicUserRole)
 import Perspectives.TypesForDeltas (ContextDelta(..), ContextDeltaType(..), DeltaRecord, RoleBindingDelta(..), RoleBindingDeltaType(..), RolePropertyDelta(..), RolePropertyDeltaType(..), UniverseContextDelta(..), UniverseContextDeltaType(..), UniverseRoleDelta(..), UniverseRoleDeltaType(..))
 import Perspectives.Warning (PerspectivesWarning(..))
-import Prelude (class Eq, class Ord, Unit, bind, compare, discard, flip, map, negate, not, pure, show, unit, void, ($), (*>), (+), (/=), (<), (<$>), (<<<), (<>), (==), (>), (>=), (>>=), (&&), (||), (>=>))
+import Prelude (class Eq, class Monad, class Ord, Unit, bind, compare, discard, flip, map, negate, not, pure, show, unit, void, ($), (*>), (+), (/=), (<), (<$>), (<<<), (<>), (==), (>), (>=), (>>=), (&&), (||), (>=>))
 import Simple.JSON (readJSON')
 
 -- TODO. Each of the executing functions must catch errors that arise from unknown types.
@@ -218,15 +218,19 @@ extractOrderingInfo stringifiedDelta = case runExcept $ readJSON' stringifiedDel
 -- | A gap exists when a delta's resourceVersion is greater than the local version + 1.
 -- | Returns the list of missing deltas (gaps) if any.
 checkForGaps :: Array { resourceKey :: String, resourceVersion :: Int, author :: PerspectivesUser } -> MonadPerspectivesTransaction (Array MissingDelta)
-checkForGaps deltaInfos = do
+checkForGaps = checkForGapsWith (lift <<< getResourceVersion)
+
+checkForGapsWith :: forall m. Monad m => (String -> m Int) -> Array { resourceKey :: String, resourceVersion :: Int, author :: PerspectivesUser } -> m (Array MissingDelta)
+checkForGapsWith lookupVersion deltaInfos = do
   let
     nonLegacyInfos = filter (\d -> d.resourceVersion >= 0) deltaInfos
-    resourceKeys = nub (map _.resourceKey nonLegacyInfos)
+    -- Storage addresses may change on publication; version histories use safeKey identity.
+    resourceKeys = nub (map (safeKey <<< _.resourceKey) nonLegacyInfos)
   gaps <- for resourceKeys \resourceKey -> do
-    localVersion <- lift $ getResourceVersion resourceKey
+    localVersion <- lookupVersion resourceKey
     let
       sortedInfos = sortBy (\d1 d2 -> compare d1.resourceVersion d2.resourceVersion)
-        (filter (\d -> d.resourceKey == resourceKey) nonLegacyInfos)
+        (filter (\d -> safeKey d.resourceKey == resourceKey) nonLegacyInfos)
       result = foldl
         ( \acc d ->
             case acc.gap of
@@ -500,6 +504,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
     _ -> do
       -- Gaps detected: block the entire transaction.
       lift $ renderPerspectivesWarning >=> traceSync $ TransactionBlockedByVersionGaps
+      lift $ traceSync $ "Missing peer delta versions: " <> show gaps
       lift $ storePendingTransaction t gaps
   where
 

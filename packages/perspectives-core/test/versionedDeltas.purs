@@ -4,6 +4,7 @@ import Prelude
 
 import Data.Array (any)
 import Data.Either (Either(..))
+import Data.Identity (Identity(..))
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
 import Effect (Effect)
@@ -18,6 +19,7 @@ import Perspectives.Representation.InstanceIdentifiers (PerspectivesUser(..), Ro
 import Perspectives.Representation.TypeIdentifiers (ContextType(..))
 import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..), EnumeratedRoleType(..), RoleType(..))
 import Perspectives.Sync.CanonicalJson (canonicalizeJsonString, computeDeltaId)
+import Perspectives.Sync.HandleTransaction (checkForGapsWith)
 import Perspectives.Sync.VersionedDelta (DeltaEnvelope(..), parseDeltaFormatVersion, parseIncomingDelta)
 import Perspectives.TypesForDeltas (RolePropertyDelta(..), RolePropertyDeltaType(..))
 import Test.Unit (TestF, suite, test)
@@ -47,18 +49,19 @@ theSuite = suite "Versioned delta phase 0/1" do
     Assert.assert "explicit version field should be treated as format 2" (parseDeltaFormatVersion "{\"deltaFormatVersion\":2}" == 2)
 
   test "v2 role-property deltas strip revision suffixes on parse" do
-    let payload = writeJSON
-          { deltaFormatVersion: 2
-          , subject: "model://example.org#Sales$User@3.2"
-          , subjectKind: "ENR"
-          , resourceKey: "def:#role#model://example.org#Sales$Order$Status"
-          , resourceVersion: 4
-          , id: RoleInstance "def:#role"
-          , roleType: "model://example.org#Sales$Order@3.2"
-          , property: "model://example.org#Sales$Order$Status@3.2"
-          , values: [ Value "approved" ]
-          , deltaType: SetProperty
-          }
+    let
+      payload = writeJSON
+        { deltaFormatVersion: 2
+        , subject: "model://example.org#Sales$User@3.2"
+        , subjectKind: "ENR"
+        , resourceKey: "def:#role#model://example.org#Sales$Order$Status"
+        , resourceVersion: 4
+        , id: RoleInstance "def:#role"
+        , roleType: "model://example.org#Sales$Order@3.2"
+        , property: "model://example.org#Sales$Order$Status@3.2"
+        , values: [ Value "approved" ]
+        , deltaType: SetProperty
+        }
     case parseIncomingDelta payload of
       Right (RolePropertyEnvelope (RolePropertyDelta delta)) -> do
         Assert.assert "subject should parse as an enumerated role" (delta.subject == ENR (EnumeratedRoleType "model://example.org#Sales$User"))
@@ -69,6 +72,48 @@ theSuite = suite "Versioned delta phase 0/1" do
   test "delta store ids retain a short delta suffix" do
     let docId = deltaStoreDocIdWithDeltaId "def:#role" 4 (PerspectivesUser "def:#author") "0123456789abcdef9876543210"
     Assert.assert "doc ids should end in the short delta id suffix" (docId == "role_v4_author|0123456789abcdef")
+
+  suite "version gaps across storage addresses" do
+    let
+      localKey = "def:#repository#binding"
+      publicKey = "pub:https://example.org/cw_repositories/#repository#binding"
+      author = PerspectivesUser "alice"
+      delta resourceKey resourceVersion = { resourceKey, resourceVersion, author }
+      gaps version infos = unwrap $ checkForGapsWith
+        (\key -> Identity $ if key == "repository#binding" then version else 0)
+        infos
+
+    test "combines local and public history, duplicates, and out-of-order versions" do
+      Assert.equal [] $ gaps 0
+        [ delta publicKey 3
+        , delta localKey 1
+        , delta publicKey 2
+        , delta localKey 1
+        ]
+
+    test "looks up the existing version using the canonical resource key" do
+      Assert.equal [] $ gaps 1 [ delta publicKey 2, delta localKey 3 ]
+
+    test "preserves the original address and author of a genuinely missing version" do
+      Assert.equal [ { author, resourceKey: publicKey, expectedVersion: 2 } ] $
+        gaps 0 [ delta localKey 1, delta publicKey 3 ]
+
+    test "still detects missing initial history" do
+      Assert.equal [ { author, resourceKey: publicKey, expectedVersion: 1 } ] $
+        gaps 0 [ delta publicKey 2, delta publicKey 3 ]
+
+    test "does not combine different resources or binding and property histories" do
+      let
+        propertyKey = "def:#repository#model://example.org#Model$Role$Name"
+        otherKey = "pub:https://example.org/cw_repositories/#other#binding"
+      Assert.equal
+        [ { author, resourceKey: propertyKey, expectedVersion: 1 }
+        , { author, resourceKey: otherKey, expectedVersion: 1 }
+        ]
+        $ gaps 0 [ delta localKey 1, delta propertyKey 2, delta otherKey 2 ]
+
+    test "ignores legacy and already applied versions" do
+      Assert.equal [] $ gaps 2 [ delta publicKey (-1), delta localKey 1, delta publicKey 3 ]
 
   test "compiled types are stamped with the model version" do
     let contextId = "model://example.org#Sales"

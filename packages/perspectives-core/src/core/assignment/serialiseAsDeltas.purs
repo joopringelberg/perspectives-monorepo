@@ -402,25 +402,31 @@ serialiseDependency users mpreviousDependency currentDependency = do
   addDeltasForRole roleId@(RoleInstance r) = do
     (liftToMPT $ try $ getPerspectRol roleId) >>=
       handlePerspectRolError "addDeltasForRole"
-        \(PerspectRol { context }) -> if isInPublicScheme (unwrap context) then pure unit
-          else do
-            (liftToMPT $ try $ getPerspectContext context) >>=
-              handlePerspectContextError "addDeltasForRole"
-                \(PerspectContext { buitenRol }) -> do
-                  -- Get creation deltas for external role.
-                  extRoleDeltas <- lift $ getDeltasForResource (unwrap buitenRol)
-                  -- We expect at least two deltas for the external role: the ConstructExternalRole delta and the ContextDelta that links it to the context. If there are less than two, something is wrong.
-                  if length extRoleDeltas < 2 then lift $ errorDelta ("No deltas found for external role " <> show buitenRol) else pure unit
-                  -- Get creation deltas for context.
-                  contextDeltas <- lift $ getDeltasForResource (unwrap context)
-                  -- We expect at least one delta for the context: the ConstructEmptyContext delta. If there are none, something is wrong.
-                  if null contextDeltas then lift $ errorDelta ("No deltas found for context " <> show context) else pure unit
-                  -- Get creation deltas for this role.
-                  roleDeltas <- lift $ getDeltasForResource (unwrap roleId)
-                  -- We expect at least one delta for the role: the ConstructEmptyRole delta. If there are none, something is wrong.
-                  if null roleDeltas then lift $ errorDelta ("No deltas found for role " <> show roleId) else pure unit
-                  for_ (extRoleDeltas <> contextDeltas <> roleDeltas) \(DeltaStoreRecord { signedDelta }) ->
-                    addDelta $ DeltaInTransaction { users, delta: signedDelta }
+        \(PerspectRol { context }) -> if isInPublicScheme (unwrap context) then do
+            -- Get creation deltas for this role.
+            roleDeltas <- lift $ getDeltasForResource (unwrap roleId)
+            -- We expect at least one delta for the role: the ConstructEmptyRole delta. If there are none, something is wrong.
+            if null roleDeltas then lift $ errorDelta ("No deltas found for role " <> show roleId) else pure unit
+            for_ roleDeltas \(DeltaStoreRecord { signedDelta }) ->
+              addDelta $ DeltaInTransaction { users, delta: signedDelta }
+            else do
+              (liftToMPT $ try $ getPerspectContext context) >>=
+                handlePerspectContextError "addDeltasForRole"
+                  \(PerspectContext { buitenRol }) -> do
+                    -- Get creation deltas for external role.
+                    extRoleDeltas <- lift $ getDeltasForResource (unwrap buitenRol)
+                    -- We expect at least two deltas for the external role: the ConstructExternalRole delta and the ContextDelta that links it to the context. If there are less than two, something is wrong.
+                    if length extRoleDeltas < 2 then lift $ errorDelta ("No deltas found for external role " <> show buitenRol) else pure unit
+                    -- Get creation deltas for context.
+                    contextDeltas <- lift $ getDeltasForResource (unwrap context)
+                    -- We expect at least one delta for the context: the ConstructEmptyContext delta. If there are none, something is wrong.
+                    if null contextDeltas then lift $ errorDelta ("No deltas found for context " <> show context) else pure unit
+                    -- Get creation deltas for this role.
+                    roleDeltas <- lift $ getDeltasForResource (unwrap roleId)
+                    -- We expect at least one delta for the role: the ConstructEmptyRole delta. If there are none, something is wrong.
+                    if null roleDeltas then lift $ errorDelta ("No deltas found for role " <> show roleId) else pure unit
+                    for_ (extRoleDeltas <> contextDeltas <> roleDeltas) \(DeltaStoreRecord { signedDelta }) ->
+                      addDelta $ DeltaInTransaction { users, delta: signedDelta }
 
   withContext :: Boolean
   withContext = true

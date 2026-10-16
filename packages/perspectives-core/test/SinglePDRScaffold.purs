@@ -217,11 +217,18 @@ singlePDRCacheKey cfg =
     cfg.suiteName <> "|" <> loadMethodKey <> "|" <> outputSnapshotKey
 
 executeModelTest
-  :: PDRInstance
+  :: forall r
+   . PDRInstance
   -> ContextInstance
   -> String
   -> LogConfiguration
-  -> SinglePDRModelConfiguration
+  -> { testAppManager :: String
+     , testsType :: String
+     , testTimeLimit :: Milliseconds
+     , testNameProperty :: String
+     , testSucceededProperty :: String
+     | r
+     }
   -> Aff SynchronisationResult
 executeModelTest pdr testAppContext testContextTypeR logConfiguration cfg = do
   runInPDR pdr do

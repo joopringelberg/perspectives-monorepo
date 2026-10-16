@@ -2,20 +2,17 @@ module Test.BrokerServiceSignupTests where
 
 import Prelude
 
+import Control.Monad.AvarMonadAsk (gets)
 import Control.Monad.Error.Class (throwError)
 import Data.Array (catMaybes, head, null)
 import Data.Either (Either(..), isRight)
 import Data.Foldable (any, elem, for_)
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Time.Duration (Milliseconds(..))
-import Perspectives.Assignment.Update (setProperty)
-import Perspectives.Cuid2 (cuid2)
-import Perspectives.RunMonadPerspectivesTransaction (doNotShareWithPeers)
 import Data.Traversable (for)
 import Data.Tuple (Tuple(..))
 import Effect (Effect)
 import Effect.Aff (Aff, attempt, bracket, error, launchAff_)
-import Control.Monad.AvarMonadAsk (gets)
 import Effect.Aff.AVar (tryRead)
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
@@ -23,28 +20,31 @@ import Foreign.Object (fromFoldable)
 import Node.Encoding (Encoding(..))
 import Node.FS.Aff (readTextFile)
 import Partial.Unsafe (unsafePartial)
+import Perspectives.AMQP.RabbitMQManagement (virtualHost)
+import Perspectives.Assignment.Update (setProperty)
 import Perspectives.CoreTypes (LogLevel(..), LogTopic(..), MonadPerspectives, (##=), (##>))
+import Perspectives.Cuid2 (cuid2)
 import Perspectives.DataUpgrade.PatchModels (patchModels)
 import Perspectives.DataUpgrade.RecompileLocalModels (recompileLocalModel)
 import Perspectives.Identifiers (modelUri2LocalName, unversionedModelUri)
 import Perspectives.Instances.ObjectGetters (binding, context, getEnumeratedRoleInstances, getUnlinkedRoleInstances)
-import Perspectives.Logging (infoTest, traceTest)
+import Perspectives.Logging (ansiCyan, ansiRed, infoTest, traceTest)
 import Perspectives.ModelDependencies (identifiableFirstName, identifiableLastName, mySocialEnvironment, socialEnvironmentPersons, sysUser)
-import Perspectives.AMQP.RabbitMQManagement (virtualHost)
 import Perspectives.Names (lookupIndexedContext)
 import Perspectives.PerspectivesState (defaultRuntimeOptions, setTopicLogLevel)
 import Perspectives.Query.UnsafeCompiler (getPropertyValues)
 import Perspectives.Representation.InstanceIdentifiers (Value(..))
 import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..), EnumeratedRoleType(..), IndexedContext(..), PropertyType(..), RoleType(..))
-import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransaction', shareWithPeers)
+import Perspectives.RunMonadPerspectivesTransaction (doNotShareWithPeers, runMonadPerspectivesTransaction', shareWithPeers)
 import Perspectives.Sidecar.StableIdMapping (ModelUri(..), Stable, StableIdMapping)
 import Perspectives.Sidecar.ToStable (toStable)
 import Perspectives.TypePersistence.LoadArc (loadCompileAndStoreArcFile_)
 import Test.LocalCouchdbTestSupport (addLocalCouchdbCredentials)
+import Test.Layer3Scaffold (LogConfiguration, ModelTest, applyLogConfigurationToPDRs)
 import Test.PDRInstance (SynchronisationResult, noBus, pollUntil, snapshotExists, startPDRInstanceFromSnapshotWithHook, testPouchdbUser, withPDRCached)
 import Test.PDRInstance.Types (PDRInstance, runInPDR)
 import Test.RabbitMQCtl (addAdminUser, deleteUser, purgeOwnQueue, queueExists, userExists)
-import Test.SinglePDRScaffold (SinglePDRModelConfiguration, TestModelLoadMethod(..), LogConfiguration, emptyLogConfiguration, executeModelTest, loadModel)
+import Test.SinglePDRScaffold (TestModelLoadMethod(..), emptyLogConfiguration, executeModelTest, loadModel)
 import Test.Unit (TestSuite, suite, test)
 import Test.Unit.Assert (assert)
 import Test.Unit.Main (runTest)
@@ -85,18 +85,16 @@ getSignupResults = do
     $ error ("Required Alice post-reboot snapshot is missing: " <> aliceSnapshotDirectory)
 
   bracket
-    (startPDRInstanceFromSnapshotWithHook (testPouchdbUser "alice") defaultRuntimeOptions Nothing noBus aliceSnapshotDirectory purgeOwnQueue)
+    (startPDRInstanceFromSnapshotWithHook (testPouchdbUser "alice") defaultRuntimeOptions (Just ansiCyan) noBus aliceSnapshotDirectory purgeOwnQueue)
     (_.shutdown)
     \alice ->
-      withPDRCached (testPouchdbUser "bob") defaultRuntimeOptions Nothing noBus bobSnapshotDirectory \bob -> do
+      withPDRCached (testPouchdbUser "bob") defaultRuntimeOptions (Just ansiRed) noBus bobSnapshotDirectory \bob -> do
         addLocalCouchdbCredentials alice
         addLocalCouchdbCredentials bob
 
-        -- The broker signup scenario assumes the local CouchdbManagement model has the
-        -- population/permissions fix used by the rebooted universe. Patch the stored model
-        -- in both snapshots before the test model is compiled.
-        patchCouchdbManagement alice
-        patchCouchdbManagement bob
+        -- CouchdbManagement has been patched in the universe snapshots already
+        -- patchCouchdbManagement alice
+        -- patchCouchdbManagement bob
 
         -- Alice compiles first and coins the stable ids; Bob reuses her mapping so both
         -- PDRs share the same CUIDs for the test model's types.
@@ -106,8 +104,7 @@ getSignupResults = do
 
         void $ compileTestModel bob (Just aliceMapping)
 
-        for_ [ alice, bob ] \pdr -> runInPDR pdr do
-          for_ signupTestModelConfiguration.setupLogConfiguration.pdr \{ topic, logLevel } -> setTopicLogLevel topic logLevel
+        applyLogConfigurationToPDRs alice bob signupTestModelConfiguration.setupLogConfiguration
 
         bobTestApp <- pollUntil 100 (Milliseconds 100.0)
           "Broker signup test app to appear in Bob's PDR"
@@ -139,16 +136,15 @@ getSignupResults = do
               if testCase.testContextTypeName == createCouchdbAccountTestContext then aliceTestApp
               else bobTestApp
 
-          -- Alice's PDR shares the process output with Bob's; her state transitions and broker traffic explain what she does on termination.
           when (testCase.testContextTypeName == endSubscriptionTestContext) $ giveAliceAdminCredentials alice adminPassword
-          when (testCase.testContextTypeName == endSubscriptionTestContext) $ runInPDR alice do
-            setTopicLogLevel STATE Debug
-            setTopicLogLevel BROKER Debug
+          applyLogConfigurationToPDRs alice bob
+            (fromMaybe signupTestModelConfiguration.setupLogConfiguration testCase.logConfiguration)
+
           result <- executeModelTest
             testPdr
             testApp
             testCase.testContextTypeName
-            testCase.logConfiguration
+            emptyLogConfiguration
             signupTestModelConfiguration
 
           runInPDR testPdr do
@@ -354,7 +350,24 @@ signupSuite { signupResults, aliceSawBob, bobCouchdbOutcome, afterTermination } 
         test "Bob's queue should be deleted from RabbitMQ after termination" do
           assert "Bob's RabbitMQ queue still exists" rabbitQueueGone
 
-signupTestModelConfiguration :: SinglePDRModelConfiguration
+-- pdrA is Alice; pdrB is Bob, regardless of which PDR executes the test.
+type SignupModelConfiguration =
+  { suiteName :: String
+  , snapshotDirectory :: String
+  , outputSnapshotDirectory :: Maybe String
+  , testModel :: String
+  , testModelLoadMethods :: Array TestModelLoadMethod
+  , indexedTestContext :: String
+  , testAppManager :: String
+  , testsType :: String
+  , testSucceededProperty :: String
+  , testNameProperty :: String
+  , testTimeLimit :: Milliseconds
+  , setupLogConfiguration :: LogConfiguration
+  , tests :: Array ModelTest
+  }
+
+signupTestModelConfiguration :: SignupModelConfiguration
 signupTestModelConfiguration =
   { suiteName: "Broker Service signup tests"
   , snapshotDirectory: bobSnapshotDirectory
@@ -372,31 +385,42 @@ signupTestModelConfiguration =
   , testSucceededProperty
   , testNameProperty
   , testTimeLimit: Milliseconds 60000.0
-  , setupLogConfiguration:
-      { pdr:
-          [ { topic: TEST, logLevel: Trace }
-          -- , { topic: INSTALL, logLevel: Trace }
-          -- , { topic: MODEL, logLevel: Warn }
-          ]
-      }
+  , setupLogConfiguration: emptyConfiguration
   , tests:
-      [ { testContextTypeName: signupTestContext, logConfiguration: debugConfiguration }
-      , { testContextTypeName: createCouchdbAccountTestContext, logConfiguration: debugConfiguration }
-      , { testContextTypeName: endSubscriptionTestContext, logConfiguration: debugConfiguration }
+      [ { testContextTypeName: signupTestContext, logConfiguration: Just emptyConfiguration }
+      , { testContextTypeName: createCouchdbAccountTestContext, logConfiguration: Just debugConfiguration }
+      -- , { testContextTypeName: endSubscriptionTestContext, logConfiguration: Just debugConfiguration }
       ]
   }
 
+emptyConfiguration :: LogConfiguration
+emptyConfiguration =
+      { pdrA:
+          [ { topic: TEST, logLevel: Trace }
+          ]
+      , pdrB:
+          [ { topic: TEST, logLevel: Trace }
+          ]
+      }
 debugConfiguration :: LogConfiguration
 debugConfiguration =
-  { pdr:
+  { pdrA:
       [
         -- { topic: TEST, logLevel: Trace }
         { topic: BROKER, logLevel: Trace }
       , { topic: SYNC, logLevel: Trace }
+      , { topic: DELTA, logLevel: Trace }
       -- , { topic: INSTALL, logLevel: Trace }
       , { topic: RESOURCE, logLevel: Trace }
       , { topic: STATE, logLevel: Trace }
       -- , { topic: MODEL, logLevel: Warn }
+      ]
+  , pdrB:
+      [ { topic: BROKER, logLevel: Trace }
+      , { topic: SYNC, logLevel: Trace }
+      , { topic: DELTA, logLevel: Trace }
+      , { topic: RESOURCE, logLevel: Trace }
+      , { topic: STATE, logLevel: Trace }
       ]
   }
 

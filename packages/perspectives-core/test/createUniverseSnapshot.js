@@ -4,5 +4,6 @@ import repositoryregistry from '../test/patches/repositoryRegistry@1.0.arc';
 import amqptestmodel from '../test/patches/AMQPtestModel@1.0.arc';
 import amqptestsetup from '../test/patches/AMQPtestSetup@1.0.arc';
 import brokerservices from '../test/patches/BrokerServices@7.0.arc';
+import system from '../test/patches/perspectivesSysteem@7.0.arc';
 
-export { couchdbmanagement, repositoryregistry, amqptestmodel, amqptestsetup, brokerservices }
+export { couchdbmanagement, repositoryregistry, amqptestmodel, amqptestsetup, brokerservices, system }

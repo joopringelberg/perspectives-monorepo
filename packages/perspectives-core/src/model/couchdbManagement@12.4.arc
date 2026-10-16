@@ -199,7 +199,7 @@ domain model://perspectives.domains#CouchdbManagement@12.4
           do for Admin
             bind origin to CouchdbServers in cm:MyCouchdbApp
           notify Admin
-            "You now have an account with CouchdbServer {Name}"
+            "You now are Admin of CouchdbServer {Name}"
 
       state AccountsReceivesServer = (not exists filter cm:MyCouchdbApp >> CouchdbServers with filledBy origin) and exists (filter context >> Accounts with filledBy me)
         on entry

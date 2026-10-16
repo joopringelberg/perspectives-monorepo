@@ -464,7 +464,7 @@ domain model://perspectives.domains#System@7.0
       perspective on ModelsInUse
         only (Create, CreateAndFill, Fill, RemoveFiller, Remove)
         props (ModelName, Description, Version, Patch, Build, ShouldNotBeRemoved, ModelToRemove) verbs (Consult)
-        props (InstalledPatch, InstalledBuild, UpdateOnBuild, DetachedFiller) verbs (SetPropertyValue)
+        props (InstalledPatch, InstalledBuild, UpdateOnBuild, DetachedFiller, ModelToRemove) verbs (SetPropertyValue)
         in object state Filled
           action Detach
             DetachedFiller = binding >> callExternal util:RoleIdentifier() returns String

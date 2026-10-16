@@ -59,6 +59,7 @@ import Test.SidecarUniqueTypeNames (theSuite) as SUTN
 import Test.Persistence.Authentication (theSuite) as PA
 import Test.VariableBindings (theSuite) as VB
 import Test.TransactionQueue (theSuite) as TQ
+import Test.VersionedDeltas (theSuite) as VD
 
 -- Comprehensive unit tests for ExpandedADT, CNF, and ADT (with real assertions)
 import Test.Perspectives.Representation.AbstractDataTypeTests (theSuite) as ADTTESTS
@@ -88,6 +89,7 @@ main = runTest do
   PA.theSuite
   VB.theSuite -- Variable bindings are private to a fiber
   TQ.theSuite
+  VD.theSuite
 
   -- Read a file from the file-system, but otherwise pure (no MonadPerspectives / no HTTP)
   TPAM.theSuite -- ARC model parser (parses .arc files from the model/

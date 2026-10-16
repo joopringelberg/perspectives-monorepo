@@ -187,23 +187,25 @@ main = launchAff_ do
         -- patchModels and recompileLocalModel log on the UPGRADE topic.
         setTopicLogLevel UPGRADE Debug
         -- Per 12-10-2026 we construct a universe snapshot from an already rebooted universe, holding all the new model versions.
-        -- patchModels $ fromFoldable
-        --   [ Tuple "model://perspectives.domains#CouchdbManagement" couchdbmanagement
-        --   , Tuple "model://perspectives.domains#RepositoryRegistry" repositoryregistry
-        --   , Tuple "model://joopringelberg.nl#AMQPtestModel" amqptestmodel
-        --   , Tuple "model://joopringelberg.nl#AMQPtestSetup" amqptestsetup
-        --   , Tuple "model://perspectives.domains#BrokerServices" brokerservices
-        --   ]
-        -- for_
-        --   [ "model://perspectives.domains#CouchdbManagement"
-        --   , "model://perspectives.domains#RepositoryRegistry"
-        --   , "model://joopringelberg.nl#AMQPtestModel"
-        --   , "model://joopringelberg.nl#AMQPtestSetup"
-        --   , "model://perspectives.domains#BrokerServices"
-        --   ]
-        --   \modelUri -> do
-        --     success <- recompileLocalModel (ModelUri modelUri)
-        --     log ("Patched and recompiled " <> modelUri <> ": " <> show success)
+        patchModels $ fromFoldable
+          [ Tuple "model://perspectives.domains#System" system
+          , Tuple "model://perspectives.domains#CouchdbManagement" couchdbmanagement
+          -- , Tuple "model://perspectives.domains#RepositoryRegistry" repositoryregistry
+          -- , Tuple "model://joopringelberg.nl#AMQPtestModel" amqptestmodel
+          -- , Tuple "model://joopringelberg.nl#AMQPtestSetup" amqptestsetup
+          -- , Tuple "model://perspectives.domains#BrokerServices" brokerservices
+          ]
+        for_
+          [ "model://perspectives.domains#System"
+          , "model://perspectives.domains#CouchdbManagement"
+          -- , "model://perspectives.domains#RepositoryRegistry"
+          -- , "model://joopringelberg.nl#AMQPtestModel"
+          -- , "model://joopringelberg.nl#AMQPtestSetup"
+          -- , "model://perspectives.domains#BrokerServices"
+          ]
+          \modelUri -> do
+            success <- recompileLocalModel (ModelUri modelUri)
+            log ("Patched and recompiled " <> modelUri <> ": " <> show success)
 
       settleAndSave pdr
 
@@ -215,3 +217,4 @@ foreign import repositoryregistry :: String
 foreign import amqptestmodel :: String
 foreign import amqptestsetup :: String
 foreign import brokerservices :: String
+foreign import system :: String
