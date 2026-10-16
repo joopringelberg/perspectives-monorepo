@@ -37,6 +37,7 @@ data PerspectivesWarning
   | PropertySynchronizationIncomplete EnumeratedPropertyType RoleType (Array RoleType)
   | RoleSynchronizationIncomplete EnumeratedRoleType RoleType (Array RoleType)
   | RoleBindingSynchronizationIncomplete EnumeratedRoleType RoleType (Array RoleType)
+  | PeerPerspectiveOnIndexedRootContext RoleType ContextType
   | NotificationError StateIdentifier
   | AutomaticActionError StateIdentifier
   | ExternalFunctionError String
@@ -90,6 +91,7 @@ instance showPerspectivesWarning :: Show PerspectivesWarning where
   show (PropertySynchronizationIncomplete prop source destinations) = "(PropertySynchronizationIncomplete) Modifications to property:\n\t'" <> (unwrap prop) <> "'\n by:\n\t'" <> roletype2string source <> "'\n cannot be sent to:\n\t* " <> intercalate "\n\t* " (map roletype2string destinations) <> "."
   show (RoleSynchronizationIncomplete role source destinations) = "(RoleSynchronizationIncomplete) New (and removed) instances of role type:\n\t'" <> (unwrap role) <> "'\n by:\n\t'" <> roletype2string source <> "'\n cannot be sent to:\n\t* " <> intercalate "\n\t* " (map roletype2string destinations) <> "."
   show (RoleBindingSynchronizationIncomplete role source destinations) = "(RoleBindingSynchronizationIncomplete) Filling (and emptying) instances of role type:\n\t'" <> (unwrap role) <> "'\n by:\n\t'" <> roletype2string source <> "'\n cannot be communicated with:\n\t* " <> intercalate "\n\t* " (map roletype2string destinations) <> "."
+  show (PeerPerspectiveOnIndexedRootContext user context) = "(PeerPerspectiveOnIndexedRootContext) User role '" <> roletype2string user <> "' has a perspective with properties on a role of indexed root context '" <> unwrap context <> "'. This can lead to synchronization with peers and is not recommended. Use a calculated user role that reduces to 'me' for local-only access."
   show (NotificationError stateId) = "(NotificationError) Error on notifying in state " <> unwrap stateId
   show (AutomaticActionError stateId) = "(AutomaticActionError) Error on executing automatic action in state " <> unwrap stateId
   show (ExternalFunctionError fname) = "(ExternalFunctionError) External library function '" <> fname <> "' resulted in an error."
