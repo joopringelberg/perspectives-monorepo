@@ -29,7 +29,7 @@ module Main.RecompileBasicModels where
 import Prelude
 
 import Control.Monad.AvarMonadAsk (modify)
-import Control.Monad.Error.Class (class MonadThrow)
+import Control.Monad.Error.Class (class MonadThrow, throwError)
 import Control.Monad.Except (ExceptT, runExceptT)
 import Control.Monad.State (execState, execStateT)
 import Control.Monad.Trans.Class (lift)
@@ -51,6 +51,7 @@ import Effect.Class (liftEffect)
 import Foreign (unsafeToForeign)
 import Foreign.Object (empty)
 import Partial.Unsafe (unsafePartial)
+import Perspectives.Assignment.StateCache (clearModelStates)
 import Perspectives.ContextAndRole (rol_property)
 import Perspectives.CoreTypes (MonadPerspectivesTransaction, MonadPerspectives)
 import Perspectives.Couchdb (AttachmentInfo, DeleteCouchdbDocument(..))
@@ -159,14 +160,14 @@ recompileModel model@(UninterpretedDomeinFile { _rev, _id, id, namespace, arc, _
     -- It should also be the local part of the id.
     r <- lift $ loadAndCompileArcFileWithSidecar_ (ModelUri $ unwrap id) arc true mMapping (unsafePartial modelUri2LocalName (unwrap id)) (namespace <> (fromMaybe "" ((<>) "@" <$> (modelUriVersion _id)))) (modelUriVersion _id)
     case r of
-      Left m -> do
-        rendered <- lift $ lift $ renderMultiplePerspectivesErrors m
-        lift $ lift $ errorUpgrade ("recompileModel: " <> rendered)
+      Left m -> throwError m
       Right (Tuple df@(DomeinFile drf@{ invertedQueriesInOtherDomains, upstreamStateNotifications, upstreamAutomaticEffects }) (Tuple invertedQueries mapping')) -> lift $ lift do
         infoUpgrade $ "Recompiled '" <> namespace <> "' succesfully!"
         -- We have to add the _id here manually.
         df' <- pure $ DomeinFile drf { _id = _id, _attachments = _attachments }
         storeDomeinFileInCouchdbPreservingAttachments df'
+        -- State ids survive recompilation, but cached actions still close over the old definitions.
+        void $ pure $ clearModelStates id
         -- Drop the inverted queries of the previous compilation first; otherwise queries that refer to types
         -- that no longer exist (e.g. removed states) survive and break the runtime.
         removeInvertedQueriesContributedByModel id

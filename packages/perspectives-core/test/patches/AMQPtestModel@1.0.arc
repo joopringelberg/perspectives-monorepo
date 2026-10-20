@@ -3,7 +3,7 @@
 domain model://joopringelberg.nl#AMQPtestModel@1.0
   use sys for model://perspectives.domains#System
   use mm for model://joopringelberg.nl#AMQPtestModel
-  use bs for model://perspectives.domains#BrokerServices
+  use bs for model://perspectives.domains#BrokerServices@7.0
 
   -------------------------------------------------------------------------------
   ---- SETTING UP
@@ -141,20 +141,30 @@ domain model://joopringelberg.nl#AMQPtestModel@1.0
       property P (Number)
 
   ------------------------------------------------------------------------------
-  ---- Make Follower terminate the contract.
+  ---- Leader terminates Follower's contract; verify its removal locally in Follower's PDR.
   ------------------------------------------------------------------------------
   case Test_Leader_Terminates_Contract
     aspect mm:Test
+    state ExecuteAction = extern >> (StartAction and ContractWasPresent)
+      on entry
+        do for Leader
+          ContractTerminated = true for FollowerBrokerContract
+          TestName = "BrokerService Administrator terminates contract of Follower" for extern
+          once settled
+            TestFinished = true for extern
+
     external
-      -- This is to see if Leader has the required resources.
-      state ManagedBrokersRoleExists = exists bs:MyBrokers >> ManagedBrokers
-        state ManagedBrokerExists = exists bs:MyBrokers >> ManagedBrokers >> binding
-        -- Deze toestand wordt nooit geldig. Hypothese: het lukt niet de rollen uit de database op te halen.
-        -- Wel als we Accounts niet unlinked maken.
-          state AccountsRolesExist = exists bs:MyBrokers >> ManagedBrokers >> binding >> context >> Accounts
-            state ContractsExist = exists bs:MyBrokers >> ManagedBrokers >> binding >> context >> Accounts >> binding
-      -- This is for Follower: it cannot be in terms of ManagedBrokers.
-      state TestSucceeded = (exists bs:MyBrokers >> ContractInUse) and not exists bs:MyBrokers >> ContractInUse >> context >> Queues
+      property ContractWasPresent (Boolean)
+      property StartAction (Boolean)
+      -- This property triggers evaluation of TestSucceeded yet another time.
+      property TestFinished (Boolean)
+      state ContractObserved = exists bs:MyBrokers >> ContractInUse
+        on entry
+          do for Follower
+            ContractWasPresent = true
+
+      -- Registered becomes false before removal, so ContractInUse cannot establish that the contract is gone.
+      state TestSucceeded = ContractWasPresent and TestFinished and not exists bs:MyBrokers >> ContractInUse
         on entry
           do for Follower
             TestSucceeded = true
@@ -163,20 +173,23 @@ domain model://joopringelberg.nl#AMQPtestModel@1.0
       aspect mm:Test$Leader
       perspective on FollowerBrokerContract
         props (ContractTerminated) verbs (Consult, SetPropertyValue)
+      perspective on extern
+        props (StartAction, TestFinished) verbs (Consult, SetPropertyValue)
+        props (ContractWasPresent) verbs (Consult)
       action RunTest
-        ContractTerminated = true for FollowerBrokerContract
-        TestName = "BrokerService Administrator terminates contract of Follower" for extern
-    
-    -- context FollowerBrokerContract = (filter 
-    --   bs:MyBrokers >> PublicBrokers >> binding >> context >> Accounts >> binding 
-    --   with context >> AccountHolder filledBy (origin >> Follower >> binding)) >>= first
+        StartAction = true for extern
 
     -- This role is for the Manager to see: it is in terms of ManagedBrokers.
-    context FollowerBrokerContract =  
-      bs:MyBrokers >> ManagedBrokers >> binding >> context >> Accounts >> binding 
+    context FollowerBrokerContract = letE
+        followersuser <- Follower >> binding
+        contracts <- bs:MyBrokers >> ManagedBrokers >> binding >> context >> Accounts >> binding
+      in
+        filter contracts with context >> AccountHolder filledBy followersuser
 
     user Follower filledBy (sys:TheWorld$PerspectivesUsers)
       aspect mm:Test$Follower
+      perspective on extern
+        props (ContractWasPresent) verbs (Consult, SetPropertyValue)
+        props (TestFinished) verbs (Consult)
       perspective on FollowerBrokerContract
         props (ContractTerminated) verbs (Consult)
-

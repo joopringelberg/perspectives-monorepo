@@ -75,7 +75,7 @@ import Perspectives.ApiTypes (PropertySerialization(..), RolSerialization(..))
 import Perspectives.Assignment.RunAction (runActionForObject, runContextAction)
 import Perspectives.Assignment.Update (setProperty)
 import Perspectives.Authenticate (getPrivateKey, getTransportPrivateKey)
-import Perspectives.CoreTypes (BrokerService, IndexedResource, IntegrityFix, JustInTimeModelLoad(..), LogLevel(..), LogTopic(..), MonadPerspectives, MonadPerspectivesTransaction, RepeatingTransaction, ResourceToBeStored, RuntimeOptions, TypeFix, (##>))
+import Perspectives.CoreTypes (BrokerService, IndexedResource, IntegrityFix, JustInTimeModelLoad(..), LogTopic(..), MonadPerspectives, MonadPerspectivesTransaction, RepeatingTransaction, ResourceToBeStored, RuntimeOptions, TypeFix, (##>))
 import Perspectives.CoreTypes (LogLevel(..)) as CT
 import Perspectives.Extern.Files (getPFileTextValue)
 import Perspectives.External.CoreModules (addAllExternalFunctions)
@@ -89,7 +89,7 @@ import Perspectives.ModelTranslation (getCurrentLanguageFromIDB)
 import Perspectives.Names (getMySystem, getUserIdentifier)
 import Perspectives.Persistence.API (PouchdbUser)
 import Perspectives.Persistence.State (getSystemIdentifier)
-import Perspectives.Persistent (saveMarkedResources, tryGetPerspectContext)
+import Perspectives.Persistent (saveMarkedResources)
 import Perspectives.PerspectivesState (newPerspectivesState, noTransactionIsRunning, setBrokerService, setModelUris, setStompClientFactory, setTopicLogLevel, stompClient)
 import Perspectives.Representation.Class.PersistentType (EnumeratedPropertyType(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..), externalRole)
@@ -659,12 +659,12 @@ withTwoPDRsCachedNoBus user1 opts1 color1 snapshotDir1 user2 opts2 color2 snapsh
   withPDRCached user1 opts1 color1 noBus snapshotDir1 \pdr1 -> do
 
     runInPDR pdr1 do
-      setTopicLogLevel TEST Trace
+      -- setTopicLogLevel TEST Trace
       -- setTopicLogLevel INSTALL Trace
       -- setTopicLogLevel RESOURCE Trace
       -- setTopicLogLevel STATE Trace
       -- setTopicLogLevel SYNC Trace
-      setTopicLogLevel BROKER Trace
+      -- setTopicLogLevel BROKER Trace
       infoTest "withTwoPDRsCachedNoBus: Setting log levels for PDR1"
 
     -- Here, make pdr1 subscribe to the default AMQP/Stomp broker so that it can receive transactions from pdr2.
@@ -677,12 +677,12 @@ withTwoPDRsCachedNoBus user1 opts1 color1 snapshotDir1 user2 opts2 color2 snapsh
         withPDRCached user2 opts2 color2 noBus snapshotDir2 \pdr2 -> do
 
           runInPDR pdr2 do
-            setTopicLogLevel TEST Trace
+            -- setTopicLogLevel TEST Trace
             -- setTopicLogLevel INSTALL Trace
             -- setTopicLogLevel RESOURCE Trace
             -- setTopicLogLevel STATE Trace
             -- setTopicLogLevel SYNC Trace
-            setTopicLogLevel BROKER Trace
+            -- setTopicLogLevel BROKER Trace
             infoTest "withTwoPDRsCachedNoBus: Setting log levels for PDR2"
 
           -- Subscribe pdr2 and always unsubscribe it before pdr1.

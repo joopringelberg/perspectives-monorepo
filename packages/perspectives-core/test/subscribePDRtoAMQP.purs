@@ -10,7 +10,7 @@ import Data.Traversable (traverse)
 import Effect.Aff (Aff, bracket, error, throwError)
 import Perspectives.Assignment.RunAction (runActionForObject, runContextAction)
 import Perspectives.Assignment.Update (setProperty)
-import Perspectives.CoreTypes (LogLevel(..), LogTopic(..), (##=), (##>))
+import Perspectives.CoreTypes (LogLevel, LogTopic, (##=), (##>))
 import Perspectives.Extern.Couchdb (addModelToLocalStore_, createEntitiesDatabase)
 import Perspectives.Identifiers (deconstructBuitenRol)
 import Perspectives.Instances.ObjectGetters (binding_, getEnumeratedRoleInstances)
@@ -137,15 +137,15 @@ contractTerminated = "model://perspectives.domains#BrokerServices$BrokerContract
 
 -- We need the Stable identifier.
 brokerServiceModel :: String
--- brokerServiceModel = "model://perspectives.domains#BrokerServices@6.1"
-brokerServiceModel = "model://perspectives.domains#zjuzxbqpgc@6.1"
+-- brokerServiceModel = "model://perspectives.domains#BrokerServices@7.0"
+brokerServiceModel = "model://perspectives.domains#zjuzxbqpgc@7.0"
 
 -------------------------------------------------------------------------------
 ---- AMQP TEST SETUP MODEL
 -------------------------------------------------------------------------------
 
 amqpTestSetupModel :: String
--- amqpTestSetupModel = "model://joopringelberg.nl#AMQPtestSetup@6.1"
+-- amqpTestSetupModel = "model://joopringelberg.nl#AMQPtestSetup@1.0"
 amqpTestSetupModel = "model://joopringelberg.nl#whku0vufat@1.0"
 
 testSetupManager :: String
@@ -156,7 +156,7 @@ testSetupManager = "model://joopringelberg.nl#AMQPtestSetup$TestSetupApp$Manager
 -------------------------------------------------------------------------------
 subscribePDRtoAMQP :: ContextInstance -> PDRInstance -> Aff Unit
 subscribePDRtoAMQP publicBrokerServiceInstance pdr =
-  withBracketedTopicLogLevel pdr [ { topic: BROKER, logLevel: Trace }, { topic: RESOURCE, logLevel: Trace } ] $ runInPDR pdr do
+  withBracketedTopicLogLevel pdr [ {-- topic: BROKER, logLevel: Trace }, { topic: RESOURCE, logLevel: Trace --} ] $ runInPDR pdr do
     -- Load the Broker model
     runMonadPerspectivesTransaction' shareWithPeers (ENR $ EnumeratedRoleType sysUser)
       $
@@ -190,7 +190,7 @@ subscribePDRtoAMQP publicBrokerServiceInstance pdr =
 -------------------------------------------------------------------------------
 unsubscribePDRfromAMQP :: PDRInstance -> Aff Unit
 unsubscribePDRfromAMQP pdr =
-  withBracketedTopicLogLevel pdr [ { topic: BROKER, logLevel: Trace }, { topic: STATE, logLevel: Trace } ] $ runInPDR pdr do
+  withBracketedTopicLogLevel pdr [ {-- topic: BROKER, logLevel: Trace }, { topic: STATE, logLevel: Trace --} ] $ runInPDR pdr do
     -- Retrieve the contract instance from the indexed context bs:MyBrokers.
     IndexedContext brokerServicesAppStable <- toStable (IndexedContext brokerServicesApp)
     lookupIndexedContext brokerServicesAppStable >>= case _ of

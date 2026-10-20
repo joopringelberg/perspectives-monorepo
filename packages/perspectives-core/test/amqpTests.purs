@@ -81,7 +81,11 @@ synchronisationTestModelConfiguration =
   , snapshotDirAlice: "test/pdr-snapshot/layer3-clean/alice"
   , snapshotDirBob: "test/pdr-snapshot/layer3-clean/bob"
   , testModel
-  , testModelLoadMethod: LoadModelFromRepository
+  , testModelLoadMethod: CompileModelFromSource
+      { sourcePath: "src/model/AMQPtestModel@1.0.arc"
+      , modelUriReadable: "model://joopringelberg.nl#AMQPtestModel@1.0"
+      , basedOnVersion: Nothing
+      }
   , indexedTestContext
   , testAppManager
   , testAppFollowerType
@@ -93,14 +97,15 @@ synchronisationTestModelConfiguration =
       { pdrA:
           [ { topic: TEST, logLevel: Trace }
           , { topic: INSTALL, logLevel: Trace }
-          , { topic: RESOURCE, logLevel: Trace }
-          , { topic: STATE, logLevel: Trace }
-          , { topic: BROKER, logLevel: Trace }
-          , { topic: SYNC, logLevel: Trace }
+          -- , { topic: RESOURCE, logLevel: Trace }
+          -- , { topic: STATE, logLevel: Trace }
+          -- , { topic: BROKER, logLevel: Trace }
+          -- , { topic: SYNC, logLevel: Trace }
           ]
       , pdrB:
           [ { topic: TEST, logLevel: Trace }
-          , { topic: BROKER, logLevel: Trace }
+          -- , { topic: STATE, logLevel: Trace }
+          -- , { topic: BROKER, logLevel: Trace }
           ]
       }
   , tests: allTests
@@ -151,20 +156,20 @@ debugConfiguration :: LogConfiguration
 debugConfiguration =
   { pdrA:
       [ { topic: TEST, logLevel: Trace }
-      , { topic: RESOURCE, logLevel: Trace }
-      , { topic: STATE, logLevel: Trace }
-      , { topic: SYNC, logLevel: Trace }
-      , { topic: PERSISTENCE, logLevel: Trace }
-      -- , { topic: INSTALL, logLevel: Trace }
+      -- , { topic: RESOURCE, logLevel: Trace }
+      -- , { topic: STATE, logLevel: Trace }
+      -- , { topic: SYNC, logLevel: Trace }
+      -- , { topic: PERSISTENCE, logLevel: Trace }
+      , { topic: INSTALL, logLevel: Trace }
       ]
   , pdrB:
       [ { topic: TEST, logLevel: Trace }
-      , { topic: RESOURCE, logLevel: Trace }
-      , { topic: STATE, logLevel: Trace }
-      , { topic: SYNC, logLevel: Trace }
-      , { topic: PERSISTENCE, logLevel: Trace }
+      -- , { topic: RESOURCE, logLevel: Trace }
+      -- , { topic: STATE, logLevel: Trace }
+      -- , { topic: SYNC, logLevel: Trace }
+      -- , { topic: PERSISTENCE, logLevel: Trace }
       -- , { topic: BROKER, logLevel: Trace }
-      -- , { topic: INSTALL, logLevel: Trace }
+      , { topic: INSTALL, logLevel: Trace }
       ]
   }
 
