@@ -160,14 +160,14 @@ setPassword
   MonadPerspectivesTransaction Unit
 setPassword url_ adminUserName_ adminPassword_ accountName_ accountPassword_ _ = pure unit
 
--- | Deletes the users' account at the BrokerService
+-- | Returns true only when RabbitMQ confirms deletion of the account.
 deleteAMQPaccount
   :: Array BrokerServiceUrl
   -> Array AdminUserName
   -> Array AdminPassword
   -> Array AccountName
   -> RoleInstance
-  -> MonadPerspectivesTransaction Unit
+  -> MonadPerspectivesQuery Value
 deleteAMQPaccount url_ adminUserName_ adminPassword_ accountName_ _ =
   try
     ( case
@@ -177,22 +177,21 @@ deleteAMQPaccount url_ adminUserName_ adminPassword_ accountName_ _ =
         head accountName_
         of
         Just brokerServiceUrl, Just adminUserName, Just adminPassword, Just accountName -> do
-          r <- try $ lift $ runRabbitState' { virtualHost, brokerServiceUrl, adminUserName, adminPassword } do
-            deleteUser accountName
-          case r of
-            Left e -> logPerspectivesError $ Custom $ show e
-            Right _ -> pure unit
+          deleted <- lift $ lift $ runRabbitState' { virtualHost, brokerServiceUrl, adminUserName, adminPassword }
+            (deleteUser accountName)
+          pure $ Value (if deleted then "true" else "false")
         _, _, _, _ -> throwError $ error "Missing some arguments in deleteAMQPaccount."
     )
-    >>= handleExternalStatementError "model://perspectives.domains#RabbitMQ$DeleteAMQPaccount"
+    >>= handleExternalFunctionError "model://perspectives.domains#RabbitMQ$DeleteAMQPaccount"
 
+-- | Returns true only when RabbitMQ confirms deletion of the queue.
 deleteQueue_
   :: Array BrokerServiceUrl
   -> Array AdminUserName
   -> Array AdminPassword
   -> Array QueueName
   -> RoleInstance
-  -> MonadPerspectivesTransaction Unit
+  -> MonadPerspectivesQuery Value
 deleteQueue_ url_ adminUserName_ adminPassword_ queueName_ _ =
   try
     ( case
@@ -202,14 +201,12 @@ deleteQueue_ url_ adminUserName_ adminPassword_ queueName_ _ =
         head queueName_
         of
         Just brokerServiceUrl, Just adminUserName, Just adminPassword, Just queueName -> do
-          r <- try $ lift $ runRabbitState' { virtualHost, brokerServiceUrl, adminUserName, adminPassword } do
-            deleteQueue queueName
-          case r of
-            Left e -> logPerspectivesError $ Custom $ show e
-            Right _ -> pure unit
+          deleted <- lift $ lift $ runRabbitState' { virtualHost, brokerServiceUrl, adminUserName, adminPassword }
+            (deleteQueue queueName)
+          pure $ Value (if deleted then "true" else "false")
         _, _, _, _ -> throwError $ error "Missing some arguments in deleteQueue."
     )
-    >>= handleExternalStatementError "model://perspectives.domains#RabbitMQ$DeleteQueue"
+    >>= handleExternalFunctionError "model://perspectives.domains#RabbitMQ$DeleteQueue"
 
 setPermissionsForAMQPaccount
   :: Array BrokerServiceUrl
@@ -284,8 +281,8 @@ externalFunctions =
   [ Tuple "model://perspectives.domains#RabbitMQ$PrepareAMQPaccount" { func: unsafeCoerce prepareAMQPaccount, nArgs: 6, isFunctional: True, isEffect: true }
   , Tuple "model://perspectives.domains#RabbitMQ$SetBindingKey" { func: unsafeCoerce setBindingKey, nArgs: 5, isFunctional: True, isEffect: true }
   , Tuple "model://perspectives.domains#RabbitMQ$SetPassword" { func: unsafeCoerce setPassword, nArgs: 5, isFunctional: True, isEffect: true }
-  , Tuple "model://perspectives.domains#RabbitMQ$DeleteAMQPaccount" { func: unsafeCoerce deleteAMQPaccount, nArgs: 4, isFunctional: True, isEffect: true }
-  , Tuple "model://perspectives.domains#RabbitMQ$DeleteQueue" { func: unsafeCoerce deleteQueue_, nArgs: 4, isFunctional: True, isEffect: true }
+  , Tuple "model://perspectives.domains#RabbitMQ$DeleteAMQPaccount" { func: unsafeCoerce deleteAMQPaccount, nArgs: 4, isFunctional: True, isEffect: false }
+  , Tuple "model://perspectives.domains#RabbitMQ$DeleteQueue" { func: unsafeCoerce deleteQueue_, nArgs: 4, isFunctional: True, isEffect: false }
   , Tuple "model://perspectives.domains#RabbitMQ$SetPermissionsForAMQPaccount" { func: unsafeCoerce setPermissionsForAMQPaccount, nArgs: 5, isFunctional: True, isEffect: true }
   , Tuple "model://perspectives.domains#RabbitMQ$StartListening" { func: unsafeCoerce startListening, nArgs: 0, isFunctional: True, isEffect: true }
   , Tuple "model://perspectives.domains#RabbitMQ$SelfRegisterWithRabbitMQ" { func: unsafeCoerce selfRegisterWithRabbitMQ, nArgs: 4, isFunctional: True, isEffect: false }

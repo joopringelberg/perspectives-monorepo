@@ -12,7 +12,8 @@
 --   2. The AccountHolder acknowledges (TerminationAcknowledged), also when he himself terminated. Once the 
 --      acknowledgement has been sent (`once settled`), he removes the contract from his installation.
 --   3. Only when the Administrator has seen the acknowledgement, she deletes the account and the queue from RabbitMQ 
---      and removes the contract (and the Accounts role it fills) from her installation.
+--      and removes the contract (and the Accounts role it fills) only after confirmed account and queue deletion.
+--      Failed deletion leaves the Administrator's Accounts role and contract available for inspection.
 -- As a result, the contract is gone on both sides. If the AccountHolder has not yet accepted the contract (so there is nobody to
 -- acknowledge), step 3 follows immediately upon termination.
 domain model://perspectives.domains#BrokerServices@7.0
@@ -250,6 +251,7 @@ domain model://perspectives.domains#BrokerServices@7.0
         perspective on Accounts
           only (CreateAndFill, Remove, RemoveContext)
           props(LastNameOfAccountHolder) verbs (Consult)
+          props (AccountDeleted) verbs (Consult)
       perspective on Administrator
         only (Fill, RemoveFiller)
         props (FirstName, LastName) verbs (Consult)
@@ -366,6 +368,11 @@ domain model://perspectives.domains#BrokerServices@7.0
 
     -- PDRDEPENDENCY
     context Accounts (relational, unlinked) filledBy BrokerContract
+      property AccountDeleted (Boolean)
+      state ReadyToRemove = AccountDeleted and ((binding >> context >> Queues >>= count) == ((filter binding >> context >> Queues with QueueDeleted) >>= count))
+        on entry
+          do for Administrator
+            remove context origin
 
     context MyPublicBrokers = bs:MyBrokers >> PublicBrokers  >> binding
 
@@ -418,16 +425,15 @@ domain model://perspectives.domains#BrokerServices@7.0
 
     -- The AccountHolder has acknowledged termination (or there is no AccountHolder to acknowledge it). 
     -- Neither party depends on RabbitMQ any longer, so the Administrator can delete the account and the contract.
-    -- Removing the contract removes the Queues role, which in turn deletes the queue from RabbitMQ (see Queues).
+    -- Successful account deletion triggers queue deletion (see Queues); only confirmed deletion permits removal.
     state ReadyToDeregister = (extern >> ContractTerminated) and ((extern >> TerminationAcknowledged) or (not exists AccountHolder >> binding))
       on entry
         do for BrokerContract$Administrator
-          callEffect rabbit:DeleteAMQPaccount(
+          AccountDeleted = callExternal rabbit:DeleteAMQPaccount(
             extern >> ManagementEndpoint,
             Administrator >> AdminUserName,
             Administrator >> AdminPassword,
-            AccountHolder >> AccountName)
-          remove context extern >> binder Accounts
+            AccountHolder >> AccountName) returns Boolean for extern >> binder Accounts
 
     state Active = extern >> Registered
       on entry
@@ -642,7 +648,7 @@ domain model://perspectives.domains#BrokerServices@7.0
       
       perspective on Queues
         only (Create, Fill, DeleteContext, Delete)
-        props (QueueName) verbs (Consult, SetPropertyValue)
+        props (QueueName, QueueDeleted) verbs (Consult, SetPropertyValue)
       
       -- If this contract is due to self-signup, Administrator needs this perspective to know that this contract
       -- fills an Accounts role in the service
@@ -655,6 +661,7 @@ domain model://perspectives.domains#BrokerServices@7.0
       -- Needed to remove the contract (and the Accounts role it fills) once it is terminated.
       perspective on extern >> binder Accounts
         only (RemoveContext)
+        props (AccountDeleted) verbs (Consult, SetPropertyValue)
       
       perspective on TCPManager
         only (Create, Fill, Remove)
@@ -695,15 +702,16 @@ domain model://perspectives.domains#BrokerServices@7.0
     context Queues (relational) filledBy sys:PerspectivesSystem
       property QueueName (String)
         readableName
-      -- Removing the Queues role (for example by removing the contract) deletes the queue from the RabbitMQ server
-      -- and makes the AccountHolder stop reading it.
+      property QueueDeleted (Boolean)
+      state ReadyToDelete = context >> extern >> binder Accounts >> AccountDeleted
+        on entry
+          do for BrokerContract$Administrator
+            QueueDeleted = callExternal rabbit:DeleteQueue(
+              context >> extern >> ManagementEndpoint,
+              context >> Administrator >> AdminUserName,
+              context >> Administrator >> AdminPassword,
+              QueueName) returns Boolean
       on exit
-        do for BrokerContract$Administrator
-          callEffect rabbit:DeleteQueue(
-            context >> extern >> ManagementEndpoint,
-            context >> Administrator >> AdminUserName,
-            context >> Administrator >> AdminPassword,
-            QueueName)
         do for BrokerContract$AccountHolder
           callEffect rabbit:StopReadingPost(QueueName)
 

@@ -247,7 +247,7 @@ test("all workers failing before a manifest produce an explicit unknown-scenario
 test("existing scaffold entrypoints remain uninstrumented and measurements require process isolation", async () => {
   const scaffold = await readFile(new URL("./Layer3Scaffold.purs", import.meta.url), "utf8");
   assert.match(scaffold, /getSynchronisationResults = getSynchronisationResultsInternal Nothing withTwoPDRsCached true/);
-  assert.match(scaffold, /getSynchronisationResultsOverAMQP = getSynchronisationResultsInternal Nothing withTwoPDRsCachedNoBus false/);
+  assert.match(scaffold, /credentials <- requireAMQPAdministratorCredentials cfg\s+getSynchronisationResultsInternal Nothing \(withTwoPDRsCachedNoBus credentials\) false cacheRef cfg/);
   assert.match(scaffold, /executeModelTest = executeModelTestInternal Nothing/);
   assert.match(scaffold, /case cached of\s+Just results -> pure results/);
   assert.match(scaffold, /available <- performanceSnapshotsAvailable cfg\s+unless available \$ throwError/);
