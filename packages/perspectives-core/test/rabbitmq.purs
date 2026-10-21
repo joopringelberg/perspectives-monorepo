@@ -8,8 +8,9 @@ import Data.Maybe (Maybe(..), fromJust, isJust, isNothing)
 import Effect.Aff.Class (liftAff)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.AMQP.RabbitMQManagement (RabbitState, createQueue, createUser, deleteQueue, deleteUser, getNodes, getUser, runRabbitState', setPermissions)
+import Perspectives.CoreTypes (runMonadPerspectivesQueryToObject)
 import Perspectives.Extern.RabbitMQ (deleteAMQPaccount, deleteQueue_, prepareAMQPaccount, setBindingKey)
-import Perspectives.Representation.InstanceIdentifiers (RoleInstance(..))
+import Perspectives.Representation.InstanceIdentifiers (RoleInstance(..), Value(..))
 import Test.Perspectives.Utils (runMonadPerspectivesTransaction, runP)
 import Test.Unit (TestF, suite, test, testSkip)
 import Test.Unit.Assert (assert)
@@ -25,7 +26,7 @@ modelDirectory :: String
 modelDirectory = "src/model"
 
 rabbitState :: RabbitState
-rabbitState = 
+rabbitState =
   { virtualHost: "mycontexts"
   , brokerServiceUrl: "https://mycontexts.com/rbmq/"
   , adminUserName: "joopring"
@@ -38,45 +39,51 @@ theSuite = suite "Perspectives.AMQP.RabbitMQManagement" do
   testSkip "Retrieve the nodes" $ runP do
     nodes <- runRabbitState' rabbitState getNodes
     liftAff $ assert "The only node should be ''" ("rabbit@ubuntu-1cpu-1gb-nl-ams1" == (unsafePartial fromJust $ head nodes))
-  
-  testSkip "Remove a user account" $ runP do 
-    runRabbitState' rabbitState (deleteUser "rabbit_test_user")
-  
+
+  testSkip "Remove a user account" $ runP do
+    deleted <- runRabbitState' rabbitState (deleteUser "rabbit_test_user")
+    liftAff $ assert "RabbitMQ should confirm account deletion" deleted
+
   testSkip "Retrieve a user account" $ runP do
     mUser <- runRabbitState' rabbitState (getUser "rabbit_test_user")
-    liftAff $ assert "Expected a user with the name 'rabbit_test_user'" (case mUser of
-      Nothing -> false
-      Just {name} -> name == "rabbit_test_user") 
-  
+    liftAff $ assert "Expected a user with the name 'rabbit_test_user'"
+      ( case mUser of
+          Nothing -> false
+          Just { name } -> name == "rabbit_test_user"
+      )
+
   testSkip "Add and delete a user account" $ runP do
-    runRabbitState' rabbitState (do
-      createUser {password: "verysecret", tags: ""} "rabbit_test_user"
-      deleteUser "rabbit_test_user"
-      mUser <- getUser "rabbit_test_user"
-      liftAff $ assert "There should be no user with the name 'rabbit_test_user'" (isNothing mUser)
+    runRabbitState' rabbitState
+      ( do
+          createUser { password: "verysecret", tags: "" } "rabbit_test_user"
+          deleted <- deleteUser "rabbit_test_user"
+          liftAff $ assert "RabbitMQ should confirm account deletion" deleted
+          mUser <- getUser "rabbit_test_user"
+          liftAff $ assert "There should be no user with the name 'rabbit_test_user'" (isNothing mUser)
       )
 
   testSkip "Add a queue" $ runP do
     runRabbitState' rabbitState (createQueue "rabbit_test_queue")
 
   testSkip "Delete a queue" $ runP do
-    runRabbitState' rabbitState (deleteQueue "rabbit_test_queue")
-  
+    deleted <- runRabbitState' rabbitState (deleteQueue "rabbit_test_queue")
+    liftAff $ assert "RabbitMQ should confirm queue deletion" deleted
+
   testSkip "Create user and set permissions" $ runP do
     runRabbitState' rabbitState do
-      createUser {password: "verysecret", tags: ""} "rabbit_test_user"
-      setPermissions "rabbit_test_user" {configure: "rabbit_test_queue", write: "rabbit_test_queue|amq\\.topic", read: "rabbit_test_queue|amq\\.topic"}
-      deleteUser "rabbit_test_user"
-  
-  test "Perspectives.Extern.RabbitMQ.prepareAMQPaccount" $ runP $ do 
+      createUser { password: "verysecret", tags: "" } "rabbit_test_user"
+      setPermissions "rabbit_test_user" { configure: "rabbit_test_queue", write: "rabbit_test_queue|amq\\.topic", read: "rabbit_test_queue|amq\\.topic" }
+      void $ deleteUser "rabbit_test_user"
+
+  test "Perspectives.Extern.RabbitMQ.prepareAMQPaccount" $ runP $ do
     void $ runMonadPerspectivesTransaction do
-      prepareAMQPaccount 
-        ["https://mycontexts.com/rbmq/"]
-        ["joopring"]
-        ["dOnkered1g"]
-        ["rabbit_test_user"]
-        ["geheim"]
-        ["rabbit_test_queue"]
+      prepareAMQPaccount
+        [ "https://mycontexts.com/rbmq/" ]
+        [ "joopring" ]
+        [ "dOnkered1g" ]
+        [ "rabbit_test_user" ]
+        [ "geheim" ]
+        [ "rabbit_test_queue" ]
         (RoleInstance "ignore")
     runRabbitState' rabbitState do
       mUser <- getUser "rabbit_test_user"
@@ -85,28 +92,27 @@ theSuite = suite "Perspectives.AMQP.RabbitMQManagement" do
   test "Perspectives.Extern.RabbitMQ.setBindingKey" $ runP $ do
     void $ runMonadPerspectivesTransaction $
       setBindingKey
-        ["https://mycontexts.com/rbmq/"]
-        ["rabbit_test_user"]
-        ["geheim"]
-        ["rabbit_test_queue"]
-        ["def:#rabbit_test_user$User"]
+        [ "https://mycontexts.com/rbmq/" ]
+        [ "rabbit_test_user" ]
+        [ "geheim" ]
+        [ "rabbit_test_queue" ]
+        [ "def:#rabbit_test_user$User" ]
         (RoleInstance "ignore")
 
   test "Perspectives.Extern.RabbitMQ.deleteAMQPaccount" $ runP $ do
-    void $ runMonadPerspectivesTransaction $
-      deleteAMQPaccount 
-        ["https://mycontexts.com/rbmq/"]
-        ["joopring"]
-        ["dOnkered1g"]
-        ["rabbit_test_user"]
-        (RoleInstance "ignore")
- 
+    result <- runMonadPerspectivesQueryToObject (RoleInstance "ignore") $
+      deleteAMQPaccount
+        [ "https://mycontexts.com/rbmq/" ]
+        [ "joopring" ]
+        [ "dOnkered1g" ]
+        [ "rabbit_test_user" ]
+    liftAff $ assert "Deletion should return true to ARC" (result == Value "true")
+
   test "Perspectives.Extern.RabbitMQ.deleteQueue" $ runP $ do
-    void $ runMonadPerspectivesTransaction $
+    result <- runMonadPerspectivesQueryToObject (RoleInstance "ignore") $
       deleteQueue_
-        ["https://mycontexts.com/rbmq/"]
-        ["joopring"]
-        ["dOnkered1g"]
-        ["rabbit_test_queue"]
-        (RoleInstance "ignore")
- 
+        [ "https://mycontexts.com/rbmq/" ]
+        [ "joopring" ]
+        [ "dOnkered1g" ]
+        [ "rabbit_test_queue" ]
+    liftAff $ assert "Queue deletion should return true to ARC" (result == Value "true")

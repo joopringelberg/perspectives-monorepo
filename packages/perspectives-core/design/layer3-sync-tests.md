@@ -12,6 +12,32 @@ It complements the high-level overview in
 
 ---
 
+## Patching installed models before a synchronisation suite
+
+`Test.Layer3Scaffold.SynchronisationModelConfiguration` accepts `modelPatches`.
+Use `[]` to retain the snapshot's installed models unchanged, or configure an
+ordered list of replacement ARC files:
+
+```purescript
+, modelPatches:
+    [ { modelUriReadable: "model://perspectives.domains#System"
+      , sourcePath: "test/patches/System@6.3.arc"
+      }
+    ]
+```
+
+Each replacement targets an already-installed model by its **unversioned readable
+URI**. Paths are relative to the process working directory. Patches are applied
+and recompiled locally in list order (dependencies first), independently in Alice's
+and Bob's PDRs, using each PDR's existing stable-id mapping. This happens after
+setup logging is configured and before connecting the in-process peers or loading
+the test model. The same setup applies to AMQP and measured suites; patching is
+outside the measured trials. File-read or recompilation failures abort setup.
+Cached suite results still bypass setup, including patching.
+Successful local recompilation invalidates the model's compiled context and role
+state caches, so subsequent state evaluations use the replacement actions rather
+than closures compiled from the snapshot's original model.
+
 ## Goals
 
 1. **Test the complete synchronisation path** — delta generation, signing, AMQP

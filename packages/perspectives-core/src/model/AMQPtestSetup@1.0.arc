@@ -39,6 +39,8 @@ domain model://joopringelberg.nl#AMQPtestSetup@1.0
     indexed mm:AMQPtestSetupApp
     aspect sys:RootContext
     external
+      property Admin (String)
+      property Password (String)
     
     user Manager = sys:Me
       perspective on bs:MyBrokers >> ManagedBrokers
@@ -73,8 +75,10 @@ domain model://joopringelberg.nl#AMQPtestSetup@1.0
         letA
           admin <- bs:MyBrokers >> ManagedBrokers >> binding >> context >> Administrator
         in
-          AdminUserName = "joopring" for admin
-          AdminPassword = "vOsisdebest5!" for admin
+          -- AdminUserName = "joopring" for admin
+          -- AdminPassword = "vOsisdebest5!" for admin
+          AdminUserName = extern >> Admin for admin
+          AdminPassword = extern >> Password for admin
 
       -- All set to run action SignUp from the test PDR, which will create a new contract in the BrokerService.
 

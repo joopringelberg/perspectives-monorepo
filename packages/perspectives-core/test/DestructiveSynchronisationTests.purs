@@ -87,6 +87,7 @@ synchronisationTestModelConfiguration =
       , basedOnVersion: Nothing
       }
   , indexedTestContext
+  , modelPatches: []
   , testAppManager
   , testAppFollowerType
   , testsType
@@ -99,6 +100,10 @@ synchronisationTestModelConfiguration =
       , pdrB:
           [ { topic: TEST, logLevel: Trace }
           ]
+      }
+  , amqpAdministratorCredentials: Just
+      { adminUserName: "joopring"
+      , adminPassword: "vOsisdebest5!"
       }
   , tests: destructiveTests
   }

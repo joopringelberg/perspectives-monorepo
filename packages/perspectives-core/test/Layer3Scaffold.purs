@@ -29,6 +29,8 @@ module Test.Layer3Scaffold
   , ModelTest
   , SynchronisationResults
   , SynchronisationModelConfiguration
+  , ModelPatch
+  , applyModelPatches
   , TestModelLoadMethod(..)
   , getSynchronisationResults
   , getSynchronisationResultsOverAMQP
@@ -57,13 +59,15 @@ import Effect.Aff (Aff, attempt, bracket, error, launchAff_, message)
 import Effect.Class (liftEffect)
 import Effect.Class.Console (log)
 import Effect.Ref (Ref, new, read, write)
-import Foreign.Object (empty) as OBJ
+import Foreign.Object (empty, singleton) as OBJ
 import Node.Encoding (Encoding(..))
 import Node.FS.Aff (readTextFile)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.ApiTypes (ContextSerialization(..), PropertySerialization(..), RolSerialization(..))
 import Perspectives.Assignment.RunAction (runContextAction)
 import Perspectives.CoreTypes (LogLevel(..), LogTopic(..), RuntimeOptions, (##=), (##>))
+import Perspectives.DataUpgrade.PatchModels (patchModels)
+import Perspectives.DataUpgrade.RecompileLocalModels (recompileLocalModel)
 import Perspectives.Extern.Couchdb (addModelToLocalStore_)
 import Perspectives.Identifiers (buitenRol, modelUri2LocalName, unversionedModelUri)
 import Perspectives.Instances.Builders (createAndAddRoleInstance, constructContext)
@@ -83,6 +87,7 @@ import Perspectives.Sidecar.ToStable (toStable)
 import Perspectives.TypePersistence.LoadArc (loadCompileAndStoreArcFile_)
 import Test.PDRInstance (SynchronisationResult, connectPDRs, pollUntil, pollUntilTestFinishes, snapshotExists, snapshotPDR, testPouchdbUser, withTwoPDRsCached, withTwoPDRsCachedNoBus)
 import Test.PDRInstance.Types (PDRInstance, runInPDR)
+import Test.Test.PDRInstance.SubscribePDRtoAMQP (AMQPAdministratorCredentials)
 import Test.PerformanceMeasurements (MeasurementHooks)
 import Test.Unit (TestSuite, suite, test)
 import Test.Unit.Assert (assert)
@@ -121,12 +126,22 @@ data TestModelLoadMethod
       , basedOnVersion :: Maybe String
       }
 
+-- | Replace the source of an installed model, preserving its local stable-id mapping.
+-- | `modelUriReadable` is the unversioned readable URI; `sourcePath` is relative to
+-- | the working directory, just like CompileModelFromSource.sourcePath.
+type ModelPatch =
+  { modelUriReadable :: String
+  , sourcePath :: String
+  }
+
 type SynchronisationModelConfiguration =
   { suiteName :: String
   , snapshotDirAlice :: String
   , snapshotDirBob :: String
   , testModel :: String
   , testModelLoadMethod :: TestModelLoadMethod
+  -- | Applied and recompiled in array order in both PDRs, before loading the test model.
+  , modelPatches :: Array ModelPatch
   , indexedTestContext :: String
   , testAppManager :: String
   , testAppFollowerType :: String
@@ -134,6 +149,9 @@ type SynchronisationModelConfiguration =
   , testSucceededProperty :: String
   , testNameProperty :: String
   , setupLogConfiguration :: LogConfiguration
+  -- | Credentials of the RabbitMQ server administered by Alice's PDR in AMQP runs.
+  -- | Nothing for configurations that only run over the in-process bus.
+  , amqpAdministratorCredentials :: Maybe AMQPAdministratorCredentials
   , tests :: Array ModelTest
   }
 
@@ -168,6 +186,17 @@ applyLogConfigurationToPDRs pdrA pdrB logConfiguration = do
 
   runInPDR pdrB do
     for_ logConfiguration.pdrB \{ topic, logLevel } -> setTopicLogLevel topic logLevel
+
+applyModelPatches :: PDRInstance -> Array ModelPatch -> Aff Unit
+applyModelPatches pdr patches =
+  for_ patches \{ modelUriReadable, sourcePath } -> do
+    source <- readTextFile UTF8 sourcePath
+    runInPDR pdr do
+      infoTest ("Patching and recompiling " <> modelUriReadable <> " from " <> sourcePath)
+      patchModels (OBJ.singleton modelUriReadable source)
+      success <- recompileLocalModel (ModelUri modelUriReadable)
+      unless success $ throwError $ error
+        ("Failed to recompile patched model " <> modelUriReadable <> " from " <> sourcePath)
 
 runSynchronisationSuite
   :: Ref (Maybe SynchronisationResults)
@@ -213,7 +242,14 @@ getSynchronisationResultsOverAMQP
   :: Ref (Maybe SynchronisationResults)
   -> SynchronisationModelConfiguration
   -> Aff SynchronisationResults
-getSynchronisationResultsOverAMQP = getSynchronisationResultsInternal Nothing withTwoPDRsCachedNoBus false
+getSynchronisationResultsOverAMQP cacheRef cfg = do
+  credentials <- requireAMQPAdministratorCredentials cfg
+  getSynchronisationResultsInternal Nothing (withTwoPDRsCachedNoBus credentials) false cacheRef cfg
+
+requireAMQPAdministratorCredentials :: SynchronisationModelConfiguration -> Aff AMQPAdministratorCredentials
+requireAMQPAdministratorCredentials cfg = case cfg.amqpAdministratorCredentials of
+  Just credentials -> pure credentials
+  Nothing -> throwError $ error $ "Configuration '" <> cfg.suiteName <> "' has no amqpAdministratorCredentials, which are required to run over AMQP."
 
 -- A measurement run never reads the suite's cached semantic results.
 -- Repetitions must run in separate processes: the scaffold's memory databases
@@ -227,8 +263,9 @@ getMeasuredSynchronisationResults hooks overAMQP cfg = do
   available <- performanceSnapshotsAvailable cfg
   unless available $ throwError $ error "Performance measurements require complete existing snapshots for both PDRs; bootstrap is disabled."
   cacheRef <- liftEffect $ new Nothing
-  if overAMQP then
-    getSynchronisationResultsInternal (Just hooks) withTwoPDRsCachedNoBus false cacheRef cfg
+  if overAMQP then do
+    credentials <- requireAMQPAdministratorCredentials cfg
+    getSynchronisationResultsInternal (Just hooks) (withTwoPDRsCachedNoBus credentials) false cacheRef cfg
   else
     getSynchronisationResultsInternal (Just hooks) withTwoPDRsCached true cacheRef cfg
 
@@ -262,6 +299,9 @@ getSynchronisationResultsInternal mHooks withTwoPDRsFn connectPeers cacheRef cfg
         \pdrA pdrB -> do
           withSavedTwoPDRLogConfigs pdrA pdrB do
             applyLogConfigurationToPDRs pdrA pdrB cfg.setupLogConfiguration
+
+            applyModelPatches pdrA cfg.modelPatches
+            applyModelPatches pdrB cfg.modelPatches
 
             when connectPeers (connectPDRs pdrA pdrB)
 

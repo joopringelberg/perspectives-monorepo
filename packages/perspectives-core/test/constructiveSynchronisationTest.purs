@@ -75,6 +75,7 @@ synchronisationTestModelConfiguration =
   , snapshotDirBob: "test/pdr-snapshot/newdeltas/bob"
   , testModel
   , testModelLoadMethod: LoadModelFromRepository
+  , modelPatches: []
   , indexedTestContext
   , testAppManager
   , testAppFollowerType
@@ -89,6 +90,7 @@ synchronisationTestModelConfiguration =
           [ { topic: TEST, logLevel: Trace }
           ]
       }
+  , amqpAdministratorCredentials: Nothing
   , tests: allTests
   }
 

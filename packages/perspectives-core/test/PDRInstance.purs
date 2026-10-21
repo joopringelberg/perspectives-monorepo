@@ -105,7 +105,7 @@ import Perspectives.Sync.HandleTransaction (executeTransaction)
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer)
 import Simple.JSON (readJSON)
 import Test.PDRInstance.Types (PDRInstance, runInPDR)
-import Test.Test.PDRInstance.SubscribePDRtoAMQP (manageAMQPwithPDR, subscribePDRtoAMQP, unsubscribePDRfromAMQP)
+import Test.Test.PDRInstance.SubscribePDRtoAMQP (AMQPAdministratorCredentials, manageAMQPwithPDR, subscribePDRtoAMQP, unsubscribePDRfromAMQP)
 import Unsafe.Coerce (unsafeCoerce)
 
 -----------------------------------------------------------
@@ -645,7 +645,8 @@ withTwoPDRsCached user1 opts1 color1 snapshotDir1 user2 opts2 color2 snapshotDir
 -- | Here is where we subscribe both PDR instances to the default AMQP/Stomp broker so that they can receive transactions from each other.
 withTwoPDRsCachedNoBus
   :: forall a
-   . PouchdbUser
+   . AMQPAdministratorCredentials
+  -> PouchdbUser
   -> RuntimeOptions
   -> Maybe String
   -> String
@@ -655,7 +656,7 @@ withTwoPDRsCachedNoBus
   -> String
   -> (PDRInstance -> PDRInstance -> Aff a)
   -> Aff a
-withTwoPDRsCachedNoBus user1 opts1 color1 snapshotDir1 user2 opts2 color2 snapshotDir2 f =
+withTwoPDRsCachedNoBus amqpAdministratorCredentials user1 opts1 color1 snapshotDir1 user2 opts2 color2 snapshotDir2 f =
   withPDRCached user1 opts1 color1 noBus snapshotDir1 \pdr1 -> do
 
     runInPDR pdr1 do
@@ -668,7 +669,8 @@ withTwoPDRsCachedNoBus user1 opts1 color1 snapshotDir1 user2 opts2 color2 snapsh
       infoTest "withTwoPDRsCachedNoBus: Setting log levels for PDR1"
 
     -- Here, make pdr1 subscribe to the default AMQP/Stomp broker so that it can receive transactions from pdr2.
-    publicBrokerServiceInstance <- manageAMQPwithPDR pdr1
+    -- pdr1 will be the manager of the BrokerService.
+    publicBrokerServiceInstance <- manageAMQPwithPDR amqpAdministratorCredentials pdr1
     -- Subscribe pdr1 first and always unsubscribe it in the outer finalizer.
     bracket
       (subscribePDRtoAMQP publicBrokerServiceInstance pdr1)

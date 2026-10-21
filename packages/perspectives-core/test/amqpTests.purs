@@ -78,7 +78,7 @@ synchronisationSuite results =
 synchronisationTestModelConfiguration :: SynchronisationModelConfiguration
 synchronisationTestModelConfiguration =
   { suiteName: "AMQP synchronisation tests"
-  , snapshotDirAlice: "test/pdr-snapshot/layer3-clean/alice"
+  , snapshotDirAlice: "test/pdr-snapshot/universe/alice"
   , snapshotDirBob: "test/pdr-snapshot/layer3-clean/bob"
   , testModel
   , testModelLoadMethod: CompileModelFromSource
@@ -87,6 +87,15 @@ synchronisationTestModelConfiguration =
       , basedOnVersion: Nothing
       }
   , indexedTestContext
+  , modelPatches:
+      [ 
+      --   { modelUriReadable: "model://perspectives.domains#BrokerServices"
+      --   , sourcePath: "test/patches/BrokerServices@7.0.arc"
+      --   }
+      -- , { modelUriReadable: "model://joopringelberg.nl#AMQPtestSetup"
+      --   , sourcePath: "test/patches/AMQPtestSetup@1.0.arc"
+      --   }
+      ]
   , testAppManager
   , testAppFollowerType
   , testsType
@@ -96,18 +105,25 @@ synchronisationTestModelConfiguration =
   , setupLogConfiguration:
       { pdrA:
           [ { topic: TEST, logLevel: Trace }
-          , { topic: INSTALL, logLevel: Trace }
-          -- , { topic: RESOURCE, logLevel: Trace }
-          -- , { topic: STATE, logLevel: Trace }
-          -- , { topic: BROKER, logLevel: Trace }
+          -- , { topic: INSTALL, logLevel: Trace }
+          , { topic: RESOURCE, logLevel: Trace }
+          , { topic: STATE, logLevel: Trace }
+          , { topic: BROKER, logLevel: Trace }
           -- , { topic: SYNC, logLevel: Trace }
           ]
       , pdrB:
           [ { topic: TEST, logLevel: Trace }
-          -- , { topic: STATE, logLevel: Trace }
-          -- , { topic: BROKER, logLevel: Trace }
+          , { topic: STATE, logLevel: Trace }
+          , { topic: BROKER, logLevel: Trace }
           ]
       }
+  , amqpAdministratorCredentials: Just
+      { adminUserName: "konijn"
+      , adminPassword: "gEengrootgehe9m"
+      }
+  -- { adminUserName: "joopring"
+  -- , adminPassword: "vOsisdebest5!"
+  -- }
   , tests: allTests
   }
 

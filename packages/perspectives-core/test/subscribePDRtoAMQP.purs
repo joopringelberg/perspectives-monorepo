@@ -19,7 +19,7 @@ import Perspectives.ModelDependencies (sysUser)
 import Perspectives.Names (lookupIndexedContext)
 import Perspectives.PerspectivesState (getLogConfig, setLogConfig, setTopicLogLevel)
 import Perspectives.Query.UnsafeCompiler (getRoleInstances)
-import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..))
+import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..), externalRole)
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), IndexedContext(..), RoleType(..))
 import Perspectives.ResourceIdentifiers (takeGuid)
 import Perspectives.RunMonadPerspectivesTransaction (doNotShareWithPeers, runMonadPerspectivesTransaction', shareWithPeers)
@@ -55,9 +55,15 @@ withBracketedTopicLogLevel pdr topicLevels action =
 -------------------------------------------------------------------------------
 ---- MANAGE AMQP WITH PDR
 -------------------------------------------------------------------------------
+-- | Credentials of the administrator of the RabbitMQ server that the managing PDR will administer.
+type AMQPAdministratorCredentials =
+  { adminUserName :: String
+  , adminPassword :: String
+  }
+
 -- | Returns the external role of the public version of the created BrokerService instance.
-manageAMQPwithPDR :: PDRInstance -> Aff ContextInstance
-manageAMQPwithPDR pdr = runInPDR pdr do
+manageAMQPwithPDR :: AMQPAdministratorCredentials -> PDRInstance -> Aff ContextInstance
+manageAMQPwithPDR { adminUserName, adminPassword } pdr = runInPDR pdr do
   let bespokeDatabaseName = "cw_test_amqp_broker_service"
   -- let bespokeDatabaseName = "https://perspectives.domains/cw_ro6a1vrf9y/"
   runMonadPerspectivesTransaction' shareWithPeers (ENR $ EnumeratedRoleType sysUser)
@@ -91,9 +97,13 @@ manageAMQPwithPDR pdr = runInPDR pdr do
       runContextAction testSetupManager "ConfigureBrokerService" (unwrap setupApp)
   infoTest $ pdr.name <> " ran ConfigureBrokerService action to configure the BrokerService instance"
 
+  adminProperty <- toStable (EnumeratedPropertyType testSetupAppAdmin)
+  passwordProperty <- toStable (EnumeratedPropertyType testSetupAppPassword)
   runMonadPerspectivesTransaction' doNotShareWithPeers (CR $ CalculatedRoleType testSetupManager)
-    $
-      runContextAction testSetupManager "SetCredentials" (unwrap setupApp)
+    $ do
+        setProperty [ externalRole setupApp ] adminProperty Nothing [ Value adminUserName ]
+        setProperty [ externalRole setupApp ] passwordProperty Nothing [ Value adminPassword ]
+        runContextAction testSetupManager "SetCredentials" (unwrap setupApp)
   infoTest $ pdr.name <> " ran SetCredentials action to provide the Administrator with credentials for the BrokerService instance"
 
   -- Retrieve the address of the public version of the BrokerService instance, so that it can be used by the other PDR to subscribe to AMQP.
@@ -151,12 +161,18 @@ amqpTestSetupModel = "model://joopringelberg.nl#whku0vufat@1.0"
 testSetupManager :: String
 testSetupManager = "model://joopringelberg.nl#AMQPtestSetup$TestSetupApp$Manager"
 
+testSetupAppAdmin :: String
+testSetupAppAdmin = "model://joopringelberg.nl#AMQPtestSetup$TestSetupApp$External$Admin"
+
+testSetupAppPassword :: String
+testSetupAppPassword = "model://joopringelberg.nl#AMQPtestSetup$TestSetupApp$External$Password"
+
 -------------------------------------------------------------------------------
 ---- SUBSCRIBE PDR TO AMQP
 -------------------------------------------------------------------------------
 subscribePDRtoAMQP :: ContextInstance -> PDRInstance -> Aff Unit
 subscribePDRtoAMQP publicBrokerServiceInstance pdr =
-  withBracketedTopicLogLevel pdr [ {-- topic: BROKER, logLevel: Trace }, { topic: RESOURCE, logLevel: Trace --} ] $ runInPDR pdr do
+  withBracketedTopicLogLevel pdr [ {-- topic: BROKER, logLevel: Trace }, { topic: RESOURCE, logLevel: Trace --}] $ runInPDR pdr do
     -- Load the Broker model
     runMonadPerspectivesTransaction' shareWithPeers (ENR $ EnumeratedRoleType sysUser)
       $
@@ -190,7 +206,7 @@ subscribePDRtoAMQP publicBrokerServiceInstance pdr =
 -------------------------------------------------------------------------------
 unsubscribePDRfromAMQP :: PDRInstance -> Aff Unit
 unsubscribePDRfromAMQP pdr =
-  withBracketedTopicLogLevel pdr [ {-- topic: BROKER, logLevel: Trace }, { topic: STATE, logLevel: Trace --} ] $ runInPDR pdr do
+  withBracketedTopicLogLevel pdr [ {-- topic: BROKER, logLevel: Trace }, { topic: STATE, logLevel: Trace --}] $ runInPDR pdr do
     -- Retrieve the contract instance from the indexed context bs:MyBrokers.
     IndexedContext brokerServicesAppStable <- toStable (IndexedContext brokerServicesApp)
     lookupIndexedContext brokerServicesAppStable >>= case _ of
