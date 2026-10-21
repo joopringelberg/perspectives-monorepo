@@ -45,12 +45,13 @@ import Foreign (unsafeToForeign)
 import Foreign.Object (empty)
 import Parsing (ParseError(..))
 import Perspectives.Checking.PerspectivesTypeChecker (checkDomeinFile)
+import Perspectives.Assignment.StateCache (clearModelStates)
 import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction)
 import Perspectives.DomeinCache (retrieveDomeinFile, storeDomeinFileInCache)
 import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, defaultDomeinFileRecord, deriveModelDependencies, stampDomeinFileTypeVersion)
 import Perspectives.Extern.Couchdb (installModelLocally)
 import Perspectives.Identifiers (modelUriVersion, unversionedModelUri)
-import Perspectives.InvertedQuery.Storable (StoredQueries)
+import Perspectives.InvertedQuery.Storable (StoredQueries, removeInvertedQueriesContributedByModel)
 import Perspectives.Parsing.Arc (domain)
 import Perspectives.Parsing.Arc.AST (ContextE(..))
 import Perspectives.Parsing.Arc.IndentParser (position2ArcPosition, runIndentParser)
@@ -60,6 +61,7 @@ import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseTwoState, runPhaseTwo_', toSt
 import Perspectives.Parsing.Messages (MultiplePerspectivesErrors, PerspectivesError(..))
 import Perspectives.Persistence.API (addAttachment, retrieveDocumentVersion, toFile)
 import Perspectives.Persistent (modelDatabaseName)
+import Perspectives.PerspectivesState (clearQueryCache)
 import Perspectives.ResourceIdentifiers (resourceIdentifier2WriteDocLocator, takeGuid)
 import Perspectives.SideCar.PhantomTypedNewtypes (Readable)
 import Perspectives.Sidecar.NormalizeTypeNames (StableIdMappingForModel, getinstalledModelCuids, normalizeInvertedQueries, normalizeTypes)
@@ -116,6 +118,8 @@ loadAndCompileArcFile_ dfid text saveInCache modelCuid modelUriReadable mbasedOn
 -- | the types and individuals it already covers.
 -- | Otherwise reuse the installed model's mapping; if none exists, use the normal repository /
 -- | `mbasedOnVersion` mapping lookup. Recompiling an installed model must preserve its stable IDs.
+-- | Replaces its previous inverted queries and invalidates cached queries and state definitions
+-- | before installation can evaluate the new model's initial instances.
 -- | NOTE: this function is only used from module Test.SinglePDRScaffold and Test.Layer3Scaffold
 loadCompileAndStoreArcFile_ :: ModelUri Stable -> Source -> Boolean -> String -> String -> Maybe String -> Maybe StableIdMapping -> MonadPerspectivesTransaction (Either (Array PerspectivesError) (Tuple (DomeinFile Stable) (Tuple StoredQueries StableIdMapping)))
 loadCompileAndStoreArcFile_ dfid text saveInCache modelCuid modelUriReadable mbasedOnVersion mExistingMapping = do
@@ -138,6 +142,10 @@ loadCompileAndStoreArcFile_ dfid text saveInCache modelCuid modelUriReadable mba
   case result of
     Left errs -> pure $ Left errs
     Right (Tuple df@(DomeinFile dfr@{ id }) (Tuple invertedQueries mapping')) -> do
+      lift do
+        removeInvertedQueriesContributedByModel id
+        clearQueryCache
+        void $ pure $ clearModelStates id
       -- Install the compiled model locally so initial instances and dependencies are handled the same way
       -- as in addModelToLocalStore_.
       installModelLocally (Tuple dfr empty) true invertedQueries
