@@ -70,6 +70,7 @@ import Test.Parsing.Arc (theSuite) as TPA
 import Test.Parsing.Arc.PhaseTwo (theSuite) as TPA2
 import Test.Parsing.Arc.PhaseThree (completeTypeNormalisationSuite, recursiveFillerComparisonSuite) as TPA3
 import Test.Parsing.Arc.Model (theSuite) as TPAM
+import Test.Parsing.Arc.IndexedRootPerspectives (theSuite) as IRP
 
 -- Query description compiler — uses an in-memory DomeinFile cache; no CouchDB
 import Test.Query.DescriptionCompiler (theSuite) as QDC
@@ -90,6 +91,7 @@ main = runTest do
   VB.theSuite -- Variable bindings are private to a fiber
   TQ.theSuite
   VD.theSuite
+  IRP.theSuite
 
   -- Read a file from the file-system, but otherwise pure (no MonadPerspectives / no HTTP)
   TPAM.theSuite -- ARC model parser (parses .arc files from the model/

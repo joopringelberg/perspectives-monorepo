@@ -210,6 +210,10 @@ humanizeString s = case typeUri2ModelUri s of
 -- | Constructors whose fields are already plain Strings are left unchanged.
 humanizePerspectivesWarning :: PerspectivesWarning -> MonadPerspectives PerspectivesWarning
 humanizePerspectivesWarning w = case w of
+  PeerPerspectiveOnIndexedRootContext user context -> do
+    user' <- toReadable user
+    context' <- toReadable context
+    pure (PeerPerspectiveOnIndexedRootContext user' context')
   PropertySynchronizationIncomplete prop source destinations -> do
     prop' <- toReadable prop
     source' <- toReadable source
