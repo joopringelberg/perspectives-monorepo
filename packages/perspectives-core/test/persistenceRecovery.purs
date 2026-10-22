@@ -5,13 +5,15 @@ module Test.Persistence.Recovery where
 
 import Prelude
 
+import Control.Alt ((<|>))
 import Control.Monad.AvarMonadAsk (gets, modify)
+import Control.Parallel (parallel, sequential)
 import Data.Array (elem)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..), fromMaybe, isJust, isNothing)
 import Decacheable (decache)
 import Effect (Effect)
-import Effect.Aff (try)
+import Effect.Aff (Milliseconds(..), delay, try)
 import Effect.Aff.Class (liftAff)
 import Effect.Aff.Compat (fromEffectFnAff)
 import Effect.Class (liftEffect)
@@ -23,10 +25,14 @@ import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..)
 import Perspectives.Persistence.API (addDocument, addDocumentImpl, deleteDatabase, getDocumentWithConflictsImpl, withDatabase, withForce)
 import Perspectives.Persistence.RunEffectAff (runEffectFnAff3)
 import Perspectives.Persistence.Types (PouchdbDatabase, runMonadPouchdb)
-import Perspectives.Persistent (entitiesDatabaseName, forceSaveRole, getPerspectRol, saveEntiteit_, saveMarkedResources)
+import Perspectives.Persistent (entitiesDatabaseName, forceSaveRole, getPerspectRol, removeEntiteit, saveEntiteit_, saveMarkedResources)
 import Perspectives.Representation.Class.Cacheable (cacheEntity, tryReadEntiteitFromCache)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser(..), RoleInstance(..))
+import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), RoleType(..), StateIdentifier(..))
+import Perspectives.RunMonadPerspectivesTransaction (computeStateEvaluations)
 import Perspectives.RunPerspectives (runPerspectivesWithoutCouchdb)
+import Perspectives.ScheduledAssignment (StateEvaluation(..))
+import Perspectives.Sync.InvertedQueryResult (InvertedQueryResult(..))
 import Simple.JSON (read, write)
 import Test.Unit (TestSuite, suite, test)
 import Test.Unit.Assert (assert, equal)
@@ -133,6 +139,37 @@ theSuite = suite "Persistence recovery" do
       cached <- tryReadEntiteitFromCache publicContextId
       liftAff $ assert "A new unpersisted context must remain cached" (isJust cached)
       deleteDatabase "publication_new_regression"
+
+  test "state evaluation excludes physically deleted subjects without invoking repair" do
+    result <- sequential $ parallel (delay (Milliseconds 2000.0) *> pure Nothing) <|> parallel
+      ( Just <$> runPerspectivesWithoutCouchdb "deleted-state-subjects" do
+          let
+            stateId = StateIdentifier "model://test#State"
+            survivingContextId = ContextInstance "def:#surviving-context"
+            deletedContextId = ContextInstance "def:#deleted-context"
+            survivingRoleId = RoleInstance "def:#surviving-role"
+            deletedRoleId = RoleInstance "def:#deleted-role"
+            contextRecord = defaultContextRecord
+              { states = [ stateId ]
+              , preferredUserRoleType = Just (ENR $ EnumeratedRoleType "model://test#User")
+              }
+            roleRecord = defaultRolRecord { states = [ stateId ], context = survivingContextId }
+          void $ saveEntiteit_ survivingContextId (PerspectContext contextRecord { _id = "surviving-context", id = survivingContextId })
+          void $ saveEntiteit_ deletedContextId (PerspectContext contextRecord { _id = "deleted-context", id = deletedContextId })
+          void $ saveEntiteit_ survivingRoleId (PerspectRol roleRecord { _id = "surviving-role", id = survivingRoleId })
+          void $ saveEntiteit_ deletedRoleId (PerspectRol roleRecord { _id = "deleted-role", id = deletedRoleId })
+          saveMarkedResources
+          void $ removeEntiteit deletedRoleId
+          void $ removeEntiteit deletedContextId
+          contextEvaluations <- computeStateEvaluations (ContextStateQuery stateId [ deletedContextId, survivingContextId ])
+          roleEvaluations <- computeStateEvaluations (RoleStateQuery stateId [ deletedRoleId, survivingRoleId ])
+          liftAff do
+            equal [ ContextStateEvaluation stateId survivingContextId ] contextEvaluations
+            equal [ RoleStateEvaluation stateId survivingRoleId ] roleEvaluations
+          database <- entitiesDatabaseName
+          deleteDatabase database
+      )
+    assert "Deleted subjects must not block waiting for the absent integrity fixer" (isJust result)
 
   where
   publicDatabase = "https://publication.invalid/cw_publication_regression/"

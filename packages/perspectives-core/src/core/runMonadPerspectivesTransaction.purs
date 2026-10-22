@@ -55,7 +55,7 @@ import Perspectives.Instances.Me (getMyType)
 import Perspectives.Instances.ObjectGetters (Filler_(..), context, contextType, filler2filledFromDatabase_, getActiveRoleStates, getActiveStates, roleType, roleType_)
 import Perspectives.Logging (debugState, errorCompiler, traceState, warnState)
 import Perspectives.ModelDependencies (sysUser)
-import Perspectives.Persistent (tryRemoveEntiteit)
+import Perspectives.Persistent (entityExists, tryRemoveEntiteit)
 import Perspectives.PerspectivesState (addBinding, addWarning, clearPublicRolesJustLoaded, decreaseTransactionLevel, getPublicRolesJustLoaded, increaseTransactionLevel, nextTransactionNumber, pushFrame, restoreFrame, transactionFlag, transactionLevel)
 import Perspectives.Query.QueryTypes (Calculation(..))
 import Perspectives.Query.UnsafeCompiler (context2propertyValue, getCalculatedRoleInstances)
@@ -455,7 +455,9 @@ runSharing share authoringRole t =
 -- This allows multiple distinct states of the same resource to be evaluated within a single transaction.
 computeStateEvaluations :: InvertedQueryResult -> MonadPerspectives (Array StateEvaluation)
 computeStateEvaluations (ContextStateQuery stateId contextInstances) = join <$> do
-  activeInstances <- filterA (\rid -> rid ##>> exists' getActiveStates) contextInstances
+  -- Post-removal replay can still contain deleted subjects; do not invoke resource repair for them.
+  existingInstances <- filterA entityExists contextInstances
+  activeInstances <- filterA (\rid -> rid ##>> exists' getActiveStates) existingInstances
   if null activeInstances then warnState ("No active context instances for state evaluation in " <> show contextInstances)
   else pure unit
   for activeInstances \cid -> do
@@ -474,7 +476,8 @@ computeStateEvaluations (ContextStateQuery stateId contextInstances) = join <$> 
       Just _ -> pure [ ContextStateEvaluation stateId cid ]
 
 computeStateEvaluations (RoleStateQuery stateId roleInstances) = join <$> do
-  activeInstances <- filterA (\rid -> rid ##>> exists' getActiveRoleStates) roleInstances
+  existingInstances <- filterA entityExists roleInstances
+  activeInstances <- filterA (\rid -> rid ##>> exists' getActiveRoleStates) existingInstances
   -- If the roleInstance has no recorded states, this means it has been marked for removal
   -- and has exited all its states. We should not do that again!
   for activeInstances \rid -> do
