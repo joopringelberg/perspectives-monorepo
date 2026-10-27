@@ -191,17 +191,17 @@ main = launchAff_ do
           [ Tuple "model://perspectives.domains#System" system
           , Tuple "model://perspectives.domains#CouchdbManagement" couchdbmanagement
           -- , Tuple "model://perspectives.domains#RepositoryRegistry" repositoryregistry
-          -- , Tuple "model://joopringelberg.nl#AMQPtestModel" amqptestmodel
-          -- , Tuple "model://joopringelberg.nl#AMQPtestSetup" amqptestsetup
-          -- , Tuple "model://perspectives.domains#BrokerServices" brokerservices
+          , Tuple "model://joopringelberg.nl#AMQPtestModel" amqptestmodel
+          , Tuple "model://joopringelberg.nl#AMQPtestSetup" amqptestsetup
+          , Tuple "model://perspectives.domains#BrokerServices" brokerservices
           ]
         for_
           [ "model://perspectives.domains#System"
           , "model://perspectives.domains#CouchdbManagement"
           -- , "model://perspectives.domains#RepositoryRegistry"
-          -- , "model://joopringelberg.nl#AMQPtestModel"
-          -- , "model://joopringelberg.nl#AMQPtestSetup"
-          -- , "model://perspectives.domains#BrokerServices"
+          , "model://joopringelberg.nl#AMQPtestModel"
+          , "model://joopringelberg.nl#AMQPtestSetup"
+          , "model://perspectives.domains#BrokerServices"
           ]
           \modelUri -> do
             success <- recompileLocalModel (ModelUri modelUri)

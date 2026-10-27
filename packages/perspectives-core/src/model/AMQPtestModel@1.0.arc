@@ -148,6 +148,7 @@ domain model://joopringelberg.nl#AMQPtestModel@1.0
     state ExecuteAction = extern >> (StartAction and ContractWasPresent)
       on entry
         do for Leader
+          bind FollowerBrokerContract to ContractToBeTerminated
           ContractTerminated = true for FollowerBrokerContract
           TestName = "BrokerService Administrator terminates contract of Follower" for extern
           once settled
@@ -156,35 +157,41 @@ domain model://joopringelberg.nl#AMQPtestModel@1.0
     external
       property ContractWasPresent (Boolean)
       property StartAction (Boolean)
-      -- This property triggers evaluation of TestSucceeded yet another time.
+      -- This property triggers evaluation of TestSucceeded yet another time. IT IS NOW OBSOLETE.
       property TestFinished (Boolean)
       state ContractObserved = exists bs:MyBrokers >> ContractInUse
         on entry
           do for Follower
             ContractWasPresent = true
 
-      -- Registered becomes false before removal, so ContractInUse cannot establish that the contract is gone.
-      state TestSucceeded = ContractWasPresent and TestFinished and not exists bs:MyBrokers >> ContractInUse
-        on entry
-          do for Follower
-            TestSucceeded = true
+      -- This proves that the contract existed and is removed, implying that Administrator has entered state ReadyToRemove
+      -- which is only valid after succesful removal of the account and its queue.
+      state PreTestSucceeded = ContractWasPresent and exists context >> ContractToBeTerminated >> binding
+        state TestSucceeded = not exists context >> ContractToBeTerminated >> binding
+          on entry
+            do for Leader
+              TestSucceeded = true
 
     user Leader filledBy (sys:TheWorld$PerspectivesUsers)
       aspect mm:Test$Leader
       perspective on FollowerBrokerContract
         props (ContractTerminated) verbs (Consult, SetPropertyValue)
       perspective on extern
-        props (StartAction, TestFinished) verbs (Consult, SetPropertyValue)
+        props (StartAction, TestFinished, TestSucceeded) verbs (Consult, SetPropertyValue)
         props (ContractWasPresent) verbs (Consult)
+      perspective on ContractToBeTerminated
+        only (CreateAndFill, RemoveFiller)
       action RunTest
         StartAction = true for extern
 
     -- This role is for the Manager to see: it is in terms of ManagedBrokers.
-    context FollowerBrokerContract = letE
+    context FollowerBrokerContract (functional) = letE
         followersuser <- Follower >> binding
         contracts <- bs:MyBrokers >> ManagedBrokers >> binding >> context >> Accounts >> binding
       in
-        filter contracts with context >> AccountHolder filledBy followersuser
+        (filter contracts with context >> AccountHolder filledBy followersuser)
+    
+    context ContractToBeTerminated filledBy bs:BrokerContract
 
     user Follower filledBy (sys:TheWorld$PerspectivesUsers)
       aspect mm:Test$Follower

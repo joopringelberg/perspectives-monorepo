@@ -369,7 +369,10 @@ domain model://perspectives.domains#BrokerServices@7.0
     -- PDRDEPENDENCY
     context Accounts (relational, unlinked) filledBy BrokerContract
       property AccountDeleted (Boolean)
-      state ReadyToRemove = AccountDeleted and ((binding >> context >> Queues >>= count) == ((filter binding >> context >> Queues with QueueDeleted) >>= count))
+      state ReadyToRemove =
+          (not exists binding >> context >> AccountHolder >> binding)
+          and AccountDeleted
+          and ((binding >> context >> Queues >>= count) == ((filter binding >> context >> Queues with QueueDeleted) >>= count))
         on entry
           do for Administrator
             remove context origin

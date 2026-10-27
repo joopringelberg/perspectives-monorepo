@@ -79,7 +79,7 @@ synchronisationTestModelConfiguration :: SynchronisationModelConfiguration
 synchronisationTestModelConfiguration =
   { suiteName: "AMQP synchronisation tests"
   , snapshotDirAlice: "test/pdr-snapshot/universe/alice"
-  , snapshotDirBob: "test/pdr-snapshot/layer3-clean/bob"
+  , snapshotDirBob: "test/pdr-snapshot/universe/bob"
   , testModel
   , testModelLoadMethod: CompileModelFromSource
       { sourcePath: "src/model/AMQPtestModel@1.0.arc"
@@ -106,7 +106,7 @@ synchronisationTestModelConfiguration =
       { pdrA:
           [ { topic: TEST, logLevel: Trace }
           -- , { topic: INSTALL, logLevel: Trace }
-          , { topic: RESOURCE, logLevel: Trace }
+          -- , { topic: RESOURCE, logLevel: Trace }
           , { topic: STATE, logLevel: Trace }
           , { topic: BROKER, logLevel: Trace }
           -- , { topic: SYNC, logLevel: Trace }
