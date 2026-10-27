@@ -11,6 +11,8 @@ module Test.RabbitMQCtl
   , queueExists
   , addAdminUser
   , deleteUser
+  , deleteQueue
+  , queueHasConsumer
   ) where
 
 import Prelude
@@ -47,6 +49,14 @@ addAdminUser vhost name password = do
 
 deleteUser :: String -> Aff Unit
 deleteUser name = void $ rabbitmqctl [ "delete_user", name ]
+
+deleteQueue :: String -> String -> Aff Unit
+deleteQueue vhost name = void $ rabbitmqctl [ "delete_queue", "-p", vhost, name ]
+
+queueHasConsumer :: String -> String -> Aff Boolean
+queueHasConsumer vhost name = do
+  out <- rabbitmqctl [ "-q", "--no-table-headers", "list_consumers", "-p", vhost, "queue_name" ]
+  pure $ any (_ == name) (split (Pattern "\n") out)
 
 -- | Whether the user exists on the local RabbitMQ node.
 userExists :: String -> Aff Boolean

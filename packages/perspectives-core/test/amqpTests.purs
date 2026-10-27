@@ -88,7 +88,7 @@ synchronisationTestModelConfiguration =
       }
   , indexedTestContext
   , modelPatches:
-      [ 
+      [
       --   { modelUriReadable: "model://perspectives.domains#BrokerServices"
       --   , sourcePath: "test/patches/BrokerServices@7.0.arc"
       --   }
@@ -153,9 +153,6 @@ testSucceededProperty = "model://joopringelberg.nl#AMQPtestModel$Test$External$T
 testNameProperty :: String
 testNameProperty = "model://joopringelberg.nl#AMQPtestModel$Test$External$TestName"
 
-test_Leader_Terminates_Contract :: String
-test_Leader_Terminates_Contract = "model://joopringelberg.nl#AMQPtestModel$Test_Leader_Terminates_Contract"
-
 -------------------------------------------------------------------------------
 ---- THE TESTS
 ---- One entry for each test in model://joopringelberg.nl#AMQPtestModel
@@ -163,9 +160,7 @@ test_Leader_Terminates_Contract = "model://joopringelberg.nl#AMQPtestModel$Test_
 
 allTests :: Array ModelTest
 allTests =
-  [
-    -- { testContextTypeName: test_SetProperty, logConfiguration: Nothing }
-    { testContextTypeName: test_Leader_Terminates_Contract, logConfiguration: Just debugConfiguration }
+  [ { testContextTypeName: test_SetProperty, logConfiguration: Just debugConfiguration }
   ]
 
 debugConfiguration :: LogConfiguration

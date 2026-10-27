@@ -12,7 +12,7 @@ import Data.Time.Duration (Milliseconds(..))
 import Data.Traversable (for)
 import Data.Tuple (Tuple(..))
 import Effect (Effect)
-import Effect.Aff (Aff, attempt, bracket, error, launchAff_)
+import Effect.Aff (Aff, attempt, bracket, error, finally, launchAff_)
 import Effect.Aff.AVar (tryRead)
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
@@ -43,7 +43,8 @@ import Test.LocalCouchdbTestSupport (addLocalCouchdbCredentials)
 import Test.Layer3Scaffold (LogConfiguration, ModelTest, applyLogConfigurationToPDRs)
 import Test.PDRInstance (SynchronisationResult, noBus, pollUntil, snapshotExists, startPDRInstanceFromSnapshotWithHook, testPouchdbUser, withPDRCached)
 import Test.PDRInstance.Types (PDRInstance, runInPDR)
-import Test.RabbitMQCtl (addAdminUser, deleteUser, purgeOwnQueue, queueExists, userExists)
+import Test.RabbitMQCtl (addAdminUser, deleteQueue, deleteUser, purgeOwnQueue, queueExists, queueHasConsumer, userExists)
+import Test.Test.PDRInstance.SubscribePDRtoAMQP (subscribePDRtoAMQP)
 import Test.SinglePDRScaffold (TestModelLoadMethod(..), emptyLogConfiguration, executeModelTest, loadModel)
 import Test.Unit (TestSuite, suite, test)
 import Test.Unit.Assert (assert)
@@ -51,8 +52,12 @@ import Test.Unit.Main (runTest)
 
 main :: Effect Unit
 main = launchAff_ do
-  results <- getSignupResults
-  liftEffect $ runTest (signupSuite results)
+  results <- for [ endSubscriptionTestContext, leaderTerminatesContractTestContext ] \terminationTest -> do
+    result <- getSignupResultsForTermination terminationTest
+    pure $ Tuple terminationTest result
+  liftEffect $ runTest do
+    for_ results \(Tuple terminationTest result) ->
+      suite terminationTest (signupSuite result)
 
 type SignupResults =
   { signupResults :: Array SynchronisationResult
@@ -60,7 +65,7 @@ type SignupResults =
   , bobCouchdbOutcome :: Maybe CouchdbOutcome
   -- Bob's RabbitMQ account and queue, as they were while he was subscribed.
   , bobCredentials :: Maybe BrokerCredentials
-  -- Set after the EndSubscription test; Nothing if we could not check.
+  -- Set after either termination scenario; Nothing if we could not check.
   , afterTermination :: Maybe TerminationOutcome
   }
 
@@ -78,7 +83,24 @@ type TerminationOutcome =
   }
 
 getSignupResults :: Aff SignupResults
-getSignupResults = do
+getSignupResults = getSignupResultsForTermination endSubscriptionTestContext
+
+-- Each termination consumes the subscription, so restore fresh PDRs for each scenario.
+getSignupResultsForTermination :: String -> Aff SignupResults
+getSignupResultsForTermination terminationTest =
+  bracket
+    ( do
+        adminPassword <- liftEffect $ cuid2 "brokerServiceSignupTestAdmin"
+        exists <- userExists rabbitAdminName
+        when exists $ deleteUser rabbitAdminName
+        addAdminUser virtualHost rabbitAdminName adminPassword
+        pure adminPassword
+    )
+    (\_ -> deleteUser rabbitAdminName)
+    (runSignupScenario terminationTest)
+
+runSignupScenario :: String -> String -> Aff SignupResults
+runSignupScenario terminationTest adminPassword = do
   aliceSnapshotExists <- snapshotExists aliceSnapshotDirectory
   unless aliceSnapshotExists
     $ throwError
@@ -86,7 +108,7 @@ getSignupResults = do
 
   bracket
     (startPDRInstanceFromSnapshotWithHook (testPouchdbUser "alice") defaultRuntimeOptions (Just ansiCyan) noBus aliceSnapshotDirectory purgeOwnQueue)
-    (_.shutdown)
+    (\alice -> finally alice.shutdown (cleanupAliceSubscription alice))
     \alice ->
       withPDRCached (testPouchdbUser "bob") defaultRuntimeOptions (Just ansiRed) noBus bobSnapshotDirectory \bob -> do
         addLocalCouchdbCredentials alice
@@ -121,22 +143,30 @@ getSignupResults = do
               lookupIndexedContext indexed
           )
 
-        -- Alice administers RabbitMQ through the management API. The snapshot holds no admin credentials for her,
-        -- so we create a temporary RabbitMQ administrator for her.
-        adminPassword <- liftEffect $ cuid2 "brokerServiceSignupTestAdmin"
-        void $ attempt $ deleteUser rabbitAdminName
-        addAdminUser virtualHost rabbitAdminName adminPassword
+        giveAliceAdminCredentials alice adminPassword
+        ensureAliceSubscribed alice
 
-        results <- for signupTestModelConfiguration.tests \testCase -> do
+        let
+          tests = map
+            ( \testCase ->
+                if testCase.testContextTypeName == endSubscriptionTestContext then
+                  testCase { testContextTypeName = terminationTest }
+                else testCase
+            )
+            signupTestModelConfiguration.tests
+
+        results <- for tests \testCase -> do
           let
+            runsOnAlice = testCase.testContextTypeName == createCouchdbAccountTestContext
+              || testCase.testContextTypeName == leaderTerminatesContractTestContext
             testPdr =
-              if testCase.testContextTypeName == createCouchdbAccountTestContext then alice
+              if runsOnAlice then alice
               else bob
             testApp =
-              if testCase.testContextTypeName == createCouchdbAccountTestContext then aliceTestApp
+              if runsOnAlice then aliceTestApp
               else bobTestApp
 
-          when (testCase.testContextTypeName == endSubscriptionTestContext) $ giveAliceAdminCredentials alice adminPassword
+          when (testCase.testContextTypeName == terminationTest) $ giveAliceAdminCredentials alice adminPassword
           applyLogConfigurationToPDRs alice bob
             (fromMaybe signupTestModelConfiguration.setupLogConfiguration testCase.logConfiguration)
 
@@ -208,9 +238,44 @@ getSignupResults = do
                 , rabbitQueueGone: not queueStillThere
                 }
 
-        void $ attempt $ deleteUser rabbitAdminName
-
         pure { signupResults: map _.result results, aliceSawBob: any _.aliceSawBob results, bobCouchdbOutcome, bobCredentials, afterTermination }
+
+ensureAliceSubscribed :: PDRInstance -> Aff Unit
+ensureAliceSubscribed alice = do
+  existing <- runInPDR alice currentBrokerCredentials
+  case existing of
+    Just _ -> throwError $ error "Alice's base snapshot must not already contain a broker subscription"
+    Nothing -> pure unit
+  brokerService <- runInPDR alice do
+    IndexedContext index <- toStable (IndexedContext myBrokersContext)
+    myBrokers <- lookupIndexedContext index >>= case _ of
+      Nothing -> throwError $ error "Alice's Broker Services app is missing"
+      Just ctx -> pure ctx
+    managedBrokers <- toStable (EnumeratedRoleType managedBrokersRole)
+    services <- myBrokers ##= getEnumeratedRoleInstances managedBrokers >=> binding >=> context
+    case head services of
+      Nothing -> throwError $ error "Alice has no managed broker service to subscribe to"
+      Just service -> pure service
+  subscribePDRtoAMQP brokerService alice
+  void $ pollUntil 120 (Milliseconds 500.0)
+    "Alice's registered RabbitMQ account and active queue consumer"
+    do
+      credentials <- runInPDR alice currentBrokerCredentials
+      case credentials of
+        Nothing -> pure Nothing
+        Just { login, queueId } -> do
+          accountExists <- userExists login
+          hasConsumer <- queueHasConsumer virtualHost queueId
+          pure if accountExists && hasConsumer then Just unit else Nothing
+
+cleanupAliceSubscription :: PDRInstance -> Aff Unit
+cleanupAliceSubscription alice = do
+  credentials <- runInPDR alice currentBrokerCredentials
+  for_ credentials \{ login, queueId } -> do
+    accountExists <- userExists login
+    when accountExists $ deleteUser login
+    exists <- queueExists virtualHost queueId
+    when exists $ deleteQueue virtualHost queueId
 
 rabbitAdminName :: String
 rabbitAdminName = "bssu_test_admin"
@@ -238,15 +303,18 @@ giveAliceAdminCredentials pdr password = runInPDR pdr do
 patchSomeModels :: PDRInstance -> Aff Unit
 patchSomeModels pdr = runInPDR pdr do
   setTopicLogLevel UPGRADE Debug
-  patchModels (fromFoldable 
-    [ Tuple "model://perspectives.domains#CouchdbManagement" couchdbmanagement 
-    , Tuple "model://perspectives.domains#System" system
-    ]
+  patchModels
+    ( fromFoldable
+        [
+        --   Tuple "model://perspectives.domains#CouchdbManagement" couchdbmanagement
+        -- , Tuple "model://perspectives.domains#System" system
+        ]
     )
-  success <- recompileLocalModel (ModelUri "model://perspectives.domains#CouchdbManagement")
-  infoTest ("Patched and recompiled CouchdbManagement in snapshot: " <> show success)
-  successSystem <- recompileLocalModel (ModelUri "model://perspectives.domains#System")
-  infoTest ("Patched and recompiled System in snapshot: " <> show successSystem)
+
+-- success <- recompileLocalModel (ModelUri "model://perspectives.domains#CouchdbManagement")
+-- infoTest ("Patched and recompiled CouchdbManagement in snapshot: " <> show success)
+-- successSystem <- recompileLocalModel (ModelUri "model://perspectives.domains#System")
+-- infoTest ("Patched and recompiled System in snapshot: " <> show successSystem)
 
 -- | The credentials of the broker service this PDR is currently reading post from.
 currentBrokerCredentials :: MonadPerspectives (Maybe BrokerCredentials)
@@ -403,35 +471,36 @@ signupTestModelConfiguration =
 
 emptyConfiguration :: LogConfiguration
 emptyConfiguration =
-      { pdrA:
-          [ { topic: TEST, logLevel: Trace }
-          ]
-      , pdrB:
-          [ { topic: TEST, logLevel: Trace }
-          ]
-      }
+  { pdrA:
+      [ { topic: TEST, logLevel: Trace }
+      ]
+  , pdrB:
+      [ { topic: TEST, logLevel: Trace }
+      ]
+  }
+
 debugConfiguration :: LogConfiguration
 debugConfiguration =
   { pdrA:
       [
-        -- { topic: TEST, logLevel: Trace }
-      --   { topic: BROKER, logLevel: Trace }
+        { topic: TEST, logLevel: Trace }
+      , { topic: BROKER, logLevel: Trace }
       -- , { topic: SYNC, logLevel: Trace }
       -- , { topic: DELTA, logLevel: Trace }
       -- , { topic: INSTALL, logLevel: Trace }
       -- , { topic: RESOURCE, logLevel: Trace }
       -- , { topic: STATE, logLevel: Trace }
       -- , { topic: MODEL, logLevel: Warn }
-      {topic: UPGRADE, logLevel: Trace}
+      -- , { topic: UPGRADE, logLevel: Trace }
       ]
   , pdrB:
-      [ 
-      --   { topic: BROKER, logLevel: Trace }
+      [ { topic: TEST, logLevel: Trace }
+      , { topic: BROKER, logLevel: Trace }
       -- , { topic: SYNC, logLevel: Trace }
       -- , { topic: DELTA, logLevel: Trace }
       -- , { topic: RESOURCE, logLevel: Trace }
       -- , { topic: STATE, logLevel: Trace }
-      {topic: UPGRADE, logLevel: Trace}
+      -- , { topic: UPGRADE, logLevel: Trace }
       ]
   }
 
@@ -474,6 +543,9 @@ createCouchdbAccountTestContext = testModelReadable <> "$CreateCouchdbAccount"
 
 endSubscriptionTestContext :: String
 endSubscriptionTestContext = testModelReadable <> "$EndSubscription"
+
+leaderTerminatesContractTestContext :: String
+leaderTerminatesContractTestContext = testModelReadable <> "$Test_Leader_Terminates_Contract"
 
 aliceSnapshotDirectory :: String
 aliceSnapshotDirectory = "test/pdr-snapshot/universe/aliceAfterReboot"

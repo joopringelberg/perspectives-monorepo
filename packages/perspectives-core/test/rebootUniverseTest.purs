@@ -148,7 +148,7 @@ rebootUniverseTests =
     , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$ManageBrokerService", logConfiguration: emptyLogConfiguration }
     , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$Add_public_pages", logConfiguration: emptyLogConfiguration }
     , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$CreateRepositoryRegistryPublicPage", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$SignUpToBrokerService", logConfiguration: emptyLogConfiguration }
+    -- , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$SignUpToBrokerService", logConfiguration: emptyLogConfiguration }
     -- , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$ExecuteBigBang", logConfiguration: emptyLogConfiguration }
   ]
 

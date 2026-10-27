@@ -74,7 +74,7 @@ main = runTest $ suite "Compile-and-store stable IDs" do
               assert "ReadyToInstall retains its installed stable ID" (idUriForState mapping stateName == Just stateId)
               assert "The existing active state still has a definition" (isJust $ Object.lookup stateId dfr.states)
 
-  test "Recompilation replaces queries that reference a state moved under a new parent" do
+  test "Recompilation replaces queries that reference a removed state" do
     source <- readTextFile UTF8 "src/model/AMQPtestModel@1.0.arc"
     bracket
       (startPDRInstanceFromSnapshot (testPouchdbUser "alice") defaultRuntimeOptions Nothing noBus "test/pdr-snapshot/universe/alice")
@@ -111,7 +111,7 @@ main = runTest $ suite "Compile-and-store stable IDs" do
             storedQueries :: StoredQueries <- getViewWithDocs db "defaultViews/modelView" (Key $ unwrap modelId)
             refreshedQueries <- getPropertyQueries pure [ key ]
             liftAff do
-              assert "The moved state no longer has its old definition" (not $ isJust $ Object.lookup oldStateId dfr.states)
+              assert "The removed state no longer has its old definition" (not $ isJust $ Object.lookup oldStateId dfr.states)
               assert "Only the new compilation's queries remain" (sort (writeJSON <$> storedQueries) == sort (writeJSON <$> queries))
               assert "The new queries do not reference the old state" (not $ contains (Pattern oldStateId) (writeJSON storedQueries))
               assert "The query cache no longer returns the old state" (not $ contains (Pattern oldStateId) (writeJSON refreshedQueries))

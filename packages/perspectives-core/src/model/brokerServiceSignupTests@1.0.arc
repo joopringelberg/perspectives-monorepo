@@ -137,6 +137,47 @@ domain model://joopringelberg.nl#BrokerServiceSignupTests@1.0
           once settled
             TestSucceeded = true for extern
 
+  case Test_Leader_Terminates_Contract
+    aspect mm:Test
+
+    external
+      property ContractWasPresent (Boolean)
+      state ContractObserved = exists context >> ContractToBeTerminated >> binding
+        on entry
+          do for Tester once settled
+            ContractWasPresent = true
+            ContractTerminated = true for context >> ContractToBeTerminated
+
+      -- Observe removal of the actual contract, not just its deregistration.
+      state Success = ContractWasPresent and not exists context >> ContractToBeTerminated >> binding
+        on entry
+          do for Tester once settled
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+
+      perspective on BobBrokerContract
+        props (ContractTerminated) verbs (Consult, SetPropertyValue)
+
+      perspective on ContractToBeTerminated
+        only (CreateAndFill, RemoveFiller)
+        props (ContractTerminated) verbs (Consult, SetPropertyValue)
+
+      perspective on extern
+        props (ContractWasPresent) verbs (Consult, SetPropertyValue)
+
+      action RunTest
+        TestName = "Alice terminates Bob's Broker Service contract" for extern
+        bind BobBrokerContract to ContractToBeTerminated
+
+    context BobBrokerContract (functional) =
+      (filter bs:MyBrokers >> ManagedBrokers >> binding >> context >> Accounts >> binding
+        with (context >> AccountHolder >> binding >> FirstName == "bob")
+          and (context >> AccountHolder >> binding >> LastName == "bob_last")) >>= first
+
+    context ContractToBeTerminated filledBy bs:BrokerContract
+
   case EndSubscription
     aspect mm:Test
 
