@@ -34,8 +34,8 @@ import Node.FS.Aff (readTextFile)
 import Parsing.String (eof)
 import Perspectives.Parsing.Arc (domain, userRoleE)
 import Perspectives.Parsing.Arc.AST (ActionE(..), AutomaticEffectE(..), ContextActionE(..), ContextE(..), ContextPart(..), RoleE(..), RolePart(..), StateE(..), StateQualifiedPart(..))
-import Perspectives.Parsing.Arc.IndentParser (runIndentParser)
 import Perspectives.Parsing.Arc.Expression.AST (BinaryStep(..), Operator(..), Step(..), SimpleStep(..), UnaryStep(..), VarBinding(..))
+import Perspectives.Parsing.Arc.IndentParser (runIndentParser)
 import Perspectives.Parsing.Arc.Statement.AST (Assignment(..), LetABinding(..), LetStep(..), Statements(..))
 import Test.Unit (TestSuite, suite, test)
 import Test.Unit.Assert (assert, equal)
@@ -140,13 +140,13 @@ theSuite = suite "Action settlement stages" do
             (automaticEffects root)
 
   for_ [ "src/model/couchdbManagement@12.4.arc" ] \path ->
-    test (path <> " captures server coordinates before binding the local server role") do
+    test (path <> " copies server coordinates to the created server context") do
       source <- readTextFile UTF8 path
       parsed <- runIndentParser source (domain <* eof)
       case parsed of
         Left err -> assert (show err) false
         Right root ->
-          equal 2 (length (filter capturesServerCoordinates (automaticEffects root)))
+          equal 1 (length (filter copiesServerCoordinates (automaticEffects root)))
 
   test "received Couchdb servers do not trigger local admin provisioning" do
     source <- readTextFile UTF8 "src/model/couchdbManagement@12.4.arc"
@@ -308,24 +308,30 @@ propertyName = case _ of
   PropertyAssignment { propertyIdentifier } -> propertyIdentifier
   _ -> ""
 
-capturesServerCoordinates :: Statements -> Boolean
-capturesServerCoordinates = case _ of
+copiesServerCoordinates :: Statements -> Boolean
+copiesServerCoordinates = case _ of
   Let
     ( LetStep
         { bindings:
-            [ Expr (VarBinding "serverurl" _)
-            , Expr (VarBinding "couchdbport" _)
-            , Stat "server" (CreateRole _)
+            [ Expr (VarBinding "couchdburl" _)
             ]
-        , stages:
-            [ [ Bind_ _
-              , PropertyAssignment { propertyIdentifier: "Url", valueExpression: Simple (Variable _ "serverurl") }
-              , PropertyAssignment { propertyIdentifier: "CouchdbPort", valueExpression: Simple (Variable _ "couchdbport") }
-              ]
-            ]
+        , stages: [ assignments ]
         }
-    ) -> true
+    ) ->
+    createsAndCopiesServerCoordinates assignments
   _ -> false
+  where
+  createsAndCopiesServerCoordinates assignments =
+    any isCouchdbServerCreation assignments
+      && map propertyName (filter isServerCoordinate assignments) == [ "ServerUrl", "CouchdbPort" ]
+
+  isCouchdbServerCreation = case _ of
+    CreateContext_ { contextTypeIdentifier } -> contextTypeIdentifier == "CouchdbServer"
+    _ -> false
+
+  isServerCoordinate = case _ of
+    PropertyAssignment { propertyIdentifier } -> propertyIdentifier == "ServerUrl" || propertyIdentifier == "CouchdbPort"
+    _ -> false
 
 adminLifecycleStates :: RolePart -> Array StateE
 adminLifecycleStates = case _ of
