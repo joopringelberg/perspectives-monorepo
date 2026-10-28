@@ -78,7 +78,7 @@ synchronisationSuite results =
 synchronisationTestModelConfiguration :: SynchronisationModelConfiguration
 synchronisationTestModelConfiguration =
   { suiteName: "AMQP synchronisation tests"
-  , snapshotDirAlice: "test/pdr-snapshot/universe/alice"
+  , snapshotDirAlice: "test/pdr-snapshot/rebootedUniverse/alice"
   , snapshotDirBob: "test/pdr-snapshot/universe/bob"
   , testModel
   , testModelLoadMethod: CompileModelFromSource
@@ -89,6 +89,9 @@ synchronisationTestModelConfiguration =
   , indexedTestContext
   , modelPatches:
       [
+        { modelUriReadable: "model://perspectives.domains#CouchdbManagement"
+        , sourcePath: "src/model/couchdbManagement@12.4.arc"
+        }
       --   { modelUriReadable: "model://perspectives.domains#BrokerServices"
       --   , sourcePath: "test/patches/BrokerServices@7.0.arc"
       --   }
@@ -160,29 +163,34 @@ testNameProperty = "model://joopringelberg.nl#AMQPtestModel$Test$External$TestNa
 
 allTests :: Array ModelTest
 allTests =
-  [ { testContextTypeName: test_SetProperty, logConfiguration: Just debugConfiguration }
+  [ 
+    -- { testContextTypeName: test_SetProperty, logConfiguration: Just debugConfiguration }
+   { testContextTypeName: test_Create_A_Bespoke_Database, logConfiguration: Just debugConfiguration }
   ]
 
 debugConfiguration :: LogConfiguration
 debugConfiguration =
   { pdrA:
       [ { topic: TEST, logLevel: Trace }
-      -- , { topic: RESOURCE, logLevel: Trace }
-      -- , { topic: STATE, logLevel: Trace }
-      -- , { topic: SYNC, logLevel: Trace }
+      , { topic: RESOURCE, logLevel: Trace }
+      , { topic: STATE, logLevel: Trace }
+      , { topic: SYNC, logLevel: Trace }
       -- , { topic: PERSISTENCE, logLevel: Trace }
       , { topic: INSTALL, logLevel: Trace }
       ]
   , pdrB:
       [ { topic: TEST, logLevel: Trace }
-      -- , { topic: RESOURCE, logLevel: Trace }
-      -- , { topic: STATE, logLevel: Trace }
-      -- , { topic: SYNC, logLevel: Trace }
+      , { topic: RESOURCE, logLevel: Trace }
+      , { topic: STATE, logLevel: Trace }
+      , { topic: SYNC, logLevel: Trace }
       -- , { topic: PERSISTENCE, logLevel: Trace }
       -- , { topic: BROKER, logLevel: Trace }
-      , { topic: INSTALL, logLevel: Trace }
+      -- , { topic: INSTALL, logLevel: Trace }
       ]
   }
 
 test_SetProperty :: String
 test_SetProperty = "model://joopringelberg.nl#AMQPtestModel$Test_SetProperty"
+
+test_Create_A_Bespoke_Database :: String
+test_Create_A_Bespoke_Database = "model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database"

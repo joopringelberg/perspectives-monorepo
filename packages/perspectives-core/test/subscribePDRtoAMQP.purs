@@ -2,19 +2,19 @@ module Test.Test.PDRInstance.SubscribePDRtoAMQP where
 
 import Prelude
 
-import Data.Array (head)
+import Data.Array (filterA, null)
 import Data.Foldable (for_)
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
-import Data.Traversable (traverse)
 import Effect.Aff (Aff, bracket, error, throwError)
 import Perspectives.Assignment.RunAction (runActionForObject, runContextAction)
 import Perspectives.Assignment.Update (setProperty)
-import Perspectives.CoreTypes (LogLevel, LogTopic, (##=), (##>))
-import Perspectives.Extern.Couchdb (addModelToLocalStore_, createEntitiesDatabase)
+import Perspectives.CoreTypes (LogLevel, LogTopic, MonadPerspectives, (##=), (##>))
+import Perspectives.Extern.Couchdb (addModelToLocalStore_)
 import Perspectives.Identifiers (deconstructBuitenRol)
-import Perspectives.Instances.ObjectGetters (binding_, getEnumeratedRoleInstances)
-import Perspectives.Logging (errorBroker, infoTest, traceBroker, traceTest)
+import Perspectives.Instances.ObjectGetters (binding_, getEnumeratedRoleInstances, getProperty)
+import Perspectives.Instances.Me (isMe)
+import Perspectives.Logging (infoTest)
 import Perspectives.ModelDependencies (sysUser)
 import Perspectives.Names (lookupIndexedContext)
 import Perspectives.PerspectivesState (getLogConfig, setLogConfig, setTopicLogLevel)
@@ -43,15 +43,6 @@ withBracketedTopicLogLevel pdr topicLevels action =
     (\oldConfig -> runInPDR pdr $ setLogConfig oldConfig)
     (\_ -> action)
 
--- LET OP: we moeten in eerste instantie de beheerder en een eerste subscriber testen.
--- Dat betekent dat gebruik maken van de service niet gelijk is voor beide test PDR's.
--- Voor de beheerder is een BespokeDatabase nodig. Dat is niet meer of minder dan een Couchdb database. 
--- Mogelijk kan dat in een lokale Couchdb zijn?
--- Hoe komt de administrator aan een contract?
--- De client bezoekt de publieke versie van de BrokerService.
--- De client voert actie AddThisServer uit.
--- Dan in de App de actie Signup.
-
 -------------------------------------------------------------------------------
 ---- MANAGE AMQP WITH PDR
 -------------------------------------------------------------------------------
@@ -61,65 +52,70 @@ type AMQPAdministratorCredentials =
   , adminPassword :: String
   }
 
--- | Returns the external role of the public version of the created BrokerService instance.
-manageAMQPwithPDR :: AMQPAdministratorCredentials -> PDRInstance -> Aff ContextInstance
-manageAMQPwithPDR { adminUserName, adminPassword } pdr = runInPDR pdr do
-  let bespokeDatabaseName = "cw_test_amqp_broker_service"
-  -- let bespokeDatabaseName = "https://perspectives.domains/cw_ro6a1vrf9y/"
-  runMonadPerspectivesTransaction' shareWithPeers (ENR $ EnumeratedRoleType sysUser)
-    do
-      addModelToLocalStore_ [ amqpTestSetupModel ] (RoleInstance "Ignored")
-      infoTest $ pdr.name <> " loaded AMQP test setup model"
-      -- Create a 'public' database in the in-memory Pouchdb database, named "cw_test_amqp_broker_service". This is the database that will be used to store the public version of the BrokerService instance.
-      createEntitiesDatabase [ "" ] [ bespokeDatabaseName ] [ "" ] (RoleInstance "Ignored")
-      infoTest $ pdr.name <> " created public database for BrokerService instance"
-
-  -- Create a BrokerService instance in the PDR, so that it can manage AMQP subscriptions.
-  setupApp <- do
-    IndexedContext setupApp <- toStable (IndexedContext "model://joopringelberg.nl#AMQPtestSetup$AMQPtestSetupApp")
-    msetUpApp <- lookupIndexedContext setupApp
-    case msetUpApp of
-      Nothing -> throwError $ error $ pdr.name <> " could not find AMQPtestSetupApp context"
-      Just s -> do
-        infoTest $ pdr.name <> " found the AMQPtestSetupApp context"
-        pure s
-
-  -- First create an instance of ManagedBrokers
-  -- and set its StorageLocation property to the URL of a Couchdb database that can be used to store the public version.
-  runMonadPerspectivesTransaction' doNotShareWithPeers (CR $ CalculatedRoleType testSetupManager)
-    $
-      runContextAction testSetupManager "SetupBrokerService" (unwrap setupApp)
-  infoTest $ pdr.name <> " ran SetupBrokerService action to create a BrokerService instance"
-
-  -- Now run the action ConfigureBrokerService by the Manager.
-  runMonadPerspectivesTransaction' shareWithPeers (CR $ CalculatedRoleType testSetupManager)
-    $
-      runContextAction testSetupManager "ConfigureBrokerService" (unwrap setupApp)
-  infoTest $ pdr.name <> " ran ConfigureBrokerService action to configure the BrokerService instance"
-
-  adminProperty <- toStable (EnumeratedPropertyType testSetupAppAdmin)
-  passwordProperty <- toStable (EnumeratedPropertyType testSetupAppPassword)
-  runMonadPerspectivesTransaction' doNotShareWithPeers (CR $ CalculatedRoleType testSetupManager)
-    $ do
-        setProperty [ externalRole setupApp ] adminProperty Nothing [ Value adminUserName ]
-        setProperty [ externalRole setupApp ] passwordProperty Nothing [ Value adminPassword ]
-        runContextAction testSetupManager "SetCredentials" (unwrap setupApp)
-  infoTest $ pdr.name <> " ran SetCredentials action to provide the Administrator with credentials for the BrokerService instance"
-
-  -- Retrieve the address of the public version of the BrokerService instance, so that it can be used by the other PDR to subscribe to AMQP.
+-- | Select the rebooted universe's broker, never an arbitrary first broker.
+getManagedBrokerService :: MonadPerspectives { publicContext :: ContextInstance, administrator :: RoleInstance }
+getManagedBrokerService = do
   IndexedContext brokerServicesAppStable <- toStable (IndexedContext brokerServicesApp)
   lookupIndexedContext brokerServicesAppStable >>= case _ of
-    Nothing -> throwError $ error $ pdr.name <> " could not find BrokerServicesApp context"
+    Nothing -> throwError $ error "BrokerServicesApp is missing; create the rebooted universe snapshot first"
     Just managedBrokersContext -> do
       stableManagedBrokers <- toStable (EnumeratedRoleType managedBrokers)
       managedBrokersInstances <- managedBrokersContext ##= getEnumeratedRoleInstances stableManagedBrokers
-      traceTest $ pdr.name <> " retrieved ManagedBrokers instances: " <> show managedBrokersInstances <> " from BrokerServicesApp " <> show managedBrokersContext
-      brokerServices <- traverse binding_ managedBrokersInstances
-      case head brokerServices of
-        Just (Just brokerServiceInstance) -> do
-          infoTest $ pdr.name <> " retrieved public BrokerService instance address"
-          pure $ ContextInstance $ "pub:" <> bespokeDatabaseName <> "#" <> takeGuid (deconstructBuitenRol (unwrap brokerServiceInstance))
-        _ -> throwError $ error $ pdr.name <> " could not find any BrokerService instance in ManagedBrokers"
+      identifier <- toStable (EnumeratedPropertyType (managedBrokers <> "$GivenIdentifier"))
+      testBrokers <- filterA
+        ( \role -> do
+            name <- role ##> getProperty identifier
+            pure (name == Just (Value "BigBangsBrokerService"))
+        )
+        managedBrokersInstances
+      case testBrokers of
+        [ testBroker ] -> binding_ testBroker >>= case _ of
+          Just brokerServiceInstance -> do
+            publicUrl <- toStable (EnumeratedPropertyType "model://perspectives.domains#BrokerServices$BrokerService$External$PublicUrl")
+            location <- brokerServiceInstance ##> getProperty publicUrl
+            url <- case location of
+              Just (Value value) | value /= "" -> pure value
+              _ -> throwError $ error "BigBangsBrokerService has no public storage URL"
+            let service = ContextInstance (deconstructBuitenRol (unwrap brokerServiceInstance))
+            administratorType <- toStable (EnumeratedRoleType "model://perspectives.domains#BrokerServices$BrokerService$Administrator")
+            administrators <- service ##= getEnumeratedRoleInstances administratorType
+            case administrators of
+              [ administrator ] -> do
+                mine <- isMe administrator
+                unless mine $ throwError $ error "The restored user does not administer BigBangsBrokerService"
+                pure
+                  { publicContext: ContextInstance $ "pub:" <> url <> "#" <> takeGuid (unwrap service)
+                  , administrator
+                  }
+              _ -> throwError $ error "Expected exactly one BigBangsBrokerService Administrator"
+          Nothing -> throwError $ error "BigBangsBrokerService has no context binding"
+        _ -> throwError $ error $ "Expected exactly one managed BigBangsBrokerService in the rebooted snapshot, found " <> show testBrokers
+
+-- | Reuse management; only per-run RabbitMQ administrator credentials change.
+reuseAMQPManagement :: AMQPAdministratorCredentials -> PDRInstance -> Aff ContextInstance
+reuseAMQPManagement { adminUserName, adminPassword } pdr = runInPDR pdr do
+  broker <- getManagedBrokerService
+  username <- toStable (EnumeratedPropertyType "model://perspectives.domains#BrokerServices$BrokerService$Administrator$AdminUserName")
+  password <- toStable (EnumeratedPropertyType "model://perspectives.domains#BrokerServices$BrokerService$Administrator$AdminPassword")
+  runMonadPerspectivesTransaction' doNotShareWithPeers (ENR $ EnumeratedRoleType sysUser) do
+    setProperty [ broker.administrator ] username Nothing [ Value adminUserName ]
+    setProperty [ broker.administrator ] password Nothing [ Value adminPassword ]
+  infoTest $ pdr.name <> " reusing BigBangsBrokerService management"
+  pure broker.publicContext
+
+requireUnsubscribed :: MonadPerspectives Unit
+requireUnsubscribed = do
+  contracts <- getBrokerSubscriptions
+  unless (null contracts) $ throwError $ error "Snapshot must not contain broker subscriptions; subscriptions are created afresh for each run"
+
+getBrokerSubscriptions :: MonadPerspectives (Array RoleInstance)
+getBrokerSubscriptions = do
+  IndexedContext index <- toStable (IndexedContext brokerServicesApp)
+  lookupIndexedContext index >>= case _ of
+    Nothing -> throwError $ error "Snapshot has no BrokerServicesApp"
+    Just app -> do
+      contractsType <- toStable (CalculatedRoleType "model://perspectives.domains#BrokerServices$BrokerServices$Contracts")
+      app ##= getRoleInstances (CR contractsType)
 
 brokerServicesApp :: String
 brokerServicesApp = "model://perspectives.domains#BrokerServices$MyBrokers"
@@ -150,34 +146,19 @@ brokerServiceModel :: String
 -- brokerServiceModel = "model://perspectives.domains#BrokerServices@7.0"
 brokerServiceModel = "model://perspectives.domains#zjuzxbqpgc@7.0"
 
--------------------------------------------------------------------------------
----- AMQP TEST SETUP MODEL
--------------------------------------------------------------------------------
-
-amqpTestSetupModel :: String
--- amqpTestSetupModel = "model://joopringelberg.nl#AMQPtestSetup@1.0"
-amqpTestSetupModel = "model://joopringelberg.nl#whku0vufat@1.0"
-
-testSetupManager :: String
-testSetupManager = "model://joopringelberg.nl#AMQPtestSetup$TestSetupApp$Manager"
-
-testSetupAppAdmin :: String
-testSetupAppAdmin = "model://joopringelberg.nl#AMQPtestSetup$TestSetupApp$External$Admin"
-
-testSetupAppPassword :: String
-testSetupAppPassword = "model://joopringelberg.nl#AMQPtestSetup$TestSetupApp$External$Password"
+prepareAMQPSubscription :: MonadPerspectives Unit
+prepareAMQPSubscription = do
+  runMonadPerspectivesTransaction' doNotShareWithPeers (ENR $ EnumeratedRoleType sysUser) $
+    addModelToLocalStore_ [ brokerServiceModel ] (RoleInstance "Ignored")
+  requireUnsubscribed
 
 -------------------------------------------------------------------------------
 ---- SUBSCRIBE PDR TO AMQP
 -------------------------------------------------------------------------------
 subscribePDRtoAMQP :: ContextInstance -> PDRInstance -> Aff Unit
-subscribePDRtoAMQP publicBrokerServiceInstance pdr =
+subscribePDRtoAMQP publicBrokerServiceInstance pdr = do
   withBracketedTopicLogLevel pdr [ {-- topic: BROKER, logLevel: Trace }, { topic: RESOURCE, logLevel: Trace --}] $ runInPDR pdr do
-    -- Load the Broker model
-    runMonadPerspectivesTransaction' shareWithPeers (ENR $ EnumeratedRoleType sysUser)
-      $
-        addModelToLocalStore_ [ brokerServiceModel ] (RoleInstance "Ignored")
-    infoTest $ pdr.name <> " loaded BrokerService model"
+    prepareAMQPSubscription
 
     -- Use the public version of the BrokerService instance to subscribe to AMQP.
     -- Run the context action AddThisServer in the context of the external role of the public BrokerService instance.
@@ -193,37 +174,29 @@ subscribePDRtoAMQP publicBrokerServiceInstance pdr =
         Just b@(ContextInstance bApp) -> do
           publicBrokersStable <- toStable (EnumeratedRoleType publicBrokers)
           publicBrokersInstances <- b ##= getEnumeratedRoleInstances publicBrokersStable
-          case head publicBrokersInstances of
-            (Just publicBrokerRoleInstance) -> do
+          matchingBrokers <- filterA
+            ( \role -> do
+                filler <- binding_ role
+                pure (filler == Just (externalRole publicBrokerServiceInstance))
+            )
+            publicBrokersInstances
+          case matchingBrokers of
+            [ publicBrokerRoleInstance ] -> do
               runMonadPerspectivesTransaction' shareWithPeers (CR $ CalculatedRoleType brokerServicesManager)
                 $
                   runActionForObject (CR $ CalculatedRoleType brokerServicesManager) "SignUp" bApp (unwrap publicBrokerRoleInstance)
               infoTest $ pdr.name <> " executed SignUp action to subscribe to AMQP using the public BrokerService instance" <> show publicBrokerRoleInstance
-            _ -> throwError $ error $ pdr.name <> " could not find any Public BrokerService instance in BrokerServicesApp"
+            _ -> throwError $ error $ pdr.name <> " expected exactly one PublicBrokers role for " <> show publicBrokerServiceInstance <> ", found " <> show matchingBrokers
 
 -------------------------------------------------------------------------------
 ---- UNSUBSCRIBE PDR FROM AMQP
 -------------------------------------------------------------------------------
 unsubscribePDRfromAMQP :: PDRInstance -> Aff Unit
 unsubscribePDRfromAMQP pdr =
-  withBracketedTopicLogLevel pdr [ {-- topic: BROKER, logLevel: Trace }, { topic: STATE, logLevel: Trace --}] $ runInPDR pdr do
-    -- Retrieve the contract instance from the indexed context bs:MyBrokers.
-    IndexedContext brokerServicesAppStable <- toStable (IndexedContext brokerServicesApp)
-    lookupIndexedContext brokerServicesAppStable >>= case _ of
-      Nothing -> errorBroker $ pdr.name <> " could not find BrokerServicesApp context"
-      Just managedBrokersContext -> do
-        traceBroker $ pdr.name <> " found BrokerServicesApp context: " <> show managedBrokersContext
-        -- Then fetch the role instance ContractInUse: it is the (external role of the) BrokerContract for the PDR.
-        contractInUseStable <- toStable (CalculatedRoleType contractInUse)
-        mcontract <- managedBrokersContext ##> getRoleInstances (CR contractInUseStable)
-        case mcontract of
-          Nothing -> errorBroker $ pdr.name <> " could not find any BrokerContract instance in BrokerServicesApp"
-          Just contractInstance -> do
-            traceBroker $ pdr.name <> " found BrokerContract instance: " <> show contractInstance
-            brokerContractAccountHolderStable <- toStable (EnumeratedRoleType brokerContractAccountHolder)
-            -- Finally set the property ContractTerminated to true on that BrokerContract external role, which will trigger the termination of the contract and the unsubscription from AMQP.
-            contractTerminatedStable <- toStable (EnumeratedPropertyType contractTerminated)
-            runMonadPerspectivesTransaction' shareWithPeers (ENR brokerContractAccountHolderStable)
-              $
-                setProperty [ contractInstance ] contractTerminatedStable Nothing [ Value "true" ]
-            traceBroker $ pdr.name <> " set ContractTerminated property to true on BrokerContract instance: " <> show contractInstance
+  runInPDR pdr do
+    contracts <- getBrokerSubscriptions
+    unless (null contracts) do
+      holder <- toStable (EnumeratedRoleType brokerContractAccountHolder)
+      terminated <- toStable (EnumeratedPropertyType contractTerminated)
+      runMonadPerspectivesTransaction' shareWithPeers (ENR holder) $
+        setProperty contracts terminated Nothing [ Value "true" ]

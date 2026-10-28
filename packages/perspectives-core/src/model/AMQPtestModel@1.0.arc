@@ -4,6 +4,7 @@ domain model://joopringelberg.nl#AMQPtestModel@1.0
   use sys for model://perspectives.domains#System
   use mm for model://joopringelberg.nl#AMQPtestModel
   use bs for model://perspectives.domains#BrokerServices@7.0
+  use cm for model://perspectives.domains#CouchdbManagement@12.4
 
   -------------------------------------------------------------------------------
   ---- SETTING UP
@@ -139,3 +140,82 @@ domain model://joopringelberg.nl#AMQPtestModel@1.0
 
     thing TestRole1
       property P (Number)
+
+  case Create_A_Bespoke_Database
+    aspect mm:Test
+    external
+      property BespokeDatabaseReady (Boolean)
+      property TestContextCreated (Boolean)
+
+      state DatabaseReady = BespokeDatabaseReady
+        on entry
+          do for Follower
+            letA
+              testcontext <- create context mm:TestContext named "bobscontext" bound to TestContexts
+              testdata <- create role mm:TestContext$TestData in testcontext >> binding >> context
+            in
+              Value = "Created by Bob" for testdata
+
+              once settled
+                TestContextCreated = true
+
+      state ContextCreated = TestContextCreated
+        state TestSucceeded = exists publicrole pub:https://perspectives.domains/cw_bobsdatabase/#bobscontext (mm:TestContext)
+          on entry
+            do for Follower once settled
+              TestSucceeded = true
+
+    context BespokeDatabase filledBy cm:BespokeDatabase
+    context TestContexts (relational) filledBy mm:TestContext
+
+    user Leader filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Leader
+      perspective on extern
+        props (BespokeDatabaseReady) verbs (SetPropertyValue)
+        props (TestContextCreated) verbs (Consult)
+      perspective on cm:CouchdbServer$Accounts
+        only (Create, Fill)
+      perspective on cm:CouchdbServer$BespokeDatabases
+        only (CreateAndFill)
+        props (Endorsed, Public, EnteredDatabaseName) verbs (SetPropertyValue, Consult)
+      perspective on cm:BespokeDatabase$Owner
+        only (Create, Fill)
+      action RunTest
+        letA
+          bob <- (filter bs:MyBrokers >> ManagedBrokers >> binding >> context >> Accounts >> binding >> context >> AccountHolder >> binding
+            with (FirstName == "bob") and (LastName == "bob_last")) >>= first
+          server <- (filter cm:MyCouchdbApp >> CouchdbServers with Url == "https://perspectives.domains/")
+            >> binding >> context >>= first
+          account <- create role cm:CouchdbServer$Accounts in server
+          database <- create context cm:BespokeDatabase bound to cm:CouchdbServer$BespokeDatabases in server
+          owner <- create role cm:BespokeDatabase$Owner in database >> binding >> context
+        in
+          TestName = "Create a bespoke database for Bob" for extern
+          bind_ bob to account
+          bind_ account to owner
+          EnteredDatabaseName = "cw_bobsdatabase/" for database
+          Endorsed = true for database
+          Public = true for database
+
+          once settled
+            BespokeDatabaseReady = true for extern
+
+    user Follower filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Follower
+      perspective on extern
+        props (BespokeDatabaseReady) verbs (Consult)
+        props (TestContextCreated) verbs (Consult, SetPropertyValue)
+      perspective on TestContexts
+        only (CreateAndFill)
+      perspective on TestContexts >> binding >> context >> mm:TestContext$TestData
+        only (Create)
+        props (Value) verbs (SetPropertyValue)
+
+  case TestContext
+    external
+    public Visitor at "https://perspectives.domains/cw_bobsdatabase/" = sys:Me
+      perspective on TestData
+        props (Value) verbs (Consult)
+
+    thing TestData
+      property Value (String)

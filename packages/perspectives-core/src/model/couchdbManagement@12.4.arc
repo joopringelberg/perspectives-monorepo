@@ -572,7 +572,7 @@ domain model://perspectives.domains#CouchdbManagement@12.4
             callEffect cdb:MakeAdminOfDb( BaseUrl, DatabaseName, context >> Owner >> UserName )
       state Publish = (exists DatabaseName) and Public
         on entry
-          do for Owner
+          do for CBAdmin
             callEffect cdb:MakeDatabasePublic( BaseUrl, DatabaseName )
         -- on exit
         --   do for Owner

@@ -78,7 +78,6 @@ rebootUniverseCompileTestModelConfiguration =
             , basedOnVersion: Nothing
             }
         ]
-    , outputSnapshotDirectory = Just "test/pdr-snapshot/universe/aliceAfterReboot"
     }
 
 modelDependenciesTestModel :: String

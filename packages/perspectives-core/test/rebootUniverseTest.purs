@@ -78,7 +78,7 @@ rebootUniverseCompileTestModelConfiguration =
             , basedOnVersion: Nothing
             }
         ]
-    , outputSnapshotDirectory = Just "test/pdr-snapshot/universe/aliceAfterReboot"
+    , outputSnapshotDirectory = Just "test/pdr-snapshot/rebootedUniverse/alice"
     }
 
 rebootUniverseTestModel :: String
@@ -110,46 +110,45 @@ rebootUniverseSnapshotDirectory = "test/pdr-snapshot/universe/alice"
 -- Outcomment all tests to just re-create the snapshot without trying to create databases.
 rebootUniverseTests :: Array ModelTest
 rebootUniverseTests =
-  [
-      { testContextTypeName: "model://joopringelberg.nl#RepositoryTools$Cleanup", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#RepositoryTools$ManageCouchdb", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#RepositoryTools$CreateBigBangsDatabase", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#RepositoryTools$CreatePerspectivesDomainsRepository", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#RepositoryTools$CreateJoopringelbergNlRepository", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_Couchdb", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_Serialise", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_Sensor", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_Utilities", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_System", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_BodiesWithAccounts", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_Parsing", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_HelpLib", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_Files", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_CouchdbManagement", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_BrokerServices", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_RabbitMQ", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_HyperContext", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_Introduction", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_HelpProject", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_Disconnect", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_RepositoryRegistry", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_SharedFileServices", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_RepositoryTools", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_RebootUniverse", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_SynchronisationTestModel", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_TwoPDRDestructiveTests", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_StateTestModel", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_SinglePDRDestructiveTests", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_TransactionExecutionTests", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_AMQPtestModel", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_AMQPtestSetup", logConfiguration: emptyLogConfiguration }
-    -- The next model is not yet finished. We'll continue after the reboot.
-    -- , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_TestModelDependencies", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$ManageBrokerService", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$Add_public_pages", logConfiguration: emptyLogConfiguration }
-    , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$CreateRepositoryRegistryPublicPage", logConfiguration: emptyLogConfiguration }
-    -- , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$SignUpToBrokerService", logConfiguration: emptyLogConfiguration }
-    -- , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$ExecuteBigBang", logConfiguration: emptyLogConfiguration }
+  [ { testContextTypeName: "model://joopringelberg.nl#RepositoryTools$Cleanup", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RepositoryTools$ManageCouchdb", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RepositoryTools$CreateBigBangsDatabase", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RepositoryTools$CreatePerspectivesDomainsRepository", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RepositoryTools$CreateJoopringelbergNlRepository", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_Couchdb", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_Serialise", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_Sensor", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_Utilities", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_System", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_BodiesWithAccounts", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_Parsing", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_HelpLib", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_Files", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_CouchdbManagement", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_BrokerServices", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_RabbitMQ", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_HyperContext", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_Introduction", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_HelpProject", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_Disconnect", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_RepositoryRegistry", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_SharedFileServices", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_RepositoryTools", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_RebootUniverse", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_SynchronisationTestModel", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_TwoPDRDestructiveTests", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_StateTestModel", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_SinglePDRDestructiveTests", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_TransactionExecutionTests", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_AMQPtestModel", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_AMQPtestSetup", logConfiguration: emptyLogConfiguration }
+  -- The next model is not yet finished. We'll continue after the reboot.
+  -- , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$AddModel_TestModelDependencies", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$ManageBrokerService", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$Add_public_pages", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$CreateRepositoryRegistryPublicPage", logConfiguration: emptyLogConfiguration }
+  -- , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$SignUpToBrokerService", logConfiguration: emptyLogConfiguration }
+  -- , { testContextTypeName: "model://joopringelberg.nl#RebootUniverse$ExecuteBigBang", logConfiguration: emptyLogConfiguration }
   ]
 
 debugConfiguration :: LogConfiguration
@@ -157,9 +156,9 @@ debugConfiguration =
   { pdr:
       [
         -- { topic: TEST, logLevel: Trace }
-          { topic: RESOURCE, logLevel: Trace }
-        , { topic: STATE, logLevel: Trace }
-        , { topic: INSTALL, logLevel: Trace }
+        { topic: RESOURCE, logLevel: Trace }
+      , { topic: STATE, logLevel: Trace }
+      , { topic: INSTALL, logLevel: Trace }
       -- , { topic: MODEL, logLevel: Debug }
       , { topic: ACTION, logLevel: Trace }
       ]

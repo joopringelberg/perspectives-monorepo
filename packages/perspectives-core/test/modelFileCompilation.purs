@@ -120,10 +120,11 @@ modelFileCompilationSuite testResults =
 modelFilePaths :: Array String
 modelFilePaths =
   [ "src/model/AMQPtestModel@1.0.arc"
+  , "src/model/AMQPtestSetup@1.0.arc"
   , "src/model/brokerServiceSignupTests@1.0.arc"
   ]
 
 -- | Directory where the PDR snapshot is cached between test runs.
 -- | Delete this directory to force a full PDR rebuild on the next run.
 snapshotDirectory :: String
-snapshotDirectory = "test/pdr-snapshot/newdeltas/alice"
+snapshotDirectory = "test/pdr-snapshot/universe/alice"

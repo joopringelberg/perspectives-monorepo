@@ -56,17 +56,19 @@ import Control.Monad.Error.Class (throwError)
 import Control.Promise (Promise, toAffE)
 import Data.Array (null)
 import Data.Either (Either(..))
+import Data.Foldable (for_)
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
 import Data.Traversable (traverse_)
 import Effect (Effect)
-import Effect.Aff (Aff, Error, Milliseconds(..), attempt, bracket, delay, error, forkAff, killFiber)
-import Effect.Aff.AVar (AVar, empty, new, put)
+import Effect.Aff (Aff, Error, Milliseconds(..), attempt, bracket, delay, error, finally, forkAff, killFiber)
+import Effect.Aff.AVar (AVar, empty, new, put, tryRead)
 import Effect.Class (liftEffect)
 import Effect.Class.Console (log)
 import Effect.Exception (message)
+import Effect.Ref as Ref
 import Foreign.Object (empty) as OBJ
-import Main (forkCreateIndexedResources, forkDatabasePersistence, forkJustInTimeModelLoader, forkReferentialIntegrityFixer, forkTimedTransactions)
+import Main (forkCreateIndexedResources, forkDatabasePersistence, forkJustInTimeModelLoader, forkReferentialIntegrityFixer, forkTimedTransactions, retrieveAllCredentials)
 import Main.RecompileBasicModels (addIndexedNames)
 import Perspectives.AMQP.IncomingPost (incomingPost, retrieveBrokerService)
 import Perspectives.AMQP.Stomp (deactivate)
@@ -105,7 +107,8 @@ import Perspectives.Sync.HandleTransaction (executeTransaction)
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer)
 import Simple.JSON (readJSON)
 import Test.PDRInstance.Types (PDRInstance, runInPDR)
-import Test.Test.PDRInstance.SubscribePDRtoAMQP (AMQPAdministratorCredentials, manageAMQPwithPDR, subscribePDRtoAMQP, unsubscribePDRfromAMQP)
+import Test.RabbitMQCtl (deleteQueue, deleteUser, queueExists, userExists)
+import Test.Test.PDRInstance.SubscribePDRtoAMQP (AMQPAdministratorCredentials, prepareAMQPSubscription, requireUnsubscribed, reuseAMQPManagement, subscribePDRtoAMQP, unsubscribePDRfromAMQP)
 import Unsafe.Coerce (unsafeCoerce)
 
 -----------------------------------------------------------
@@ -422,6 +425,7 @@ startPDRInstanceFromSnapshotWithHook pouchdbUser runtimeOptions mLogColor bus sn
         modify \(s@{ runtimeOptions: ro }) -> s { runtimeOptions = ro { privateKey = unsafeCoerce signingKey, transportPrivateKey = unsafeCoerce transportKey } }
         getSystemIdentifier >>= createUserDatabases
         getinstalledModelCuids fromLocalModels >>= setModelUris
+        retrieveAllCredentials
         -- As in Main: without an in-process bus, take the broker service from the restored BrokerContract,
         -- or incomingPost will block forever on getBrokerService.
         case bus of
@@ -642,7 +646,8 @@ withTwoPDRsCached user1 opts1 color1 snapshotDir1 user2 opts2 color2 snapshotDir
 -- | Unlike `withTwoPDRsCached`, this does not install the in-process bus
 -- | test transport and therefore leaves runtime wiring equivalent to
 -- | non-test startup.
--- | Here is where we subscribe both PDR instances to the default AMQP/Stomp broker so that they can receive transactions from each other.
+-- | Requires an unsubscribed, rebooted Alice snapshot with existing management.
+-- | Creates fresh subscriptions for both users and removes them after the run.
 withTwoPDRsCachedNoBus
   :: forall a
    . AMQPAdministratorCredentials
@@ -656,51 +661,48 @@ withTwoPDRsCachedNoBus
   -> String
   -> (PDRInstance -> PDRInstance -> Aff a)
   -> Aff a
-withTwoPDRsCachedNoBus amqpAdministratorCredentials user1 opts1 color1 snapshotDir1 user2 opts2 color2 snapshotDir2 f =
-  withPDRCached user1 opts1 color1 noBus snapshotDir1 \pdr1 -> do
+withTwoPDRsCachedNoBus amqpAdministratorCredentials user1 opts1 color1 snapshotDir1 user2 opts2 color2 snapshotDir2 f = do
+  for_ [ snapshotDir1, snapshotDir2 ] \directory -> do
+    exists <- snapshotExists directory
+    unless exists $ throwError $ error $ "Required AMQP snapshot is missing: " <> directory
+  bracket
+    (startPDRInstanceFromSnapshotWithHook user1 opts1 color1 noBus snapshotDir1 requireUnsubscribed)
+    _.shutdown
+    \pdr1 -> do
+      publicBrokerServiceInstance <- reuseAMQPManagement amqpAdministratorCredentials pdr1
+      withFreshAMQPSubscription "pdr1" publicBrokerServiceInstance pdr1 do
+        bracket
+          (startPDRInstanceFromSnapshotWithHook user2 opts2 color2 noBus snapshotDir2 prepareAMQPSubscription)
+          _.shutdown
+          \pdr2 -> do
+            withFreshAMQPSubscription "pdr2" publicBrokerServiceInstance pdr2 (f pdr1 pdr2)
 
-    runInPDR pdr1 do
-      -- setTopicLogLevel TEST Trace
-      -- setTopicLogLevel INSTALL Trace
-      -- setTopicLogLevel RESOURCE Trace
-      -- setTopicLogLevel STATE Trace
-      -- setTopicLogLevel SYNC Trace
-      -- setTopicLogLevel BROKER Trace
-      infoTest "withTwoPDRsCachedNoBus: Setting log levels for PDR1"
+withFreshAMQPSubscription :: forall a. String -> ContextInstance -> PDRInstance -> Aff a -> Aff a
+withFreshAMQPSubscription label broker pdr action =
+  bracket
+    (liftEffect $ Ref.new Nothing)
+    (\saved -> liftEffect (Ref.read saved) >>= cleanupAMQPSubscription label pdr)
+    \saved -> do
+      subscribePDRtoAMQP broker pdr
+      service <- pollUntil 120 (Milliseconds 500.0) (label <> " broker registration") $
+        runInPDR pdr (gets _.brokerService) >>= tryRead
+      liftEffect $ Ref.write (Just service) saved
+      action
 
-    -- Here, make pdr1 subscribe to the default AMQP/Stomp broker so that it can receive transactions from pdr2.
-    -- pdr1 will be the manager of the BrokerService.
-    publicBrokerServiceInstance <- manageAMQPwithPDR amqpAdministratorCredentials pdr1
-    -- Subscribe pdr1 first and always unsubscribe it in the outer finalizer.
-    bracket
-      (subscribePDRtoAMQP publicBrokerServiceInstance pdr1)
-      (\_ -> cleanupAMQPSubscription "pdr1" pdr1)
-      \_ ->
-        withPDRCached user2 opts2 color2 noBus snapshotDir2 \pdr2 -> do
-
-          runInPDR pdr2 do
-            -- setTopicLogLevel TEST Trace
-            -- setTopicLogLevel INSTALL Trace
-            -- setTopicLogLevel RESOURCE Trace
-            -- setTopicLogLevel STATE Trace
-            -- setTopicLogLevel SYNC Trace
-            -- setTopicLogLevel BROKER Trace
-            infoTest "withTwoPDRsCachedNoBus: Setting log levels for PDR2"
-
-          -- Subscribe pdr2 and always unsubscribe it before pdr1.
-          bracket
-            (subscribePDRtoAMQP publicBrokerServiceInstance pdr2)
-            (\_ -> cleanupAMQPSubscription "pdr2" pdr2)
-            \_ -> f pdr1 pdr2
-
-cleanupAMQPSubscription :: String -> PDRInstance -> Aff Unit
-cleanupAMQPSubscription label pdr = do
+cleanupAMQPSubscription :: String -> PDRInstance -> Maybe BrokerService -> Aff Unit
+cleanupAMQPSubscription label pdr saved = do
   log $ "[withTwoPDRsCachedNoBus] Starting AMQP unsubscribe for " <> label
-  attempt (unsubscribePDRfromAMQP pdr) >>= case _ of
-    Left err ->
-      log $ "[withTwoPDRsCachedNoBus] Warning: unsubscribe failed for " <> label <> ": " <> message err
-    Right _ ->
-      log $ "[withTwoPDRsCachedNoBus] AMQP unsubscribe completed for " <> label
+  service <- case saved of
+    Just subscription -> pure $ Just subscription
+    Nothing -> runInPDR pdr (gets _.brokerService) >>= tryRead
+  -- The manager is also a subscriber: do not rely on its own termination
+  -- transaction finishing after its incoming-post connection has stopped.
+  finally (unsubscribePDRfromAMQP pdr) do
+    runInPDR pdr (stompClient >>= traverse_ (liftEffect <<< deactivate))
+    for_ service \{ login, queueId, vhost } -> do
+      userExists login >>= \exists -> when exists $ deleteUser login
+      queueExists vhost queueId >>= \exists -> when exists $ deleteQueue vhost queueId
+  log $ "[withTwoPDRsCachedNoBus] AMQP unsubscribe completed for " <> label
 
 -----------------------------------------------------------
 -- CONNECT TWO PDR INSTANCES VIA INVITATION

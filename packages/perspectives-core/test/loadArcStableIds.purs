@@ -45,7 +45,7 @@ main = runTest $ suite "Compile-and-store stable IDs" do
   test "Recompilation reuses installed and explicitly supplied mappings" do
     source <- readTextFile UTF8 "src/model/repositoryTools@1.0.arc"
     bracket
-      (startPDRInstanceFromSnapshot (testPouchdbUser "alice") defaultRuntimeOptions Nothing noBus "test/pdr-snapshot/universe/aliceAfterReboot")
+      (startPDRInstanceFromSnapshot (testPouchdbUser "alice") defaultRuntimeOptions Nothing noBus "test/pdr-snapshot/rebootedUniverse/alice")
       (\pdr -> pdr.shutdown)
       \pdr -> runInPDR pdr do
         let

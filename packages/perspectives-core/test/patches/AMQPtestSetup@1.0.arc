@@ -63,7 +63,7 @@ domain model://joopringelberg.nl#AMQPtestSetup@1.0
       action ConfigureBrokerService
         letA
           -- The external role of the BrokerService instance.
-          broker <- bs:MyBrokers >> ManagedBrokers >> binding >>= first
+          broker <- (filter bs:MyBrokers >> ManagedBrokers with StorageLocation == "cw_test_amqp_broker_service") >> binding >>= first
         in
           Name = "Test Broker" for broker
           Url = "wss://mycontexts.com:15673/ws" for broker
@@ -73,7 +73,7 @@ domain model://joopringelberg.nl#AMQPtestSetup@1.0
 
       action SetCredentials
         letA
-          admin <- bs:MyBrokers >> ManagedBrokers >> binding >> context >> Administrator
+          admin <- (filter bs:MyBrokers >> ManagedBrokers with StorageLocation == "cw_test_amqp_broker_service") >> binding >> context >> Administrator
         in
           -- AdminUserName = "joopring" for admin
           -- AdminPassword = "vOsisdebest5!" for admin
@@ -81,4 +81,3 @@ domain model://joopringelberg.nl#AMQPtestSetup@1.0
           AdminPassword = extern >> Password for admin
 
       -- All set to run action SignUp from the test PDR, which will create a new contract in the BrokerService.
-

@@ -32,6 +32,7 @@ module Test.SinglePDRScaffold
   , getSinglePDRResults
   , loadModel
   , executeModelTest
+  , saveSuccessfulSnapshot
   ) where
 
 import Prelude
@@ -39,16 +40,17 @@ import Prelude
 import Control.Monad.Cont (lift)
 import Control.Monad.Error.Class (throwError)
 import Control.Monad.Except.Trans (runExceptT)
-import Data.Array (find)
+import Data.Array (find, null)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
-import Data.Foldable (intercalate)
+import Data.Foldable (all, intercalate)
 import Data.Int (ceil)
 import Data.Time.Duration (Milliseconds(..))
 import Data.Traversable (for_, traverse)
 import Effect.Aff (Aff, error)
 import Effect.Class (liftEffect)
+import Effect.Class.Console (log)
 import Effect.Ref (Ref, new, read, write)
 import Effect.Unsafe (unsafePerformEffect)
 import Foreign.Object (empty) as OBJ
@@ -74,6 +76,7 @@ import Perspectives.Sidecar.ToStable (toStable)
 import Perspectives.TypePersistence.LoadArc (loadCompileAndStoreArcFile_)
 import Test.PDRInstance (SynchronisationResult, noBus, pollUntil, pollUntilTestFinishes, settleAndSave, snapshotPDR, testPouchdbUser, withPDRCached)
 import Test.PDRInstance.Types (PDRInstance, runInPDR)
+import Test.Test.PDRInstance.SubscribePDRtoAMQP (requireUnsubscribed)
 
 type TopicLogLevelPair =
   { topic :: LogTopic
@@ -168,7 +171,8 @@ getSinglePDRResults cfg = do
           settleAndSave pdr
 
           case cfg.outputSnapshotDirectory of
-            Just outputSnapshotDirectory ->
+            Just outputSnapshotDirectory -> saveSuccessfulSnapshot result do
+              runInPDR pdr requireUnsubscribed
               snapshotPDR pouchdbUser.systemIdentifier pouchdbUser.perspectivesUser outputSnapshotDirectory
             Nothing -> pure unit
 
@@ -176,6 +180,15 @@ getSinglePDRResults cfg = do
 
       liftEffect $ write (cached <> [ { cacheKey, results } ]) cachedSinglePDRResults
       pure results
+
+-- | Never replace a reusable baseline with a failed or empty test run.
+saveSuccessfulSnapshot :: SinglePDRResults -> Aff Unit -> Aff Unit
+saveSuccessfulSnapshot results save =
+  if not (null results) && all succeeded results then save
+  else log "[SinglePDRScaffold] Output snapshot not written: all tests must succeed and the run must not be empty."
+  where
+  succeeded (Right { testSucceeded }) = testSucceeded
+  succeeded (Left _) = false
 
 loadModel :: PDRInstance -> TestModelLoadMethod -> Aff Unit
 loadModel pdr = case _ of

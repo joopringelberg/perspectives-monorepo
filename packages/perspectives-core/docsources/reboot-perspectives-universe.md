@@ -56,8 +56,8 @@ pnpm run create:universeSnapshot
 
 `create:universeSnapshot` refuses to run unless the routing checker reports
 `remote`. The creator starts a fresh PDR for `alice`, installs the base models
-and its configured `extraModels`, patches and recompiles CouchdbManagement and
-RepositoryRegistry locally, and writes:
+and its configured `extraModels`, applies the local patches listed in the
+snapshot creator, and writes:
 
 ```text
 test/pdr-snapshot/universe/alice
@@ -99,7 +99,8 @@ configuration, not server health.
   `src/model/rebootUniverse@2.0.arc`;
 - executes the enabled cases in `rebootUniverseTests`;
 - writes the resulting PDR snapshot to
-  `test/pdr-snapshot/universe/aliceAfterReboot`.
+  `test/pdr-snapshot/rebootedUniverse/alice`, only when every enabled case
+  succeeds and the run is nonempty.
 
 The sequence starts with `Cleanup`, then `ManageCouchdb` and
 `CreateBigBangsDatabase`, creates the `perspectives.domains` and
@@ -107,6 +108,49 @@ The sequence starts with `Cleanup`, then `ManageCouchdb` and
 includes RepositoryTools, RebootUniverse, and the enabled test models in the
 `joopringelberg.nl` namespace. The final enabled cases configure the broker
 service and publish the public pages and repository overview.
+
+Keep `SignUpToBrokerService` disabled in this runner. The reusable snapshot must
+contain CouchdbServer and BrokerService management contexts, but no subscription.
+Snapshot publication rejects subscriptions. The model-dependencies runner does
+not write this baseline: its partial rebuild must not replace a full reboot.
+
+### Snapshot consumers and fresh subscriptions
+
+- `universe/alice` remains the seed for reboot/database-creation tests,
+  compilation tools, publication recovery, and the old-state stable-ID regression.
+- `rebootedUniverse/alice` is used by the AMQP synchronization tests, BrokerService
+  signup tests, AMQP performance runs, and the RepositoryTools stable-ID regression.
+- Bob continues to use `universe/bob`. He does not need Alice's management state.
+- In-process synchronization/performance tests retain their `newdeltas` snapshots.
+
+The AMQP scaffold requires existing snapshots. It selects the managed broker
+whose `GivenIdentifier` is `BigBangsBrokerService`, reads its actual `PublicUrl`,
+and sets the configured RabbitMQ administrator credentials on its existing
+Administrator role. It does not create another management context or public
+test database. Both users sign up afresh, and cleanup terminates their contracts,
+including on failures during subscription setup. Teardown remembers each
+per-run subscription's user and queue, and explicitly removes any remaining
+resources with the existing local `rabbitmqctl` test support. This also covers
+Alice's self-subscription, whose termination can stop her connection before her
+own deletion protocol finishes. Cleanup failures fail the run rather than being
+silently ignored. AMQP runners require local routing and local RabbitMQ.
+The signup suite uses the same broker selection with its temporary RabbitMQ
+administrator.
+
+Restoring a PDR also reloads its persisted CouchDB credentials, as normal startup
+does. A PDR snapshot saves local databases and keypairs; it does not save external
+CouchDB or RabbitMQ state. Keep the corresponding local CouchDB database contents
+available. Do not retain RabbitMQ subscriptions in reusable snapshots or try to
+restore their users and queues.
+
+Run `pnpm run test:snapshotLifecycle` to check the snapshot-publication guard and
+the rebooted snapshot's management/subscription prerequisites without signing up
+or rebuilding the external databases.
+With local routing and RabbitMQ running, `pnpm run test:freshSubscriptions`
+exercises the shared two-PDR setup twice. It verifies that management is not
+duplicated, accounts are fresh, and RabbitMQ users and queues are removed after
+each run and after an intentional callback failure. It creates a temporary
+RabbitMQ administrator and removes it afterwards.
 
 **Destructive scope:** `Cleanup` explicitly deletes
 `cw_servers_and_repositories`, `cw_perspectives_domains`,
@@ -127,7 +171,7 @@ every remote database or every historical model version.
 Remain in **local** mode.
 
 1. Open MyContexts using the local setup and create an installation named
-   **BigBang**. The Node test PDR and its `aliceAfterReboot` snapshot do not
+   **BigBang**. The Node test PDR and its `rebootedUniverse/alice` snapshot do not
    themselves create this browser installation.
 2. In BigBang, manually install
    `model://joopringelberg.nl#RebootUniverse@2.0`.

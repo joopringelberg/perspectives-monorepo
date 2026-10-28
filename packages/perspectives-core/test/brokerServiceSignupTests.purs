@@ -21,7 +21,6 @@ import Node.Encoding (Encoding(..))
 import Node.FS.Aff (readTextFile)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.AMQP.RabbitMQManagement (virtualHost)
-import Perspectives.Assignment.Update (setProperty)
 import Perspectives.CoreTypes (LogLevel(..), LogTopic(..), MonadPerspectives, (##=), (##>))
 import Perspectives.Cuid2 (cuid2)
 import Perspectives.DataUpgrade.PatchModels (patchModels)
@@ -35,7 +34,7 @@ import Perspectives.PerspectivesState (defaultRuntimeOptions, setTopicLogLevel)
 import Perspectives.Query.UnsafeCompiler (getPropertyValues)
 import Perspectives.Representation.InstanceIdentifiers (Value(..))
 import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..), EnumeratedRoleType(..), IndexedContext(..), PropertyType(..), RoleType(..))
-import Perspectives.RunMonadPerspectivesTransaction (doNotShareWithPeers, runMonadPerspectivesTransaction', shareWithPeers)
+import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransaction', shareWithPeers)
 import Perspectives.Sidecar.StableIdMapping (ModelUri(..), Stable, StableIdMapping)
 import Perspectives.Sidecar.ToStable (toStable)
 import Perspectives.TypePersistence.LoadArc (loadCompileAndStoreArcFile_)
@@ -44,7 +43,7 @@ import Test.Layer3Scaffold (LogConfiguration, ModelTest, applyLogConfigurationTo
 import Test.PDRInstance (SynchronisationResult, noBus, pollUntil, snapshotExists, startPDRInstanceFromSnapshotWithHook, testPouchdbUser, withPDRCached)
 import Test.PDRInstance.Types (PDRInstance, runInPDR)
 import Test.RabbitMQCtl (addAdminUser, deleteQueue, deleteUser, purgeOwnQueue, queueExists, queueHasConsumer, userExists)
-import Test.Test.PDRInstance.SubscribePDRtoAMQP (subscribePDRtoAMQP)
+import Test.Test.PDRInstance.SubscribePDRtoAMQP (getManagedBrokerService, requireUnsubscribed, reuseAMQPManagement, subscribePDRtoAMQP)
 import Test.SinglePDRScaffold (TestModelLoadMethod(..), emptyLogConfiguration, executeModelTest, loadModel)
 import Test.Unit (TestSuite, suite, test)
 import Test.Unit.Assert (assert)
@@ -107,7 +106,7 @@ runSignupScenario terminationTest adminPassword = do
     $ error ("Required Alice post-reboot snapshot is missing: " <> aliceSnapshotDirectory)
 
   bracket
-    (startPDRInstanceFromSnapshotWithHook (testPouchdbUser "alice") defaultRuntimeOptions (Just ansiCyan) noBus aliceSnapshotDirectory purgeOwnQueue)
+    (startPDRInstanceFromSnapshotWithHook (testPouchdbUser "alice") defaultRuntimeOptions (Just ansiCyan) noBus aliceSnapshotDirectory (requireUnsubscribed *> purgeOwnQueue))
     (\alice -> finally alice.shutdown (cleanupAliceSubscription alice))
     \alice ->
       withPDRCached (testPouchdbUser "bob") defaultRuntimeOptions (Just ansiRed) noBus bobSnapshotDirectory \bob -> do
@@ -246,17 +245,8 @@ ensureAliceSubscribed alice = do
   case existing of
     Just _ -> throwError $ error "Alice's base snapshot must not already contain a broker subscription"
     Nothing -> pure unit
-  brokerService <- runInPDR alice do
-    IndexedContext index <- toStable (IndexedContext myBrokersContext)
-    myBrokers <- lookupIndexedContext index >>= case _ of
-      Nothing -> throwError $ error "Alice's Broker Services app is missing"
-      Just ctx -> pure ctx
-    managedBrokers <- toStable (EnumeratedRoleType managedBrokersRole)
-    services <- myBrokers ##= getEnumeratedRoleInstances managedBrokers >=> binding >=> context
-    case head services of
-      Nothing -> throwError $ error "Alice has no managed broker service to subscribe to"
-      Just service -> pure service
-  subscribePDRtoAMQP brokerService alice
+  broker <- runInPDR alice getManagedBrokerService
+  subscribePDRtoAMQP broker.publicContext alice
   void $ pollUntil 120 (Milliseconds 500.0)
     "Alice's registered RabbitMQ account and active queue consumer"
     do
@@ -283,22 +273,8 @@ rabbitAdminName = "bssu_test_admin"
 -- | Give the administrator of Alice's broker service the credentials of the temporary RabbitMQ administrator.
 -- | They are not shared with peers.
 giveAliceAdminCredentials :: PDRInstance -> String -> Aff Unit
-giveAliceAdminCredentials pdr password = runInPDR pdr do
-  IndexedContext myBrokersIndex <- toStable (IndexedContext myBrokersContext)
-  mMyBrokers <- lookupIndexedContext myBrokersIndex
-  for_ mMyBrokers \myBrokers -> do
-    managedBrokersType <- toStable (EnumeratedRoleType managedBrokersRole)
-    administratorType <- toStable (EnumeratedRoleType "model://perspectives.domains#BrokerServices$BrokerService$Administrator")
-    adminUserName <- toStable (EnumeratedPropertyType "model://perspectives.domains#BrokerServices$BrokerService$Administrator$AdminUserName")
-    adminPassword <- toStable (EnumeratedPropertyType "model://perspectives.domains#BrokerServices$BrokerService$Administrator$AdminPassword")
-    brokerServices <- myBrokers ##= getEnumeratedRoleInstances managedBrokersType >=> binding >=> context
-    for_ brokerServices \brokerService -> do
-      administrators <- brokerService ##= getEnumeratedRoleInstances administratorType
-      for_ administrators \administrator -> do
-        void $ runMonadPerspectivesTransaction' doNotShareWithPeers (ENR $ EnumeratedRoleType sysUser) do
-          setProperty [ administrator ] adminUserName Nothing [ Value rabbitAdminName ]
-          setProperty [ administrator ] adminPassword Nothing [ Value password ]
-        infoTest ("Gave Alice's administrator " <> show administrator <> " the credentials of RabbitMQ administrator " <> rabbitAdminName)
+giveAliceAdminCredentials pdr password = void $
+  reuseAMQPManagement { adminUserName: rabbitAdminName, adminPassword: password } pdr
 
 patchSomeModels :: PDRInstance -> Aff Unit
 patchSomeModels pdr = runInPDR pdr do
@@ -482,8 +458,7 @@ emptyConfiguration =
 debugConfiguration :: LogConfiguration
 debugConfiguration =
   { pdrA:
-      [
-        { topic: TEST, logLevel: Trace }
+      [ { topic: TEST, logLevel: Trace }
       , { topic: BROKER, logLevel: Trace }
       -- , { topic: SYNC, logLevel: Trace }
       -- , { topic: DELTA, logLevel: Trace }
@@ -548,7 +523,7 @@ leaderTerminatesContractTestContext :: String
 leaderTerminatesContractTestContext = testModelReadable <> "$Test_Leader_Terminates_Contract"
 
 aliceSnapshotDirectory :: String
-aliceSnapshotDirectory = "test/pdr-snapshot/universe/aliceAfterReboot"
+aliceSnapshotDirectory = "test/pdr-snapshot/rebootedUniverse/alice"
 
 bobSnapshotDirectory :: String
 bobSnapshotDirectory = "test/pdr-snapshot/universe/bob"
