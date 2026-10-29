@@ -134,6 +134,22 @@ Each phase has an explicit exit gate. Stop and revisit the platform choice if a 
 
 **Exit gate:** each target can start the current app, open the PDR, persist and reload data without loss, and reconnect in the foreground. Record unsupported APIs and platform-specific fallbacks before adding production abstractions.
 
+#### Phase 0 repository audit (2026-10-29)
+
+- `packages/mycontexts/src/startPDR.tsx` currently selects a page-hosted PDR for Safari, iOS, and Android (except Firefox); other browsers use a SharedWorker. The page-worker path relays client ports through the Service Worker. This is a code-path inventory, not evidence that a worker or socket survives suspension.
+- The core already has a two-PDR Node.js performance harness. Its default in-process-bus mode measures sender action time, time until Bob observes the result, and end-to-end time. Optional profiling records selected incoming-work spans and message/delta/byte counts. It measures PDR processing and synchronization in Node, not browser throttling, worker lifetime, IndexedDB persistence, or mobile OS behavior.
+- `pnpm run test:performance:collector` was validated with Node's test runner: **12 tests passed**. The full performance runner was not run: this checkout has no pnpm dependencies or built performance bundle, and the required Alice/Bob snapshot-completion files are absent. Its runner intentionally refuses to bootstrap missing snapshots. Do not treat the collector tests as performance samples.
+- No browser/PWA session or physical iOS/Android device was available for this pass. Browser lifecycle, real WebView worker support, storage durability, and foreground/background reconnect remain unmeasured. The product's acceptable background-sync delay and target OS/version matrix also need owner confirmation.
+
+On a development machine with dependencies and prepared snapshots, run the performance harness from `packages/perspectives-core` to establish a **Node two-PDR baseline**; use `--profile` for internal spans:
+
+```bash
+pnpm run build:performance
+node scripts/performance-runner.mjs --profile --output /tmp/mycontexts-pdr-performance.json
+```
+
+Keep this result separate from the browser/device matrix. Measure browser behavior with an instrumented MyContexts build in each target browser and on physical devices, recording PDR host start/stop, STOMP disconnect/reconnect, missed-message recovery, IndexedDB state after restart, and multiple-tab behavior across foreground, suspension, and resume.
+
 ### Phase 1 — Introduce only the shared seams proven necessary
 
 1. Add a runtime-host adapter around the existing proxy/PDR startup path, preserving its message contract.
