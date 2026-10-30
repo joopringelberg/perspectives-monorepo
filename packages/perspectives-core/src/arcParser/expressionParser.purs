@@ -55,45 +55,50 @@ import Perspectives.Representation.Class.PersistentType (ContextType(..))
 import Perspectives.Representation.QueryFunction (FunctionName(..))
 import Perspectives.Representation.Range (Duration_(..), Range(..))
 import Perspectives.Time (date2String, dateTime2String, time2String)
-import Prelude (bind, not, pure, show, ($), (&&), (*>), (+), (<$>), (<*), (<*>), (<<<), (>), (>>=), (<>), eq, (/=), discard, (==))
+import Prelude (bind, not, pure, show, ($), (&&), (*>), (+), (<), (<$>), (<*), (<*>), (<<<), (>), (>>=), (<>), eq, (/=), discard, (==))
 
 step :: IP Step
-step = defer \_ -> normalizeToFixedPoint <$> step_ false
-
-normalizeToFixedPoint :: Step -> Step
-normalizeToFixedPoint stp =
-  let
-    normalized = normalizeStep stp
-  in
-    if normalized == stp then normalized
-    else normalizeToFixedPoint normalized
+step = defer \_ -> step_ false
 
 step_ :: Boolean -> IP Step
-step_ parenthesised = do
+step_ parenthesised = stepAtPrecedence parenthesised 0
+
+stepAtPrecedence :: Boolean -> Int -> IP Step
+stepAtPrecedence parenthesised minimumPrecedence = do
   start <- getPosition
   left <- (token.parens (step_ true)) <|> leftSide
-  mop <- optionMaybe (unsafePartial operator)
-  case mop of
-    Nothing -> do
-      mdop <- optionMaybe (unsafePartial durationOperator)
-      unsafePartial case mdop of
-        Nothing -> pure left
-        Just (Year pos) -> pure $ Unary (DurationOperator start (Year pos) left)
-        Just (Month pos) -> pure $ Unary (DurationOperator start (Month pos) left)
-        Just (Week pos) -> pure $ Unary (DurationOperator start (Week pos) left)
-        Just (Day pos) -> pure $ Unary (DurationOperator start (Day pos) left)
-        Just (Hour pos) -> pure $ Unary (DurationOperator start (Hour pos) left)
-        Just (Minute pos) -> pure $ Unary (DurationOperator start (Minute pos) left)
-        Just (Second pos) -> pure $ Unary (DurationOperator start (Second pos) left)
-        Just (Millisecond pos) -> pure $ Unary (DurationOperator start (Millisecond pos) left)
-    (Just op) -> do
-      -- Parse recursively without top-level normalization first.
-      -- We must preserve the parenthesised marker here, because this local
-      -- regrouping decision relies on it.
-      right <- step_ false
-      end <- getPosition
-      pure $ Binary $ BinaryStep { start, end, left, operator: op, right, parenthesised }
+  continue start false left
   where
+  continue :: ArcPosition -> Boolean -> Step -> IP Step
+  continue start hasOperator left' = do
+    nextOperator <- optionMaybe (try $ lookAhead (unsafePartial operator))
+    case nextOperator of
+      Just op ->
+        if operatorPrecedence op < minimumPrecedence then
+          pure $ preserveLegacySpan (shouldRotateLeft hasOperator left' op) left'
+        else do
+          parsedOperator <- unsafePartial operator
+          right <- stepAtPrecedence false (operatorPrecedence parsedOperator)
+          end <- getPosition
+          let
+            rotatesLeft = shouldRotateLeft hasOperator left' parsedOperator
+            left'' = preserveLegacySpan rotatesLeft left'
+            end' = if rotatesLeft then endOf right else end
+            combined = Binary $ BinaryStep
+              { start
+              , end: end'
+              , left: left''
+              , operator: parsedOperator
+              , right
+              , parenthesised
+              }
+          continue start true combined
+      Nothing -> do
+        duration <- optionMaybe (unsafePartial durationOperator)
+        case duration of
+          Nothing -> pure left'
+          Just op -> pure $ durationStep start left' op
+
   leftSide :: IP Step
   leftSide = do
     keyword <- option "" (lookAhead reservedIdentifier)
@@ -105,83 +110,26 @@ step_ parenthesised = do
       u | isUnaryKeyword u -> unaryStep
       _ -> simpleStep
 
-normalizeStep :: Step -> Step
-normalizeStep stp = case stp of
-  Binary binaryStep -> normalizeBinaryStep binaryStep
-  Unary (LogicalNot start step') -> Unary (LogicalNot start (normalizeStep step'))
-  Unary (Exists start step') -> Unary (Exists start (normalizeStep step'))
-  Unary (FilledBy start step') -> Unary (FilledBy start (normalizeStep step'))
-  Unary (Fills start step') -> Unary (Fills start (normalizeStep step'))
-  Unary (Available start step') -> Unary (Available start (normalizeStep step'))
-  Unary (DurationOperator start operator' step') -> Unary (DurationOperator start operator' (normalizeStep step'))
-  Unary (ContextIndividual start contextName step') -> Unary (ContextIndividual start contextName (normalizeStep step'))
-  Unary (RoleIndividual start roleName step') -> Unary (RoleIndividual start roleName (normalizeStep step'))
-  Unary (TypeFilterStep start end step' typeCombination) -> Unary (TypeFilterStep start end (normalizeStep step') typeCombination)
-  PureLet (PureLetStep { start, end, bindings, body }) ->
-    PureLet $ PureLetStep
-      { start
-      , end
-      , bindings: normalizeBinding <$> bindings
-      , body: normalizeStep body
-      }
-  Computation (ComputationStep { functionName, arguments, computedType, start, end }) ->
-    Computation $ ComputationStep
-      { functionName
-      , arguments: normalizeStep <$> arguments
-      , computedType
-      , start
-      , end
-      }
-  _ -> stp
-  where
-  normalizeBinding :: VarBinding -> VarBinding
-  normalizeBinding (VarBinding name boundStep) = VarBinding name (normalizeStep boundStep)
+  durationStep :: ArcPosition -> Step -> Operator -> Step
+  durationStep position step' (Year opPosition) = Unary (DurationOperator position (Year opPosition) step')
+  durationStep position step' (Month opPosition) = Unary (DurationOperator position (Month opPosition) step')
+  durationStep position step' (Week opPosition) = Unary (DurationOperator position (Week opPosition) step')
+  durationStep position step' (Day opPosition) = Unary (DurationOperator position (Day opPosition) step')
+  durationStep position step' (Hour opPosition) = Unary (DurationOperator position (Hour opPosition) step')
+  durationStep position step' (Minute opPosition) = Unary (DurationOperator position (Minute opPosition) step')
+  durationStep position step' (Second opPosition) = Unary (DurationOperator position (Second opPosition) step')
+  durationStep position step' (Millisecond opPosition) = Unary (DurationOperator position (Millisecond opPosition) step')
+  durationStep _ step' _ = step'
 
-normalizeBinaryStep :: BinaryStep -> Step
-normalizeBinaryStep (BinaryStep { start, end, operator: operator', left, right, parenthesised }) =
-  normalizeRotations
-    (normalizeChildren (normalizeRotations initialTree))
-  where
-  initialTree :: Step
-  initialTree = Binary $ BinaryStep
-    { start
-    , end
-    , operator: operator'
-    , left
-    , right
-    , parenthesised
-    }
+shouldRotateLeft :: Boolean -> Step -> Operator -> Boolean
+shouldRotateLeft hasOperator (Binary (BinaryStep { operator: previousOperator })) nextOperator =
+  hasOperator && operatorPrecedence previousOperator > operatorPrecedence nextOperator
+shouldRotateLeft _ _ _ = false
 
-  normalizeChildren :: Step -> Step
-  normalizeChildren stp = case stp of
-    Binary (BinaryStep { start: start', end: end', operator: op', left: left', right: right', parenthesised: parenthesised' }) ->
-      Binary $ BinaryStep
-        { start: start'
-        , end: end'
-        , operator: op'
-        , left: normalizeStep left'
-        , right: normalizeStep right'
-        , parenthesised: parenthesised'
-        }
-    _ -> stp
-
-  normalizeRotations :: Step -> Step
-  normalizeRotations stp = case stp of
-    Binary (BinaryStep { start: start', end: end', operator: op', left: left', right: right', parenthesised: parenthesised' }) ->
-      case right' of
-        Binary (BinaryStep { left: leftOfRight, operator: opOfRight, right: rightOfRight, end: endOfRight, parenthesised: rightParenthesised }) ->
-          if not rightParenthesised && (operatorPrecedence op') > (operatorPrecedence opOfRight) then
-            normalizeRotations $ Binary $ BinaryStep
-              { start: start'
-              , end: endOfRight
-              , left: Binary (BinaryStep { start: start', end: endOf left', operator: op', left: left', right: leftOfRight, parenthesised: false })
-              , operator: opOfRight
-              , right: rightOfRight
-              , parenthesised: parenthesised'
-              }
-          else stp
-        _ -> stp
-    _ -> stp
+preserveLegacySpan :: Boolean -> Step -> Step
+preserveLegacySpan true (Binary (BinaryStep fields)) =
+  Binary $ BinaryStep (fields { end = endOf fields.left, parenthesised = false })
+preserveLegacySpan _ step' = step'
 
 simpleStep :: IP Step
 simpleStep = do

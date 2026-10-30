@@ -53,7 +53,7 @@ import Perspectives.Parsing.Arc.AST.ReplaceIdentifiers (replaceIdentifier)
 import Perspectives.Parsing.Arc.Expression (parseJSDate, propertyRange, regexExpression, startOf, step, typeCombinations)
 import Perspectives.Parsing.Arc.Expression.AST (SimpleStep(..), Step(..))
 import Perspectives.Parsing.Arc.Identifiers (arcIdentifier, boolean, email, lowerCaseName, prefixedName, qualifiedName, reserved, stringUntilNewline)
-import Perspectives.Parsing.Arc.IndentParser (IP, arcPosition2Position, containsTab, entireBlock, entireBlock1, getArcParserState, getCurrentContext, getCurrentState, getObject, getPosition, getStateIdentifier, getSubject, inSubContext, isEof, isIndented, isNextLine, nestedBlock, protectObject, protectOnEntry, protectOnExit, protectSubject, sameOrOutdented', setObject, setOnEntry, setOnExit, setSubject, withArcParserState, withEntireBlock)
+import Perspectives.Parsing.Arc.IndentParser (IP, arcPosition2Position, ensureNoTabs, entireBlock, entireBlock1, getArcParserState, getCurrentContext, getCurrentState, getObject, getPosition, getStateIdentifier, getSubject, inSubContext, isEof, isIndented, isNextLine, nestedBlock, protectObject, protectOnEntry, protectOnExit, protectSubject, sameOrOutdented', setObject, setOnEntry, setOnExit, setSubject, withArcParserState, withEntireBlock)
 import Perspectives.Parsing.Arc.Position (ArcPosition)
 import Perspectives.Parsing.Arc.Statement (assignment, letWithAssignment, stagedStatements, twoReservedWords)
 import Perspectives.Parsing.Arc.Statement.AST (Statements(..))
@@ -285,7 +285,7 @@ contextE = withPos do
 
 domain :: IP ContextE
 domain = do
-  void containsTab
+  ensureNoTabs
   r <- token.whiteSpace *> contextE
   isEndOfFile <- isEof
   case r of

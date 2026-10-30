@@ -396,6 +396,18 @@ theSuite = suite "Perspectives.Parsing.Arc.Expression" do
         ) -> true
       _ -> false
 
+  test "Reassociated and explicitly parenthesised expressions retain their source spans" do
+    reassociated <- runIndentParser "A * B + C" step
+    parenthesised <- runIndentParser "(A * B) / C" step
+
+    assert "A node moved to the left by precedence retains the legacy end position" case reassociated of
+      Right (Binary (BinaryStep { operator: Add _, left: Binary (BinaryStep { operator: Multiply _, end: ArcPosition { line: 1, column: 2 } }) })) -> true
+      _ -> false
+
+    assert "An explicitly parenthesised left operand retains its complete span and marker" case parenthesised of
+      Right (Binary (BinaryStep { operator: Divide _, left: Binary (BinaryStep { operator: Multiply _, end: ArcPosition { line: 1, column: 7 }, parenthesised: true }) })) -> true
+      _ -> false
+
   test "number in equation" do
     (r :: Either ParseError Step) <- runIndentParser "MyProp > 10" step
     case r of

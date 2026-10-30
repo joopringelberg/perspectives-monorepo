@@ -25,7 +25,7 @@ module Perspectives.Parsing.Arc.IndentParser
   , ArcParserState
   , IP
   , arcPosition2Position
-  , containsTab
+  , ensureNoTabs
   , entireBlock
   , entireBlock1
   , get'
@@ -310,15 +310,16 @@ arcPosition2Position = unsafeCoerce
 position2ArcPosition :: Position -> ArcPosition
 position2ArcPosition = unsafeCoerce
 
+data BlockRequirement = BlockMayBeEmpty | BlockMustBeNonEmpty
+
 -- | `withBlock f a p` parses `a`
 -- | followed by an indented block of `p` (possibly none), where the entire block must have been
 -- | consumed, combining them with `f`.
 withEntireBlock :: forall a b c. (a -> List b -> c) -> IP a -> IP b -> IP c
 withEntireBlock f a p = withPos $ do
   r1 <- a
-  isIndented' <- isIndented
-  (isNextLine' :: Boolean) <- isNextLine
-  r2 <- if (isIndented' && isNextLine') then entireBlock1 p else pure Nil
+  startsBlock <- indentedOnNextLine
+  r2 <- if startsBlock then entireBlock1 p else pure Nil
   pure (f r1 r2)
 
 -- | Parses a block of lines at the same indentation level with pr.
@@ -328,12 +329,7 @@ withEntireBlock f a p = withPos $ do
 -- | Also, if pr fails but consumes input and leaves the parser position to the left of the reference, the entire block
 -- | succeeds.
 entireBlock :: forall x. IP x -> IP (List x)
-entireBlock pr =
-  ( withPos
-      ( (many $ checkIndent *> pr)
-          >>= unlessOutdented (pr >>= pure <<< singleton)
-      )
-  )
+entireBlock = parseBlock BlockMayBeEmpty
 
 -- | Applies parser `p` iff the current location of the parser is not outdented with respect
 -- | to the reference position stored previously by the IndentParser (and the end of the input
@@ -354,12 +350,20 @@ unlessOutdented p a = do
 -- | Also, if pr fails but consumes input and leaves the parser position to the left of the reference, the entire block
 -- | succeeds.
 entireBlock1 :: forall x. IP x -> IP (List x)
-entireBlock1 pr =
-  ( withPos
-      ( (some $ checkIndent *> pr)
-          >>= unlessOutdented (pr >>= pure <<< singleton)
-      )
-  )
+entireBlock1 = parseBlock BlockMustBeNonEmpty
+
+parseBlock :: forall x. BlockRequirement -> IP x -> IP (List x)
+parseBlock requirement pr = withPos do
+  entries <- case requirement of
+    BlockMayBeEmpty -> many (checkIndent *> pr)
+    BlockMustBeNonEmpty -> some (checkIndent *> pr)
+  unlessOutdented (pr >>= pure <<< singleton) entries
+
+indentedOnNextLine :: IP Boolean
+indentedOnNextLine = do
+  indented <- isIndented
+  nextLine' <- isNextLine
+  pure (indented && nextLine')
 
 -- | If the current position is on a line below and to the right of the reference point,
 -- | p must succeed at least once and must parse all lines until the current position is
@@ -368,16 +372,14 @@ entireBlock1 pr =
 -- | If the current position is on the same line or not indented, succeeds with Nil.
 nestedBlock :: forall x. IP x -> IP (List x)
 nestedBlock p = do
-  ind <- isIndented
-  nl <- isNextLine
-  if ind && nl then entireBlock1 p
+  startsBlock <- indentedOnNextLine
+  if startsBlock then entireBlock1 p
   else pure Nil
 
 optionalNestedBlock :: forall x. IP x -> IP (List x)
 optionalNestedBlock p = do
-  ind <- isIndented
-  nl <- isNextLine
-  if ind && nl then entireBlock p
+  startsBlock <- indentedOnNextLine
+  if startsBlock then entireBlock p
   else pure Nil
 
 -- | True iff the Parser Position is further to the right than the reference position.
@@ -441,11 +443,11 @@ nextLine = do
   s <- get'
   if sourceLine pos > sourceLine s then pure unit else (eof <|> fail "not on the next line. ")
 
-containsTab :: IP Boolean
-containsTab = do
+ensureNoTabs :: IP Unit
+ensureNoTabs = do
   input <- (\(ParseState input _ _) -> input) <$> getParserT
   case indexOf (Pattern "\t") input of
-    Nothing -> pure true
+    Nothing -> pure unit
     Just pos -> fail $ "Tab found at string position " <> (show pos) <> ". Remove all tabs as they confuse the index computation, leading to errors in parsing your model. "
 
 isEof :: IP Boolean
