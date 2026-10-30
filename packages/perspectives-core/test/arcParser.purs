@@ -35,6 +35,14 @@ theSuite = suite "Perspectives.Parsing.Arc regressions" do
         assert "Expected the outer context after backtracking" (context == ContextType "")
       Left err -> failure (show err)
 
+  test "a successful nested context restores parser state after leaving its scope" do
+    result <- runIndentParser "x" $
+      inSubContext "Nested" (getCurrentContext <* char 'x') *> getCurrentContext
+    case result of
+      Right context ->
+        assert "Expected the outer context after the nested parser succeeds" (context == ContextType "")
+      Left err -> failure (show err)
+
   test "a failed state scope restores parser state after backtracking" do
     let
       initialState = ContextState (ContextType "") Nothing
