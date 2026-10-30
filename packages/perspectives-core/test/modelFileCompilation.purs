@@ -26,11 +26,10 @@
 -- | network CouchDB database.  The test is specifically intended to be used
 -- | by Copilot when the parser/compiler system is changed.
 -- |
--- | Multiple file paths can be listed in `modelFilePaths`.  Each file is
--- | compiled independently inside a single PDR instance; no topological
--- | sorting is required because all files are expected to be unrelated
--- | (e.g. different versions of the same model, or several candidate
--- | rewrites produced by Copilot).
+-- | Every model is parsed from its listed ARC file and compiled through the
+-- | normal phase-one-to-three pipeline. In-corpus imports are compiled first;
+-- | imports outside the corpus and any import cycle must already be available
+-- | in the cached PDR snapshot.
 -- |
 -- | Any parse or compile errors are reported clearly and the test fails if
 -- | any are present.
@@ -42,9 +41,10 @@ module Test.ModelFileCompilation where
 
 import Prelude
 
-import Data.Array (null)
+import Data.Array (filter, find, fromFoldable, null)
 import Data.Either (Either(..))
-import Data.Foldable (for_)
+import Data.Foldable (all, any, for_)
+import Data.List (mapMaybe)
 import Data.Maybe (Maybe(..))
 import Data.Traversable (for)
 import Effect (Effect)
@@ -54,9 +54,10 @@ import Node.Encoding (Encoding(..))
 import Node.FS.Aff (readTextFile)
 import Parsing (ParseError)
 import Perspectives.Cuid2 (cuid2)
+import Perspectives.Identifiers (modelUriVersion, unversionedModelUri)
 import Perspectives.ModelDependencies (sysUser)
 import Perspectives.Parsing.Arc (domain)
-import Perspectives.Parsing.Arc.AST (ContextE(..))
+import Perspectives.Parsing.Arc.AST (ContextE(..), ContextPart(..))
 import Perspectives.Parsing.Arc.IndentParser (runIndentParser)
 import Perspectives.Parsing.Messages (MultiplePerspectivesErrors)
 import Perspectives.PerspectivesState (defaultRuntimeOptions)
@@ -70,7 +71,22 @@ import Test.Unit (TestSuite, suite, test)
 import Test.Unit.Assert (assert)
 import Test.Unit.Main (runTest)
 
-type CompilationResult = { filePath :: String, errors :: MultiplePerspectivesErrors }
+type ModelSource = { modelUri :: String, filePath :: String }
+
+type PreparedModelSource =
+  { modelUri :: String
+  , filePath :: String
+  , source :: String
+  , parsed :: Either ParseError ContextE
+  , dependencies :: Array String
+  }
+
+type CompilationResult =
+  { modelUri :: String
+  , filePath :: String
+  , parsedModelUri :: Maybe String
+  , errors :: MultiplePerspectivesErrors
+  }
 
 main :: Effect Unit
 main = launchAff_ do
@@ -80,51 +96,129 @@ main = launchAff_ do
 getCompilationResults :: Aff (Array CompilationResult)
 getCompilationResults = do
   let user = testPouchdbUser "alice"
+  preparedSources <- for modelSources prepareModelSource
   withPDRCached user defaultRuntimeOptions Nothing noBus snapshotDirectory \pdr -> do
-    for modelFilePaths \filePath -> do
-      text <- readTextFile UTF8 filePath
-      (parsed :: Either ParseError ContextE) <- runIndentParser text domain
-      case parsed of
-        Left e -> pure { filePath, errors: [ parseError2PerspectivesError e ] }
-        Right (ContextE { id: modelUriReadable }) -> do
-          modelCuid <- liftEffect $ cuid2 modelUriReadable
-          r <- runInPDR pdr $ do
-            -- Trace Install
-            -- setTopicLogLevel INSTALL Trace
-            -- setTopicLogLevel MODEL Trace
-            runMonadPerspectivesTransaction' doNotShareWithPeers (ENR $ EnumeratedRoleType sysUser)
-              (loadAndCompileArcFile_ (ModelUri modelUriReadable) text false modelCuid modelUriReadable Nothing)
-          case r of
-            Left errors -> pure { filePath, errors }
-            Right _ -> pure { filePath, errors: [] }
+    for (dependencyFirstOrder preparedSources) \candidate ->
+      case candidate.parsed of
+        Left e -> pure
+          { modelUri: candidate.modelUri
+          , filePath: candidate.filePath
+          , parsedModelUri: Nothing
+          , errors: [ parseError2PerspectivesError e ]
+          }
+        Right (ContextE { id: parsedModelUri }) ->
+          if parsedModelUri /= candidate.modelUri then
+            pure
+              { modelUri: candidate.modelUri
+              , filePath: candidate.filePath
+              , parsedModelUri: Just parsedModelUri
+              , errors: []
+              }
+          else do
+            modelCuid <- liftEffect $ cuid2 parsedModelUri
+            r <- runInPDR pdr $ do
+              runMonadPerspectivesTransaction' doNotShareWithPeers (ENR $ EnumeratedRoleType sysUser)
+                -- The source always enters the phase-one-to-three compiler. Caching
+                -- its result only makes it available to later corpus dependencies.
+                (loadAndCompileArcFile_ (ModelUri parsedModelUri) candidate.source true modelCuid parsedModelUri Nothing)
+            case r of
+              Left errors -> pure
+                { modelUri: candidate.modelUri
+                , filePath: candidate.filePath
+                , parsedModelUri: Just parsedModelUri
+                , errors
+                }
+              Right _ -> pure
+                { modelUri: candidate.modelUri
+                , filePath: candidate.filePath
+                , parsedModelUri: Just parsedModelUri
+                , errors: []
+                }
 
 modelFileCompilationSuite :: Array CompilationResult -> TestSuite
 modelFileCompilationSuite testResults =
   suite "Model file compilation tests" do
-    for_ testResults \{ filePath, errors } ->
-      if null errors then
-        test (filePath <> " compiled correctly") do
-          assert ("The model file '" <> filePath <> "' should compile without errors") true
-      else
-        test (filePath <> " failed to compile") do
-          assert ("The model file '" <> filePath <> "' should compile without errors, but got: " <> show errors) false
+    for_ testResults \{ modelUri, filePath, parsedModelUri, errors } ->
+      test (modelUri <> " (" <> filePath <> ") compiles from ARC source") do
+        assert
+          ( "Expected domain URI "
+              <> modelUri
+              <> ", parsed "
+              <> show parsedModelUri
+              <> "; compilation errors: "
+              <> show errors
+          )
+          (parsedModelUri == Just modelUri && null errors)
 
--- | The ARC model files to compile.
--- | Each entry is an absolute path or a path relative to the process working
--- | directory (i.e. the package root when run via `pnpm run test:modelfiles`).
--- |
--- | Copilot: populate this array with the files you want to test, e.g.:
--- |   [ "test/mymodel_v1.arc"
--- |   , "test/mymodel_v2.arc"
--- |   ]
-modelFilePaths :: Array String
-modelFilePaths =
-  [ "src/model/AMQPtestModel@1.0.arc"
-  , "src/model/AMQPtestSetup@1.0.arc"
-  , "src/model/brokerServiceSignupTests@1.0.arc"
+prepareModelSource :: ModelSource -> Aff PreparedModelSource
+prepareModelSource { modelUri, filePath } = do
+  source <- readTextFile UTF8 filePath
+  parsed <- runIndentParser source domain
+  let
+    dependencies = case parsed of
+      Left _ -> []
+      Right (ContextE { contextParts }) ->
+        fromFoldable $ mapMaybe
+          ( case _ of
+              PREFIX _ dependency -> Just dependency
+              _ -> Nothing
+          )
+          contextParts
+  pure { modelUri, filePath, source, parsed, dependencies }
+
+dependencyFirstOrder :: Array PreparedModelSource -> Array PreparedModelSource
+dependencyFirstOrder sources = go [] sources
+  where
+  go ordered pending
+    | null pending = ordered
+    | otherwise =
+        let
+          ready = filter (dependenciesAvailable ordered) pending
+        in
+          if null ready then ordered <> pending
+          else
+            go
+              (ordered <> ready)
+              (filter (\source -> not $ any (\readySource -> readySource.modelUri == source.modelUri) ready) pending)
+
+  dependenciesAvailable ordered source =
+    all (dependencyAvailable ordered source) source.dependencies
+
+  dependencyAvailable ordered source dependency = case find (matchesDependency dependency <<< _.modelUri) sources of
+    Nothing -> true
+    Just dependencySource ->
+      dependencySource.modelUri == source.modelUri
+        || any (\compiledSource -> compiledSource.modelUri == dependencySource.modelUri) ordered
+
+  matchesDependency dependency sourceUri = case modelUriVersion dependency of
+    Just _ -> sourceUri == dependency
+    Nothing -> unversionedModelUri sourceUri == dependency
+
+-- System and RepositoryRegistry are installed by setupUser; RepositoryRegistry
+-- also appears in extraModels, so each source URI is listed once.
+modelSources :: Array ModelSource
+modelSources =
+  [ { modelUri: "model://perspectives.domains#System@7.0", filePath: "src/model/perspectivesSysteem@7.0.arc" }
+  , { modelUri: "model://perspectives.domains#RabbitMQ@2.0", filePath: "src/model/rabbitMQ@2.0.arc" }
+  , { modelUri: "model://perspectives.domains#BrokerServices@7.0", filePath: "src/model/BrokerServices@7.0.arc" }
+  , { modelUri: "model://perspectives.domains#HyperContext@1.0", filePath: "src/model/hypertext@1.0.arc" }
+  , { modelUri: "model://perspectives.domains#Introduction@1.0", filePath: "src/model/introduction@1.0.arc" }
+  , { modelUri: "model://perspectives.domains#HelpProject@3.0", filePath: "src/model/helpProject@3.0.arc" }
+  , { modelUri: "model://perspectives.domains#Disconnect@1.1", filePath: "src/model/disconnect@1.1.arc" }
+  , { modelUri: "model://perspectives.domains#RepositoryRegistry@1.0", filePath: "src/model/repositoryRegistry@1.0.arc" }
+  , { modelUri: "model://perspectives.domains#SharedFileServices@4.0", filePath: "src/model/sharedFileStorage@4.0.arc" }
+  , { modelUri: "model://joopringelberg.nl#SynchronisationTestModel@2.0", filePath: "src/model/testSynchronisation@2.0.arc" }
+  , { modelUri: "model://joopringelberg.nl#TwoPDRDestructiveTests@1.0", filePath: "src/model/twoPDRDestructiveTests@1.0.arc" }
+  , { modelUri: "model://joopringelberg.nl#StateTestModel@1.0", filePath: "src/model/testState@1.0.arc" }
+  , { modelUri: "model://joopringelberg.nl#SinglePDRDestructiveTests@2.0", filePath: "src/model/singlePDRDestructiveTests@2.0.arc" }
+  , { modelUri: "model://joopringelberg.nl#TransactionExecutionTests@1.0", filePath: "src/model/transactionExecutionTests@1.0.arc" }
+  , { modelUri: "model://joopringelberg.nl#AMQPtestModel@1.0", filePath: "src/model/AMQPtestModel@1.0.arc" }
+  , { modelUri: "model://joopringelberg.nl#AMQPtestSetup@1.0", filePath: "src/model/AMQPtestSetup@1.0.arc" }
   ]
 
 -- | Directory where the PDR snapshot is cached between test runs.
+-- | Generate it with `pnpm run create:universeSnapshot` where the model
+-- | repositories and their certificate authority are available.
 -- | Delete this directory to force a full PDR rebuild on the next run.
 snapshotDirectory :: String
 snapshotDirectory = "test/pdr-snapshot/universe/alice"
