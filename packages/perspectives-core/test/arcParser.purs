@@ -2,17 +2,22 @@ module Test.Parsing.Arc where
 
 import Prelude
 
+import Control.Alt ((<|>))
 import Control.Monad.Free (Free)
 import Data.Either (Either(..))
 import Data.List (List(..), filter, head, length, (:))
 import Data.Maybe (Maybe(..))
 import Effect.Aff (Aff)
-import Parsing (ParseError(..), Position(..))
+import Parsing (ParseError(..), Position(..), fail)
+import Parsing.Combinators (try)
+import Parsing.String (char)
 import Perspectives.Parsing.Arc (contextRoleE, domain, thingRoleE, userRoleE)
-import Perspectives.Parsing.Arc.AST (ContextE, ContextPart(..), FormE(..), FreeFormScreenE(..), RoleE(..), RolePart(..), RowE(..), ScreenE(..), ScreenElement(..), TabE(..), TableE(..), TableFormE(..), TableFormOrWhenE(..), TableFormSectionE(..), WhoWhatWhereScreenE(..), PropsOrView(..))
+import Perspectives.Parsing.Arc.AST (ContextE, ContextPart(..), FormE(..), FreeFormScreenE(..), RoleE(..), RoleIdentification(..), RolePart(..), RowE(..), ScreenE(..), ScreenElement(..), TabE(..), TableE(..), TableFormE(..), TableFormOrWhenE(..), TableFormSectionE(..), WhoWhatWhereScreenE(..), PropsOrView(..), StateSpecification(..))
 import Perspectives.Parsing.Arc.Expression.AST (BinaryStep(..), FilledByAttribute(..), Operator(..), SimpleStep(..), Step(..), TypeCombination(..))
-import Perspectives.Parsing.Arc.IndentParser (runIndentParser)
+import Perspectives.Parsing.Arc.IndentParser (getArcParserState, getCurrentContext, getCurrentState, inSubContext, protectObject, runIndentParser, setObject, withArcParserState)
+import Perspectives.Parsing.Arc.Position (ArcPosition(..))
 import Perspectives.Representation.ExplicitSet (ExplicitSet(..))
+import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedRoleType(..), RoleType(..))
 import Perspectives.Representation.Verbs (PropertyVerb(..))
 import Test.Parsing.ArcAstSelectors (ensureOnEntry, ensurePerspectiveOn, ensurePropertyVerbSetForPropsOrView, ensurePropertyVerbsForPropsOrView, ensureStateInRole, ensureUserRole, failure, isNotified, isStateWithContext, isStateWithExplicitRole_)
 import Test.Unit (TestF, suite, test)
@@ -21,6 +26,49 @@ import Test.Unit.Assert (assert)
 -- | Supplementary phase-one regressions not covered by Arc.Syntax.
 theSuite :: Free TestF Unit
 theSuite = suite "Perspectives.Parsing.Arc regressions" do
+  test "a failed nested context restores parser state after backtracking" do
+    result <- runIndentParser "x" $
+      try (inSubContext "Nested" (char 'x' *> fail "invalid nested context"))
+        <|> getCurrentContext
+    case result of
+      Right context ->
+        assert "Expected the outer context after backtracking" (context == ContextType "")
+      Left err -> failure (show err)
+
+  test "a failed state scope restores parser state after backtracking" do
+    let
+      initialState = ContextState (ContextType "") Nothing
+      scopedState = ContextState (ContextType "Nested") Nothing
+    result <- runIndentParser "x" $
+      try (withArcParserState scopedState (char 'x' *> fail "invalid state"))
+        <|> getCurrentState
+    case result of
+      Right state ->
+        assert "Expected the outer state after backtracking" (state == initialState)
+      Left err -> failure (show err)
+
+  test "a failed state scope preserves the original parse error" do
+    let scopedState = ContextState (ContextType "Nested") Nothing
+    result <- runIndentParser "x" $
+      withArcParserState scopedState (char 'x' *> fail "original error")
+    case result of
+      Left (ParseError message (Position position)) -> do
+        assert "Expected the original parse error" (message == "original error")
+        assert "Expected the original source position" (position.line == 1 && position.column == 2)
+      Right _ -> failure "Expected the scoped parser to fail"
+
+  test "a failed protected object restores its role after backtracking" do
+    let
+      role = ExplicitRole (ContextType "Root") (ENR $ EnumeratedRoleType "Root$Role")
+        (ArcPosition { line: 1, column: 1 })
+    result <- runIndentParser "x" $
+      try (protectObject (setObject role *> char 'x' *> fail "invalid object"))
+        <|> getArcParserState
+    case result of
+      Right state ->
+        assert "Expected the protected object to be restored" (state.object == Nothing)
+      Left err -> failure (show err)
+
   test "An empty role declaration fails" do
     result <- runIndentParser "" thingRoleE
     case result of

@@ -74,6 +74,7 @@ module Perspectives.Parsing.Arc.IndentParser
 import Prim.Row
 
 import Control.Alt (void, (<|>))
+import Control.Monad.Error.Class (catchError, throwError)
 import Control.Monad.State (StateT, evalStateT, lift, modify)
 import Control.Monad.State.Trans (get, put)
 import Data.Either (Either)
@@ -143,6 +144,22 @@ getArcParserState = lift $ lift $ get
 modifyArcParserState :: (ArcParserState -> ArcParserState) -> IP ArcParserState
 modifyArcParserState f = lift $ lift $ modify f
 
+-- Parser backtracking resets input but not this underlying state transformer.
+withScopedArcParserState
+  :: forall a
+   . (ArcParserState -> ArcParserState)
+  -> (ArcParserState -> ArcParserState -> ArcParserState)
+  -> IP a
+  -> IP a
+withScopedArcParserState update restore parser = do
+  oldState <- getArcParserState
+  void $ modifyArcParserState update
+  result <- catchError parser \err -> do
+    void $ modifyArcParserState (restore oldState)
+    throwError err
+  void $ modifyArcParserState (restore oldState)
+  pure result
+
 getCurrentContext :: IP ContextType
 getCurrentContext = getArcParserState >>= pure <<< _.currentContext
 
@@ -160,28 +177,21 @@ getSubject = getArcParserState >>= \{ subject } -> case subject of
   Just s -> pure s
 
 inSubContext :: forall a. String -> IP a -> IP a
-inSubContext subContextName p = do
-  oldState@{ currentContext } <- getArcParserState
-  void $ modifyArcParserState \s -> s
-    { currentContext = case unwrap currentContext of
-        "" -> ContextType subContextName
-        m -> ContextType (m <> "$" <> subContextName)
-    }
-  -- getCurrentContext >>= \c -> log ("Entered context " <> show c)
-  result <- p
-  -- log ("Restoring context " <> show currentContext)
-  lift $ lift $ put oldState
-  pure result
+inSubContext subContextName =
+  withScopedArcParserState
+    ( \s -> s
+        { currentContext = case unwrap s.currentContext of
+            "" -> ContextType subContextName
+            m -> ContextType (m <> "$" <> subContextName)
+        }
+    )
+    (\oldState _ -> oldState)
 
 withArcParserState :: forall a. StateSpecification -> IP a -> IP a
-withArcParserState stateDeterminant a = do
-  oldState@{ state } <- getArcParserState
-  void $ modifyArcParserState \s -> s { state = stateDeterminant }
-  -- log ("State now is " <> show stateDeterminant)
-  result <- a
-  -- log ("Restoring state " <> show state)
-  lift $ lift $ put oldState
-  pure result
+withArcParserState stateDeterminant =
+  withScopedArcParserState
+    (\s -> s { state = stateDeterminant })
+    (\oldState _ -> oldState)
 
 getStateIdentifier :: IP StateSpecification
 getStateIdentifier = getArcParserState >>= pure <<< _.state
@@ -232,12 +242,10 @@ protectLabel
   => Proxy l
   -> IP b
   -> IP b
-protectLabel l f = do
-  (oldValue :: Maybe a) <- getArcParserState >>= pure <<< Record.get l
-  void $ modifyArcParserState \s -> Record.set l Nothing s
-  result <- f
-  void $ modifyArcParserState \s -> Record.set l oldValue s
-  pure result
+protectLabel l =
+  withScopedArcParserState
+    (Record.set l Nothing)
+    (\oldState currentState -> Record.set l (Record.get l oldState) currentState)
 
 protectSubject :: forall a. IP a -> IP a
 protectSubject = protectLabel (Proxy :: Proxy "subject")
@@ -442,4 +450,3 @@ containsTab = do
 
 isEof :: IP Boolean
 isEof = eof *> pure true <|> pure false
-
