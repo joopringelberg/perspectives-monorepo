@@ -38,7 +38,7 @@ import Perspectives.Parsing.Arc.Expression.AST (VarBinding(..))
 import Perspectives.Parsing.Arc.Identifiers (arcIdentifier, reserved)
 import Perspectives.Parsing.Arc.IndentParser (IP, getPosition, outdented', sameOrOutdented')
 import Perspectives.Parsing.Arc.Statement.AST (Assignment(..), AssignmentOperator(..), LetABinding(..), LetStep(..), StatementStage, Statements(..))
-import Perspectives.Parsing.Arc.Token (reservedIdentifier, token)
+import Perspectives.Parsing.Arc.Token (reservedIdentifier, token, twoReservedWords)
 import Prelude (bind, discard, pure, ($), (*>), (<$>), (<*), (<*>), (<>), (>>=))
 
 assignment :: IP Assignment
@@ -57,7 +57,7 @@ roleAssignment = do
         "remove", "context" -> contextRemoval
         "remove", "filler" -> removeFiller
         "remove", "as" -> removeAsFiller
-        _, _ -> fail ("Expected 'role', 'context', 'filler', or 'as' after 'remove'. ")
+        _, _ -> reserved "remove" *> fail "Expected 'role', 'context', 'filler', or 'as' after 'remove'. "
     "move" -> move
     "bind" -> bind'
     "bind_" -> bind_
@@ -66,7 +66,7 @@ roleAssignment = do
       case first, second of
         "delete", "role" -> roleDeletion
         "delete", "context" -> contextDeletion
-        _, _ -> fail ("Expected 'role' or 'context' after 'delete'. ")
+        _, _ -> reserved "delete" *> fail "Expected 'role' or 'context' after 'delete'. "
     "callEffect" -> callEffect
     "callDestructiveEffect" -> callDestructiveEffect
     "runContextAction" -> runContextActionP
@@ -76,12 +76,12 @@ roleAssignment = do
       case first, second of
         "create", "role" -> roleCreation
         "create", "context" -> createContext
-        _, _ -> fail ("Expected 'role' or 'context' after 'create'. ")
+        _, _ -> reserved "create" *> fail "Expected 'role' or 'context' after 'create'. "
     "create_" -> do
       (Tuple first second) <- twoReservedWords
       case first, second of
         "create_", "context" -> createContext_
-        _, _ -> fail ("Expected 'context' after 'create_'.")
+        _, _ -> reserved "create_" *> fail "Expected 'context' after 'create_'."
     s -> fail ("Expected remove, create, create_, move, bind, bind_, delete, callDestructiveEffect, callEffect, runContextAction or runRoleAction but found '" <> s <> "'. ")
 
 roleRemoval :: IP Assignment
@@ -198,12 +198,19 @@ removeAsFiller = do
 
 isPropertyAssignment :: IP Boolean
 isPropertyAssignment = do
-  (Tuple first second) <- twoReservedWords
-  case first, second of
-    "delete", "property" -> pure true
-    "delete", "role" -> pure false
-    "create", "file" -> pure true
-    _, _ -> isJust <$> optionMaybe (lookAhead (arcIdentifier *> assignmentOperator))
+  keyword <- option "" (lookAhead reservedIdentifier)
+  case keyword of
+    "delete" -> do
+      (Tuple _ second) <- twoReservedWords
+      case second of
+        "property" -> pure true
+        _ -> pure false
+    "create" -> do
+      (Tuple _ second) <- twoReservedWords
+      case second of
+        "file" -> pure true
+        _ -> pure false
+    _ -> isJust <$> optionMaybe (lookAhead (arcIdentifier *> assignmentOperator))
 
 -- keyword <- option "" (lookAhead reservedIdentifier)
 -- case keyword of
@@ -406,9 +413,3 @@ letABinding = do
       case me of
         Nothing -> fail "Expected `create role` or `create context` or a functional expression here. "
         Just e -> pure $ Expr (VarBinding varName e)
-
--- | Looking ahead, find at least one reserved identifier, two if possible.
--- | If only one is found, returns Tuple <theword> "".
--- | If none is found, returns Tuple "" "".
-twoReservedWords :: IP (Tuple String String)
-twoReservedWords = option (Tuple "" "") $ lookAhead (Tuple <$> reservedIdentifier <*> (option "" reservedIdentifier))

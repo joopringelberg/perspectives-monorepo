@@ -6,7 +6,7 @@ import Control.Monad.Free (Free)
 import Data.Array (length)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..), isJust, isNothing)
-import Parsing (ParseError(..))
+import Parsing (ParseError(..), Position(..))
 import Partial.Unsafe (unsafePartial)
 import Perspectives.Parsing.Arc.Expression (computationStep, operator, simpleStep, step, unaryStep)
 import Perspectives.Parsing.Arc.Expression.AST (BinaryStep(..), ComputationStep(..), ComputedType(..), Operator(..), PureLetStep(..), SimpleStep(..), Step(..), UnaryStep(..))
@@ -121,9 +121,22 @@ theSuite = suite "Perspectives.Parsing.Arc.Expression" do
   test "Malformed competing assignment keywords report the selected production" do
     (r :: Either ParseError Assignment) <- runIndentParser "remove widget MyRole" assignment
     case r of
-      Left (ParseError message _) ->
+      Left (ParseError message (Position position)) -> do
         assert "The consumed remove discriminator should own the error" (message == "Expected 'role', 'context', 'filler', or 'as' after 'remove'. ")
+        assert "The malformed assignment should report its error after the unique keyword" (position.line == 1 && position.column == 8)
       Right _ -> assert "An unsupported remove form should fail" false
+
+  test "Assignment classification distinguishes delete-role and delete-property forms" do
+    deleteRole <- runIndentParser "delete role MyRole" assignment
+    deleteProperty <- runIndentParser "delete property Name" assignment
+
+    assert "delete role is routed to the role-assignment production" case deleteRole of
+      Right (DeleteRole _) -> true
+      _ -> false
+
+    assert "delete property is routed to the property-assignment production" case deleteProperty of
+      Right (DeleteProperty _) -> true
+      _ -> false
 
   test "CompoundStep on filter with parens" do
     (r :: Either ParseError Step) <- runIndentParser "(filter MyRole with ItsBooleanProp)" step

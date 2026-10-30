@@ -14,7 +14,7 @@ import Parsing.String (char, eof)
 import Perspectives.Parsing.Arc (contextRoleE, domain, thingRoleE, userRoleE)
 import Perspectives.Parsing.Arc.AST (ContextE, ContextPart(..), FormE(..), FreeFormScreenE(..), RoleE(..), RoleIdentification(..), RolePart(..), RowE(..), ScreenE(..), ScreenElement(..), TabE(..), TableE(..), TableFormE(..), TableFormOrWhenE(..), TableFormSectionE(..), WhoWhatWhereScreenE(..), PropsOrView(..), StateSpecification(..))
 import Perspectives.Parsing.Arc.Expression.AST (BinaryStep(..), FilledByAttribute(..), Operator(..), SimpleStep(..), Step(..), TypeCombination(..))
-import Perspectives.Parsing.Arc.IndentParser (getArcParserState, getCurrentContext, getCurrentState, inSubContext, protectObject, runIndentParser, setObject, withArcParserState)
+import Perspectives.Parsing.Arc.IndentParser (getArcParserState, getCurrentContext, getCurrentState, inSubContext, protectObject, runIndentParser, setObject, withArcParserState, withEntireBlock)
 import Perspectives.Parsing.Arc.Position (ArcPosition(..))
 import Perspectives.Representation.ExplicitSet (ExplicitSet(..))
 import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedRoleType(..), RoleType(..))
@@ -137,9 +137,18 @@ theSuite = suite "Perspectives.Parsing.Arc regressions" do
       blankLines = "domain model://perspectives.domains#Test\n\n  thing Item\n    property Name (String)\n  thing Other"
       crlf = "domain model://perspectives.domains#Test\r\n  thing Item\r\n    property Name (String)\r\n"
       eofSource = "domain model://perspectives.domains#Test"
+    sameLineResult <- runIndentParser "Headerchild" $
+      withEntireBlock
+        (\_ children -> children)
+        (char 'H' *> char 'e' *> char 'a' *> char 'd' *> char 'e' *> char 'r' *> pure unit)
+        (char 'c' *> pure "child")
     blankResult <- runIndentParser blankLines (domain <* eof)
     crlfResult <- runIndentParser crlf (domain <* eof)
     eofResult <- runIndentParser eofSource (domain <* eof)
+
+    assert "A same-line parser is not treated as an indented block" case sameLineResult of
+      Right Nil -> true
+      _ -> false
 
     assert "A blank line does not terminate nested declarations and an outdented sibling is accepted" case blankResult of
       Right _ -> true

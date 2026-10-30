@@ -55,9 +55,9 @@ import Perspectives.Parsing.Arc.Expression.AST (SimpleStep(..), Step(..))
 import Perspectives.Parsing.Arc.Identifiers (arcIdentifier, boolean, email, lowerCaseName, prefixedName, qualifiedName, reserved, stringUntilNewline)
 import Perspectives.Parsing.Arc.IndentParser (IP, arcPosition2Position, ensureNoTabs, entireBlock, entireBlock1, getArcParserState, getCurrentContext, getCurrentState, getObject, getPosition, getStateIdentifier, getSubject, inSubContext, isEof, isIndented, isNextLine, nestedBlock, protectObject, protectOnEntry, protectOnExit, protectSubject, sameOrOutdented', setObject, setOnEntry, setOnExit, setSubject, withArcParserState, withEntireBlock)
 import Perspectives.Parsing.Arc.Position (ArcPosition)
-import Perspectives.Parsing.Arc.Statement (assignment, letWithAssignment, stagedStatements, twoReservedWords)
+import Perspectives.Parsing.Arc.Statement (assignment, letWithAssignment, stagedStatements)
 import Perspectives.Parsing.Arc.Statement.AST (Statements(..))
-import Perspectives.Parsing.Arc.Token (reservedIdentifier, token)
+import Perspectives.Parsing.Arc.Token (reservedIdentifier, token, twoReservedWords)
 import Perspectives.Persistent.PublicStore (PublicStore(..))
 import Perspectives.Repetition (Duration(..), Repeater(..))
 import Perspectives.Representation.Action (StartMoment(..))
@@ -1394,146 +1394,94 @@ authorOnly = do
 -- | propertyVerbs =
 -- |   view <ident> [ ( <propertyVerb>{, <propertyVerb>}+ )]
 -- |   |
--- |   props [(<ident> {, <ident>}+) ] [ verbs ( <propertyVerb>{, <propertyVerb>}+ )]
+-- |   props [(<ident> {, <ident>}+) ] [ verbs ( <propertyVerb>{, <propertyVerb>}+)]
 -- | The default has propertyVerbs = Universal and propsOrView = AllProperties!
 propertyVerbs :: IP PropertyVerbE
-propertyVerbs = basedOnView <|> basedOnProps
+propertyVerbs = do
+  { subject, object, state } <- getArcParserState
+  case subject, object of
+    Just s, Just o -> do
+      start <- getPosition
+      { selection } <- propertySelection false
+      (pv :: ExplicitSet PropertyVerb) <- option Universal (propertyVerbClause)
+      end <- getPosition
+      sameOrOutdented'
+      pure $ PropertyVerbE { subject: s, object: o, state, propertyVerbs: pv, propsOrView: selection, start, end }
+    _, _ -> fail "User role and object of perspective must be given, "
   where
-  -- view SomeView              all properties in SomeView, all verbs
-  -- view SomeView (Consult)    all properties in SomeView, verb Consult
-  basedOnView :: IP PropertyVerbE
-  basedOnView = do
-    -- | subject and object must be present.
-    { subject, object, state } <- getArcParserState
-    case subject, object of
-      Just s, Just o -> do
-        -- | view <ArcIdentifier> [: (<PropertyVerb+)]
-        start <- getPosition
-        view <- reserved "view" *> (View <$> arcIdentifier)
-        (pv :: ExplicitSet PropertyVerb) <- option Universal (((reserved "verbs") <|> (reserved "without")) *> lotsOfVerbs)
-        end <- getPosition
-        sameOrOutdented'
-        pure $ PropertyVerbE { subject: s, object: o, state, propertyVerbs: pv, propsOrView: view, start, end }
-      _, _ -> fail "User role and object of perspective must be given, "
+  propertyVerbClause :: IP (ExplicitSet PropertyVerb)
+  propertyVerbClause =
+    ((reserved "verbs") <|> (reserved "without"))
+      *> (PSet <<< fromFoldable <$> token.parens (propertyVerb `sepBy` token.symbol ","))
 
-  -- props                         all properties, all verbs
-  -- props (Title)                 property Title, all verbs
-  -- props (Title) verbs (Consult) property Title, verb Consult
-  -- props verbs (Consult)         all properties, verb Consult
-  -- The default has propertyVerbs = Universal and propsOrView = AllProperties!
-  basedOnProps :: IP PropertyVerbE
-  basedOnProps = do
-    -- | subject and object must be present.
-    { subject, object, state } <- getArcParserState
-    case subject, object of
-      Just s, Just o -> do
-        -- | props (<ArcIdentifier>) [: (<PropertyVerb+)]
-        start <- getPosition
-        -- "all props" of "props (P1, P2)" 
-        props <- do
-          allProps <- option false allProperties
-          if allProps then pure AllProperties
-          else (reserved "props" *> (Properties <$> lotsOfProperties))
-        (pv :: ExplicitSet PropertyVerb) <- option Universal (((reserved "verbs") <|> (reserved "without")) *> lotsOfVerbs)
-        end <- getPosition
-        sameOrOutdented'
-        pure $ PropertyVerbE { subject: s, object: o, state, propertyVerbs: pv, propsOrView: props, start, end }
-      _, _ -> fail "User role and object of perspective must be given, "
+type PropertySelection =
+  { selection :: PropsOrView
+  , properties :: List { propertyName :: String, position :: ArcPosition }
+  }
 
-  lotsOfVerbs :: IP (ExplicitSet PropertyVerb)
-  lotsOfVerbs = PSet <<< fromFoldable <$> token.parens (propertyVerb `sepBy` token.symbol ",")
-
-  lotsOfProperties :: IP (List String)
-  lotsOfProperties = token.parens (arcIdentifier `sepBy` token.symbol ",")
-
-  allProperties :: IP Boolean
-  allProperties = do
-    (Tuple first second) <- twoReservedWords
-    case first, second of
-      "all", "props" -> reserved "all" *> reserved "props" *> pure true
-      _, _ -> pure false
-
-withoutProperties :: IP PropsOrView
-withoutProperties = basedOnView <|> basedOnProps
+propertySelection :: Boolean -> IP PropertySelection
+propertySelection optionalProperties = basedOnView <|> basedOnProps
   where
-  -- view SomeView              all properties in SomeView, all verbs
-  -- view SomeView (Consult)    all properties in SomeView, verb Consult
-  basedOnView :: IP PropsOrView
+  basedOnView :: IP PropertySelection
   basedOnView = do
-    -- | subject and object must be present.
-    { subject, object, state } <- getArcParserState
-    case subject, object of
-      Just s, Just o -> do
-        -- | view <ArcIdentifier> [: (<PropertyVerb+)]
-        view <- reserved "view" *> (View <$> arcIdentifier)
-        sameOrOutdented'
-        pure view
-      _, _ -> fail "User role and object of perspective must be given, "
+    selection <- reserved "view" *> (View <$> arcIdentifier)
+    pure { selection, properties: Nil }
 
-  -- props                         all properties, all verbs
-  -- props (Title)                 property Title, all verbs
-  -- The default has propertyVerbs = Universal and propsOrView = AllProperties!
-  basedOnProps :: IP PropsOrView
+  basedOnProps :: IP PropertySelection
   basedOnProps = do
-    -- | subject and object must be present.
-    { subject, object, state } <- getArcParserState
-    case subject, object of
-      Just s, Just o -> do
-        -- | props (<ArcIdentifier>) [: (<PropertyVerb+)]
-        start <- getPosition
-        props <- option AllProperties (reserved "props" *> (Properties <$> lotsOfProperties))
-        sameOrOutdented'
-        pure props
-      _, _ -> fail "User role and object of perspective must be given, "
-
-  lotsOfVerbs :: IP (ExplicitSet PropertyVerb)
-  lotsOfVerbs = PSet <<< fromFoldable <$> token.parens (propertyVerb `sepBy` token.symbol ",")
-
-  lotsOfProperties :: IP (List String)
-  lotsOfProperties = token.parens (arcIdentifier `sepBy` token.symbol ",")
-
--- | Inclusive counterpart for withoutProperties.
--- | Parses either `with view <ArcIdentifier>` or `with props (<ArcIdentifier>{, <ArcIdentifier>}*)`.
-withPropertiesAndPositions
-  :: IP
-       { selection :: PropsOrView
-       , properties :: List { propertyName :: String, position :: ArcPosition }
-       }
-withPropertiesAndPositions = basedOnView <|> basedOnProps
-  where
-  basedOnView :: IP { selection :: PropsOrView, properties :: List { propertyName :: String, position :: ArcPosition } }
-  basedOnView = do
-    { subject, object, state } <- getArcParserState
-    case subject, object of
-      Just _, Just _ -> do
-        view <- reserved "view" *> (View <$> arcIdentifier)
-        sameOrOutdented'
-        pure { selection: view, properties: Nil }
-      _, _ -> fail "User role and object of perspective must be given, "
-
-  basedOnProps :: IP { selection :: PropsOrView, properties :: List { propertyName :: String, position :: ArcPosition } }
-  basedOnProps = do
-    { subject, object, state } <- getArcParserState
-    case subject, object of
-      Just _, Just _ -> do
-        _ <- getPosition
-        mProperties <- optionMaybe (reserved "props" *> token.parens (propertyNamesAndPositions `sepBy` token.symbol ","))
-        let
-          properties = case mProperties of
-            Nothing -> Nil
-            Just namedProperties -> namedProperties
-          selection = case mProperties of
-            Nothing -> AllProperties
-            Just namedProperties -> Properties (map _.propertyName namedProperties)
-        sameOrOutdented'
-        pure { selection, properties }
-      _, _ -> fail "User role and object of perspective must be given, "
+    allProps <- if optionalProperties then pure false else option false allProperties
+    if allProps then pure { selection: AllProperties, properties: Nil }
+    else do
+      namedProperties <-
+        if optionalProperties then
+          optionMaybe (reserved "props" *> token.parens (propertyNamesAndPositions `sepBy` token.symbol ","))
+        else
+          Just <$> (reserved "props" *> token.parens (propertyNamesAndPositions `sepBy` token.symbol ","))
+      let
+        properties = case namedProperties of
+          Nothing -> Nil
+          Just selectedProperties -> selectedProperties
+        selection = case namedProperties of
+          Nothing -> AllProperties
+          Just selectedProperties -> Properties (map _.propertyName selectedProperties)
+      pure { selection, properties }
 
   propertyNamesAndPositions :: IP { propertyName :: String, position :: ArcPosition }
   propertyNamesAndPositions = do
     position <- getPosition
     propertyName <- arcIdentifier
     pure { propertyName, position }
+
+allProperties :: IP Boolean
+allProperties = do
+  (Tuple first second) <- twoReservedWords
+  case first, second of
+    "all", "props" -> reserved "all" *> reserved "props" *> pure true
+    _, _ -> pure false
+
+withoutProperties :: IP PropsOrView
+withoutProperties = do
+  ensurePropertySelectorScope
+  selected <- propertySelection true
+  sameOrOutdented'
+  pure selected.selection
+
+-- | Inclusive counterpart for withoutProperties.
+-- | Parses either `with view <ArcIdentifier>` or `with props (<ArcIdentifier>{, <ArcIdentifier>}*)`.
+withPropertiesAndPositions
+  :: IP PropertySelection
+withPropertiesAndPositions = do
+  ensurePropertySelectorScope
+  selected <- propertySelection true
+  sameOrOutdented'
+  pure selected
+
+ensurePropertySelectorScope :: IP Unit
+ensurePropertySelectorScope = do
+  { subject, object } <- getArcParserState
+  case subject, object of
+    Just _, Just _ -> pure unit
+    _, _ -> fail "User role and object of perspective must be given, "
 
 allPropertyVerbs :: List PropertyVerb
 allPropertyVerbs = (Consult : (RemovePropertyValue : (DeleteProperty : (AddPropertyValue : (SetPropertyValue : Nil)))))

@@ -1,9 +1,9 @@
-# ARC phase-one parser architecture assessment
+# ARC phase-one parser architecture and implementation
 
-This is the architectural proposal for issue #545, based on `master` after
-PR #546. It is an assessment only: no parser behavior or AST is changed here.
-The maintainer reports that the expanded source-compilation corpus passes
-locally; this milestone does not rerun that preparatory task.
+This document records the assessment and approved staged implementation for
+issue #545, based on `master` after PR #546. The implementation preserves the
+phase-one AST contract and parser behavior while rationalising block, expression,
+assignment, and selector parsing.
 
 ## Current responsibilities and flow
 
@@ -91,16 +91,14 @@ compilation.
   (`expressionParser.purs:486-537`). These are compatibility-sensitive
   details; parser cleanup must not silently change spans.
 
-## Expression precedence and normalisation
+## Expression precedence and previous normalization
 
-`step_` parses an operand, then recursively parses the right operand, so an
-unparenthesised operator chain starts as a right-nested tree
-(`expressionParser.purs:61-105`). `operatorPrecedence` assigns the current
-levels (`445-482`); `normalizeBinaryStep` rotates an unparenthesised right
-child when the left operator has higher precedence, and `normalizeStep`
-walks unary, let, and computation children (`108-185`). `step` repeats that
-normalisation until structural equality reaches a fixed point (`61-70`).
-Parentheses prevent a rotation through the `parenthesised` marker.
+Before implementation, `step_` parsed an operand and recursively parsed the
+right operand, so an unparenthesised operator chain started as a right-nested
+tree. `operatorPrecedence` assigned the current levels; `normalizeBinaryStep`
+rotated an unparenthesised right child when the left operator had higher
+precedence, and `step` repeated this until structural equality reached a fixed
+point. Parentheses prevented a rotation through the `parenthesised` marker.
 
 This implements precedence, and existing tests verify representative additive
 precedence and parenthesised grouping (`test/expressionParser.purs:255-335`).
@@ -112,14 +110,13 @@ analogy with another language. First characterize mixed-operator
 associativity, comparison chains, filter/composition boundaries, and all
 parenthesis cases against phase-three query shapes.
 
-The proposed direction is an explicit precedence/associativity parser that
-constructs the intended `Step` tree directly, removing the post-parse
-fixed-point pass only after tests demonstrate equivalent grouping and spans.
-Keep the current precedence data unchanged in the first refactor. If a
-language-level precedence change is later desired, treat it as a separate,
-documented behavior change with model and compiler tests.
+Implementation uses precedence-aware parsing to construct the `Step` tree
+directly. The precedence table is unchanged; strict precedence comparisons keep
+equal-precedence chains right-nested. Characterization tests cover mixed
+arithmetic, logical and comparison operators, filter grouping, parentheses,
+operator positions, and compatibility-sensitive spans.
 
-## Proposed architecture and compatibility
+## Architecture and compatibility decisions
 
 Keep the existing AST contracts as the phase-one boundary:
 
@@ -188,3 +185,37 @@ At every stage, compare AST/compiled results for representative real model
 sources and treat any changed meaning as a regression unless separately
 approved and tested. Keep local Spago `path:` dependencies and generated
 outputs/caches out of commits.
+
+## Implementation results
+
+1. Added characterization for existing operator grouping, parentheses,
+   filter boundaries, operator positions, malformed assignment dispatch,
+   parser-state restoration, and block behavior (same-line rejection, nested
+   and outdented children, blank lines, CRLF, EOF, tabs, and malformed children).
+2. `entireBlock` and `entireBlock1` now share a block parser with explicit
+   empty/nonempty requirements. Their indentation, dedent, EOF, and recovery
+   behavior is retained; the rollback-safe state-scope helper is unchanged.
+   The domain parser now calls `ensureNoTabs`, which states the helper's actual
+   contract.
+3. Replaced fixed-point expression-tree normalization with precedence-aware
+   parsing. Existing precedence, equal-precedence right nesting, AST fields,
+   parentheses markers, and characterized source spans are preserved.
+4. Moved `twoReservedWords` into the token module, where shared lexical
+   lookahead belongs. Assignment classification now discriminates `delete`
+   and `create` forms explicitly; statement AST and settlement-stage lowering
+   remain unchanged.
+5. Consolidated view/property selection parsing for perspective verbs and screen
+   selectors, retaining property source positions where required. The
+   screen/widget grammar remains in `arcParser.purs`: it shares declaration
+   state and private helpers, so extraction would not provide a narrower
+   AST-preserving interface.
+
+Validation: `spago build` succeeded and `test:layer1` passed with 427 tests
+(2 skipped) after the parser rationalisation. The model-source compilation
+corpus runner built and bundled successfully, then could not initialize its
+PDR: this checkout has no `test/pdr-snapshot/universe/alice` snapshot and no
+`mkcert` installation or root CA. The resulting fetch to
+`https://perspectives.domains/cw_perspectives_domains/` failed with
+`self-signed certificate in certificate chain` (`mkcert: not found`; the
+configured `/rootCA.pem` was absent). The corpus therefore remains unvalidated
+in this environment and needs a local snapshot or trusted CA setup.
