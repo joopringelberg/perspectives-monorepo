@@ -41,6 +41,7 @@ This index provides an overview of the technical documentation in `packages/pers
 
 | Document | Description |
 |---|---|
+| [ARC Phase-One Parser Architecture Assessment](arc-parser-phase-one-assessment.md) | Evidence-based assessment and staged proposal for rationalising ARC parsing while preserving the phase-one AST contracts. |
 | [Type Comparison](type-comparison.md) | How types are represented (ADT, ExpandedADT, CNF), normalised, and compared throughout the PDR. Covers `equalsOrSpecialises`, `leastCommonSuperType`, role-class hierarchy, and the role of Phase Three in populating comparison tables. |
 | [Stable ID Mapping](stable-id-mapping.md) | How stable type identifiers are preserved across ARC model refactors using a `stableIdMapping.json` sidecar stored alongside the DomeinFile. Covers the alias mechanism, snapshot heuristics, and where in the compilation pipeline the mapping is applied. |
 
