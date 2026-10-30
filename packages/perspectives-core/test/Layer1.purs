@@ -69,7 +69,7 @@ import Test.Perspectives.Representation.AbstractDataTypeTests (theSuite) as ADTT
 import Test.Parsing.Arc (theSuite) as TPA
 import Test.Parsing.Arc.Syntax (theSuite) as TPAS
 import Test.Parsing.Arc.PhaseTwo (theSuite) as TPA2
-import Test.Parsing.Arc.PhaseThree (completeTypeNormalisationSuite, recursiveFillerComparisonSuite) as TPA3
+import Test.Parsing.Arc.PhaseThree (theSuite) as TPA3
 import Test.Parsing.Arc.Model (theSuite) as TPAM
 import Test.Parsing.Arc.IndexedRootPerspectives (theSuite) as IRP
 
@@ -93,25 +93,14 @@ main = runTest do
   TQ.theSuite
   VD.theSuite
   IRP.theSuite
-  TPAS.theSuite        -- Phase 1 — comprehensive non-expression syntax tests
+  TPAS.theSuite -- Phase 1 — comprehensive non-expression syntax tests
+  TPA.theSuite -- Supplementary phase-one regressions
+  TPA2.theSuite -- Phase 2 — declarations, qualification and type representation
+  TPA3.theSuite -- Phase 3 — compiled queries, perspectives and type normalisation
+  QDC.theSuite -- Query description compilation
 
   -- Read a file from the file-system, but otherwise pure (no MonadPerspectives / no HTTP)
   TPAM.theSuite -- ARC model parser (parses .arc files from the model/
 
   -- ── Pure ADT algebra (runP wraps in-memory computations only) ──────────────
   ADTTESTS.theSuite -- ExpandedADT / CNF / ADT unit tests (with assertions)
-
--- ── ARC parsing phases 1–3 (in-memory; file-system for .arc fixtures) ──────
--- NOTE: the broader phase suites are not ready: they contain a large number of failing tests.
--- TPA.theSuite         -- Phase 1 — tokenise + parse
--- TPA2.theSuite        -- Phase 2 — name resolution / type inference
--- TPA3.theSuite        -- Phase 3 — inverted query indexing
-
--- This small suite fails.
--- TPA3.completeTypeNormalisationSuite
-
--- This small suite fails.
--- TPA3.recursiveFillerComparisonSuite
-
--- -- ── Query description compiler (in-memory DomeinFile cache) ────────────────
--- QDC.theSuite
