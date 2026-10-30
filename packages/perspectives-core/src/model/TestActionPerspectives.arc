@@ -58,9 +58,9 @@ domain model://joopringelberg.nl#TestActionPerspectives
       action FillWithOrigin_
         bind currentactor to ThingToBeFilled_
       action UnBind
-        unbind currentactor from ToBeRemoved
+        remove as filler of ToBeRemoved currentactor
       action UnBind_
-        unbind currentactor from ThingToBeFilled_
+        remove as filler of ThingToBeFilled_ currentactor
       action DeleteRole
         delete role ToBeRemoved
       action DeleteContext

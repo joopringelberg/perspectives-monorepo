@@ -22,9 +22,9 @@ export default function FileDropZone(props: FileDropZoneProps) {
   );
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
-    switch (event.keyCode) {
-      case 13: // Enter
-      case 32: // space
+    switch (event.key) {
+      case "Enter": // Enter
+      case " ": // space
         document.getElementById('selectedFile')?.click();
         event.preventDefault();
         break;
@@ -44,7 +44,7 @@ export default function FileDropZone(props: FileDropZoneProps) {
 
   function handleFileWithExtension(fileList: FileList) {
     const theFile = fileList.item(0);
-    const r = props.extension.match(/\./) ? new RegExp("\\" + props.extension) : new RegExp("\." + props.extension);
+    const r = props.extension.match(/\./) ? new RegExp("\\" + props.extension) : new RegExp("." + props.extension);
     if (theFile && theFile.name.match(r)) {
       props.handlefile(theFile);
     }

@@ -27,19 +27,19 @@ import Prelude
 import Data.Eq.Generic (genericEq)
 import Data.Generic.Rep (class Generic)
 import Data.List (List)
-import Data.List.Types (NonEmptyList)
 import Data.Maybe (Maybe, maybe)
 import Data.Newtype (class Newtype, unwrap)
 import Data.Show.Generic (genericShow)
 import Data.Tuple (Tuple)
 import Foreign (unsafeToForeign)
 import Partial.Unsafe (unsafePartial)
-import Perspectives.Parsing.Arc.Expression.AST (Step)
+import Perspectives.Parsing.Arc.Expression.AST (Step, TypeCombination)
 import Perspectives.Parsing.Arc.Expression.RegExP (RegExP)
 import Perspectives.Parsing.Arc.Position (ArcPosition)
 import Perspectives.Parsing.Arc.Statement.AST (Statements)
 import Perspectives.Persistent.PublicStore (PublicStore)
 import Perspectives.Repetition (Duration, Repeater)
+import Perspectives.Representation.Action (StartMoment)
 import Perspectives.Representation.Class.EnumReadForeign (enumReadForeign)
 import Perspectives.Representation.Context (ContextKind)
 import Perspectives.Representation.ExplicitSet (ExplicitSet)
@@ -92,7 +92,7 @@ data RolePart
   | FunctionalAttribute Boolean
   | MandatoryAttribute Boolean
   | UnlinkedAttribute
-  | FilledBySpecifications FilledBySpecification
+  | FilledBySpecifications TypeCombination
   | Calculation Step Boolean
   | RoleAspect String ArcPosition (Maybe PropertyMapping)
   | IndexedRole String ArcPosition
@@ -101,12 +101,6 @@ data RolePart
   | PublicUrl Step
   | DefaultUserRole
 
-data FilledBySpecification
-  = Alternatives (NonEmptyList FilledByAttribute)
-  | Combination (NonEmptyList FilledByAttribute)
-  | DisjunctionOfConjunctions (NonEmptyList (NonEmptyList FilledByAttribute))
-
-data FilledByAttribute = FilledByAttribute String ContextType
 --------------------------------------------------------------------------------
 ---- PROPERTYMAPPING
 --------------------------------------------------------------------------------
@@ -250,6 +244,7 @@ data StateQualifiedPart
   | CA ContextActionE
   | SO SelfOnly
   | PO AuthorOnly
+  | PP PerspectivePosition
   | N NotificationE
   | AE AutomaticEffectE
   | SUBSTATE StateE
@@ -333,6 +328,15 @@ newtype AuthorOnly = AuthorOnly
   }
 
 --------------------------------------------------------------------------------
+---- PERSPECTIVEPOSITION
+--------------------------------------------------------------------------------
+newtype PerspectivePosition = PerspectivePosition
+  { subject :: RoleIdentification
+  , object :: RoleIdentification
+  , start :: ArcPosition
+  }
+
+--------------------------------------------------------------------------------
 ---- NOTIFICATION
 --------------------------------------------------------------------------------
 -- Ends up in State, identified by the fully qualified name in StateTransitionE.
@@ -342,7 +346,7 @@ newtype NotificationE = NotificationE
   , message :: SentenceE
   -- , level :: NotificationLevel
   , object :: Maybe RoleIdentification
-  , startMoment :: Maybe Duration
+  , startMoment :: StartMoment
   , endMoment :: Maybe Duration
   , repeats :: Repeater
   , start :: ArcPosition
@@ -366,7 +370,7 @@ newtype AutomaticEffectE = AutomaticEffectE
   , object :: Maybe RoleIdentification
   , transition :: StateTransitionE
   , effect :: Statements
-  , startMoment :: Maybe Duration
+  , startMoment :: StartMoment
   , endMoment :: Maybe Duration
   , repeats :: Repeater
   , start :: ArcPosition
@@ -488,6 +492,8 @@ data ScreenElement
   | MarkDownElement MarkDownE
   | ChatElement ChatE
   | WhenElement WhenE
+  | TypeAheadFillerElement TypeAheadFillerE
+  | TypeAheadFormElement TypeAheadFormE
 
 --------------------------------------------------------------------------------
 ---- WHEN
@@ -519,13 +525,25 @@ type FieldConstraintE =
   , end :: ArcPosition
   }
 
+type FillPropertyValueE =
+  { propertyName :: String
+  , valuesQuery :: Step
+  , start :: ArcPosition
+  , end :: ArcPosition
+  }
+
 type WidgetCommonFields =
   { title :: Maybe String
   -- Only the ExplicitRole constructor is allowed!
   , perspective :: RoleIdentification
   , fillFrom :: Maybe Step
+  -- The role name after `typeaheadfillfrom` (used in master/detail context).
+  -- Mutually exclusive with fillFrom; Nothing when not specified.
+  , typeAheadFillFromRole :: Maybe String
+  , fillPropertyValues :: List FillPropertyValueE
   -- Alternative to withoutProps: explicitly include properties/views
   , withProps :: Maybe PropsOrView
+  , withPropsPositions :: List { propertyName :: String, position :: ArcPosition }
   , withoutProps :: Maybe PropsOrView
   , withoutVerbs :: List PropertyVerbE
   -- Must be a subset of the roleVerbs of the perspective
@@ -540,6 +558,21 @@ type WidgetCommonFields =
 ---- TABLE
 --------------------------------------------------------------------------------
 data TableE = TableE (List MarkDownE) WidgetCommonFields
+
+--------------------------------------------------------------------------------
+---- TYPEAHEADFILLER
+--------------------------------------------------------------------------------
+-- | A widget that lets the user search for and select a role instance to fill
+-- | a target role, using the FilterValue view for efficient candidate lookup.
+newtype TypeAheadFillerE = TypeAheadFillerE WidgetCommonFields
+
+--------------------------------------------------------------------------------
+---- TYPEAHEADFORM
+--------------------------------------------------------------------------------
+-- | A widget that shows a typeahead input for searching a role instance and,
+-- | once selected, presents the instance in a form. The candidates are fetched
+-- | from the FilterValue view; the form uses the same perspective.
+newtype TypeAheadFormE = TypeAheadFormE WidgetCommonFields
 
 --------------------------------------------------------------------------------
 ---- MARKDOWN
@@ -585,14 +618,6 @@ instance showRoleE :: Show RoleE where
 
 derive instance genericRoleElement :: Generic RolePart _
 instance showRoleElement :: Show RolePart where
-  show = genericShow
-
-derive instance Generic FilledBySpecification _
-instance Show FilledBySpecification where
-  show = genericShow
-
-derive instance Generic FilledByAttribute _
-instance Show FilledByAttribute where
   show = genericShow
 
 derive instance Generic PropertyMapping _
@@ -645,6 +670,10 @@ instance showSelfOnly :: Show SelfOnly where
 
 derive instance Generic AuthorOnly _
 instance Show AuthorOnly where
+  show = genericShow
+
+derive instance Generic PerspectivePosition _
+instance Show PerspectivePosition where
   show = genericShow
 
 derive instance genericPropertyE :: Generic PropertyE _
@@ -744,6 +773,18 @@ instance Show ChatE where
   show = genericShow
 
 derive instance Newtype ChatE _
+
+derive instance Generic TypeAheadFillerE _
+instance Show TypeAheadFillerE where
+  show = genericShow
+
+derive instance Newtype TypeAheadFillerE _
+
+derive instance Generic TypeAheadFormE _
+instance Show TypeAheadFormE where
+  show = genericShow
+
+derive instance Newtype TypeAheadFormE _
 
 derive instance Generic WhenE _
 instance Show WhenE where

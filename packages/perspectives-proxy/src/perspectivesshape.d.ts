@@ -10,16 +10,45 @@ export type ContextInstanceT = string & { readonly brand: unique symbol };
 export type ValueT = string & { readonly brand: unique symbol };
 export type PropertyValueReceiver = (value: ValueT[]) => void;
 export type RoleType = string & { readonly brand: unique symbol };
+export type EnumeratedRoleType = string & { readonly brand: unique symbol };
 export type UserRoleType = RoleType
 export type RoleTypeReceiver = (roleType: RoleType[]) => void;
 export type PerspectivesReceiver = (perspectives: Perspective[]) => void;
 export type ContextAndNameReceiver = (contextAndName: ContextAndName[]) => void;
+export type WiderContextReceiver = (widerContexts: WiderContext[]) => void;
 export type ScreenReceiver = (screen: ScreenDefinition[]) => void;
 export type TableFormReceiver = (tableForm: TableFormDef[]) => void;
+export type ConversationReceiver = (conversation: ConversationBody[]) => void;
+export type ConversationBranchReceiver = (branch: ConversationBranch[]) => void;
 export type PropertyType = string & { readonly brand: unique symbol };
 export type ContextType = string & { readonly brand: unique symbol };
 export type RoleKind = "RoleInContext" | "ContextRole" | "ExternalRole" | "UserRole" | "Public" | "PublicProxy"
 export type EnumeratedOrCalculatedProperty = {type: "ENP" | "CP", value: PropertyType}
+
+export type ConversationMessage = {
+  message: string;
+  fallback: string;
+};
+
+export type ConversationElement =
+  | { statement: ConversationMessage }
+  | { question: ConversationMessage }
+  | { answer: ConversationMessage; sequence?: ConversationElement[] }
+  | { sequence: ConversationElement[] };
+
+export type ConversationBody = {
+  conversation: ConversationElement[];
+};
+
+export type ConversationBranch = {
+  branchExternal: RoleInstanceT;
+  branchContext: ContextInstanceT;
+  authoringRoleType: UserRoleType;
+  conversationText: string;
+  conversationTextPropertyType: PropertyType;
+  contextTypePropertyType: PropertyType;
+  conversationIdentifierPropertyType: PropertyType;
+};
 
 export type ContextActions = Record<ModeledActionName, TranslatedActionName>;
 
@@ -76,6 +105,10 @@ export type Perspective = {
   properties: Record<string, SerialisedProperty>;
   actions: Record<string, string>;
   possibleFillers: {readableName : string, instance: RoleInstanceT}[];
+  possiblePropertyValues: Record<string, ValueT[]>;
+  // When set, properties should be displayed in this order (from `with props` in a screen
+  // definition). Properties listed here come first; any remaining properties follow.
+  propertyOrder?: PropertyType[];
 };
 
 export type RoleVerb = 
@@ -97,7 +130,6 @@ export type Roleinstancewithprops = {
   propertyValues: Record<string, PropertyValues>;
   actions: Record<string, string>;
   objectStateBasedProperties: { type: string; value: PropertyType }[];
-  // NOTA BENE: publicUrl is OBSOLETE.
   publicUrl?: string;
   filler?: RoleInstanceT;
   isMe: boolean;
@@ -164,11 +196,11 @@ export type TabDef = {
 };
 
 export type ScreenElementDefTagged = {
-  elementType: "RowElementD" | "ColumnElementD" | "TableElementD" | "FormElementD" | "MarkDownElementD" | "ChatElementD" | "WhenElementD";
+  elementType: "RowElementD" | "ColumnElementD" | "TableElementD" | "FormElementD" | "MarkDownElementD" | "ChatElementD" | "WhenElementD" | "TypeAheadFillerElementD" | "TypeAheadFormElementD";
   element: ScreenElementDef;
 }
 
-export type ScreenElementDef = RowElementDef | ColumnElementDef | TableElementDef | FormElementDef | MarkDownElementDef | ChatElementDef | WhenElementDef;
+export type ScreenElementDef = RowElementDef | ColumnElementDef | TableElementDef | FormElementDef | MarkDownElementDef | ChatElementDef | WhenElementDef | TypeAheadFillerElementDef | TypeAheadFormElementDef;
 
 export type WhenElementDef = {
   tag: "WhenDef";
@@ -226,10 +258,36 @@ export type ChatElementDef = {
   };
 }
 
+export type FilterValueEntry = {
+  filterValue: string;
+  roleId: RoleInstanceT;
+}
+
+export type TypeAheadFillerElementDef = {
+  tag: "TypeAheadFillerDef";
+  widgetCommonFields: WidgetCommonFields;
+  candidates: FilterValueEntry[];
+}
+
+// Widget common fields for TypeAheadForm: omits `perspective` because it is
+// fetched on demand via getPerspective() after the user selects a candidate.
+export type TypeAheadFormWidgetFields = {
+  title?: string;
+  fieldConstraints?: FieldDisplayConstraint[];
+};
+
+export type TypeAheadFormElementDef = {
+  tag: "TypeAheadFormDef";
+  widgetCommonFields: TypeAheadFormWidgetFields;
+  displayName: string;
+  candidates: FilterValueEntry[];
+}
+
 export type WidgetCommonFields = {
   title: string;
   perspective: Perspective;
   fieldConstraints?: FieldDisplayConstraint[];
+  typeAheadFillFromCandidates?: FilterValueEntry[];
 };
 
 export type FieldDisplayConstraint = {
@@ -278,6 +336,10 @@ export type RuntimeOptions = {
   privateKey?: CryptoKey;
   // Default: the CryptoKey object that has been created on setting up the installation. This is extractable.
   publicKey?: CryptoKey;
+  // Default: the RSA-OAEP CryptoKey object that has been created on setting up the installation. This is not extractable.
+  transportPrivateKey?: CryptoKey;
+  // Default: the RSA-OAEP CryptoKey object that has been created on setting up the installation. This is extractable.
+  transportPublicKey?: CryptoKey;
   // Default: the package number taken from package.json
   myContextsVersion: string;
 };
@@ -326,9 +388,31 @@ export type ContextAndName =
 	  readableName : string }
 
 ////////////////////////////////////////////
+//// WIDERCONTEXT
+////////////////////////////////////////////
+export type WiderContext =
+	{ externalRole : RoleInstanceT
+	  readableName : string
+    contextType : ContextType }
+
+    ////////////////////////////////////////////
+//// MODEL CONTEXT GRAPH
+////////////////////////////////////////////
+export type ModelGraphNode = { id: ContextType; label: string, indexedName?: ContextInstance };
+export type ModelGraphEdge = {
+  from: ContextType;
+  to: ContextType;
+  roleId: EnumeratedRoleType;
+  roleLabel: string;
+  roleKind: "ContextRole" | "UserRole";
+};
+export type ModelContextGraph = { nodes: ModelGraphNode[]; edges: ModelGraphEdge[] };
+
+////////////////////////////////////////////
 //// FILLER TYPES
 ////////////////////////////////////////////
 export type FillerType = { roleType: RoleType, readableName: string }
+export type FillMode = "provided" | "required"
 
 ////////////////////////////////////////////
 //// INSPECTABLE CONTEXT

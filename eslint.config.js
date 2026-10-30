@@ -23,6 +23,19 @@ export default [
       'no-unused-vars': 'warn',
     },
   },
+  {
+    files: [
+      'packages/mycontexts/src/buildMeta.js',
+      'packages/mycontexts/src/generateManifest.js',
+      'packages/mycontexts/src/syncPublicAssets.js'
+    ],
+    languageOptions: {
+      globals: {
+        process: 'readonly',
+        console: 'readonly'
+      }
+    }
+  },
   // TypeScript specific rules
   {
     files: ['**/*.ts', '**/*.tsx'],
@@ -53,6 +66,7 @@ export default [
         BroadcastChannel: 'readonly',
         URL: 'readonly',
         clients: 'readonly',
+        Client: 'readonly',
         Promise: 'readonly',
         navigator: 'readonly',
         window: 'readonly',
@@ -73,7 +87,23 @@ export default [
         fetch: 'readonly',
         console: 'readonly',
         btoa: 'readonly',
-        Buffer: 'readonly'
+        Buffer: 'readonly',
+        crypto: 'readonly'
+      }
+    },
+    rules: {
+      'no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-vars': 'off',
+      'no-undef': 'warn'
+    }
+  },
+  // perspectives-core test FFI files configuration
+  {
+    files: ['**/packages/perspectives-core/test/**/*.js'],
+    languageOptions: {
+      globals: {
+        console: 'readonly',
+        crypto: 'readonly',
       }
     },
     rules: {
@@ -99,6 +129,33 @@ export default [
       'no-unused-vars': 'off',
       '@typescript-eslint/no-unused-vars': 'off',
       'no-undef': 'warn'
+    }
+  },
+  // CommonJS Node.js services and GitHub Actions scripts.
+  {
+    files:
+      [ '**/packages/perspectives-rabbitmq-service/**/*.js'
+      , '**/packages/perspectives-sharedfilestorage/**/*.js'
+      , '.github/scripts/weekly-report*.cjs'
+      ],
+    languageOptions: {
+      sourceType: 'commonjs',
+      globals: {
+        require: 'readonly',
+        module: 'readonly',
+        exports: 'writable',
+        process: 'readonly',
+        console: 'readonly',
+        Buffer: 'readonly',
+        setTimeout: 'readonly',
+        setInterval: 'readonly',
+        __dirname: 'readonly'
+      }
+    },
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
+      'no-unused-vars': 'warn',
+      '@typescript-eslint/no-unused-vars': 'warn'
     }
   }
 ];

@@ -31,7 +31,7 @@ const LoadingScreen = () => {
             <Col>
               {/* Change h2 to h1 for proper document structure */}
               <h1 className="mb-4">{i18next.t("loading_welcome", {ns: 'mycontexts'})}</h1>
-              <p className="mb-4 text-dark">{i18next.t("loading_message", {ns: 'mycontexts', version: __MYCONTEXTS_VERSION__, build: __BUILD__})}</p>
+              <p className="mb-4 text-dark">{i18next.t("loading_message", {ns: 'mycontexts', version: __MYCONTEXTS_VERSION__, build: __BUILD_ID__})}</p>
               <Spinner animation="border" role="status" variant="primary">
                 <span className="visually-hidden">Loading...</span>
               </Spinner>

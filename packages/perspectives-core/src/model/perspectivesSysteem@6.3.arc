@@ -78,10 +78,10 @@ domain model://perspectives.domains#System@6.3
       state Upgrade_3_1_3 = callExternal util:IsLowerVersion( sys:UpgradeHook >> LastHandledUpgrade, "3.1.3" ) returns Boolean and 
         (callExternal util:IsLowerVersion( "3.1.3", callExternal util:SystemParameter( "PDRVersion" ) returns String) returns Boolean or
           ("3.1.3" == callExternal util:SystemParameter( "PDRVersion" ) returns String))
-        state SwitchKey = (filter sys:TheWorld >> PerspectivesUsers with fills me) >> PerspectivesUsers$HasKey
+        state SwitchKey = (filter sys:TheWorld >> PerspectivesUsers with fills me) >> HasKey
           perspective of Upgrader
             perspective on filter sys:TheWorld >> PerspectivesUsers with fills me
-              props (PerspectivesUsers$HasKey, UserWithHasKey$HasKey) verbs (DeleteProperty, SetPropertyValue)
+              props (UserWithHasKey$HasKey) verbs (DeleteProperty, SetPropertyValue)
           on entry
             do for Upgrader
               letA
@@ -89,7 +89,7 @@ domain model://perspectives.domains#System@6.3
               in
                 UserWithHasKey$HasKey = true for therole
                 LastHandledUpgrade = callExternal util:SystemParameter( "PDRVersion" ) returns String
-                delete property PerspectivesUsers$HasKey from therole
+                delete property HasKey from therole
 
   -- Used as model://perspectives.domains#System$RoleWithId$Id in the PDR code.
   thing RoleWithId
@@ -143,6 +143,8 @@ domain model://perspectives.domains#System@6.3
       -- the private key is never available in Perspectives data, only as an object in IndexedDB.
       -- PDRDEPENDENCY
       property PublicKey (String)
+      -- PDRDEPENDENCY
+      property TransportPublicKey (String)
 
   user Addressable
     property Street (String)
@@ -153,6 +155,14 @@ domain model://perspectives.domains#System@6.3
     property EmailAddress (Email)
     property Phone (String)
       -- pattern = "^(\\+|00)?[0-9]{1,3}[-. ]?[0-9]{1,4}[-. ]?[0-9]{1,4}[-. ]?[0-9]{1,9}$"
+
+  ----------------------------------
+  ---- ROLEWITHFILTER
+  ---- This role should be used as an aspect role for roles to be presented with the `typeaheadfiller` widget, so that the widget can filter the presented options based on the value of FilterValue.
+  ----------------------------------
+  -- PDRDEPENDENCY
+  thing RoleWithFilter
+    property FilterValue (String)
 
   -- TheWorld is shared by everyone. It is identified by def:#TheWorld.
   case TheWorld
@@ -170,19 +180,17 @@ domain model://perspectives.domains#System@6.3
       -- We don't want to hand out keys to users as seen by public users.
       -- PDRDEPENDENCY (actually, a MyContexts dependency)
       property SharedFileServerKey (String)
-      state NoKey = (not PerspectivesUsers$HasKey) and (exists me >> SharedFileServerKey) and (not (callExternal util:BottomIdentifier() returns String matches regexp "^pub:.*"))
+      state NoKey = (not HasKey) and (exists me >> SharedFileServerKey) and (not (callExternal util:BottomIdentifier() returns String matches regexp "^pub:.*"))
         on entry
           do for Initializer
             SharedFileServerKey = callExternal util:GetSharedFileServerKey( me >> SharedFileServerKey ) returns String
-            PerspectivesUsers$HasKey = true
-      -- OBSOLETE. This property is obsolete from version 3.1.3 onwards. It is replaced by UserWithHasKey$HasKey in the upgrade code of that version. We keep it for a while to avoid breaking the PDR upgrade code, but we don't use it anymore.
-      property HasKey (Boolean)
+            HasKey = true
 
       perspective on PerspectivesUsers
         -- As this perspective is selfonly, it doesn't cause synchronization with peers.
         -- In other words: a PerspectivesUsers instance cannot see other PerspectivesUsers instances.
         selfonly
-        props (SharedFileServerKey, PerspectivesUsers$HasKey) verbs (Consult)
+        props (SharedFileServerKey, HasKey) verbs (Consult)
     
     user NonPerspectivesUsers (relational)
       aspect sys:Identifiable
@@ -198,7 +206,7 @@ domain model://perspectives.domains#System@6.3
     user Initializer = me
       perspective on PerspectivesUsers
         only (Create)
-        props (Identifiable$PublicKey, SharedFileServerKey, PerspectivesUsers$HasKey) verbs (SetPropertyValue, AddPropertyValue)
+        props (Identifiable$PublicKey, Identifiable$TransportPublicKey, SharedFileServerKey, HasKey) verbs (SetPropertyValue, AddPropertyValue)
       -- Legacy: this perspective was necessary because Initializer created the Persons instance on installation of the PDR.
       perspective on sys:MySocialEnvironment >> Persons
         only (Create, Fill)
@@ -220,6 +228,13 @@ domain model://perspectives.domains#System@6.3
 
     -- PDRDEPENDENCY
     user Persons (relational, unlinked) filledBy (PerspectivesUsers, NonPerspectivesUsers)
+      aspect sys:RoleWithFilter
+      -- We need to be able to filter Persons by LastName for the typeaheadfiller widget.
+      -- NOTE: when LastName changes, FilterValue will not follow automatically.
+      state HasLastName = exists LastName
+        on entry
+          do for Me
+            FilterValue = LastName
       -- perspective on Me
       --   props (Cancelled, LastName, FirstName, PublicKey) verbs (Consult)
       state Unfilled = not exists binding
@@ -236,19 +251,19 @@ domain model://perspectives.domains#System@6.3
             create file ("identity_of_" + context >> Me >> LastName + ".json") as "text/json" in MyIdentity
               text
       perspective on Me
-        props (Cancelled, LastName, FirstName, PublicKey) verbs (Consult, SetPropertyValue)
+        props (Cancelled, LastName, FirstName, PublicKey, TransportPublicKey) verbs (Consult, SetPropertyValue)
         action Cancel
           Cancelled = true
       perspective on Persons
         only (Create, Fill)
         props (FirstName, LastName) verbs (Consult)
-        props (Cancelled) verbs (Consult, SetPropertyValue)
+        props (Cancelled, FilterValue) verbs (Consult, SetPropertyValue)
       perspective on OtherPersons
         only (Create, Fill)
         props (FirstName, LastName) verbs (Consult, SetPropertyValue)
       perspective on Peers
         props (FirstName, LastName) verbs (Consult)
-        props (Cancelled) verbs (Consult, SetPropertyValue)
+        props (Cancelled, TransportPublicKey) verbs (Consult, SetPropertyValue)
       perspective on sys:TheWorld >> Onlookers
         only (Create, Remove)
         props (FirstName, LastName) verbs (Consult, SetPropertyValue)
@@ -314,7 +329,7 @@ domain model://perspectives.domains#System@6.3
       -- that previously was filled by a NonPerspectivesUsers instance.
       perspective on sys:TheWorld >> PerspectivesUsers
         props (FirstName, LastName) verbs (Consult)
-        props (Cancelled) verbs (SetPropertyValue)
+        props (Cancelled, TransportPublicKey) verbs (SetPropertyValue, Consult)
   
   -- PDRDEPENDENCY
   case PerspectivesSystem
@@ -392,6 +407,8 @@ domain model://perspectives.domains#System@6.3
     -- TODO. WHAT ABOUT SOCIALENVIRONMENT$ME?
     user User (mandatory) filledBy (Persons + PerspectivesUsers)
       aspect sys:ContextWithNotification$NotifiedUser
+      -- Credentials are used here to specify an optional remote store for the user's data. If the user has no credentials, the local store is used.
+      aspect sys:WithCredentials
 
       -- PDRDEPENDENCY
       property Channel = (binder Initiator union binder ConnectedPartner) >> context >> extern >> ChannelDatabaseName
@@ -400,14 +417,24 @@ domain model://perspectives.domains#System@6.3
       -- PDRDEPENDENCY
       property Id (String)
       -- property Id = callExternal util:RoleIdentifier() returns String
+      -- PDRDEPENDENCY
+      property BackupAutomatically (Boolean)
+      -- Whether data are stored in IndexedDB or on a remote CouchDB server.
+      property StoreDataRemotely (Boolean)
 
       -- PDRDEPENDENCY
       indexed sys:Me
       view VolledigeNaam (FirstName, LastName)
       perspective on User
         only (Create, Fill)
-        props (LastName, FirstName, PublicKey) verbs (SetPropertyValue)
-        props (Channel) verbs (Consult)
+        props (LastName, FirstName, PublicKey, SpecificUserName, Password, AuthorizedDomain, BackupAutomatically, StoreDataRemotely) verbs (SetPropertyValue)
+        props (Channel, UserName, SpecificUserName, Password, AuthorizedDomain, BackupAutomatically, StoreDataRemotely) verbs (Consult)
+        action MoveDataToRemote
+          callEffect cdb:MoveDataToRemote( AuthorizedDomain, UserName, Password )
+          StoreDataRemotely = true
+        action MoveDataToLocal
+          callEffect cdb:MoveDataToLocal( )
+          StoreDataRemotely = false
       perspective on StartContexts
         props (Name) verbs (Consult)
       perspective on PinnedContexts
@@ -435,19 +462,21 @@ domain model://perspectives.domains#System@6.3
       -- Notice that these roles are filled with the public version of VersionedModelManifest$External.
       -- We can actually only show properties that are in that perspective.
       perspective on ModelsInUse
-        only (Create, CreateAndFill, Fill, RemoveFiller)
+        only (Create, CreateAndFill, Fill, RemoveFiller, Remove)
         props (ModelName, Description, Version, Patch, Build, ShouldNotBeRemoved) verbs (Consult)
         props (InstalledPatch, InstalledBuild, UpdateOnBuild, DetachedFiller) verbs (SetPropertyValue)
         in object state Filled
           action Detach
             DetachedFiller = binding >> callExternal util:RoleIdentifier() returns String
-            unbind_ origin >> binding from origin
+            remove filler of origin
         in object state UnFilled
           action Reattach
             bind_ (roleinstance (sys:VersionedModelManifest$External) DetachedFiller) to origin
         in object state CanBeRemoved
-          all roleverbs
+          only (Remove)
           props (ModelName, Description, Version, Patch, Build, ShouldNotBeRemoved) verbs (Consult)
+          action UnInstall
+            remove role origin
 
       perspective on ModelsToUpdate
         props (ModelName, Description, Version) verbs (Consult)
@@ -510,21 +539,52 @@ domain model://perspectives.domains#System@6.3
             detail
               props (FirstName, LastName) verbs (Consult)
         what
-          row 
-            markdown <### Perspectives system
-                      This is the Perspectives system, representing your installation.
+          tab "General"
+            row 
+              markdown <### Perspectives system
+                        This is the Perspectives system, representing your installation.
 
-                      * Create and accept invitations to connect with other users.
-                      * Go to an App store to install a new App.
-                      * On the left, under **Who** you see your contacts.
-                      >
-          row  
-            form External
-              without props (ShowLibraries, CurrentLanguage, PreviousLanguage, MaxHistoryLength)
-          row
-            form RecoveryPoint
-          row 
-            form GlobalUpgradeHook
+                        * Create and accept invitations to connect with other users.
+                        * Go to an App store to install a new App.
+                        * To remove an App, remove the role instance from ModelsInUse.
+                        * On the left, under **Who** you see your contacts.
+                        >
+            row  
+              form External
+                without props (ShowLibraries, CurrentLanguage, PreviousLanguage, MaxHistoryLength)
+            row
+              form RecoveryPoint
+            row 
+              form GlobalUpgradeHook
+          tab "Data storage"
+            when User >> StoreDataRemotely
+              row
+                markdown <### Remote data storage
+                          You have chosen to store your data on a remote server.
+                          If you want to store your data on your own device, use the action in the toolbar.
+                          >
+            row 
+            when not User >> StoreDataRemotely
+              row
+                markdown <### Local data storage
+                          You have chosen to store your data on your own device.
+                          If you want to store your data on a remote server, use the action in the toolbar.
+                          >
+            row -- zonder deze lege rij wordt de volgende expressie onder de vorige geschaard, maar zonder conditie.
+            row
+              markdown <### Where do you want to store your data?
+                        You can store your data on your own device, or on a server that you control.
+                        If you want to store your data on a server, you need to provide the credentials for that server.
+                        >
+              form User
+                with props (AuthorizedDomain, SpecificUserName, Password)
+            when (exists User >> AuthorizedDomain) and (exists User >> Password)
+              row 
+                markdown <### Automatic remote backup
+                          you can enable automatic remote backup. Data will be backed up to the server you specified in the previous form.
+                          >
+                form User
+                  with props (BackupAutomatically)
         where
           OutgoingInvitations
             master
@@ -535,7 +595,8 @@ domain model://perspectives.domains#System@6.3
             detail
           ModelsInUse
             master
-              without props (ModelName, Description, Version, Patch, Build, InstalledPatch, InstalledBuild, UpdateOnBuild, DetachedFiller, ShouldNotBeRemoved)
+              with props (VersionName)
+              no roleverbs
             detail
               without props (DetachedFiller, ShouldNotBeRemoved)
           ModelsToUpdate
@@ -645,9 +706,10 @@ domain model://perspectives.domains#System@6.3
         -- notify User
         --   "Model {ModelToRemove} has been removed completely."
         do for User
+          -- This will remove the model root context. In its on exit, we clean up the instance of IndexedContexts and StartContexts that were created for this model. It will also remove the model from the local store.
           callDestructiveEffect cdb:RemoveModelFromLocalStore ( ModelToRemove )
     
-    context ModelsToUpdate = filter ModelsInUse with isInState InstallUpdate or isInState InstallBuild
+    thing ModelsToUpdate = (filter ModelsInUse with isInState InstallUpdate or isInState InstallBuild)
 
     -- context ModelsToUpdate = filter ModelsInUse with 
     --   -- Compare the Patch part of the Semantic Versioning string (the least or rightmost part).
@@ -657,7 +719,7 @@ domain model://perspectives.domains#System@6.3
 
     -- All context types that have been declared to be 'indexed' have an instance that fills this role.
     -- PDRDEPENDENCY
-    context IndexedContexts (mandatory) filledBy sys:RootContext
+    context IndexedContexts (mandatory, relational) filledBy sys:RootContext
       -- PDRDEPENDENCY
       property Name (mandatory, String)
         readableName
@@ -684,7 +746,7 @@ domain model://perspectives.domains#System@6.3
         -- By default, if a StartContext has no value for IsSystemModel, that is interpreted as false.
         -- Hence `not IsSystemModel` will be true. In other words, by default all StartContexts are shown,
         -- irrespective of the value of ShowSystemApps.
-        filter StartContexts with ((not IsSystemModel) or showsystemapps)
+        (filter StartContexts with ((not IsSystemModel) or showsystemapps)) >> binding
 
     context PendingInvitations = callExternal cdb:PendingInvitations() returns sys:Invitation$External
 
@@ -695,9 +757,9 @@ domain model://perspectives.domains#System@6.3
       property Identifier (mandatory, String)
 
     -- A calculated role representing all available Notifications (from any context).
-    context AllNotifications = callExternal cdb:RoleInstances( "model://perspectives.domains#System$ContextWithNotification$Notifications" ) returns sys:ContextWithNotification$Notifications
+    thing AllNotifications = (callExternal cdb:RoleInstances( "model://perspectives.domains#System$ContextWithNotification$Notifications" ) returns sys:ContextWithNotification$Notifications)
 
-    context AllSettings = callExternal cdb:RoleInstances( "model://perspectives.domains#System$ContextWithSettings$External" ) returns sys:ContextWithSettings$External
+    context AllSettings = (callExternal cdb:RoleInstances( "model://perspectives.domains#System$ContextWithSettings$External" ) returns sys:ContextWithSettings$External)
 
     -- PDRDEPENDENCY
     context PinnedContexts (relational)
@@ -895,7 +957,8 @@ domain model://perspectives.domains#System@6.3
       property IWantToInviteAnUnconnectedUser (Boolean)
       property CorrectCodeEntered = ConfirmationCode == EnteredCode
       state Message = exists Message
-      state CreateInvitation = exists ConfirmationCode
+      -- Without a last name, the Inviter will not be serialised completely.
+      state CreateInvitation = (exists ConfirmationCode) and (exists context >> Inviter >> LastName)
         on entry
           do for Inviter
             letA

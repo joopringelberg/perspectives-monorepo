@@ -1,2 +1,0 @@
-TO PRODUCE A DISTRIBUTION
-pulp --psc-package browserify --standalone perspectives-core --to perspectives-core.js

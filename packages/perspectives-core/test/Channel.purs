@@ -42,7 +42,7 @@ theSuite = suite "Perspectives.Sync.Channel" do
     getter <- getPropertyFunction "model:System$PerspectivesSystem$User$Channel"
     me <- getUserIdentifier
     mdbname <- (RoleInstance me) ##> getter
-    lift $ logShow mdbname
+    logShow mdbname
     liftAff $ assert "We should be able to calculate the value of the Channel property for `me`" (isJust mdbname)
     case mdbname of
       Nothing -> pure unit
@@ -61,7 +61,7 @@ theSuite = suite "Perspectives.Sync.Channel" do
 
     getter <- getPropertyFunction "model:System$PerspectivesSystem$User$Channel"
     mdbname <- RoleInstance "model:User$joop$User" ##> getter
-    lift $ logShow mdbname
+    logShow mdbname
 
     liftAff $ assert "We should be able to calculate the value of the Channel property for `model:User$joop$User`" (isJust mdbname)
 
@@ -94,7 +94,7 @@ theSuite = suite "Perspectives.Sync.Channel" do
     createDatabase "post"
     user <- getPerspectivesUser
     localReplication url "channel" "post" (Just $ unwrap user)
-    t <- liftAff $ createTransaction (ENR $ EnumeratedRoleType "model:System$PerspectivesSystem$User")
+    t <- liftAff $ createTransaction (ENR $ EnumeratedRoleType "model:System$PerspectivesSystem$User") false
     void $ addDocument "channel" t "emptyTransaction"
 
     -- Wait a bit
@@ -133,7 +133,7 @@ theSuite = suite "Perspectives.Sync.Channel" do
         case mchannel of
           Nothing -> pure unit
           Just (Value channelId) -> do
-            t <- liftAff $ createTransaction (ENR $ EnumeratedRoleType "model:System$PerspectivesSystem$User")
+            t <- liftAff $ createTransaction (ENR $ EnumeratedRoleType "model:System$PerspectivesSystem$User") false
             void $ addDocument channelId t "emptyTransaction"
             -- Wait a bit
             liftAff $ delay (Milliseconds 5000.0)

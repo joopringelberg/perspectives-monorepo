@@ -35,9 +35,13 @@ import Perspectives.Parsing.Arc.Expression.AST (Step, VarBinding)
 import Perspectives.Parsing.Arc.Position (ArcPosition)
 import Perspectives.Utilities (class PrettyPrint, prettyPrint')
 
-data Statements = Let LetStep | Statements (Array Assignment)
+type StatementStage = Array Assignment
 
-newtype LetStep = LetStep { start :: ArcPosition, end :: ArcPosition, bindings :: Array LetABinding, assignments :: Array Assignment }
+type StatementPlan = Array StatementStage
+
+data Statements = Let LetStep | Statements StatementStage
+
+newtype LetStep = LetStep { start :: ArcPosition, end :: ArcPosition, bindings :: Array LetABinding, stages :: StatementPlan }
 
 data LetABinding = Expr VarBinding | Stat String Assignment
 
@@ -58,15 +62,20 @@ data Assignment
   | Move (WithTextRange (roleExpression :: Step, contextExpression :: Maybe Step))
   | Bind (WithTextRange (bindingExpression :: Step, roleIdentifier :: String, contextExpression :: Maybe Step))
   | Bind_ (WithTextRange (bindingExpression :: Step, binderExpression :: Step))
-  -- TODO: Maybe String voor roleIdentifier. Pas de parser aan.
-  | Unbind (WithTextRange (bindingExpression :: Step, roleIdentifier :: Maybe String))
-  | Unbind_ (WithTextRange (bindingExpression :: Step, binderExpression :: Step))
+  | RemoveAsFillerOfType (WithTextRange (roleIdentifier :: String, fillerExpression :: Step))
+  | RemoveAsFiller (WithTextRange (fillerExpression :: Step))
+  | RemoveFiller (WithTextRange (filledExpression :: Step))
+  | RemoveFillerWith (WithTextRange (fillerExpression :: Step, filledExpression :: Step))
   | DeleteRole (WithTextRange (roleIdentifier :: String, contextExpression :: Maybe Step))
   | DeleteContext (WithTextRange (contextRoleIdentifier :: String, contextExpression :: Maybe Step))
   | DeleteProperty (WithTextRange (propertyIdentifier :: String, roleExpression :: Maybe Step))
   | PropertyAssignment (WithTextRange (propertyIdentifier :: String, operator :: AssignmentOperator, valueExpression :: Step, roleExpression :: Maybe Step))
   | ExternalEffect (WithTextRange (effectName :: String, arguments :: (Array Step)))
   | ExternalDestructiveEffect (WithTextRange (effectName :: String, arguments :: (Array Step)))
+  -- | runContextAction <ArcIdentifier> for <userRoleIdentifier> in <contextExpression>
+  | RunContextAction (WithTextRange (actionIdentifier :: String, userRoleIdentifier :: String, contextExpression :: Step))
+  -- | runRoleAction <ArcIdentifier> for <userRoleIdentifier> on <objectExpression> in <contextExpression>
+  | RunRoleAction (WithTextRange (actionIdentifier :: String, userRoleIdentifier :: String, objectExpression :: Step, contextExpression :: Step))
 
 startOfAssignment :: Assignment -> ArcPosition
 startOfAssignment (RemoveRole { start }) = start
@@ -78,14 +87,18 @@ startOfAssignment (CreateFile { start }) = start
 startOfAssignment (Move { start }) = start
 startOfAssignment (Bind { start }) = start
 startOfAssignment (Bind_ { start }) = start
-startOfAssignment (Unbind { start }) = start
-startOfAssignment (Unbind_ { start }) = start
+startOfAssignment (RemoveAsFillerOfType { start }) = start
+startOfAssignment (RemoveAsFiller { start }) = start
+startOfAssignment (RemoveFiller { start }) = start
+startOfAssignment (RemoveFillerWith { start }) = start
 startOfAssignment (DeleteRole { start }) = start
 startOfAssignment (DeleteContext { start }) = start
 startOfAssignment (DeleteProperty { start }) = start
 startOfAssignment (PropertyAssignment { start }) = start
 startOfAssignment (ExternalEffect { start }) = start
 startOfAssignment (ExternalDestructiveEffect { start }) = start
+startOfAssignment (RunContextAction { start }) = start
+startOfAssignment (RunRoleAction { start }) = start
 
 endOfAssignment :: Assignment -> ArcPosition
 endOfAssignment (RemoveRole { end }) = end
@@ -97,14 +110,18 @@ endOfAssignment (CreateFile { end }) = end
 endOfAssignment (Move { end }) = end
 endOfAssignment (Bind { end }) = end
 endOfAssignment (Bind_ { end }) = end
-endOfAssignment (Unbind { end }) = end
-endOfAssignment (Unbind_ { end }) = end
+endOfAssignment (RemoveAsFillerOfType { end }) = end
+endOfAssignment (RemoveAsFiller { end }) = end
+endOfAssignment (RemoveFiller { end }) = end
+endOfAssignment (RemoveFillerWith { end }) = end
 endOfAssignment (DeleteRole { end }) = end
 endOfAssignment (DeleteContext { end }) = end
 endOfAssignment (DeleteProperty { end }) = end
 endOfAssignment (PropertyAssignment { end }) = end
 endOfAssignment (ExternalEffect { end }) = end
 endOfAssignment (ExternalDestructiveEffect { end }) = end
+endOfAssignment (RunContextAction { end }) = end
+endOfAssignment (RunRoleAction { end }) = end
 
 derive instance genericStatements :: Generic Statements _
 instance showStatements :: Show Statements where
@@ -122,7 +139,9 @@ instance eqLetStep :: Eq LetStep where
 
 derive instance ordLetStap :: Ord LetStep
 instance prettyPrintLetStep :: PrettyPrint LetStep where
-  prettyPrint' t (LetStep { bindings, assignments }) = "LetStep\n" <> intercalate (t <> "\n") (prettyPrint' (t <> "  ") <$> bindings) <> "\n" <> t <> "in\n" <> intercalate (t <> "\n") (prettyPrint' (t <> "  ") <$> assignments)
+  prettyPrint' t (LetStep { bindings, stages }) = "LetStep\n" <> intercalate (t <> "\n") (prettyPrint' (t <> "  ") <$> bindings) <> "\n" <> t <> "in\n" <> intercalate ("\n" <> t <> "once settled\n") (prettyPrintStage <$> stages)
+    where
+    prettyPrintStage assignments = intercalate (t <> "\n") (prettyPrint' (t <> "  ") <$> assignments)
 
 derive instance genericLetABinding :: Generic LetABinding _
 instance showLetABinding :: Show LetABinding where
@@ -161,14 +180,18 @@ instance prettyPrintAssignment :: PrettyPrint Assignment where
   prettyPrint' t (Move { roleExpression, contextExpression }) = "Move " <> prettyPrint' t roleExpression <> "\n" <> t <> prettyPrint' (t <> "  ") contextExpression
   prettyPrint' t (Bind { bindingExpression, contextExpression }) = "Bind " <> prettyPrint' t bindingExpression <> "\n" <> t <> prettyPrint' (t <> "  ") contextExpression
   prettyPrint' t (Bind_ { bindingExpression, binderExpression }) = "Bind_ " <> prettyPrint' t bindingExpression <> "\n" <> t <> prettyPrint' (t <> "  ") binderExpression
-  prettyPrint' t (Unbind { bindingExpression, roleIdentifier }) = "Unbind " <> prettyPrint' t bindingExpression <> "\n" <> t <> show roleIdentifier
-  prettyPrint' t (Unbind_ { bindingExpression, binderExpression }) = "Unbind_ " <> prettyPrint' t bindingExpression <> "\n" <> t <> prettyPrint' (t <> "  ") binderExpression
+  prettyPrint' t (RemoveAsFillerOfType { roleIdentifier, fillerExpression }) = "RemoveAsFillerOfType " <> roleIdentifier <> " " <> prettyPrint' t fillerExpression
+  prettyPrint' t (RemoveAsFiller { fillerExpression }) = "RemoveAsFiller " <> prettyPrint' t fillerExpression
+  prettyPrint' t (RemoveFiller { filledExpression }) = "RemoveFiller " <> prettyPrint' t filledExpression
+  prettyPrint' t (RemoveFillerWith { fillerExpression, filledExpression }) = "RemoveFillerWith " <> prettyPrint' t fillerExpression <> "\n" <> t <> prettyPrint' (t <> "  ") filledExpression
   prettyPrint' t (DeleteRole { roleIdentifier, contextExpression }) = "DeleteRole " <> roleIdentifier <> " " <> prettyPrint' t contextExpression
   prettyPrint' t (DeleteContext { contextRoleIdentifier, contextExpression }) = "DeleteContext " <> contextRoleIdentifier <> " " <> prettyPrint' t contextExpression
   prettyPrint' t (DeleteProperty { propertyIdentifier, roleExpression }) = "DeleteProperty " <> propertyIdentifier <> " " <> prettyPrint' t roleExpression
   prettyPrint' t (PropertyAssignment { propertyIdentifier, operator, valueExpression, roleExpression }) = "PropertyAssignment " <> propertyIdentifier <> " " <> prettyPrint' t operator <> " " <> "\n" <> t <> prettyPrint' (t <> "  ") valueExpression <> "\n" <> t <> prettyPrint' (t <> "  ") roleExpression
   prettyPrint' t (ExternalEffect { arguments }) = "ExternalEffect\n" <> intercalate ("\n" <> t) (prettyPrint' (t <> "  ") <$> arguments)
   prettyPrint' t (ExternalDestructiveEffect { arguments }) = "ExternalDestructiveEffect\n" <> intercalate ("\n" <> t) (prettyPrint' (t <> "  ") <$> arguments)
+  prettyPrint' t (RunContextAction { actionIdentifier, userRoleIdentifier, contextExpression }) = "RunContextAction " <> actionIdentifier <> " for " <> userRoleIdentifier <> " in " <> prettyPrint' t contextExpression
+  prettyPrint' t (RunRoleAction { actionIdentifier, userRoleIdentifier, objectExpression, contextExpression }) = "RunRoleAction " <> actionIdentifier <> " for " <> userRoleIdentifier <> " on " <> prettyPrint' t objectExpression <> " in " <> prettyPrint' t contextExpression
 
 derive instance genericAssignmentOperator :: Generic AssignmentOperator _
 instance showAssignmentOperator :: Show AssignmentOperator where

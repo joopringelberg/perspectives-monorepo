@@ -21,6 +21,26 @@ pnpm exec spago test --main Test.Main
 
 ---
 
+## Broker-service lifecycle tests
+
+Run `pnpm run test:brokerServiceSignup` with `perspectives.domains` served locally.
+The suite restores fresh Alice and Bob PDRs for each termination scenario:
+Bob's `EndSubscription`, and Alice's `Test_Leader_Terminates_Contract`.
+Before Bob signs up, setup gives Alice temporary RabbitMQ administrator credentials
+and signs her up to her own managed service using the normal `SignUp` action.
+Setup waits for her RabbitMQ user and an active consumer on her queue. Her
+subscription stays active throughout Bob's teardown; its RabbitMQ user and queue
+are cleaned up when the scenario exits, including on failure.
+Both scenarios then sign Bob up and create his CouchDB account. The latter runs
+and polls `TestSucceeded` on Alice, because Bob's transport is intentionally
+dismantled during termination. Both check Alice's contract removal and RabbitMQ
+user/queue deletion independently of the model's success property.
+
+`pnpm run test:amqp` retains the generic Bob-polled synchronisation tests; it no
+longer owns broker-contract termination.
+
+---
+
 ## Node.js-compatible PouchDB
 
 The production build uses `pouchdb-browser` (backed by IndexedDB), which does **not**
@@ -116,4 +136,3 @@ var PouchDB = require('pouchdb');
 
 For new test code, prefer `persistenceAPI.node.js` (which handles PouchDB switching
 correctly) and use token-based CouchDB authentication instead of cookies.
-

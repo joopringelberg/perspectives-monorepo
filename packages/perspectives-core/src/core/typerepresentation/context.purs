@@ -29,7 +29,6 @@ import Data.Show.Generic (genericShow)
 import Foreign (unsafeToForeign)
 import Foreign.Object (Object, empty)
 import Perspectives.Couchdb.Revision (class Revision, Revision_)
-import Perspectives.InvertedQuery (InvertedQuery)
 import Perspectives.Parsing.Arc.Position (ArcPosition)
 import Perspectives.Persistent.PublicStore (PublicStore)
 import Perspectives.Representation.Class.EnumReadForeign (enumReadForeign)
@@ -47,6 +46,7 @@ newtype Context = Context ContextRecord
 type ContextRecord =
   { id :: ContextType
   , _rev :: Revision_
+  , typeVersion :: Maybe String
   , displayName :: String
   , readableName :: ContextType
   , kindOfContext :: ContextKind
@@ -66,9 +66,13 @@ type ContextRecord =
 
   , indexedContext :: Maybe ContextInstance
 
-  , roleInvertedQueries :: Object (Array InvertedQuery) -- OBSOLETE!
-
-  -- Keys are role type names.
+  -- Type-level alias map for a ContextType.
+  -- A role can be visible under more than one name when its aspect closure is considered.
+  -- (in other words, a role can have multiple types).
+  -- This map records the aliasing used by the model, so `rolInContext` can be looked up by
+  -- either the concrete role name or one of its aspect types. In `ContextAndRole`, we do:
+  --   lookup rn roleAliases
+  -- then continue with the canonical role key stored in `rolInContext`.
   , roleAliases :: Object (EnumeratedRoleType)
 
   , pos :: ArcPosition
@@ -88,6 +92,7 @@ defaultContext :: String -> String -> ContextKind -> Maybe String -> ArcPosition
 defaultContext id dname kind context pos public = Context
   { id: (ContextType id)
   , _rev: Nothing
+  , typeVersion: Nothing
   , displayName: dname
   , readableName: ContextType id
   , kindOfContext: kind
@@ -106,8 +111,6 @@ defaultContext id dname kind context pos public = Context
   , pos: pos
 
   , indexedContext: Nothing
-
-  , roleInvertedQueries: empty
 
   , roleAliases: empty
   }

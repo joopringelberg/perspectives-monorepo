@@ -23,6 +23,7 @@
 module Perspectives.Representation.View where
 
 import Data.Generic.Rep (class Generic)
+import Data.Maybe (Maybe)
 import Data.Newtype (class Newtype, over, unwrap)
 import Data.Show.Generic (genericShow)
 import Perspectives.Couchdb.Revision (class Revision, Revision_)
@@ -51,6 +52,7 @@ newtype View = View ViewRecord
 type ViewRecord =
   { id :: ViewType
   , _rev :: Revision_
+  , typeVersion :: Maybe String
   , displayName :: String
   , readableName :: ViewType
 

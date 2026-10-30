@@ -25,3 +25,8 @@ dist-ssr
 
 # Vite
 tsconfig.tsbuildinfo
+.build-meta.json
+public/perspectives-serviceworker.js
+public/perspectives.webmanifest
+public/assets/perspectives-sharedworker.js
+public/assets/perspectives-sharedworker.js.map

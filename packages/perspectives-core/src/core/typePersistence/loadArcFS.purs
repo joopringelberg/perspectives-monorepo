@@ -24,10 +24,12 @@
 module Perspectives.TypePersistence.LoadArc.FS where
 
 import Control.Monad.Error.Class (catchError)
-import Control.Monad.Trans.Class (lift)
+import Effect.Aff.Class (liftAff)
 import Data.Array (delete)
 import Data.Either (Either(..))
 import Data.List (List(..))
+import Data.Maybe (Maybe(..))
+import Data.Newtype (unwrap)
 import Data.Tuple (Tuple(..))
 import Effect.Class (liftEffect)
 import Foreign.Object (empty)
@@ -38,7 +40,8 @@ import Node.Process (cwd)
 import Parsing (ParseError(..))
 import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.DomeinCache (storeDomeinFileInCache, storeDomeinFileInCouchdb)
-import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, defaultDomeinFileRecord)
+import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, defaultDomeinFileRecord, stampDomeinFileTypeVersion)
+import Perspectives.Identifiers (modelUriVersion)
 import Perspectives.InvertedQuery.Storable (StoredQueries)
 import Perspectives.Parsing.Arc (domain)
 import Perspectives.Parsing.Arc.AST (ContextE)
@@ -72,13 +75,13 @@ type FilePath = String
 loadAndCompileArcFile_ :: FilePath -> MonadPerspectives (Either MultiplePerspectivesErrors (Tuple (DomeinFile Readable) StoredQueries))
 loadAndCompileArcFile_ filePath = catchError
   do
-    text <- lift $ readTextFile UTF8 filePath
-    (r :: Either ParseError ContextE) <- {-pure $ unwrap $-}  lift $ runIndentParser text domain
+    text <- liftAff $ readTextFile UTF8 filePath
+    (r :: Either ParseError ContextE) <- {-pure $ unwrap $-}  liftAff $ runIndentParser text domain
     case r of
       (Left e) -> pure $ Left [ parseError2PerspectivesError e ]
       (Right ctxt) -> do
         -- liftEffect $ log ((show ctxt) <> "\n\n\n")
-        (Tuple result state :: Tuple (Either MultiplePerspectivesErrors (DomeinFile Readable)) PhaseTwoState) <- {-pure $ unwrap $-}  lift $ runPhaseTwo_' (traverseDomain ctxt) defaultDomeinFileRecord empty empty Nil
+        (Tuple result state :: Tuple (Either MultiplePerspectivesErrors (DomeinFile Readable)) PhaseTwoState) <- {-pure $ unwrap $-}  liftAff $ runPhaseTwo_' (traverseDomain ctxt) defaultDomeinFileRecord empty empty Nil
         case result of
           (Left e) -> pure $ Left e
           (Right (DomeinFile dr'@{ id })) -> do
@@ -95,7 +98,11 @@ loadAndCompileArcFile_ filePath = catchError
                   { referredModels = delete id refModels
                   , arc = text
                   }
-                pure $ Right $ Tuple df invertedQueries
+                let
+                  stampedDf = case modelUriVersion (unwrap id) of
+                    Nothing -> df
+                    Just version -> stampDomeinFileTypeVersion version df
+                pure $ Right $ Tuple stampedDf invertedQueries
   \e -> pure $ Left [ Custom (show e) ]
 
 type Persister = ModelUri Readable -> DomeinFile Readable -> MonadPerspectives MultiplePerspectivesErrors

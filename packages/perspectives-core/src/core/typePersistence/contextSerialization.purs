@@ -43,8 +43,8 @@ import Prelude
 
 import Control.Monad.Reader (runReaderT)
 import Control.Monad.Trans.Class (lift)
-import Data.Array (catMaybes, concat, difference, filter, filterA, head)
-import Data.Maybe (Maybe(..), isJust, maybe)
+import Data.Array (catMaybes, concat, difference, filter, filterA, head, null)
+import Data.Maybe (Maybe(..), fromMaybe, isJust, maybe)
 import Data.Newtype (class Newtype, unwrap)
 import Data.Traversable (traverse)
 import Foreign.Object (values)
@@ -61,16 +61,18 @@ import Perspectives.ModelDependencies (chatAspect)
 import Perspectives.ModelTranslation (translationOf)
 import Perspectives.Names (findIndexedContextName)
 import Perspectives.Query.Interpreter (lift2MPQ)
-import Perspectives.Query.QueryTypes (QueryFunctionDescription)
+import Perspectives.Query.QueryTypes (QueryFunctionDescription(..))
 import Perspectives.Query.UnsafeCompiler (context2propertyValue, getRoleInstances)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..), externalRole)
-import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), TabDef(..), TableDef(..), TableFormDef(..), TableFormOrWhenDef(..), What(..), WhenDef(..), WhenTableFormDef(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..))
-import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedPropertyType(..), EnumeratedRoleType(..), IndexedContext(..), RoleKind(..), RoleType(..), externalRoleType, roletype2string)
+import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), TabDef(..), TableDef(..), TableFormDef(..), TableFormOrWhenDef(..), TypeAheadFillerDef(..), TypeAheadFormDef(..), What(..), WhenDef(..), WhenTableFormDef(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..))
+import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType, EnumeratedPropertyType(..), EnumeratedRoleType(..), IndexedContext(..), RoleKind(..), RoleType(..), externalRoleType, roletype2string)
 import Perspectives.ResourceIdentifiers.Parser (isResourceIdentifier)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.TypePersistence.PerspectiveSerialisation (getReadableName, perspectiveForContextAndUser', perspectiveForContextAndUserFromId, perspectivesForContextAndUser')
 import Perspectives.TypePersistence.PerspectiveSerialisation.Data (SerialisedPerspective', SerialisedProperty)
-import Perspectives.TypePersistence.ScreenContextualisation (contextualiseScreen, contextualiseTableFormDef)
+import Perspectives.TypePersistence.ScreenContextualisation (contextualiseScreen, contextualiseTableFormDef, fetchCandidatesFromQfd, fetchFilterValueCandidates)
+import Perspectives.Representation.Class.Role (perspectivesOfRoleType)
+import Perspectives.Representation.Perspective (Perspective(..))
 import Perspectives.Types.ObjectGetters (contextAspectsClosure, generalisesRoleType_, indexedContextName, string2RoleType)
 import Simple.JSON (writeJSON)
 
@@ -187,15 +189,21 @@ constructDefaultScreen userRoleInstance userRoleType cid title translatedUserRol
   makeTab :: SerialisedPerspective' -> TabDef
   makeTab p@{ displayName, isFunctional } =
     let
+      objectRoleType = objectRoleTypeFromSerialisedPerspective p
       widgetCommonFields =
         { title: Nothing
         , perspective: Just p
         , perspectiveId: ""
+        , objectRoleType: Just objectRoleType
         , propertyRestrictions: Nothing
         , withoutProperties: Nothing
+        , requiredProperties: Nothing
         , roleVerbs: Nothing
         , userRole: userRoleType
         , fillFrom: Nothing
+        , typeAheadFillFrom: Nothing
+        , typeAheadFillFromCandidates: Nothing
+        , fillPropertyFrom: Nothing
         , fieldConstraints: Nothing
         }
       element =
@@ -213,15 +221,21 @@ constructDefaultScreen userRoleInstance userRoleType cid title translatedUserRol
   makeRow :: SerialisedPerspective' -> ScreenElementDef
   makeRow p@{ displayName, isFunctional } =
     let
+      objectRoleType = objectRoleTypeFromSerialisedPerspective p
       widgetCommonFields =
         { title: Nothing
         , perspective: Just p
         , perspectiveId: ""
+        , objectRoleType: Just objectRoleType
         , propertyRestrictions: Nothing
         , withoutProperties: Nothing
+        , requiredProperties: Nothing
         , roleVerbs: Nothing
         , userRole: userRoleType
         , fillFrom: Nothing
+        , typeAheadFillFrom: Nothing
+        , typeAheadFillFromCandidates: Nothing
+        , fillPropertyFrom: Nothing
         , fieldConstraints: Nothing
         }
     in
@@ -246,6 +260,16 @@ isOnContextRole { roleKind } = case roleKind of
   Just ContextRole -> true
   _ -> false
 
+-- | Derive an `objectRoleType` from a `SerialisedPerspective'`.
+-- | Uses `roleType` + `isCalculated` to decide between `CR` and `ENR`; falls back to
+-- | `ENR (EnumeratedRoleType "")` when the serialised perspective has no `roleType`.
+objectRoleTypeFromSerialisedPerspective :: SerialisedPerspective' -> RoleType
+objectRoleTypeFromSerialisedPerspective { roleType: mRoleTypeStr, isCalculated } =
+  case mRoleTypeStr of
+    Just rtStr | isCalculated -> CR (CalculatedRoleType rtStr)
+    Just rtStr -> ENR (EnumeratedRoleType rtStr)
+    Nothing -> ENR (EnumeratedRoleType "")
+
 isChat :: SerialisedPerspective' -> MonadPerspectives Boolean
 isChat { roleType } = case roleType of
   Just r -> string2RoleType r >>= generalisesRoleType_ (ENR $ EnumeratedRoleType chatAspect)
@@ -254,15 +278,21 @@ isChat { roleType } = case roleType of
 makeTableFormDef :: RoleType -> SerialisedPerspective' -> TableFormDef
 makeTableFormDef userRoleType p@{ id, displayName } =
   let
+    objectRoleType = objectRoleTypeFromSerialisedPerspective p
     widgetCommonFields =
       { title: Just displayName
       , perspective: Just p
       , perspectiveId: id
+      , objectRoleType: Just objectRoleType
       , propertyRestrictions: Nothing
       , withoutProperties: Nothing
+      , requiredProperties: Nothing
       , roleVerbs: Nothing
       , userRole: userRoleType
       , fillFrom: Nothing
+      , typeAheadFillFrom: Nothing
+      , typeAheadFillFromCandidates: Nothing
+      , fillPropertyFrom: Nothing
       , fieldConstraints: Nothing
       }
   in
@@ -333,7 +363,10 @@ instance AddPerspectives What where
   addPerspectives (FreeFormScreen { tabs, rows, columns }) user ctxt = do
     tabs' <- case tabs of
       Nothing -> pure Nothing
-      Just t -> Just <$> traverse (\a -> addPerspectives a user ctxt) t
+      Just t -> do
+        populated <- traverse (\a -> addPerspectives a user ctxt) t
+        let visible = filter (\(TabDef { elements }) -> not $ null elements) populated
+        pure $ if null visible then Nothing else Just visible
     rows' <- case rows of
       Nothing -> pure Nothing
       Just t -> Just <$> traverse (\a -> addPerspectives a user ctxt) t
@@ -371,13 +404,15 @@ instance addPerspectivesScreenElementDef :: AddPerspectives ScreenElementDef whe
   addPerspectives (FormElementD re) user ctxt = FormElementD <$> addPerspectives re user ctxt
   addPerspectives (MarkDownElementD re) user ctxt = MarkDownElementD <$> addPerspectives re user ctxt
   addPerspectives (ChatElementD re) user ctxt = ChatElementD <$> addPerspectives re user ctxt
+  addPerspectives (TypeAheadFillerElementD re) user ctxt = TypeAheadFillerElementD <$> addPerspectives re user ctxt
+  addPerspectives (TypeAheadFormElementD re) user ctxt = TypeAheadFormElementD <$> addPerspectives re user ctxt
   addPerspectives (WhenElementD (WhenDef { condition, elements })) user ctxt = do
     elements' <- traverse (\e -> addPerspectives e user ctxt) elements
     pure $ WhenElementD (WhenDef { condition, elements: elements' })
 
 instance addPerspectivesTabDef :: AddPerspectives TabDef where
   addPerspectives (TabDef r) user ctxt = do
-    elements <- traverse (\a -> addPerspectives a user ctxt) r.elements
+    elements <- catMaybes <$> traverse (traverseScreenElement user ctxt) r.elements
     contextType <- lift $ contextType_ ctxt
     (translatedTitle :: String) <- lift (translationOf (unsafePartial typeUri2ModelUri_ $ unwrap contextType) r.title)
     pure $ TabDef { title: translatedTitle, isDefault: r.isDefault, elements }
@@ -401,8 +436,12 @@ instance addPerspectivesTableDef :: AddPerspectives TableDef where
       ctxt
     contextType <- lift $ contextType_ ctxt
     (translatedTitle :: Maybe String) <- lift $ traverse (translationOf (unsafePartial typeUri2ModelUri_ $ unwrap contextType)) widgetCommonFields.title
+    -- Fetch typeahead fillfrom candidates (if any) from the filterValueView.
+    typeAheadFillFromCandidates <- case widgetCommonFields.typeAheadFillFrom of
+      Nothing -> pure Nothing
+      Just rt -> lift $ Just <$> fetchFilterValueCandidates rt ctxt
     markdown' <- traverse (\a -> addPerspectives a user ctxt) markdown
-    pure $ TableDef { markdown: markdown', widgetCommonFields: widgetCommonFields { perspective = Just perspective, title = translatedTitle } }
+    pure $ TableDef { markdown: markdown', widgetCommonFields: widgetCommonFields { perspective = Just perspective, title = translatedTitle, typeAheadFillFromCandidates = typeAheadFillFromCandidates } }
 
 instance addPerspectivesFormDef :: AddPerspectives FormDef where
   addPerspectives (FormDef { markdown, widgetCommonFields }) user ctxt = do
@@ -414,6 +453,39 @@ instance addPerspectivesFormDef :: AddPerspectives FormDef where
     (translatedTitle :: Maybe String) <- lift $ traverse (translationOf (unsafePartial typeUri2ModelUri_ $ unwrap contextType)) widgetCommonFields.title
     markdown' <- traverse (\a -> addPerspectives a user ctxt) markdown
     pure $ FormDef { markdown: markdown', widgetCommonFields: widgetCommonFields { perspective = Just perspective, title = translatedTitle } }
+
+instance AddPerspectives TypeAheadFillerDef where
+  addPerspectives (TypeAheadFillerDef { widgetCommonFields, candidates: _ }) user ctxt = do
+    -- Pass fillFrom = Nothing to avoid loading full role instances into possibleFillers.
+    -- TypeAheadFiller uses the FilterValue view instead, which is more efficient.
+    perspective <- perspectiveForContextAndUserFromId
+      user
+      (widgetCommonFields { fillFrom = Nothing })
+      ctxt
+    contextType <- lift $ contextType_ ctxt
+    (translatedTitle :: Maybe String) <- lift $ traverse (translationOf (unsafePartial typeUri2ModelUri_ $ unwrap contextType)) widgetCommonFields.title
+    candidates <- case widgetCommonFields.fillFrom of
+      Nothing -> pure []
+      Just fillFromQfd -> lift $ fetchCandidatesFromQfd fillFromQfd ctxt
+    pure $ TypeAheadFillerDef { widgetCommonFields: widgetCommonFields { perspective = Just perspective, title = translatedTitle }, candidates }
+
+instance AddPerspectives TypeAheadFormDef where
+  addPerspectives (TypeAheadFormDef { widgetCommonFields, displayName: _, candidates: _ }) user ctxt = do
+    -- Derive candidates directly from the objectRoleType stored in widgetCommonFields.
+    -- We do NOT serialise the full perspective (no role instances sent at build time).
+    -- The React component fetches the perspective on demand after the user selects a
+    -- candidate, so the full instance list never burdens the cache unnecessarily.
+    contextType <- lift $ contextType_ ctxt
+    (translatedTitle :: Maybe String) <- lift $ traverse (translationOf (unsafePartial typeUri2ModelUri_ $ unwrap contextType)) widgetCommonFields.title
+    candidates <- lift $ maybe (pure []) (\rt -> fetchFilterValueCandidates rt ctxt) widgetCommonFields.objectRoleType
+    allPerspectives <- lift $ perspectivesOfRoleType widgetCommonFields.userRole
+    let mCompiledPerspective = head $ filter (\(Perspective { id }) -> id == widgetCommonFields.perspectiveId) allPerspectives
+    displayName <- case mCompiledPerspective of
+      Nothing -> pure $ fromMaybe "" translatedTitle
+      Just (Perspective { roleTypes }) -> case head roleTypes of
+        Nothing -> pure $ fromMaybe "" translatedTitle
+        Just rt -> lift $ translateType rt
+    pure $ TypeAheadFormDef { widgetCommonFields: widgetCommonFields { perspective = Nothing, title = translatedTitle }, displayName: Just displayName, candidates }
 
 instance AddPerspectives MarkDownDef where
   addPerspectives (MarkDownConstantDef r@{ text, domain }) user ctxt = do
@@ -458,7 +530,8 @@ traverseScreenElement user ctxt a = case a of
     case head shouldBeShown of
       Just (Value "true") -> do
         elements' <- catMaybes <$> traverse (traverseScreenElement user ctxt) elements
-        pure $ Just $ WhenElementD (WhenDef { condition, elements: elements' })
+        if null elements' then pure Nothing
+        else pure $ Just $ WhenElementD (WhenDef { condition, elements: elements' })
       _ -> pure Nothing
   (other :: ScreenElementDef) -> Just <$> addPerspectives other user ctxt
 
@@ -475,9 +548,6 @@ traverseScreenElement user ctxt a = case a of
         -- The condition should be strictly true.
         _ -> pure $ Nothing
 
------------------------------------------------------------
--- GET TABLEFORM OBSOLETE!!
------------------------------------------------------------ 
 serialisedTableFormForContextAndUser :: RoleInstance -> RoleType -> ContextType -> RoleType -> (ContextInstance ~~> SerialisedTableForm)
 serialisedTableFormForContextAndUser userRoleInstance userRoleType contextType objectRoleType =
   tableFormForContextAndUser userRoleInstance userRoleType contextType objectRoleType >=> pure <<< SerialisedTableForm <<< writeJSON
@@ -576,11 +646,16 @@ constructDefaultTableForm userRoleInstance userRoleType objectRoleType cid = do
               { title: Nothing
               , perspective: Just perspective
               , perspectiveId: ""
+              , objectRoleType: Just objectRoleType
               , propertyRestrictions: Nothing
               , withoutProperties: Nothing
+              , requiredProperties: Nothing
               , roleVerbs: Nothing
               , userRole: userRoleType
               , fillFrom: Nothing
+              , typeAheadFillFrom: Nothing
+              , typeAheadFillFromCandidates: Nothing
+              , fillPropertyFrom: Nothing
               , fieldConstraints: Nothing
               }
           }
@@ -590,11 +665,16 @@ constructDefaultTableForm userRoleInstance userRoleType objectRoleType cid = do
               { title: Nothing
               , perspective: Just perspective
               , perspectiveId: ""
+              , objectRoleType: Just objectRoleType
               , propertyRestrictions: Nothing
               , withoutProperties: Nothing
+              , requiredProperties: Nothing
               , roleVerbs: Nothing
               , userRole: userRoleType
               , fillFrom: Nothing
+              , typeAheadFillFrom: Nothing
+              , typeAheadFillFromCandidates: Nothing
+              , fillPropertyFrom: Nothing
               , fieldConstraints: Nothing
               }
           }

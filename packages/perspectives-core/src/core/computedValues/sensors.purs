@@ -30,6 +30,7 @@ import Control.Monad.AvarMonadAsk (gets)
 import Control.Monad.Error.Class (try)
 import Control.Monad.Trans.Class (lift)
 import Data.Array (head, singleton)
+import Data.DateTime (date)
 import Data.Map (Map, fromFoldable, lookup)
 import Data.Maybe (Maybe(..))
 import Data.Tuple (Tuple(..))
@@ -45,6 +46,7 @@ import Perspectives.Persistent (entitiesDatabaseName, modelDatabaseName)
 import Perspectives.Representation.InstanceIdentifiers (RoleInstance, Value(..))
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
 import Perspectives.Sync.DateTime (SerializableDateTime(..))
+import Perspectives.Time (date2String)
 import Simple.JSON (write)
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -75,6 +77,7 @@ sensorFunctions = fromFoldable
   , Tuple (Tuple "domaincache" "size") (unsafePartial cacheSize)
   , Tuple (Tuple "querycache" "size") (unsafePartial cacheSize)
   , Tuple (Tuple "clock" "now") (unsafePartial currentDate)
+  , Tuple (Tuple "clock" "today") (unsafePartial currentDate)
   , Tuple (Tuple "entities" "identifier") (unsafePartial \_ _ -> entitiesDatabaseName)
   , Tuple (Tuple "models" "identifier") (unsafePartial \_ _ -> modelDatabaseName)
   ]
@@ -84,6 +87,9 @@ currentDate device sensor = case device, sensor of
   "clock", "now" -> do
     dt <- liftEffect (unsafeCoerce nowDateTime)
     pure $ unsafeCoerce $ write (SerializableDateTime dt)
+  "clock", "today" -> do
+    dt <- liftEffect (unsafeCoerce nowDateTime)
+    pure $ unsafeCoerce $ date2String (date dt)
 
 cacheSize :: Partial => SensorFunction
 cacheSize device sensor = show <$> case device, sensor of

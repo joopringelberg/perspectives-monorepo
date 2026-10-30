@@ -42,6 +42,7 @@ const focusable = -1;
 // 0 means that the element should be focusable and reachable via sequential keyboard navigation,
 // but its relative order is defined by the platform convention;
 const receiveFocusByKeyboard = 0;
+const SELECT_SUPPORTED_CONTROL_TYPES = ["text", "number", "date", "time", "datetime-local", "email"];
 
 // Assumed line height in em units, used for computing max-height of textareas from maxLines.
 const LINE_HEIGHT_EM = 1.5;
@@ -58,6 +59,7 @@ interface SmartFieldControlProps
   contextinstance: ContextInstanceT;
   minLines?: number;
   maxLines?: number;
+  referenceValues?: string[];
 }
 
 interface SmartFieldControlState
@@ -168,6 +170,10 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
     if (controlType == "checkbox")
     {
       return "checkbox";
+    }
+    if (this.referenceValues().length > 0 && SELECT_SUPPORTED_CONTROL_TYPES.indexOf(controlType) >= 0)
+    {
+      return "select";
     }
     if (controlType == "text")
     {
@@ -485,6 +491,21 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
     return this.props.serialisedProperty.constrainingFacets.enumeration || [];
   }
 
+  referenceValues()
+  {
+    return this.props.referenceValues || [];
+  }
+
+  selectableValues()
+  {
+    const facetValues = this.enumeration();
+    if (facetValues.length > 0)
+    {
+      return facetValues;
+    }
+    return this.referenceValues();
+  }
+
   // Returns object of this shape:
   // { regex: string.isRequired
   // , label: string.isRequired}
@@ -566,9 +587,21 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
               tabIndex={component.props.isselected ? receiveFocusByKeyboard : focusable}
               aria-label={ component.state.value }
               readOnly={ component.props.disabled }
-              disabled={ component.props.disabled }
+              onMouseDown={e => {
+                // Keep the parent cell clickable when the field is not editable.
+                // A disabled <select> swallows pointer interaction and prevents
+                // TableCell from receiving the click used to select the cell.
+                if (component.props.disabled)
+                {
+                  e.preventDefault();
+                }
+              }}
               value={ component.state.value }
               onChange={e => {
+                if (component.props.disabled)
+                {
+                  return;
+                }
                 const wasEditing = component.state.hasLocalEdits;
                 const newVal = e.target.value;
                 component.setState({ value: newVal, hasLocalEdits: true });
@@ -581,7 +614,9 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
               required={mandatory}
             >
             {
-              component.enumeration().map( value => <option key={value}>{value}</option>)
+              [<option key="" value="">— select —</option>].concat(
+                component.selectableValues().map( value => <option key={value} value={value}>{value}</option>)
+              )
             }
             </Form.Control>
           </div>);
@@ -640,7 +675,7 @@ export default class SmartFieldControl extends Component<SmartFieldControlProps,
         // for relevant types; its handler restores the previous
         // value both in the DOM and in the PDR.
         showUndo = component.isUndoRelevantType() && component.props.disabled === false;
-        selectedClass = component.props.isselected ? "text-light bg-secondary" : "";
+        selectedClass = component.props.isselected ? "selected-field-active" : "";
         combinedClassName = (selectedClass ? selectedClass + " " : "") + "flex-grow-1";
         handleUndoClick = (e: React.MouseEvent<HTMLButtonElement>) => {
           e.preventDefault();

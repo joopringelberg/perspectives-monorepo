@@ -43,3 +43,8 @@ stats.json
 
 # Ignore transpiler sidecar cache
 /.cache/sidecars/
+
+idb-keyval-store.json
+
+# Ignore PDR snapshots used to speed up test:modelfiles
+/test/pdr-snapshot/

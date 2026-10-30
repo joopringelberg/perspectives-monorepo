@@ -188,6 +188,43 @@ When publishing a standalone version, switch `path:` to `git: + ref:` (commented
 
 ---
 
+## Type comparison guidance (must use existing helpers)
+
+When an issue touches role types, filler restrictions, aspects, subtype/supertype checks, or binding validation, **do not implement custom type-comparison logic**. Reuse the existing type-comparison and normalisation functions documented in:
+
+- `docsources/type-comparison.md`
+
+Prefer these functions (and their direct wrappers in the same modules) over new ad-hoc comparisons:
+
+- `toConjunctiveNormalForm_` / `toConjunctiveNormalForm`
+- `equalsOrSpecialises_`, `specialises_`
+- `equalsOrGeneralises_`, `generalises_`
+- `equals_`
+- Monadic wrappers in `src/core/typerepresentation/typeLevelObjectGetters.purs`:
+  - `equalsOrSpecialisesRoleInContext`
+  - `equalsOrGeneralisesRoleInContext`
+  - `equals`
+  - `generalisesRoleType_`
+  - `specialisesRoleType_`
+  - `equalsOrGeneralisesRoleType_`
+  - `equalsOrSpecialisesRoleType_`
+
+Before adding or changing type checks:
+
+1. Identify whether inputs are `ADT`, `ExpandedADT`, or `CNF`.
+2. Normalise with the existing pipeline instead of creating new conversion logic.
+3. Use the existing predicates with the documented direction semantics (`left -> right` means "left specialises right").
+
+### Issue keywords (signal words)
+
+If a future issue should explicitly signal that this guidance applies, include one or more of these keywords in the issue text:
+
+- `TYPE-COMPARISON`
+- `TYPE-LATTICE`
+- `CNF-NORMALISATION`
+
+---
+
 ## Common Pitfalls
 
 1. **Never edit `output/`** — this is spago's generated output, overwritten on every build.
@@ -196,3 +233,9 @@ When publishing a standalone version, switch `path:` to `git: + ref:` (commented
 4. **`DeltaStoreRecord` is in `deltaStoreTypes.purs`**, not `deltaStore.purs`, to avoid circular imports with `coreTypes.purs`.
 5. **Inverted queries** must be re-indexed whenever query structure changes. Phase 3 of the ARC parser handles this.
 6. **`populateScreen` must call `contextualiseScreen`** (not `addPerspectives`) for screens with `when` conditions; otherwise `WhenTableFormItemDef` wrappers survive to serialisation as `{ tag: "WhenTableFormDef" }`.
+
+## Documentation language
+The codebase is documented in English, and all comments and documentation should be written in English to maintain consistency and accessibility for the global developer community.
+
+## ARC model semantics
+For tasks involving ARC model syntax or behavior—including parser, query, perspective, state, or transaction debugging—consult the detailed reference in [`.github/instructions/arc-language.instructions.md`](arc-language.instructions.md). The reference summarizes model semantics; confirm implementation-sensitive behavior in the cited parser/runtime sources and `docsources`.

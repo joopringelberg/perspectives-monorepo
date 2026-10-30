@@ -6,7 +6,6 @@ import Control.Monad.Free (Free)
 import Data.Array (length)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..), isJust, isNothing)
-import Effect.Class.Console (log, logShow)
 import Parsing (ParseError(..))
 import Partial.Unsafe (unsafePartial)
 import Perspectives.Parsing.Arc.Expression (computationStep, operator, simpleStep, step, unaryStep)
@@ -16,36 +15,63 @@ import Perspectives.Parsing.Arc.Position (ArcPosition(..))
 import Perspectives.Parsing.Arc.Statement (assignment, roleAssignment)
 import Perspectives.Parsing.Arc.Statement.AST (Assignment(..)) as PAS
 import Perspectives.Parsing.Arc.Statement.AST (Assignment(..), AssignmentOperator(..))
-import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
+import Perspectives.Representation.InstanceIdentifiers (RoleInstance(..))
+import Perspectives.Representation.QueryFunction (FunctionName(..))
+import Perspectives.Representation.QueryFunction (QueryFunction(..)) as QF
 import Perspectives.Representation.Range (Range(..))
-import Perspectives.Utilities (prettyPrint)
-import Test.Unit (TestF, suite, suiteOnly, suiteSkip, test, testOnly, testSkip)
+import Simple.JSON (readJSON)
+import Test.Unit (TestF, suite, test, testSkip)
 import Test.Unit.Assert (assert)
 
 theSuite :: Free TestF Unit
 theSuite = suite "Perspectives.Parsing.Arc.Expression" do
   test "SimpleStep: ArcIdentifier" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "MyRole" simpleStep
+    (r :: Either ParseError Step) <- runIndentParser "MyRole" simpleStep
     case r of
       (Left e) -> assert (show e) false
-      (Right id) -> do 
+      (Right id) -> do
         -- logShow id
         assert "'MyRole' should be parsed as a the simple step ArcIdentifier" case id of
-          (Simple (ArcIdentifier (ArcPosition{column: 1, line: 1}) "MyRole")) -> true 
+          (Simple (ArcIdentifier (ArcPosition { column: 1, line: 1 }) "MyRole")) -> true
           otherwise -> false
 
+  test "SimpleStep: PublicRole without type assertion" do
+    (r :: Either ParseError Step) <- runIndentParser "publicrole pub:https://perspectives.domains/cw_test/#role" simpleStep
+    case r of
+      Left e -> assert (show e) false
+      Right (Simple (PublicRole _ identifier Nothing)) ->
+        assert "The public resource identifier should be parsed" (identifier == "pub:https://perspectives.domains/cw_test/#role")
+      _ -> assert "The unannotated public role should be parsed" false
+
+  test "SimpleStep: PublicRole with type assertion" do
+    (r :: Either ParseError Step) <- runIndentParser "publicrole pub:https://perspectives.domains/cw_test/#role (cm:Repository)" simpleStep
+    case r of
+      Left e -> assert (show e) false
+      Right (Simple (PublicRole _ identifier (Just assertedType))) -> do
+        assert "The public resource identifier should be parsed" (identifier == "pub:https://perspectives.domains/cw_test/#role")
+        assert "The asserted role type should be parsed" (assertedType == "cm:Repository")
+      _ -> assert "The annotated public role should be parsed" false
+
+  test "PublicRole query function reads the legacy unannotated representation" do
+    let legacy = "{\"constructor\":\"PublicRole\",\"arg1\":\"\\\"pub:cw_test#role\\\"\",\"arg2\":\"\"}"
+    case readJSON legacy of
+      Left e -> assert (show e) false
+      Right (QF.PublicRole (RoleInstance identifier) Nothing) ->
+        assert "The legacy PublicRole should have no type assertion" (identifier == "pub:cw_test#role")
+      _ -> assert "The legacy PublicRole representation should remain readable" false
+
   test "SimpleStep: Binding" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "binding" simpleStep
+    (r :: Either ParseError Step) <- runIndentParser "binding" simpleStep
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> do
         -- logShow id
         assert "'MyRole' should be parsed as a the simple step Binding" case id of
-          (Simple (Filler (ArcPosition{column: 1, line: 1}) _)) -> true
+          (Simple (Filler (ArcPosition { column: 1, line: 1 }) _)) -> true
           otherwise -> false
 
   test "SimpleStep: Variable" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "someName" simpleStep
+    (r :: Either ParseError Step) <- runIndentParser "someName" simpleStep
     case r of
       (Left (ParseError m _)) -> assert "A lowercase name should be parsed as a variable" false
       (Right v@(Simple (Variable _ _))) -> do
@@ -56,76 +82,101 @@ theSuite = suite "Perspectives.Parsing.Arc.Expression" do
         assert "A lowercase name should be parsed as a variable" false
 
   test "UnaryStep: LogicalNot" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "not MyProperty" unaryStep
+    (r :: Either ParseError Step) <- runIndentParser "not MyProperty" unaryStep
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> do
         -- logShow id
         assert "'not MyProperty' should be parsed as a the unary step LogicalNot" case id of
-          (Unary (LogicalNot (ArcPosition{column: 1, line: 1}) _)) -> true
+          (Unary (LogicalNot (ArcPosition { column: 1, line: 1 }) _)) -> true
           otherwise -> false
 
   test "FilterStep" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "filter MyRole with ItsBooleanProp" step
+    (r :: Either ParseError Step) <- runIndentParser "filter MyRole with ItsBooleanProp" step
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> do
         -- logShow id
         assert "'filter MyRole with ItsBooleanProp' should be parsed as a a binary step with operator 'Filter'"
           case id of
-            (Binary (BinaryStep {operator})) -> case operator of
+            (Binary (BinaryStep { operator })) -> case operator of
               (Filter _) -> true
               otherwise -> false
             otherwise -> false
 
+  test "letA is rejected in a query expression" do
+    (r :: Either ParseError Step) <- runIndentParser "letA value <- MyRole in value" step
+    case r of
+      Left (ParseError message _) ->
+        assert "letA should be rejected with a query-specific error" (message == "letA is not allowed in query expressions. Use letE instead. ")
+      Right _ -> assert "letA should not be parsed as a query expression" false
+
+  test "letA is rejected in a nested query expression" do
+    (r :: Either ParseError Step) <- runIndentParser "MyRole >> letA value <- AnotherRole in value" step
+    case r of
+      Left (ParseError message _) ->
+        assert "Nested letA should be rejected with a query-specific error" (message == "letA is not allowed in query expressions. Use letE instead. ")
+      Right _ -> assert "Nested letA should not be parsed as a query expression" false
+
   test "CompoundStep on filter with parens" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "(filter MyRole with ItsBooleanProp)" step
+    (r :: Either ParseError Step) <- runIndentParser "(filter MyRole with ItsBooleanProp)" step
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> do
         -- logShow id
         assert "'(filter MyRole with ItsBooleanProp)' should be parsed as a a binary step with operator 'Filter'"
           case id of
-            (Binary (BinaryStep {operator})) -> case operator of
+            (Binary (BinaryStep { operator })) -> case operator of
               (Filter _) -> true
               otherwise -> false
             otherwise -> false
 
+  testSkip "TypeFilterStep" do
+    (r :: Either ParseError Step) <- runIndentParser "typeFilter MyRole with RoleA union RoleB" step
+    case r of
+      (Left e) -> assert (show e) false
+      (Right id) -> do
+        assert "'typeFilter MyRole with RoleA union RoleB' should be parsed as a binary step with operator 'TypeFilter'"
+          case id of
+            (Binary (BinaryStep { operator })) -> case operator of
+              (TypeFilter _) -> true
+              otherwise -> false
+            otherwise -> false
+
   test "BinaryStep with ==" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "Prop1 == Prop2" step
+    (r :: Either ParseError Step) <- runIndentParser "Prop1 == Prop2" step
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> do
         -- logShow id
         assert "'Prop1 == Prop2' should be parsed as a a binary step with operator 'Equals'"
           case id of
-            (Binary (BinaryStep {operator})) -> case operator of
+            (Binary (BinaryStep { operator })) -> case operator of
               (Equals _) -> true
               otherwise -> false
             otherwise -> false
         assert "'Prop1 == Prop2' should have the operator starting at position (1, 6)"
           case id of
-            (Binary (BinaryStep {operator})) -> case operator of
-              (Equals (ArcPosition{line: 1, column: 7})) -> true
+            (Binary (BinaryStep { operator })) -> case operator of
+              (Equals (ArcPosition { line: 1, column: 7 })) -> true
               otherwise -> false
             otherwise -> false
 
-
   test "BinaryStep with different SimpleSteps" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "AnotherRole >> binding" step
+    (r :: Either ParseError Step) <- runIndentParser "AnotherRole >> binding" step
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> do
         -- logShow id
         assert "'AnotherRole >> binding' should be parsed as a a binary step with operator 'Compose'"
           case id of
-            (Binary (BinaryStep {operator})) -> case operator of
+            (Binary (BinaryStep { operator })) -> case operator of
               (Compose _) -> true
               otherwise -> false
             otherwise -> false
 
   test "BinaryStep that fails on operator" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "Prop1 ? Prop2" step
+    (r :: Either ParseError Step) <- runIndentParser "Prop1 ? Prop2" step
     case r of
       (Left (ParseError m _)) -> do
         -- logShow m
@@ -136,20 +187,20 @@ theSuite = suite "Perspectives.Parsing.Arc.Expression" do
         assert "Of 'Prop1 ? Prop2', just the first term should be parsed." (id == (Simple (ArcIdentifier (ArcPosition { column: 1, line: 1 }) "Prop1")))
 
   test "Step on == with nested filter expression left" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "(filter MyRole with ItsBooleanProp) == MyOtherRole" step
+    (r :: Either ParseError Step) <- runIndentParser "(filter MyRole with ItsBooleanProp) == MyOtherRole" step
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> do
         -- logShow id
         assert "'(filter MyRole with ItsBooleanProp) == MyOtherRole' should be parsed as a a binary step with operator 'Equals'"
           case id of
-            (Binary (BinaryStep {operator})) -> case operator of
+            (Binary (BinaryStep { operator })) -> case operator of
               (Equals _) -> true
               otherwise -> false
             otherwise -> false
 
   test "Filter with compound criterium" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "filter MyRole with (MyOtherRole >> Criterium)" step
+    (r :: Either ParseError Step) <- runIndentParser "filter MyRole with (MyOtherRole >> Criterium)" step
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> do
@@ -157,81 +208,135 @@ theSuite = suite "Perspectives.Parsing.Arc.Expression" do
         -- log $ prettyPrint id
         assert "'filter MyRole with (MyOtherRole >> Criterium)' should be parsed as a a binary step with operator 'Filter'"
           case id of
-            (Binary (BinaryStep {operator})) -> case operator of
+            (Binary (BinaryStep { operator })) -> case operator of
               (Filter _) -> true
               otherwise -> false
             otherwise -> false
 
   test "Step on recursive binaryStep" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "MyRole >> MyProp == MyOtherRole >> MyProp" step
+    (r :: Either ParseError Step) <- runIndentParser "MyRole >> MyProp == MyOtherRole >> MyProp" step
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> do
         -- logShow id
         assert "'MyRole >> MyProp == MyOtherRole >> MyProp' should be parsed as a a binary step with operator 'Equals'"
           case id of
-            (Binary (BinaryStep {operator})) -> case operator of
+            (Binary (BinaryStep { operator })) -> case operator of
               (Equals _) -> true
               otherwise -> false
             otherwise -> false
 
   test "Step on recursive binaryStep with last subexpression as filter" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "(MyRole >> MyProp) == (filter MyRole with MyProp)" step
+    (r :: Either ParseError Step) <- runIndentParser "(MyRole >> MyProp) == (filter MyRole with MyProp)" step
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> do
         -- logShow id
         assert "'(MyRole >> MyProp) == (filter MyRole with MyProp)' should be parsed as a a binary step with operator 'Equals'"
           case id of
-            (Binary (BinaryStep {operator})) -> case operator of
+            (Binary (BinaryStep { operator })) -> case operator of
               (Equals _) -> true
               otherwise -> false
             otherwise -> false
 
   test "Step on unneccasary parens" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "((MyRole) >> (MyProp))" step
+    (r :: Either ParseError Step) <- runIndentParser "((MyRole) >> (MyProp))" step
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> do
         -- logShow id
         assert "'(MyRole) >> (MyProp)' should be parsed as a a binary step with operator 'Compose'"
           case id of
-            (Binary (BinaryStep {operator})) -> case operator of
+            (Binary (BinaryStep { operator })) -> case operator of
               (Compose _) -> true
               otherwise -> false
             otherwise -> false
 
   test "Operator precedence on 'MyProp1 + MyProp2 * MyProp3'" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "MyProp1 + MyProp2 * MyProp3" step
+    (r :: Either ParseError Step) <- runIndentParser "MyProp1 + MyProp2 * MyProp3" step
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> do
         -- logShow id
         assert "'MyProp1 + MyProp2 * MyProp3' should be parsed as a a binary step with operator 'Add'"
           case id of
-            (Binary (BinaryStep {operator})) -> case operator of
+            (Binary (BinaryStep { operator })) -> case operator of
               (Add _) -> true
               otherwise -> false
             otherwise -> false
 
   test "Operator precedence on '(MyProp1 + MyProp2) * MyProp3'" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "(MyProp1 + MyProp2) * MyProp3" step
+    (r :: Either ParseError Step) <- runIndentParser "(MyProp1 + MyProp2) * MyProp3" step
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> do
         -- logShow id
         assert "'(MyRole) >> (MyProp)' should be parsed as a a binary step with operator 'Multiply'"
           case id of
-            (Binary (BinaryStep {operator})) -> case operator of
+            (Binary (BinaryStep { operator })) -> case operator of
               (Multiply _) -> true
               otherwise -> false
             otherwise -> false
 
-  test "number in equation" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "MyProp > 10" step
+  test "Operator precedence keeps context composition scoped to parenthesised conjunction" do
+    (r :: Either ParseError Step) <- runIndentParser "context >> (Role6A >> binding orElse Role6B >> binding == context >> Filler6 and Role6B >> binding orElse Role6A >> binding == context >> Filler6)" step
     case r of
       (Left e) -> assert (show e) false
-      (Right a@(Binary (BinaryStep{operator, right}))) -> do
+      (Right parsedStep) -> do
+        assert "top-level operator should remain Compose" case parsedStep of
+          (Binary (BinaryStep { operator: Compose _, right })) -> true
+          _ -> false
+
+        assert "right side of top-level Compose should be a LogicalAnd between two Equals expressions" case parsedStep of
+          ( Binary
+              ( BinaryStep
+                  { operator: Compose _
+                  , right:
+                      ( Binary
+                          ( BinaryStep
+                              { operator: LogicalAnd _
+                              , left: (Binary (BinaryStep { operator: Equals _ }))
+                              , right: (Binary (BinaryStep { operator: Equals _ }))
+                              }
+                          )
+                      )
+                  }
+              )
+          ) -> true
+          _ -> false
+
+  test "Operator precedence groups role-binding orElse before equals" do
+    (r :: Either ParseError Step) <- runIndentParser "Role6A >> binding orElse Role6B >> binding == context >> Filler6" step
+    case r of
+      (Left e) -> assert (show e) false
+      (Right parsedStep) -> do
+        assert "top-level operator should be Equals" case parsedStep of
+          (Binary (BinaryStep { operator: Equals _ })) -> true
+          _ -> false
+
+        assert "left side of equals should be OrElse over two Role->binding compositions" case parsedStep of
+          ( Binary
+              ( BinaryStep
+                  { operator: Equals _
+                  , left:
+                      ( Binary
+                          ( BinaryStep
+                              { operator: OrElse _
+                              , left: (Binary (BinaryStep { operator: Compose _ }))
+                              , right: (Binary (BinaryStep { operator: Compose _ }))
+                              }
+                          )
+                      )
+                  }
+              )
+          ) -> true
+          _ -> false
+
+  test "number in equation" do
+    (r :: Either ParseError Step) <- runIndentParser "MyProp > 10" step
+    case r of
+      (Left e) -> assert (show e) false
+      (Right a@(Binary (BinaryStep { operator, right }))) -> do
         -- logShow a
         assert "'MyProp > 10' should be parsed as a a GreaterThen with left operand the number 10"
           case operator of
@@ -244,7 +349,7 @@ theSuite = suite "Perspectives.Parsing.Arc.Expression" do
       otherwise -> assert "'MyProp > 10' should be parsed as a a GreaterThen" false
 
   test "boolean" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "false" simpleStep
+    (r :: Either ParseError Step) <- runIndentParser "false" simpleStep
     case r of
       (Left e) -> assert (show e) false
       (Right a@(Simple (Value _ PBool "false"))) -> do
@@ -253,7 +358,7 @@ theSuite = suite "Perspectives.Parsing.Arc.Expression" do
       otherwise -> assert "'false' should be parsed as a (Value _ PBoolean \"false\")" false
 
   test "string" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "\"aap\"" simpleStep
+    (r :: Either ParseError Step) <- runIndentParser "\"aap\"" simpleStep
     case r of
       (Left e) -> assert (show e) false
       (Right a@(Simple (Value _ PString "aap"))) -> do
@@ -262,7 +367,7 @@ theSuite = suite "Perspectives.Parsing.Arc.Expression" do
       otherwise -> assert "'\"aap\"' should be parsed as a (Value _ PBoolean \"aap\")" false
 
   test "date" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "'1995-12-17T03:24:00'" simpleStep
+    (r :: Either ParseError Step) <- runIndentParser "'1995-12-17T03:24:00'" simpleStep
     -- logShow r
     case r of
       (Left e) -> assert (show e) false
@@ -272,7 +377,7 @@ theSuite = suite "Perspectives.Parsing.Arc.Expression" do
       otherwise -> assert "\"1995-12-17T03:24:00\" should be parsed as a (Simple (Value _ PDateTime ...))" false
 
   test "date" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "'1995-12-17'" simpleStep
+    (r :: Either ParseError Step) <- runIndentParser "'1995-12-17'" simpleStep
     case r of
       (Left e) -> assert (show e) false
       (Right a@(Simple (Value _ PDateTime _))) -> do
@@ -281,10 +386,10 @@ theSuite = suite "Perspectives.Parsing.Arc.Expression" do
       otherwise -> assert "'1995-12-17' should be parsed as a (Simple (Value _ PDateTime ...))" false
 
   test "date in comparison" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "MyProp > '1995-12-17'" step
+    (r :: Either ParseError Step) <- runIndentParser "MyProp > '1995-12-17'" step
     case r of
       (Left e) -> assert (show e) false
-      (Right a@(Binary (BinaryStep{operator, right}))) -> do
+      (Right a@(Binary (BinaryStep { operator, right }))) -> do
         -- logShow a
         assert "'MyProp > '1995-12-17'' should be parsed as a a GreaterThan with right operand the DateTime '1995-12-17'"
           case operator of
@@ -297,30 +402,30 @@ theSuite = suite "Perspectives.Parsing.Arc.Expression" do
       otherwise -> assert "'MyProp > '1995-12-17'' should be parsed as a a GreaterThan" false
 
   test "SimpleStep: sum" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "sum" simpleStep
+    (r :: Either ParseError Step) <- runIndentParser "sum" simpleStep
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> do
         -- logShow id
         assert "'sum' should be parsed as a the simple step SequenceFunction" case id of
-          (Simple (SequenceFunction (ArcPosition{column: 1, line: 1}) AddF)) -> true
+          (Simple (SequenceFunction (ArcPosition { column: 1, line: 1 }) AddF)) -> true
           otherwise -> false
 
   test "Operator: >>=" do
-    (r :: Either ParseError Operator) <- {-pure $ unwrap $-} runIndentParser ">>=" (unsafePartial operator)
+    (r :: Either ParseError Operator) <- runIndentParser ">>=" (unsafePartial operator)
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> do
         -- logShow id
         assert "'>>=' should be parsed as a the operator Sequence" case id of
-          (Sequence (ArcPosition{column: 1, line: 1})) -> true
+          (Sequence (ArcPosition { column: 1, line: 1 })) -> true
           otherwise -> false
 
   test "sequenceStep" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "MyProp >>= sum" step
+    (r :: Either ParseError Step) <- runIndentParser "MyProp >>= sum" step
     case r of
       (Left e) -> assert (show e) false
-      (Right a@(Binary (BinaryStep {operator}))) -> do
+      (Right a@(Binary (BinaryStep { operator }))) -> do
         -- logShow a
         assert "'MyProp >>= sum' should be parsed as a a BinaryStep with operator equal to 'Sequence'"
           case operator of
@@ -331,7 +436,7 @@ theSuite = suite "Perspectives.Parsing.Arc.Expression" do
         assert "'MyProp >>= sum' should be parsed as a a SequenceFunction" false
 
   test "sequenceStep with non-existing sequenceFunction" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser " this >>= fantasy" step
+    (r :: Either ParseError Step) <- runIndentParser " this >>= fantasy" step
     case r of
       (Left (ParseError m _)) -> do
         -- logShow m
@@ -341,10 +446,10 @@ theSuite = suite "Perspectives.Parsing.Arc.Expression" do
         assert "Should fail." false
 
   test "sequenceStep with complex left side" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "MyRole >> binding >> MyProp >>= sum" step
+    (r :: Either ParseError Step) <- runIndentParser "MyRole >> binding >> MyProp >>= sum" step
     case r of
       (Left e) -> assert (show e) false
-      (Right a@(Binary (BinaryStep {operator}))) -> do
+      (Right a@(Binary (BinaryStep { operator }))) -> do
         -- logShow a
         assert "'MyRole >> binding >> MyProp >>= sum' should be parsed as a BinaryStep with operator equal to 'Sequence'"
           case operator of
@@ -355,21 +460,23 @@ theSuite = suite "Perspectives.Parsing.Arc.Expression" do
         assert "'MyRole >> binding >> MyProp >>= sum' should be parsed as a a Sequence" false
 
   test "sequenceStep with complex left side" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "MyRole >> binding >> MyProp >>= sum + 1" step
+    (r :: Either ParseError Step) <- runIndentParser "MyRole >> binding >> MyProp >>= sum + 1" step
     case r of
       (Left e) -> assert (show e) false
-      (Right a@(Binary (BinaryStep {operator}))) -> do
+      (Right a@(Binary (BinaryStep { operator }))) -> do
         assert "'MyRole >> binding >> MyProp >>= sum + 1' should be parsed as a a BinaryStep with operator equal to 'add'"
           case operator of
             Add _ -> true
             otherwise -> false
       x -> do
         -- logShow x
-        assert "'MyRole >> binding >> MyProp >>= sum + 1' should be parsed \
-        \as a BinaryStep with operator equal to add" false
+        assert
+          "'MyRole >> binding >> MyProp >>= sum + 1' should be parsed \
+          \as a BinaryStep with operator equal to add"
+          false
 
   -- test "LetStep" do
-  --   (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "let*\n  a <- MyProp\n  b <- SecondProp\nin\n  AnotherProp = a\n  SomeProp = 1" letStep
+  --   (r :: Either ParseError Step) <- runIndentParser "let*\n  a <- MyProp\n  b <- SecondProp\nin\n  AnotherProp = a\n  SomeProp = 1" letStep
   --   case r of
   --     (Left e) -> assert (show e) false
   --     (Right a@(Let (LetStep {bindings, assignments}))) -> do
@@ -379,11 +486,11 @@ theSuite = suite "Perspectives.Parsing.Arc.Expression" do
   --     x -> do
   --       -- logShow x
   --       assert "'let*\n  a <- MyProp\n  b <- SecondProp\nin\n  AnotherProp = a' should be parsed as a LetStep" false
------------------------------------------------------------------------------------
----- ASSIGNMENT
------------------------------------------------------------------------------------
+  -----------------------------------------------------------------------------------
+  ---- ASSIGNMENT
+  -----------------------------------------------------------------------------------
   test "Assignment: remove" do
-    (r :: Either ParseError Assignment) <- {-pure $ unwrap $-} runIndentParser "remove role MyRole" roleAssignment
+    (r :: Either ParseError Assignment) <- runIndentParser "remove role MyRole" roleAssignment
     case r of
       (Left e) -> assert (show e) false
       (Right a@(PAS.RemoveRole _)) -> do
@@ -392,238 +499,240 @@ theSuite = suite "Perspectives.Parsing.Arc.Expression" do
       otherwise -> assert ("'remove role MyRole' should be parsed as a Remove assignment, instead this was returned: " <> show otherwise) false
 
   test "Assignment: createRole" do
-    (r :: Either ParseError Assignment) <- {-pure $ unwrap $-} runIndentParser "create role MyRole" assignment
+    (r :: Either ParseError Assignment) <- runIndentParser "create role MyRole" assignment
     case r of
       (Left e) -> assert (show e) false
-      (Right a@(PAS.CreateRole {contextExpression})) -> do
+      (Right a@(PAS.CreateRole { contextExpression })) -> do
         -- logShow a
         assert "There should be no contextExpression" (isNothing contextExpression)
       otherwise -> assert ("'create role MyRole' should be parsed as a CreateRole assignment, instead this was returned: " <> show otherwise) false
 
   test "Assignment: createRole in an embedded context" do
-    (r :: Either ParseError Assignment) <- {-pure $ unwrap $-} runIndentParser "create role MyRole in SomeContextRole >> binding >> context" assignment
+    (r :: Either ParseError Assignment) <- runIndentParser "create role MyRole in SomeContextRole >> binding >> context" assignment
     case r of
       (Left e) -> assert (show e) false
-      (Right a@(PAS.CreateRole {contextExpression})) -> do
+      (Right a@(PAS.CreateRole { contextExpression })) -> do
         -- logShow a
         assert "There should be a contextExpression" (isJust contextExpression)
       otherwise -> assert ("'create role MyRole in SomeContextRole >> binding >> context' should be parsed as a CreateRole assignment, instead this was returned: " <> show otherwise) false
 
   test "Assignment: move" do
-    (r :: Either ParseError Assignment) <- {-pure $ unwrap $-} runIndentParser "move MyRole" assignment
+    (r :: Either ParseError Assignment) <- runIndentParser "move MyRole" assignment
     case r of
       (Left e) -> assert (show e) false
-      (Right a@(PAS.Move {roleExpression: Simple (ArcIdentifier _ "MyRole"), contextExpression})) -> do
+      (Right a@(PAS.Move { roleExpression: Simple (ArcIdentifier _ "MyRole"), contextExpression })) -> do
         -- logShow a
         assert "test ok" (isNothing contextExpression)
       otherwise -> assert ("'move MyRole' should be parsed as a Move assignment, instead this was returned: " <> show otherwise) false
 
   test "Assignment: move to an embedded context" do
-    (r :: Either ParseError Assignment) <- {-pure $ unwrap $-} runIndentParser "move MyRole to SomeContextRole >> binding >> context" assignment
+    (r :: Either ParseError Assignment) <- runIndentParser "move MyRole to SomeContextRole >> binding >> context" assignment
     case r of
       (Left e) -> assert (show e) false
-      (Right a@(PAS.Move {contextExpression})) -> do
+      (Right a@(PAS.Move { contextExpression })) -> do
         -- logShow a
         assert "There should be a contextExpression" (isJust contextExpression)
       otherwise -> assert ("'move MyRole to SomeContextRole >> binding >> context' should be parsed as a Move assignment, instead this was returned: " <> show otherwise) false
 
   test "Assignment: bind" do
-    (r :: Either ParseError Assignment) <- {-pure $ unwrap $-} runIndentParser "bind MyRole to AnotherRole" assignment
+    (r :: Either ParseError Assignment) <- runIndentParser "bind MyRole to AnotherRole" assignment
     case r of
       (Left e) -> assert (show e) false
-      (Right a@(PAS.Bind {bindingExpression: Simple (ArcIdentifier _ "MyRole"), roleIdentifier})) -> do
+      (Right a@(PAS.Bind { bindingExpression: Simple (ArcIdentifier _ "MyRole"), roleIdentifier })) -> do
         -- logShow a
         assert "roleIdentifier should be 'AnotherRole'" (roleIdentifier == "AnotherRole")
       otherwise -> assert ("'bind MyRole to AnotherRole' should be parsed as a Bind assignment, instead this was returned: " <> show otherwise) false
 
   test "Assignment: bind in an embedded context" do
-    (r :: Either ParseError Assignment) <- {-pure $ unwrap $-} runIndentParser "bind MyRole to AnotherRole in SomeContextRole >> binding >> context" assignment
+    (r :: Either ParseError Assignment) <- runIndentParser "bind MyRole to AnotherRole in SomeContextRole >> binding >> context" assignment
     case r of
       (Left e) -> assert (show e) false
-      (Right a@(PAS.Bind {bindingExpression: Simple (ArcIdentifier _ "MyRole"), roleIdentifier, contextExpression})) -> do
+      (Right a@(PAS.Bind { bindingExpression: Simple (ArcIdentifier _ "MyRole"), roleIdentifier, contextExpression })) -> do
         -- logShow a
         assert "roleIdentifier should be 'AnotherRole'" (isJust contextExpression)
       otherwise -> assert ("'bind MyRole to AnotherRole in SomeContextRole >> binding >> context' should be parsed as a Bind assignment, instead this was returned: " <> show otherwise) false
 
   test "Assignment: bind with path as second term should fail" do
-    (r :: Either ParseError Assignment) <- {-pure $ unwrap $-} runIndentParser "bind MyRole to (SomeContextRole >> binding >> context >> AnotherRole)" assignment
+    (r :: Either ParseError Assignment) <- runIndentParser "bind MyRole to (SomeContextRole >> binding >> context >> AnotherRole)" assignment
     case r of
       (Left e) -> assert "failure expected" true
       otherwise -> assert "'bind MyRole to SomeContextRole >> binding >> context >> AnotherRole' should fail because the second term must be an identifier" false
 
   test "Assignment: propertyAssignment" do
-    (r :: Either ParseError Assignment) <- {-pure $ unwrap $-} runIndentParser "MyProp = 10" assignment
+    (r :: Either ParseError Assignment) <- runIndentParser "MyProp = 10" assignment
     case r of
       (Left e) -> assert (show e) false
-      (Right a@(PropertyAssignment {propertyIdentifier, operator, valueExpression, roleExpression})) -> do
+      (Right a@(PropertyAssignment { propertyIdentifier, operator, valueExpression, roleExpression })) -> do
         -- logShow a
         assert "propertyIdentifier should be 'MyProp'" (propertyIdentifier == "MyProp")
-        assert "operator should be Set" (case operator of
-          (Set _) -> true
-          otherwise -> false)
+        assert "operator should be Set"
+          ( case operator of
+              (Set _) -> true
+              otherwise -> false
+          )
         assert "valueExpression should be Simple" (valueExpression == (Simple (Value (ArcPosition { column: 10, line: 1 }) PNumber "10")))
         assert "There should be no roleExpression" (isNothing roleExpression)
       otherwise -> assert ("'MyProp = 10' should be parsed as a PropertyAssignment assignment, instead this was returned: " <> show otherwise) false
 
   test "Assignment: propertyAssignment for another role" do
-    (r :: Either ParseError Assignment) <- {-pure $ unwrap $-} runIndentParser "MyProp = 10 for AnotherRole" assignment
+    (r :: Either ParseError Assignment) <- runIndentParser "MyProp = 10 for AnotherRole" assignment
     case r of
       (Left e) -> assert (show e) false
-      (Right a@(PropertyAssignment {roleExpression})) -> do
+      (Right a@(PropertyAssignment { roleExpression })) -> do
         assert "There should be a roleExpression" (isJust roleExpression)
       otherwise -> assert ("'MyProp = 10 for AnotherRole' should be parsed as a PropertyAssignment assignment, instead this was returned: " <> show otherwise) false
 
   test "Assignment: callEffect" do
-    (r :: Either ParseError Assignment) <- {-pure $ unwrap $-} runIndentParser "callEffect cdb:LoadModel()" assignment
+    (r :: Either ParseError Assignment) <- runIndentParser "callEffect cdb:LoadModel()" assignment
     case r of
       (Left e) -> assert (show e) false
-      (Right a@(ExternalEffect {effectName, arguments})) -> do
+      (Right a@(ExternalEffect { effectName, arguments })) -> do
         -- logShow a
         assert "functionName should be 'cbd:LoadModel'" (effectName == "cdb:LoadModel")
         assert "no arguments" (arguments == [])
       otherwise -> assert ("'callEffect cdb:LoadModel()' should be parsed as an ExternalEffect assignment, instead this was returned: " <> show otherwise) false
 
   test "callExternal" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "callExternal ser:SerialiseFor( \"model:System$Invitation$Invitee\", context ) returns String" computationStep
+    (r :: Either ParseError Step) <- runIndentParser "callExternal ser:SerialiseFor( \"model:System$Invitation$Invitee\", context ) returns String" computationStep
     case r of
       (Left e) -> assert (show e) false
-      (Right a@(Computation (ComputationStep {functionName, arguments, computedType}))) -> do
+      (Right a@(Computation (ComputationStep { functionName, arguments, computedType }))) -> do
         -- logShow a
         assert "functionName should be 'cbd:LoadModel'" (functionName == "ser:SerialiseFor")
         assert "two arguments" (length arguments == 2)
         assert "ComputedType should be 'String'" (computedType == ComputedRange PString)
       otherwise -> assert ("'callExternal ser:SerialiseFor( \"model:System$Invitation$Invitee\", context ) returns String' should be parsed as an ComputationStep, instead this was returned: " <> show otherwise) false
 
------------------------------------------------------------------------------------
----- ADDITIONAL SIMPLE STEPS
------------------------------------------------------------------------------------
+  -----------------------------------------------------------------------------------
+  ---- ADDITIONAL SIMPLE STEPS
+  -----------------------------------------------------------------------------------
 
   test "SimpleStep: Filled (binder)" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "binder MyRole" simpleStep
+    (r :: Either ParseError Step) <- runIndentParser "binder MyRole" simpleStep
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> do
         -- logShow id
         assert "'binder MyRole' should be parsed as the simple step Filled" case id of
-          (Simple (Filled (ArcPosition{column: 1, line: 1}) "MyRole" Nothing)) -> true
+          (Simple (Filled (ArcPosition { column: 1, line: 1 }) "MyRole" Nothing)) -> true
           otherwise -> false
 
   test "SimpleStep: Context" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "context" simpleStep
+    (r :: Either ParseError Step) <- runIndentParser "context" simpleStep
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> do
         -- logShow id
         assert "'context' should be parsed as the simple step Context" case id of
-          (Simple (Context (ArcPosition{column: 1, line: 1}))) -> true
+          (Simple (Context (ArcPosition { column: 1, line: 1 }))) -> true
           otherwise -> false
 
   test "SimpleStep: Extern" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "extern" simpleStep
+    (r :: Either ParseError Step) <- runIndentParser "extern" simpleStep
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> do
         -- logShow id
         assert "'extern' should be parsed as the simple step Extern" case id of
-          (Simple (Extern (ArcPosition{column: 1, line: 1}))) -> true
+          (Simple (Extern (ArcPosition { column: 1, line: 1 }))) -> true
           otherwise -> false
 
   test "SimpleStep: Identity (this)" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "this" simpleStep
+    (r :: Either ParseError Step) <- runIndentParser "this" simpleStep
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> do
         -- logShow id
         assert "'this' should be parsed as the simple step Identity" case id of
-          (Simple (Identity (ArcPosition{column: 1, line: 1}))) -> true
+          (Simple (Identity (ArcPosition { column: 1, line: 1 }))) -> true
           otherwise -> false
 
   test "SimpleStep: Me" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "me" simpleStep
+    (r :: Either ParseError Step) <- runIndentParser "me" simpleStep
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> do
         -- logShow id
         assert "'me' should be parsed as the simple step Me" case id of
-          (Simple (Me (ArcPosition{column: 1, line: 1}))) -> true
+          (Simple (Me (ArcPosition { column: 1, line: 1 }))) -> true
           otherwise -> false
 
   test "SimpleStep: IndexedName" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "indexedName" simpleStep
+    (r :: Either ParseError Step) <- runIndentParser "indexedName" simpleStep
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> do
         -- logShow id
         assert "'indexedName' should be parsed as the simple step IndexedName" case id of
-          (Simple (IndexedName (ArcPosition{column: 1, line: 1}))) -> true
+          (Simple (IndexedName (ArcPosition { column: 1, line: 1 }))) -> true
           otherwise -> false
 
   test "SimpleStep: TypeOfContext" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "contextType" simpleStep
+    (r :: Either ParseError Step) <- runIndentParser "contextType" simpleStep
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> do
         -- logShow id
         assert "'contextType' should be parsed as the simple step TypeOfContext" case id of
-          (Simple (TypeOfContext (ArcPosition{column: 1, line: 1}))) -> true
+          (Simple (TypeOfContext (ArcPosition { column: 1, line: 1 }))) -> true
           otherwise -> false
 
   test "SimpleStep: TypeOfRole" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "roleType" simpleStep
+    (r :: Either ParseError Step) <- runIndentParser "roleType" simpleStep
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> do
         -- logShow id
         assert "'roleType' should be parsed as the simple step TypeOfRole" case id of
-          (Simple (TypeOfRole (ArcPosition{column: 1, line: 1}))) -> true
+          (Simple (TypeOfRole (ArcPosition { column: 1, line: 1 }))) -> true
           otherwise -> false
 
   test "SimpleStep: IsInState" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "isInState SomeState" simpleStep
+    (r :: Either ParseError Step) <- runIndentParser "isInState SomeState" simpleStep
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> do
         -- logShow id
         assert "'isInState SomeState' should be parsed as the simple step IsInState" case id of
-          (Simple (IsInState (ArcPosition{column: 1, line: 1}) "SomeState")) -> true
+          (Simple (IsInState (ArcPosition { column: 1, line: 1 }) "SomeState")) -> true
           otherwise -> false
 
   test "SimpleStep: SpecialisesRoleType" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "specialisesRoleType MyRole" simpleStep
+    (r :: Either ParseError Step) <- runIndentParser "specialisesRoleType MyRole" simpleStep
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> do
         -- logShow id
         assert "'specialisesRoleType MyRole' should be parsed as the simple step SpecialisesRoleType" case id of
-          (Simple (SpecialisesRoleType (ArcPosition{column: 1, line: 1}) "MyRole")) -> true
+          (Simple (SpecialisesRoleType (ArcPosition { column: 1, line: 1 }) "MyRole")) -> true
           otherwise -> false
 
   test "SimpleStep: ContextTypeIndividual" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "[context MyContextType]" simpleStep
+    (r :: Either ParseError Step) <- runIndentParser "[context MyContextType]" simpleStep
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> do
         -- logShow id
         assert "'[context MyContextType]' should be parsed as the simple step ContextTypeIndividual" case id of
-          (Simple (ContextTypeIndividual (ArcPosition{column: 1, line: 1}) "MyContextType")) -> true
+          (Simple (ContextTypeIndividual (ArcPosition { column: 1, line: 1 }) "MyContextType")) -> true
           otherwise -> false
 
   test "SimpleStep: RoleTypeIndividual" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "[role MyRoleType]" simpleStep
+    (r :: Either ParseError Step) <- runIndentParser "[role MyRoleType]" simpleStep
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> do
         -- logShow id
         assert "'[role MyRoleType]' should be parsed as the simple step RoleTypeIndividual" case id of
-          (Simple (RoleTypeIndividual (ArcPosition{column: 1, line: 1}) "MyRoleType")) -> true
+          (Simple (RoleTypeIndividual (ArcPosition { column: 1, line: 1 }) "MyRoleType")) -> true
           otherwise -> false
 
------------------------------------------------------------------------------------
----- ADDITIONAL SEQUENCE FUNCTIONS
------------------------------------------------------------------------------------
+  -----------------------------------------------------------------------------------
+  ---- ADDITIONAL SEQUENCE FUNCTIONS
+  -----------------------------------------------------------------------------------
 
   test "SimpleStep: product" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "product" simpleStep
+    (r :: Either ParseError Step) <- runIndentParser "product" simpleStep
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> assert "'product' should be parsed as SequenceFunction MultiplyF" case id of
@@ -631,7 +740,7 @@ theSuite = suite "Perspectives.Parsing.Arc.Expression" do
         otherwise -> false
 
   test "SimpleStep: minimum" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "minimum" simpleStep
+    (r :: Either ParseError Step) <- runIndentParser "minimum" simpleStep
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> assert "'minimum' should be parsed as SequenceFunction MinimumF" case id of
@@ -639,7 +748,7 @@ theSuite = suite "Perspectives.Parsing.Arc.Expression" do
         otherwise -> false
 
   test "SimpleStep: maximum" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "maximum" simpleStep
+    (r :: Either ParseError Step) <- runIndentParser "maximum" simpleStep
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> assert "'maximum' should be parsed as SequenceFunction MaximumF" case id of
@@ -647,7 +756,7 @@ theSuite = suite "Perspectives.Parsing.Arc.Expression" do
         otherwise -> false
 
   test "SimpleStep: count" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "count" simpleStep
+    (r :: Either ParseError Step) <- runIndentParser "count" simpleStep
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> assert "'count' should be parsed as SequenceFunction CountF" case id of
@@ -655,183 +764,183 @@ theSuite = suite "Perspectives.Parsing.Arc.Expression" do
         otherwise -> false
 
   test "SimpleStep: first" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "first" simpleStep
+    (r :: Either ParseError Step) <- runIndentParser "first" simpleStep
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> assert "'first' should be parsed as SequenceFunction FirstF" case id of
         (Simple (SequenceFunction _ FirstF)) -> true
         otherwise -> false
 
------------------------------------------------------------------------------------
----- ADDITIONAL UNARY STEPS
------------------------------------------------------------------------------------
+  -----------------------------------------------------------------------------------
+  ---- ADDITIONAL UNARY STEPS
+  -----------------------------------------------------------------------------------
 
   test "UnaryStep: Exists" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "exists MyRole" unaryStep
+    (r :: Either ParseError Step) <- runIndentParser "exists MyRole" unaryStep
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> do
         -- logShow id
         assert "'exists MyRole' should be parsed as the unary step Exists" case id of
-          (Unary (Exists (ArcPosition{column: 1, line: 1}) _)) -> true
+          (Unary (Exists (ArcPosition { column: 1, line: 1 }) _)) -> true
           otherwise -> false
 
   test "UnaryStep: FilledBy (unary prefix)" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "filledBy MyRole" unaryStep
+    (r :: Either ParseError Step) <- runIndentParser "filledBy MyRole" unaryStep
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> do
         -- logShow id
         assert "'filledBy MyRole' should be parsed as the unary step FilledBy" case id of
-          (Unary (FilledBy (ArcPosition{column: 1, line: 1}) _)) -> true
+          (Unary (FilledBy (ArcPosition { column: 1, line: 1 }) _)) -> true
           otherwise -> false
 
   test "UnaryStep: Fills (unary prefix)" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "fills MyRole" unaryStep
+    (r :: Either ParseError Step) <- runIndentParser "fills MyRole" unaryStep
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> do
         -- logShow id
         assert "'fills MyRole' should be parsed as the unary step Fills" case id of
-          (Unary (Fills (ArcPosition{column: 1, line: 1}) _)) -> true
+          (Unary (Fills (ArcPosition { column: 1, line: 1 }) _)) -> true
           otherwise -> false
 
   test "UnaryStep: Available" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "available MyRole" unaryStep
+    (r :: Either ParseError Step) <- runIndentParser "available MyRole" unaryStep
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> do
         -- logShow id
         assert "'available MyRole' should be parsed as the unary step Available" case id of
-          (Unary (Available (ArcPosition{column: 1, line: 1}) _)) -> true
+          (Unary (Available (ArcPosition { column: 1, line: 1 }) _)) -> true
           otherwise -> false
 
------------------------------------------------------------------------------------
----- ADDITIONAL BINARY OPERATORS
------------------------------------------------------------------------------------
+  -----------------------------------------------------------------------------------
+  ---- ADDITIONAL BINARY OPERATORS
+  -----------------------------------------------------------------------------------
 
   test "BinaryStep with 'and' (LogicalAnd)" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "Prop1 and Prop2" step
+    (r :: Either ParseError Step) <- runIndentParser "Prop1 and Prop2" step
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> do
         -- logShow id
         assert "'Prop1 and Prop2' should be parsed as a binary step with operator LogicalAnd" case id of
-          (Binary (BinaryStep {operator})) -> case operator of
+          (Binary (BinaryStep { operator })) -> case operator of
             (LogicalAnd _) -> true
             otherwise -> false
           otherwise -> false
 
   test "BinaryStep with 'or' (LogicalOr)" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "Prop1 or Prop2" step
+    (r :: Either ParseError Step) <- runIndentParser "Prop1 or Prop2" step
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> do
         -- logShow id
         assert "'Prop1 or Prop2' should be parsed as a binary step with operator LogicalOr" case id of
-          (Binary (BinaryStep {operator})) -> case operator of
+          (Binary (BinaryStep { operator })) -> case operator of
             (LogicalOr _) -> true
             otherwise -> false
           otherwise -> false
 
   test "BinaryStep with /= (NotEquals)" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "Prop1 /= Prop2" step
+    (r :: Either ParseError Step) <- runIndentParser "Prop1 /= Prop2" step
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> do
         -- logShow id
         assert "'Prop1 /= Prop2' should be parsed as a binary step with operator NotEquals" case id of
-          (Binary (BinaryStep {operator})) -> case operator of
+          (Binary (BinaryStep { operator })) -> case operator of
             (NotEquals _) -> true
             otherwise -> false
           otherwise -> false
 
   test "BinaryStep with - (Subtract)" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "Prop1 - Prop2" step
+    (r :: Either ParseError Step) <- runIndentParser "Prop1 - Prop2" step
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> do
         -- logShow id
         assert "'Prop1 - Prop2' should be parsed as a binary step with operator Subtract" case id of
-          (Binary (BinaryStep {operator})) -> case operator of
+          (Binary (BinaryStep { operator })) -> case operator of
             (Subtract _) -> true
             otherwise -> false
           otherwise -> false
 
   test "BinaryStep with / (Divide)" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "Prop1 / Prop2" step
+    (r :: Either ParseError Step) <- runIndentParser "Prop1 / Prop2" step
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> do
         -- logShow id
         assert "'Prop1 / Prop2' should be parsed as a binary step with operator Divide" case id of
-          (Binary (BinaryStep {operator})) -> case operator of
+          (Binary (BinaryStep { operator })) -> case operator of
             (Divide _) -> true
             otherwise -> false
           otherwise -> false
 
   test "BinaryStep with 'union'" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "MyRole union OtherRole" step
+    (r :: Either ParseError Step) <- runIndentParser "MyRole union OtherRole" step
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> do
         -- logShow id
         assert "'MyRole union OtherRole' should be parsed as a binary step with operator Union" case id of
-          (Binary (BinaryStep {operator})) -> case operator of
+          (Binary (BinaryStep { operator })) -> case operator of
             (Union _) -> true
             otherwise -> false
           otherwise -> false
 
   test "BinaryStep with 'intersection'" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "MyRole intersection OtherRole" step
+    (r :: Either ParseError Step) <- runIndentParser "MyRole intersection OtherRole" step
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> do
         -- logShow id
         assert "'MyRole intersection OtherRole' should be parsed as a binary step with operator Intersection" case id of
-          (Binary (BinaryStep {operator})) -> case operator of
+          (Binary (BinaryStep { operator })) -> case operator of
             (Intersection _) -> true
             otherwise -> false
           otherwise -> false
 
   test "BinaryStep with 'orElse'" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "MyRole orElse OtherRole" step
+    (r :: Either ParseError Step) <- runIndentParser "MyRole orElse OtherRole" step
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> do
         -- logShow id
         assert "'MyRole orElse OtherRole' should be parsed as a binary step with operator OrElse" case id of
-          (Binary (BinaryStep {operator})) -> case operator of
+          (Binary (BinaryStep { operator })) -> case operator of
             (OrElse _) -> true
             otherwise -> false
           otherwise -> false
 
   test "BinaryStep with 'filledBy' (BindsOp)" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "MyRole filledBy AnotherRole" step
+    (r :: Either ParseError Step) <- runIndentParser "MyRole filledBy AnotherRole" step
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> do
         -- logShow id
         assert "'MyRole filledBy AnotherRole' should be parsed as a binary step with operator BindsOp" case id of
-          (Binary (BinaryStep {operator})) -> case operator of
+          (Binary (BinaryStep { operator })) -> case operator of
             (BindsOp _) -> true
             otherwise -> false
           otherwise -> false
 
   test "BinaryStep with 'fills' (FillsOp)" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "MyRole fills AnotherRole" step
+    (r :: Either ParseError Step) <- runIndentParser "MyRole fills AnotherRole" step
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> do
         -- logShow id
         assert "'MyRole fills AnotherRole' should be parsed as a binary step with operator FillsOp" case id of
-          (Binary (BinaryStep {operator})) -> case operator of
+          (Binary (BinaryStep { operator })) -> case operator of
             (FillsOp _) -> true
             otherwise -> false
           otherwise -> false
 
   test "DurationOperator: 'year' postfix" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "SomeDateProp year" step
+    (r :: Either ParseError Step) <- runIndentParser "SomeDateProp year" step
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> do
@@ -840,26 +949,26 @@ theSuite = suite "Perspectives.Parsing.Arc.Expression" do
           (Unary (DurationOperator _ (Year _) _)) -> true
           otherwise -> false
 
------------------------------------------------------------------------------------
----- PURELETS
------------------------------------------------------------------------------------
+  -----------------------------------------------------------------------------------
+  ---- PURELETS
+  -----------------------------------------------------------------------------------
 
   test "PureLetStep: letE with single binding" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "letE\n  a <- MyProp\nin AnotherProp" step
+    (r :: Either ParseError Step) <- runIndentParser "letE\n  a <- MyProp\nin AnotherProp" step
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> do
         -- logShow id
         assert "'letE a <- MyProp in AnotherProp' should be parsed as a PureLet step" case id of
-          (PureLet (PureLetStep {bindings})) -> (length bindings == 1)
+          (PureLet (PureLetStep { bindings })) -> (length bindings == 1)
           otherwise -> false
 
   test "PureLetStep: letE with two bindings" do
-    (r :: Either ParseError Step) <- {-pure $ unwrap $-} runIndentParser "letE\n  a <- MyProp\n  b <- OtherProp\nin AnotherProp" step
+    (r :: Either ParseError Step) <- runIndentParser "letE\n  a <- MyProp\n  b <- OtherProp\nin AnotherProp" step
     case r of
       (Left e) -> assert (show e) false
       (Right id) -> do
         -- logShow id
         assert "'letE a <- MyProp  b <- OtherProp in AnotherProp' should have two bindings" case id of
-          (PureLet (PureLetStep {bindings})) -> (length bindings == 2)
+          (PureLet (PureLetStep { bindings })) -> (length bindings == 2)
           otherwise -> false

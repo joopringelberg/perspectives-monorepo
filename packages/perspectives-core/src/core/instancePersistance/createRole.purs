@@ -35,22 +35,21 @@ import Control.Monad.Writer (lift)
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
 import Perspectives.Assignment.Update (getSubject)
-import Perspectives.Authenticate (signDelta)
 import Perspectives.ContextAndRole (defaultRolRecord)
 import Perspectives.CoreTypes (MonadPerspectivesTransaction, (###=))
 import Perspectives.Deltas (addCreatedRoleToTransaction)
 import Perspectives.InstanceRepresentation (PerspectRol(..))
-import Perspectives.Persistence.DeltaStore (storeDeltaFromSignedDelta)
 import Perspectives.Instances.ObjectGetters (contextType_)
+import Perspectives.Persistence.DeltaStore (storeDeltaFromSignedDelta)
 import Perspectives.Representation.Class.Cacheable (EnumeratedRoleType, cacheEntity)
 import Perspectives.Representation.Class.PersistentType (StateIdentifier(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance)
 import Perspectives.ResourceIdentifiers (takeGuid)
 import Perspectives.StrippedDelta (stripResourceSchemes)
+import Perspectives.Sync.VersionedDelta (signVersionedDelta)
 import Perspectives.Types.ObjectGetters (roleAspectsClosure)
 import Perspectives.TypesForDeltas (UniverseRoleDelta(..), UniverseRoleDeltaType(..))
-import Prelude (bind, discard, pure, void, ($))
-import Simple.JSON (writeJSON)
+import Prelude (bind, discard, pure, void, ($), (<<<), (<$>))
 
 -- | `localName` should be the local name of the roleType.
 -- | The role instance is cached.
@@ -63,9 +62,10 @@ constructEmptyRole
 constructEmptyRole contextInstance roleType i rolInstanceId = do
   subject <- getSubject
   allTypes <- lift (roleType ###= roleAspectsClosure)
+  allRootStates <- pure (StateIdentifier <<< unwrap <$> allTypes)
   contextType <- lift $ contextType_ contextInstance
-  delta <- signDelta
-    ( writeJSON $ stripResourceSchemes $ UniverseRoleDelta
+  delta <- signVersionedDelta
+    ( stripResourceSchemes $ UniverseRoleDelta
         { id: contextInstance
         , contextType
         , roleInstance: rolInstanceId
@@ -85,7 +85,8 @@ constructEmptyRole contextInstance roleType i rolInstanceId = do
         , allTypes = allTypes
         , context = contextInstance
         , occurrence = i
-        , states = [ StateIdentifier $ unwrap roleType ]
+        -- We need to store all root states. Otherwise inverted queries derived from aspect perspectives will not be triggered.
+        , states = allRootStates
         }
     )
   void $ lift $ cacheEntity rolInstanceId role

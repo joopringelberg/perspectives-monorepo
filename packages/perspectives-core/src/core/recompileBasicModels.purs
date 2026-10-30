@@ -29,7 +29,7 @@ module Main.RecompileBasicModels where
 import Prelude
 
 import Control.Monad.AvarMonadAsk (modify)
-import Control.Monad.Error.Class (class MonadThrow)
+import Control.Monad.Error.Class (class MonadThrow, throwError)
 import Control.Monad.Except (ExceptT, runExceptT)
 import Control.Monad.State (execState, execStateT)
 import Control.Monad.Trans.Class (lift)
@@ -39,7 +39,7 @@ import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.FoldableWithIndex (forWithIndex_)
 import Data.Generic.Rep (class Generic)
-import Data.Maybe (Maybe(..), fromJust, isJust)
+import Data.Maybe (Maybe(..), fromMaybe, isJust)
 import Data.MediaType (MediaType(..))
 import Data.Newtype (unwrap)
 import Data.String (Pattern(..), Replacement(..), replace)
@@ -51,6 +51,7 @@ import Effect.Class (liftEffect)
 import Foreign (unsafeToForeign)
 import Foreign.Object (empty)
 import Partial.Unsafe (unsafePartial)
+import Perspectives.Assignment.StateCache (clearModelStates)
 import Perspectives.ContextAndRole (rol_property)
 import Perspectives.CoreTypes (MonadPerspectivesTransaction, MonadPerspectives)
 import Perspectives.Couchdb (AttachmentInfo, DeleteCouchdbDocument(..))
@@ -58,12 +59,13 @@ import Perspectives.DependencyTracking.Array.Trans (runArrayT)
 import Perspectives.DomeinCache (addAttachments, storeDomeinFileInCouchdbPreservingAttachments)
 import Perspectives.DomeinFile (DomeinFile(..), addDownStreamAutomaticEffect, addDownStreamNotification)
 import Perspectives.Error.Boundaries (handleDomeinFileError)
-import Perspectives.Logging (debugUpgrade, errorUpgrade, infoUpgrade)
+import Perspectives.Error.Pretty (renderMultiplePerspectivesErrors)
 import Perspectives.ExecuteInTopologicalOrder (executeInTopologicalOrder) as TOP
 import Perspectives.Extern.Couchdb (roleInstancesFromCouchdb)
 import Perspectives.Identifiers (domeinFileVersion, modelUri2LocalName, modelUriVersion)
 import Perspectives.Instances.Indexed (indexedContexts_, indexedRoles_)
-import Perspectives.InvertedQuery.Storable (saveInvertedQueries)
+import Perspectives.InvertedQuery.Storable (removeInvertedQueriesContributedByModel, saveInvertedQueries)
+import Perspectives.Logging (debugUpgrade, errorUpgrade, infoUpgrade)
 import Perspectives.ModelDependencies (domeinFileName, indexedContext, indexedRole, modelManifest, versionToInstall)
 import Perspectives.Parsing.Messages (MultiplePerspectivesErrors)
 import Perspectives.Persistence.API (Keys(..), addAttachment, addDocument, documentsInDatabase, getAttachment, includeDocs, retrieveDocumentVersion, toFile)
@@ -90,7 +92,9 @@ recompileModelsAtUrl modelsDb manifestsDb = do
     Just (Right (df :: UninterpretedDomeinFile)) -> pure $ Just df
   r <- runExceptT (executeInTopologicalOrder (catMaybes uninterpretedDomeinFiles) recompileModelAtUrl)
   case r of
-    Left errors -> lift $ errorUpgrade ("recompileModelsAtUrl: " <> show errors)
+    Left errors -> do
+      rendered <- lift $ renderMultiplePerspectivesErrors errors
+      lift $ errorUpgrade ("recompileModelsAtUrl: " <> rendered)
     _ -> pure unit
   where
   -- This function is similar to recompileModel, but it does not distribute the state notifications and automatic effects over the other models.
@@ -105,9 +109,11 @@ recompileModelsAtUrl modelsDb manifestsDb = do
           -- Load sidecar from repository DB and compile with it. We need the version to take the right sidecar.
           mRepoMapping <- lift $ lift $ loadStableMapping (ModelUri $ unwrap id <> "@" <> version) fromRepository
           -- We have to provide the CUID that has been chosen for the model. This is stored in ModelManifest$External$ModelCuid.
-          r <- lift $ loadAndCompileArcFileWithSidecar_ (ModelUri $ unwrap id) arc false mRepoMapping (unsafePartial modelUri2LocalName (unwrap id)) (namespace <> "@" <> version) version
+          r <- lift $ loadAndCompileArcFileWithSidecar_ (ModelUri $ unwrap id) arc false mRepoMapping (unsafePartial modelUri2LocalName (unwrap id)) (namespace <> "@" <> version) (Just version)
           case r of
-            Left m -> lift $ lift $ errorUpgrade ("recompileModelsAtUrl: " <> show m)
+            Left m -> do
+              rendered <- lift $ lift $ renderMultiplePerspectivesErrors m
+              lift $ lift $ errorUpgrade ("recompileModelsAtUrl: " <> rendered)
             Right (Tuple df@(DomeinFile dfr@{ id: id' }) (Tuple invertedQueries mapping')) -> lift $ lift do
               infoUpgrade $ "Recompiled '" <> namespace <> "' succesfully (" <> namespace <> ")!"
               df' <- pure $ DomeinFile dfr { _id = _id, _rev = Just _rev, _attachments = _attachments }
@@ -124,12 +130,12 @@ recompileModelsAtUrl modelsDb manifestsDb = do
               setRevision id' newRev2
           pure model
 
-  getVersionedDomeinFileName :: RoleInstance -> MonadPerspectivesTransaction (Maybe String)
-  getVersionedDomeinFileName rid = do
-    r <- lift $ getPerspectRol rid
-    case head $ rol_property r (EnumeratedPropertyType domeinFileName), head $ rol_property r (EnumeratedPropertyType versionToInstall) of
-      Just (Value dfName), Just (Value version) -> pure $ Just $ (replace (Pattern ".json") (Replacement "") dfName) <> "@" <> version <> ".json"
-      _, _ -> pure Nothing
+getVersionedDomeinFileName :: RoleInstance -> MonadPerspectivesTransaction (Maybe String)
+getVersionedDomeinFileName rid = do
+  r <- lift $ getPerspectRol rid
+  case head $ rol_property r (EnumeratedPropertyType domeinFileName), head $ rol_property r (EnumeratedPropertyType versionToInstall) of
+    Just (Value dfName), Just (Value version) -> pure $ Just $ (replace (Pattern ".json") (Replacement "") dfName) <> "@" <> version <> ".json"
+    _, _ -> pure Nothing
 
 -- | As this function recompiles a model stored in the local models database, it not only actually recompiles the source, but also
 -- | distributes the state notifications and automatic effects over the other models.
@@ -140,16 +146,31 @@ recompileModel model@(UninterpretedDomeinFile { _rev, _id, id, namespace, arc, _
     lift $ lift $ debugUpgrade ("Recompiling " <> namespace)
     -- Load sidecar from local DB and compile with it
     mlocalMapping <- lift $ lift $ loadStableMapping (ModelUri $ unwrap id) fromLocalModels
+    -- If no local sidecar is found, fall back to fetching it from the repository.
+    mMapping <- case mlocalMapping of
+      Just _ -> pure mlocalMapping
+      Nothing -> case modelUriVersion _id of
+        Nothing -> do
+          lift $ lift $ infoUpgrade ("recompileModel: no local sidecar for '" <> namespace <> "' and no version in '" <> _id <> "', cannot fall back to repository.")
+          pure Nothing
+        Just version -> do
+          lift $ lift $ infoUpgrade ("recompileModel: no local sidecar for '" <> namespace <> "', falling back to repository sidecar.")
+          lift $ lift $ loadStableMapping (ModelUri $ unwrap id <> "@" <> version) fromRepository
     -- We have to provide the CUID that has been chosen for the model. This is stored in ModelManifest$External$ModelCuid.
     -- It should also be the local part of the id.
-    r <- lift $ loadAndCompileArcFileWithSidecar_ (ModelUri $ unwrap id) arc true mlocalMapping (unsafePartial modelUri2LocalName (unwrap id)) (namespace <> "@" <> (unsafePartial fromJust $ modelUriVersion _id)) (unsafePartial fromJust $ modelUriVersion _id)
+    r <- lift $ loadAndCompileArcFileWithSidecar_ (ModelUri $ unwrap id) arc true mMapping (unsafePartial modelUri2LocalName (unwrap id)) (namespace <> (fromMaybe "" ((<>) "@" <$> (modelUriVersion _id)))) (modelUriVersion _id)
     case r of
-      Left m -> lift $ lift $ errorUpgrade ("recompileModel: " <> show m)
+      Left m -> throwError m
       Right (Tuple df@(DomeinFile drf@{ invertedQueriesInOtherDomains, upstreamStateNotifications, upstreamAutomaticEffects }) (Tuple invertedQueries mapping')) -> lift $ lift do
         infoUpgrade $ "Recompiled '" <> namespace <> "' succesfully!"
         -- We have to add the _id here manually.
         df' <- pure $ DomeinFile drf { _id = _id, _attachments = _attachments }
         storeDomeinFileInCouchdbPreservingAttachments df'
+        -- State ids survive recompilation, but cached actions still close over the old definitions.
+        void $ pure $ clearModelStates id
+        -- Drop the inverted queries of the previous compilation first; otherwise queries that refer to types
+        -- that no longer exist (e.g. removed states) survive and break the runtime.
+        removeInvertedQueriesContributedByModel id
         saveInvertedQueries invertedQueries
         -- Right after recompiling the System model, add indexed resources.
         -- Even though we retrieve those indexed resources before running data upgrades, they may not be present in state because 

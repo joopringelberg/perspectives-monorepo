@@ -27,7 +27,7 @@ import Control.Monad.Error.Class (catchError, throwError, try)
 import Control.Monad.Except (lift, runExcept, runExceptT)
 import Control.Monad.State (StateT, gets, modify, runStateT) as ST
 import Crypto.Subtle.Key.Types (CryptoKey)
-import Data.Array (any, catMaybes, concat, filter, fromFoldable, null, sortBy)
+import Data.Array (any, catMaybes, concat, filter, foldl, fromFoldable, null, nub, sortBy)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.FoldableWithIndex (forWithIndex_)
@@ -64,7 +64,7 @@ import Perspectives.Logging (traceSync, warnSync)
 import Perspectives.ModelDependencies (rootContext)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (getAttachment)
-import Perspectives.Persistence.DeltaStore (extractDeltaInfo, storeDelta, getDeltasForResource, getDeltasForRoleInstance, updateDeltaApplied, deltaStoreDocId, safeKey)
+import Perspectives.Persistence.DeltaStore (deltaStoreDocIdWithDeltaId, extractDeltaInfo, findDeltaByDeltaId, getDeltasForResource, getDeltasForRoleInstance, safeKey, storeDelta, storeDeltaFromSignedDelta, updateDeltaApplied)
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
 import Perspectives.Persistence.PendingTransactionStore (MissingDelta, storePendingTransaction)
 import Perspectives.Persistence.ResourceVersionStore (getResourceVersion, incrementResourceVersion, setResourceVersion)
@@ -75,18 +75,18 @@ import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), Per
 import Perspectives.Representation.TypeIdentifiers (ResourceType(..), RoleType(..), StateIdentifier(..), externalRoleType, roletype2string)
 import Perspectives.Representation.Verbs (PropertyVerb(..), RoleVerb(..)) as Verbs
 import Perspectives.ResourceIdentifiers (createPublicIdentifier, isInPublicScheme, resourceIdentifier2DocLocator, resourceIdentifier2WriteDocLocator, takeGuid)
+import Perspectives.Sync.CanonicalJson (computeDeltaId)
 import Perspectives.SaveUserData (removeBinding, removeContextIfUnbound, replaceBinding, scheduleContextRemoval, scheduleRoleRemoval, setFirstBinding, synchronise)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
-import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.StrippedDelta (addPublicResourceScheme, addResourceSchemes, addSchemeToResourceIdentifier)
-import Perspectives.Sync.LegacyDeltas (extractLegacyResourceKey, toContextDelta, toRoleBindingDelta, toRolePropertyDelta, toUniverseContextDelta, toUniverseRoleDelta)
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
 import Perspectives.Sync.Transaction (PublicKeyInfo, Transaction(..))
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..))
+import Perspectives.Sync.VersionedDelta (DeltaEnvelope(..), parseIncomingDelta)
 import Perspectives.Types.ObjectGetters (contextAspectsClosure, hasAspect, isPublic, roleAspectsClosure, publicUserRole)
 import Perspectives.TypesForDeltas (ContextDelta(..), ContextDeltaType(..), DeltaRecord, RoleBindingDelta(..), RoleBindingDeltaType(..), RolePropertyDelta(..), RolePropertyDeltaType(..), UniverseContextDelta(..), UniverseContextDeltaType(..), UniverseRoleDelta(..), UniverseRoleDeltaType(..))
 import Perspectives.Warning (PerspectivesWarning(..))
-import Prelude (class Eq, class Ord, Unit, bind, compare, discard, flip, map, negate, not, pure, show, unit, void, ($), (*>), (+), (/=), (<), (<$>), (<<<), (<>), (==), (>), (>=), (>>=), (&&), (||), (>=>))
+import Prelude (class Eq, class Monad, class Ord, Unit, bind, compare, discard, flip, map, negate, not, pure, show, unit, void, ($), (*>), (+), (/=), (<), (<$>), (<<<), (<>), (==), (>), (>=), (>>=), (&&), (||), (>=>))
 import Simple.JSON (readJSON')
 
 -- TODO. Each of the executing functions must catch errors that arise from unknown types.
@@ -130,7 +130,7 @@ executeRoleBindingDelta (RoleBindingDelta { filled, filler, deltaType, subject }
 -- TODO. Wat met SetPropertyValue?
 executeRolePropertyDelta :: RolePropertyDelta -> SignedDelta -> MonadPerspectivesTransaction Unit
 executeRolePropertyDelta d@(RolePropertyDelta { id, roleType, deltaType, values, property, subject }) signedDelta = do
-  lift $ toReadable property >>= \readableProperty -> renderPerspectivesWarning >=> traceSync $ (ExecutingRolePropertyDelta (show deltaType) (show id) (show readableProperty))
+  lift $ renderPerspectivesWarning >=> traceSync $ (ExecutingRolePropertyDelta deltaType id property)
   case deltaType of
     AddProperty -> do
       -- we need not check whether the model is known if we assume valid transactions:
@@ -218,11 +218,38 @@ extractOrderingInfo stringifiedDelta = case runExcept $ readJSON' stringifiedDel
 -- | A gap exists when a delta's resourceVersion is greater than the local version + 1.
 -- | Returns the list of missing deltas (gaps) if any.
 checkForGaps :: Array { resourceKey :: String, resourceVersion :: Int, author :: PerspectivesUser } -> MonadPerspectivesTransaction (Array MissingDelta)
-checkForGaps deltaInfos = do
-  gaps <- for deltaInfos \{ resourceKey, resourceVersion, author } -> do
-    localVersion <- lift $ getResourceVersion resourceKey
-    if resourceVersion > localVersion + 1 then pure $ Just { author, resourceKey, expectedVersion: localVersion + 1 }
-    else pure Nothing
+checkForGaps = checkForGapsWith (lift <<< getResourceVersion)
+
+checkForGapsWith :: forall m. Monad m => (String -> m Int) -> Array { resourceKey :: String, resourceVersion :: Int, author :: PerspectivesUser } -> m (Array MissingDelta)
+checkForGapsWith lookupVersion deltaInfos = do
+  let
+    nonLegacyInfos = filter (\d -> d.resourceVersion >= 0) deltaInfos
+    -- Storage addresses may change on publication; version histories use safeKey identity.
+    resourceKeys = nub (map (safeKey <<< _.resourceKey) nonLegacyInfos)
+  gaps <- for resourceKeys \resourceKey -> do
+    localVersion <- lookupVersion resourceKey
+    let
+      sortedInfos = sortBy (\d1 d2 -> compare d1.resourceVersion d2.resourceVersion)
+        (filter (\d -> safeKey d.resourceKey == resourceKey) nonLegacyInfos)
+      result = foldl
+        ( \acc d ->
+            case acc.gap of
+              Just _ -> acc
+              Nothing ->
+                if d.resourceVersion < acc.expectedVersion then acc
+                else if d.resourceVersion == acc.expectedVersion then acc { expectedVersion = acc.expectedVersion + 1 }
+                else
+                  acc
+                    { gap = Just
+                        { author: d.author
+                        , resourceKey: d.resourceKey
+                        , expectedVersion: acc.expectedVersion
+                        }
+                    }
+        )
+        { expectedVersion: localVersion + 1, gap: Nothing }
+        sortedInfos
+    pure result.gap
   pure $ catMaybes gaps
 
 -- | Retrieves from the repository the model that holds the ContextType, if necessary.
@@ -230,7 +257,7 @@ checkForGaps deltaInfos = do
 -- | role for. Hence we only have to check whether the external role exists.
 executeUniverseContextDelta :: UniverseContextDelta -> SignedDelta -> MonadPerspectivesTransaction Unit
 executeUniverseContextDelta (UniverseContextDelta { id, contextType, deltaType, subject }) signedDelta = do
-  lift $ toReadable contextType >>= \readableContextType -> renderPerspectivesWarning >=> traceSync $ (ExecutingUniverseContextDelta (show deltaType) (show id) (show readableContextType))
+  lift $ renderPerspectivesWarning >=> traceSync $ (ExecutingUniverseContextDelta deltaType id contextType)
   allTypes <- lift (contextType ###= contextAspectsClosure)
   externalRoleExists <- lift $ entityExists (RoleInstance $ buitenRol $ unwrap id)
   if externalRoleExists then case deltaType of
@@ -275,9 +302,7 @@ executeUniverseContextDelta (UniverseContextDelta { id, contextType, deltaType, 
 -- | Retrieves from the repository the model that holds the RoleType, if necessary.
 executeUniverseRoleDelta :: UniverseRoleDelta -> SignedDelta -> MonadPerspectivesTransaction Unit
 executeUniverseRoleDelta (UniverseRoleDelta { id, roleType, roleInstance, authorizedRole, deltaType, subject }) s = do
-  readableRoleType <- lift $ toReadable roleType
-  readableSubject <- lift $ toReadable subject
-  lift $ renderPerspectivesWarning >=> traceSync $ (ExecutingUniverseRoleDelta (show deltaType) (show id) (show roleInstance) (show readableRoleType) (show readableSubject))
+  lift $ renderPerspectivesWarning >=> traceSync $ (ExecutingUniverseRoleDelta deltaType id roleInstance roleType subject)
   void $ lift $ retrieveDomeinFile (ModelUri $ unsafePartial typeUri2ModelUri_ $ unwrap roleType)
   case deltaType of
     ConstructEmptyRole -> do
@@ -447,7 +472,11 @@ executeTransaction' :: Map.Map PerspectivesUser CryptoKey -> TransactionForPeer 
 executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) = do
 
   -- Add all public key information (possibly leading to more TheWorld$PerspectivesUsers instances).
-  for_ (unwrap publicKeys) \{ deltas: keyDeltas } -> void $ for keyDeltas \s@(SignedDelta { encryptedDelta }) -> executeDelta s (Just encryptedDelta)
+  -- Key deltas are executed directly (not through executeDeltaWithVersionTracking),
+  -- so persist them explicitly in the DeltaStore first.
+  for_ (unwrap publicKeys) \{ deltas: keyDeltas } -> void $ for keyDeltas \s@(SignedDelta { encryptedDelta }) -> do
+    lift $ storeDeltaFromSignedDelta s
+    executeDelta s (Just encryptedDelta)
 
   -- STEP 1: Verify and extract ordering info from all deltas.
   -- Use the keys collected during verifyTransaction to avoid re-querying the entity store
@@ -460,10 +489,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
       Nothing -> Nothing
       Just stringified -> case extractOrderingInfo stringified of
         Just { resourceKey, resourceVersion } -> Just { signedDelta: s, stringified, resourceKey, resourceVersion, author }
-        -- Legacy delta: derive resourceKey from content, use -1 to signal "compute next version".
-        Nothing -> case extractLegacyResourceKey stringified of
-          Just rkey -> Just { signedDelta: s, stringified, resourceKey: rkey, resourceVersion: (-1), author }
-          Nothing -> Just { signedDelta: s, stringified, resourceKey: "", resourceVersion: 0, author }
+        Nothing -> Nothing
 
   -- STEP 2: Check for gaps. If any delta has resourceVersion > localVersion + 1, block the transaction.
   let
@@ -478,11 +504,14 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
     _ -> do
       -- Gaps detected: block the entire transaction.
       lift $ renderPerspectivesWarning >=> traceSync $ TransactionBlockedByVersionGaps
+      lift $ traceSync $ "Missing peer delta versions: " <> show gaps
       lift $ storePendingTransaction t gaps
   where
 
   executeDeltaWithVersionTracking :: SignedDelta -> String -> String -> Int -> PerspectivesUser -> MonadPerspectivesTransaction Unit
   executeDeltaWithVersionTracking s stringified resourceKey resourceVersion author = do
+    deltaId <- liftAff $ computeDeltaId (unwrap author) stringified
+    mDuplicate <- lift $ findDeltaByDeltaId deltaId
     -- Extract the deltaType and contextKey from the stringified delta content.
     let
       mInfo = extractDeltaInfo stringified
@@ -492,200 +521,109 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
       contextKey = case mInfo of
         Just info -> map safeKey info.contextInstance
         Nothing -> Nothing
-    if resourceKey /= "" then do
-      localVersion <- lift $ getResourceVersion resourceKey
-      if resourceVersion < 0 then do
-        -- Legacy delta: always execute, compute next version.
-        executeDelta s (Just stringified)
-        rversion <- lift $ incrementResourceVersion resourceKey
+      persistIncomingDelta applied disposition =
         lift $ storeDelta $ DeltaStoreRecord
-          { _id: deltaStoreDocId resourceKey rversion author
-          , _rev: Nothing
-          , resourceKey
-          , resourceVersion: rversion
-          , author
-          , signedDelta: s
-          , deltaType
-          , applied: true
-          , contextKey
-          }
-      else if resourceVersion < localVersion then do
-        -- Outdated delta: version is behind local version. Store but don't execute.
-        lift $ renderPerspectivesWarning >=> traceSync $ (SkippingOutdatedDelta resourceKey resourceVersion localVersion)
-        lift $ storeDelta $ DeltaStoreRecord
-          { _id: deltaStoreDocId resourceKey resourceVersion author
+          { _id: deltaStoreDocIdWithDeltaId resourceKey resourceVersion author deltaId
           , _rev: Nothing
           , resourceKey
           , resourceVersion
           , author
+          , deltaId: Just deltaId
           , signedDelta: s
           , deltaType
-          , applied: false
+          , applied
+          , disposition: Just disposition
           , contextKey
           }
-      else if resourceVersion == localVersion then do
-        -- Check for existing deltas at this version to distinguish a fresh creation from a genuine conflict.
-        existingDeltas <- lift $ getDeltasForResource resourceKey
-        let sameVersionDeltas = filter (\(DeltaStoreRecord r) -> r.resourceVersion == resourceVersion) existingDeltas
-        if resourceVersion == 0 && null sameVersionDeltas then do
-          -- Fresh resource creation: version 0 with no prior deltas for this key.
-          -- getResourceVersion returns 0 both for untracked resources and for resources
-          -- at version 0, so when there are no existing deltas this is the first mutation,
-          -- not a write-write conflict. Execute directly.
-          executeDelta s (Just stringified)
-          lift $ storeDelta $ DeltaStoreRecord
-            { _id: deltaStoreDocId resourceKey resourceVersion author
-            , _rev: Nothing
-            , resourceKey
-            , resourceVersion
-            , author
-            , signedDelta: s
-            , deltaType
-            , applied: true
-            , contextKey
-            }
+    case mDuplicate of
+      Just _ -> pure unit
+      Nothing | resourceKey /= "" -> do
+        localVersion <- lift $ getResourceVersion resourceKey
+        if resourceVersion < localVersion then do
+          -- Outdated delta: version is behind local version. Store but don't execute.
+          lift $ renderPerspectivesWarning >=> traceSync $ (SkippingOutdatedDelta resourceKey deltaType resourceVersion localVersion)
+          persistIncomingDelta false "Outdated"
+        else if resourceVersion == localVersion then do
+          -- Check for existing deltas at this version to distinguish a fresh creation from a genuine conflict.
+          existingDeltas <- lift $ getDeltasForResource resourceKey
+          let sameVersionDeltas = filter (\(DeltaStoreRecord r) -> r.resourceVersion == resourceVersion) existingDeltas
+          if resourceVersion == 0 && null sameVersionDeltas then do
+            -- Fresh resource creation: version 0 with no prior deltas for this key.
+            -- getResourceVersion returns 0 both for untracked resources and for resources
+            -- at version 0, so when there are no existing deltas this is the first mutation,
+            -- not a write-write conflict. Execute directly.
+            executeDelta s (Just stringified)
+            persistIncomingDelta true "Applied"
+          else do
+            -- Genuine version conflict: two deltas claim the same version from different authors.
+            -- Resolve deterministically by lexicographic comparison of author IDs:
+            -- the author with the highest ID wins on all installations.
+            -- Check whether any already-stored delta at this version has an author >= the incoming author.
+            let incomingAuthorWins = not (hasAuthorGreaterOrEqual author sameVersionDeltas)
+            if incomingAuthorWins then do
+              -- Incoming author wins: execute the delta (overwriting the current value).
+              lift $ renderPerspectivesWarning >=> traceSync $ (VersionConflictIncomingWins resourceKey deltaType resourceVersion (show author))
+              executeDelta s (Just stringified)
+              persistIncomingDelta true "Applied"
+            else do
+              -- Existing author wins: store but don't execute.
+              lift $ renderPerspectivesWarning >=> traceSync $ (VersionConflictIncomingLoses resourceKey deltaType resourceVersion (show author))
+              persistIncomingDelta false "ConflictLoser"
         else do
-          -- Genuine version conflict: two deltas claim the same version from different authors.
-          -- Resolve deterministically by lexicographic comparison of author IDs:
-          -- the author with the highest ID wins on all installations.
-          -- Check whether any already-stored delta at this version has an author >= the incoming author.
-          let incomingAuthorWins = not (hasAuthorGreaterOrEqual author sameVersionDeltas)
-          if incomingAuthorWins then do
-            -- Incoming author wins: execute the delta (overwriting the current value).
-            lift $ renderPerspectivesWarning >=> traceSync $ (VersionConflictIncomingWins resourceKey resourceVersion (show author))
-            executeDelta s (Just stringified)
-            lift $ storeDelta $ DeltaStoreRecord
-              { _id: deltaStoreDocId resourceKey resourceVersion author
-              , _rev: Nothing
-              , resourceKey
-              , resourceVersion
-              , author
-              , signedDelta: s
-              , deltaType
-              , applied: true
-              , contextKey
-              }
-          else do
-            -- Existing author wins: store but don't execute.
-            lift $ renderPerspectivesWarning >=> traceSync $ (VersionConflictIncomingLoses resourceKey resourceVersion (show author))
-            lift $ storeDelta $ DeltaStoreRecord
-              { _id: deltaStoreDocId resourceKey resourceVersion author
-              , _rev: Nothing
-              , resourceKey
-              , resourceVersion
-              , author
-              , signedDelta: s
-              , deltaType
-              , applied: false
-              , contextKey
-              }
-      else do
-        -- resourceVersion > localVersion: normal next expected version.
-        -- (Gaps have already been ruled out by checkForGaps.)
-        -- Apply modify-wins-over-delete logic before executing.
-        if isDeletionDeltaType deltaType then do
-          -- Incoming is a role deletion. Check for concurrent local modifications on sub-resources.
-          suppressedByModify <- isDeletionSuppressedByModifyWins resourceKey
-          if suppressedByModify then do
-            -- Modify wins over delete: suppress the deletion.
-            lift $ renderPerspectivesWarning >=> traceSync $ (ModifyWinsOverDeleteSuppressed resourceKey)
-            lift $ setResourceVersion resourceKey resourceVersion
-            lift $ storeDelta $ DeltaStoreRecord
-              { _id: deltaStoreDocId resourceKey resourceVersion author
-              , _rev: Nothing
-              , resourceKey
-              , resourceVersion
-              , author
-              , signedDelta: s
-              , deltaType
-              , applied: false
-              , contextKey
-              }
-          else do
-            -- No concurrent modifications: apply deletion normally.
-            executeDelta s (Just stringified)
-            lift $ setResourceVersion resourceKey resourceVersion
-            lift $ storeDelta $ DeltaStoreRecord
-              { _id: deltaStoreDocId resourceKey resourceVersion author
-              , _rev: Nothing
-              , resourceKey
-              , resourceVersion
-              , author
-              , signedDelta: s
-              , deltaType
-              , applied: true
-              , contextKey
-              }
-        else if isSubResourceKey resourceKey then do
-          -- Incoming is a sub-resource modification (property or binding).
-          -- Check whether the role instance was deleted and needs restoration.
-          -- Extract the role instance ID from the sub-resource key.
-          -- Resource keys have the form: roleInstanceId <> "#" <> subResourceId,
-          -- and roleInstanceId itself contains one "#" (the scheme separator, e.g. "def:#id").
-          -- So we must find the SECOND "#" to locate the role/sub-resource boundary.
-          let roleInstanceId = extractRoleInstanceId resourceKey
-          mRole <- lift $ tryGetPerspectRol (RoleInstance roleInstanceId)
-          case mRole of
-            Nothing -> do
-              -- Role does not exist. Use the resource version as a proxy for deletion:
-              -- if localVersion > 0, the role existed at some point and was likely deleted.
-              -- This is more robust than relying on the deletion delta being in the DeltaStore,
-              -- because the creation deltas may have arrived in the same transaction as the
-              -- modification and been stored with applied=false (outdated path), preventing
-              -- a pure delta-store based check from working.
-              localRoleVersion <- lift $ getResourceVersion roleInstanceId
-              if localRoleVersion > 0 then do
-                -- Modify wins over delete: restore the role from the delta-store.
-                lift $ renderPerspectivesWarning >=> traceSync $ (ModifyWinsOverDeleteRestoring roleInstanceId)
-                restoreRoleFromDeltaStore roleInstanceId
-              else pure unit
-              -- Execute the modification (role should now exist if restored).
+          -- resourceVersion > localVersion: normal next expected version.
+          -- (Gaps have already been ruled out by checkForGaps.)
+          -- Apply modify-wins-over-delete logic before executing.
+          if isDeletionDeltaType deltaType then do
+            -- Incoming is a role deletion. Check for concurrent local modifications on sub-resources.
+            suppressedByModify <- isDeletionSuppressedByModifyWins resourceKey
+            if suppressedByModify then do
+              -- Modify wins over delete: suppress the deletion.
+              lift $ renderPerspectivesWarning >=> traceSync $ (ModifyWinsOverDeleteSuppressed resourceKey)
+              lift $ setResourceVersion resourceKey resourceVersion
+              persistIncomingDelta false "ModifyWinsSuppressedDelete"
+            else do
+              -- No concurrent modifications: apply deletion normally.
               executeDelta s (Just stringified)
               lift $ setResourceVersion resourceKey resourceVersion
-              lift $ storeDelta $ DeltaStoreRecord
-                { _id: deltaStoreDocId resourceKey resourceVersion author
-                , _rev: Nothing
-                , resourceKey
-                , resourceVersion
-                , author
-                , signedDelta: s
-                , deltaType
-                , applied: true
-                , contextKey
-                }
-            Just _ -> do
-              -- Role exists: execute normally.
-              executeDelta s (Just stringified)
-              lift $ setResourceVersion resourceKey resourceVersion
-              lift $ storeDelta $ DeltaStoreRecord
-                { _id: deltaStoreDocId resourceKey resourceVersion author
-                , _rev: Nothing
-                , resourceKey
-                , resourceVersion
-                , author
-                , signedDelta: s
-                , deltaType
-                , applied: true
-                , contextKey
-                }
-        else do
-          -- Role-level delta that is not a deletion (e.g. ConstructEmptyRole, AddRoleInstancesToContext).
-          executeDelta s (Just stringified)
-          lift $ setResourceVersion resourceKey resourceVersion
-          lift $ storeDelta $ DeltaStoreRecord
-            { _id: deltaStoreDocId resourceKey resourceVersion author
-            , _rev: Nothing
-            , resourceKey
-            , resourceVersion
-            , author
-            , signedDelta: s
-            , deltaType
-            , applied: true
-            , contextKey
-            }
-    else
-      -- No resourceKey: legacy delta without ordering info, just execute.
-      executeDelta s (Just stringified)
+              persistIncomingDelta true "Applied"
+          else if isSubResourceKey resourceKey then do
+            -- Incoming is a sub-resource modification (property or binding).
+            -- Check whether the role instance was deleted and needs restoration.
+            -- Extract the role instance ID from the sub-resource key.
+            -- Resource keys have the form: roleInstanceId <> "#" <> subResourceId,
+            -- and roleInstanceId itself contains one "#" (the scheme separator, e.g. "def:#id").
+            -- So we must find the SECOND "#" to locate the role/sub-resource boundary.
+            let roleInstanceId = extractRoleInstanceId resourceKey
+            mRole <- lift $ tryGetPerspectRol (RoleInstance roleInstanceId)
+            case mRole of
+              Nothing -> do
+                -- Role does not exist. Use the resource version as a proxy for deletion:
+                -- if localVersion > 0, the role existed at some point and was likely deleted.
+                -- This is more robust than relying on the deletion delta being in the DeltaStore,
+                -- because the creation deltas may have arrived in the same transaction as the
+                -- modification and been stored with applied=false (outdated path), preventing
+                -- a pure delta-store based check from working.
+                localRoleVersion <- lift $ getResourceVersion roleInstanceId
+                if localRoleVersion > 0 then do
+                  -- Modify wins over delete: restore the role from the delta-store.
+                  lift $ renderPerspectivesWarning >=> traceSync $ (ModifyWinsOverDeleteRestoring roleInstanceId)
+                  restoreRoleFromDeltaStore roleInstanceId
+                else pure unit
+                -- Execute the modification (role should now exist if restored).
+                executeDelta s (Just stringified)
+                lift $ setResourceVersion resourceKey resourceVersion
+                persistIncomingDelta true "Applied"
+              Just _ -> do
+                -- Role exists: execute normally.
+                executeDelta s (Just stringified)
+                lift $ setResourceVersion resourceKey resourceVersion
+                persistIncomingDelta true "Applied"
+          else do
+            -- Role-level delta that is not a deletion (e.g. ConstructEmptyRole, AddRoleInstancesToContext).
+            executeDelta s (Just stringified)
+            lift $ setResourceVersion resourceKey resourceVersion
+            persistIncomingDelta true "Applied"
+      Nothing -> pure unit
 
   -- | Returns true if a deltaType string represents a role-instance deletion.
   isDeletionDeltaType :: String -> Boolean
@@ -791,29 +729,13 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
   executeDelta s (Just stringifiedDelta) = do
     storageSchemes <- lift $ gets _.typeToStorage
     catchError
-      ( case runExcept $ readJSON' stringifiedDelta of
-          Right d1 -> lift (addResourceSchemes storageSchemes d1) >>= flip executeRolePropertyDelta s
-          Left _ -> case runExcept $ readJSON' stringifiedDelta of
-            Right d2 -> lift (addResourceSchemes storageSchemes d2) >>= flip executeRoleBindingDelta s
-            Left _ -> case runExcept $ readJSON' stringifiedDelta of
-              Right d3 -> lift (addResourceSchemes storageSchemes d3) >>= flip executeContextDelta s
-              Left _ -> case runExcept $ readJSON' stringifiedDelta of
-                Right d4 -> lift ((addResourceSchemes storageSchemes d4)) >>= flip executeUniverseRoleDelta s
-                Left _ -> case runExcept $ readJSON' stringifiedDelta of
-                  Right d5 -> lift (addResourceSchemes storageSchemes d5) >>= flip executeUniverseContextDelta s
-                  -- Fallback: try legacy delta formats (old DeltaRecord without resourceKey/resourceVersion,
-                  -- old UniverseRoleDelta with roleInstances array). Legacy deltas are trusted without re-verification.
-                  Left _ -> case runExcept $ readJSON' stringifiedDelta of
-                    Right ld1 -> lift (addResourceSchemes storageSchemes (toRolePropertyDelta ld1)) >>= flip executeRolePropertyDelta s
-                    Left _ -> case runExcept $ readJSON' stringifiedDelta of
-                      Right ld2 -> lift (addResourceSchemes storageSchemes (toRoleBindingDelta ld2)) >>= flip executeRoleBindingDelta s
-                      Left _ -> case runExcept $ readJSON' stringifiedDelta of
-                        Right ld3 -> lift (addResourceSchemes storageSchemes (toContextDelta ld3)) >>= flip executeContextDelta s
-                        Left _ -> case runExcept $ readJSON' stringifiedDelta of
-                          Right ld4 -> lift (addResourceSchemes storageSchemes (toUniverseRoleDelta ld4)) >>= flip executeUniverseRoleDelta s
-                          Left _ -> case runExcept $ readJSON' stringifiedDelta of
-                            Right ld5 -> lift (addResourceSchemes storageSchemes (toUniverseContextDelta ld5)) >>= flip executeUniverseContextDelta s
-                            Left _ -> lift $ renderPerspectivesError >=> warnSync $ (UnparseableIncomingDelta stringifiedDelta)
+      ( case parseIncomingDelta stringifiedDelta of
+          Right (RolePropertyEnvelope d1) -> lift (addResourceSchemes storageSchemes d1) >>= flip executeRolePropertyDelta s
+          Right (RoleBindingEnvelope d2) -> lift (addResourceSchemes storageSchemes d2) >>= flip executeRoleBindingDelta s
+          Right (ContextEnvelope d3) -> lift (addResourceSchemes storageSchemes d3) >>= flip executeContextDelta s
+          Right (UniverseRoleEnvelope d4) -> lift (addResourceSchemes storageSchemes d4) >>= flip executeUniverseRoleDelta s
+          Right (UniverseContextEnvelope d5) -> lift (addResourceSchemes storageSchemes d5) >>= flip executeUniverseContextDelta s
+          Left _ -> lift $ renderPerspectivesError >=> warnSync $ (UnparseableIncomingDelta stringifiedDelta)
       )
       (\e -> lift $ renderPerspectivesError >=> warnSync $ (DeltaExecutionError (show e)))
 
@@ -822,7 +744,8 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
 -- | that specific url.
 -- | As an INVARIANT, all these (public) resources are de-cached, so we ensure that they are freshly retrieved from the database prior to executing 
 -- | a delta on them. This is so we mitigate the risk of a peer having written the resource while we have an older version in cache.
--- | However, if the resource isn't present in the database, we don't delete it from the cache.
+-- | Pending saves and new, unpersisted instances remain cached. Previously persisted
+-- | instances are evicted even if their database was deleted, so creation deltas can reconstruct them.
 -- | All deltas in this transaction have either been sent to this installation and thus have been verified before, or
 -- | they are created by this installation so verification is meaningless.
 -- | We ignore a delta if its subject is public.
@@ -838,17 +761,13 @@ expandDeltas t@(TransactionForPeer { deltas, publicKeys }) storageUrl = do
   expandDelta s@(SignedDelta sr@{ author, encryptedDelta, signature }) = do
     -- Use the storageUrl to add a public scheme to the author.
     s' <- pure $ SignedDelta sr { author = over PerspectivesUser (createPublicIdentifier storageUrl) author }
-    case runExcept $ readJSON' encryptedDelta of
-      Right (d1 :: RolePropertyDelta) -> notWhenPublicSubject (unwrap d1) (lift $ (Just <<< RPD s' <$> addPublicResourceScheme storageUrl d1))
-      Left _ -> case runExcept $ readJSON' encryptedDelta of
-        Right (d2 :: RoleBindingDelta) -> notWhenPublicSubject (unwrap d2) (lift $ (Just <<< RBD s' <$> addPublicResourceScheme storageUrl d2))
-        Left _ -> case runExcept $ readJSON' encryptedDelta of
-          Right (d3 :: ContextDelta) -> notWhenPublicSubject (unwrap d3) (lift $ (Just <<< CDD s' <$> addPublicResourceScheme storageUrl d3))
-          Left _ -> case runExcept $ readJSON' encryptedDelta of
-            Right (d4 :: UniverseRoleDelta) -> notWhenPublicSubject (unwrap d4) (lift $ (Just <<< URD s' <$> addPublicResourceScheme storageUrl d4))
-            Left _ -> case runExcept $ readJSON' encryptedDelta of
-              Right (d5 :: UniverseContextDelta) -> notWhenPublicSubject (unwrap d5) (lift $ (Just <<< UCD s' <$> addPublicResourceScheme storageUrl d5))
-              Left _ -> (lift $ renderPerspectivesError >=> warnSync $ (UnparseableIncomingDelta encryptedDelta)) *> pure Nothing
+    case parseIncomingDelta encryptedDelta of
+      Right (RolePropertyEnvelope d1) -> notWhenPublicSubject (unwrap d1) (lift $ (Just <<< RPD s' <$> addPublicResourceScheme storageUrl d1))
+      Right (RoleBindingEnvelope d2) -> notWhenPublicSubject (unwrap d2) (lift $ (Just <<< RBD s' <$> addPublicResourceScheme storageUrl d2))
+      Right (ContextEnvelope d3) -> notWhenPublicSubject (unwrap d3) (lift $ (Just <<< CDD s' <$> addPublicResourceScheme storageUrl d3))
+      Right (UniverseRoleEnvelope d4) -> notWhenPublicSubject (unwrap d4) (lift $ (Just <<< URD s' <$> addPublicResourceScheme storageUrl d4))
+      Right (UniverseContextEnvelope d5) -> notWhenPublicSubject (unwrap d5) (lift $ (Just <<< UCD s' <$> addPublicResourceScheme storageUrl d5))
+      Left _ -> (lift $ renderPerspectivesError >=> warnSync $ (UnparseableIncomingDelta encryptedDelta)) *> pure Nothing
 
     where
     notWhenPublicSubject :: forall f. DeltaRecord f -> MonadPerspectivesTransaction (Maybe Delta) -> MonadPerspectivesTransaction (Maybe Delta)

@@ -24,15 +24,14 @@ module Perspectives.Representation.QueryFunction where
 
 import Control.Monad.Error.Class (throwError)
 import Data.List.NonEmpty (singleton)
-import Data.Maybe (Maybe)
+import Data.Maybe (Maybe(..))
 import Foreign (ForeignError(..))
-
 import Perspectives.Parsing.Arc.Expression.RegExP (RegExP)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..))
 import Perspectives.Representation.Range (Range)
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
 import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedPropertyType, EnumeratedRoleType, PropertyType, RoleType)
-import Prelude (class Eq, class Ord, class Show, Ordering(..), bind, compare, eq, flip, pure, show, ($), (&&), (<$>), (<*>), (<>), (<<<))
+import Prelude (class Eq, class Ord, class Show, Ordering(..), bind, compare, eq, flip, pure, show, ($), (&&), (<$>), (<*>), (<>), (==), (<<<))
 import Simple.JSON (class ReadForeign, class WriteForeign, read', readJSON', writeImpl, writeJSON)
 
 type VariableName = String
@@ -359,6 +358,8 @@ data QueryFunction
   | WithFrame
 
   | FilterF
+  | RoleTypeFilter String
+  | ContextTypeFilter String
 
   | TypeGetter FunctionName
   | RoleTypeConstant RoleType
@@ -372,7 +373,7 @@ data QueryFunction
   | ContextIndividual ContextInstance
 
   | PublicContext ContextInstance
-  | PublicRole RoleInstance
+  | PublicRole RoleInstance (Maybe String)
 
   | CreateContext ContextType RoleType
   | CreateRootContext ContextType
@@ -380,8 +381,9 @@ data QueryFunction
   | CreateRole EnumeratedRoleType
   | Bind EnumeratedRoleType
   | Bind_
-  | Unbind (Maybe EnumeratedRoleType)
-  | Unbind_
+  | RemoveAsFillerOfType EnumeratedRoleType
+  | RemoveAsFiller
+  | RemoveFiller
   | DeleteRole EnumeratedRoleType
   | DeleteContext RoleType
   | DeleteProperty EnumeratedPropertyType
@@ -427,6 +429,8 @@ instance showQueryFunction :: Show QueryFunction where
   show WithFrame = "WithFrame"
 
   show FilterF = "FilterF"
+  show (RoleTypeFilter adt) = "RoleTypeFilter " <> show adt
+  show (ContextTypeFilter adt) = "ContextTypeFilter " <> show adt
 
   show (TypeGetter functionName) = "TypeGetter " <> show functionName
   show (RoleTypeConstant roleType) = "RoleTypeConstant " <> show roleType
@@ -440,7 +444,7 @@ instance showQueryFunction :: Show QueryFunction where
   show (ContextIndividual contextInstance) = "ContextIndividual " <> show contextInstance
 
   show (PublicContext contextInstance) = "PublicContext " <> show contextInstance
-  show (PublicRole roleInstance) = "PublicRole " <> show roleInstance
+  show (PublicRole roleInstance _) = "PublicRole " <> show roleInstance
 
   show (CreateContext contextType roleType) = "CreateContext " <> show contextType <> " " <> show roleType
   show (CreateRootContext contextType) = "CreateRootContext " <> show contextType
@@ -448,8 +452,9 @@ instance showQueryFunction :: Show QueryFunction where
   show (CreateRole enumeratedRoleType) = "CreateRole " <> show enumeratedRoleType
   show (Bind enumeratedRoleType) = "Bind " <> show enumeratedRoleType
   show Bind_ = "Bind_"
-  show (Unbind menumeratedRoleType) = "Unbind " <> " " <> show menumeratedRoleType
-  show Unbind_ = "Unbind_"
+  show (RemoveAsFillerOfType enumeratedRoleType) = "RemoveAsFillerOfType " <> show enumeratedRoleType
+  show RemoveAsFiller = "RemoveAsFiller"
+  show RemoveFiller = "RemoveFiller"
   show (DeleteRole enumeratedRoleType) = "DeleteRole " <> show enumeratedRoleType
   show (DeleteContext roleType) = "DeleteContext " <> show roleType
   show (DeleteProperty enumeratedPropertyType) = "DeleteProperty " <> show enumeratedPropertyType
@@ -495,6 +500,8 @@ instance eqQueryFunction :: Eq QueryFunction where
   eq WithFrame WithFrame = true
 
   eq FilterF FilterF = true
+  eq (RoleTypeFilter adt) (RoleTypeFilter adt') = eq adt adt'
+  eq (ContextTypeFilter adt) (ContextTypeFilter adt') = eq adt adt'
 
   eq (TypeGetter a) (TypeGetter b) = eq a b
   eq (RoleTypeConstant a) (RoleTypeConstant b) = eq a b
@@ -508,7 +515,7 @@ instance eqQueryFunction :: Eq QueryFunction where
   eq (ContextIndividual a) (ContextIndividual b) = eq a b
 
   eq (PublicContext a) (PublicContext b) = eq a b
-  eq (PublicRole a) (PublicRole b) = eq a b
+  eq (PublicRole a assertedType) (PublicRole b assertedType') = eq a b && eq assertedType assertedType'
 
   eq (CreateContext a p) (CreateContext b q) = eq a b && eq p q
   eq (CreateRootContext a) (CreateRootContext b) = eq a b
@@ -516,8 +523,9 @@ instance eqQueryFunction :: Eq QueryFunction where
   eq (CreateRole a) (CreateRole b) = eq a b
   eq (Bind a) (Bind b) = eq a b
   eq Bind_ Bind_ = true
-  eq (Unbind x) (Unbind y) = eq x y
-  eq Unbind_ Unbind_ = true
+  eq (RemoveAsFillerOfType a) (RemoveAsFillerOfType b) = eq a b
+  eq RemoveAsFiller RemoveAsFiller = true
+  eq RemoveFiller RemoveFiller = true
   eq (DeleteRole a) (DeleteRole b) = eq a b
   eq (DeleteContext a) (DeleteContext b) = eq a b
   eq (DeleteProperty a) (DeleteProperty b) = eq a b
@@ -567,6 +575,8 @@ instance writeForeignQueryFunction :: WriteForeign QueryFunction where
   writeImpl WithFrame = writeImpl { constructor: "WithFrame", arg1: "", arg2: "" }
 
   writeImpl FilterF = writeImpl { constructor: "FilterF", arg1: "", arg2: "" }
+  writeImpl (RoleTypeFilter adt) = writeImpl { constructor: "RoleTypeFilter", arg1: adt, arg2: "" }
+  writeImpl (ContextTypeFilter adt) = writeImpl { constructor: "ContextTypeFilter", arg1: adt, arg2: "" }
 
   writeImpl (TypeGetter functionName) = writeImpl { constructor: "TypeGetter", arg1: writeJSON functionName, arg2: "" }
   writeImpl (RoleTypeConstant roleType) = writeImpl { constructor: "RoleTypeConstant", arg1: writeJSON roleType, arg2: "" }
@@ -580,7 +590,13 @@ instance writeForeignQueryFunction :: WriteForeign QueryFunction where
   writeImpl (ContextIndividual contextInstance) = writeImpl { constructor: "ContextIndividual", arg1: writeJSON contextInstance, arg2: "" }
 
   writeImpl (PublicContext contextInstance) = writeImpl { constructor: "PublicContext", arg1: writeJSON contextInstance, arg2: "" }
-  writeImpl (PublicRole roleInstance) = writeImpl { constructor: "PublicRole", arg1: writeJSON roleInstance, arg2: "" }
+  writeImpl (PublicRole roleInstance assertedType) = writeImpl
+    { constructor: "PublicRole"
+    , arg1: writeJSON roleInstance
+    , arg2: case assertedType of
+        Nothing -> ""
+        Just typeAssertion -> typeAssertion
+    }
 
   writeImpl (CreateContext contextType roleType) = writeImpl { constructor: "CreateContext", arg1: writeJSON contextType, arg2: writeJSON roleType }
   writeImpl (CreateRootContext contextType) = writeImpl { constructor: "CreateRootContext", arg1: writeJSON contextType, arg2: "" }
@@ -588,8 +604,9 @@ instance writeForeignQueryFunction :: WriteForeign QueryFunction where
   writeImpl (CreateRole enumeratedRoleType) = writeImpl { constructor: "CreateRole", arg1: writeJSON enumeratedRoleType, arg2: "" }
   writeImpl (Bind enumeratedRoleType) = writeImpl { constructor: "Bind", arg1: writeJSON enumeratedRoleType, arg2: "" }
   writeImpl Bind_ = writeImpl { constructor: "Bind_", arg1: "", arg2: "" }
-  writeImpl (Unbind mEnumeratedRoleType) = writeImpl { constructor: "Unbind", arg1: writeJSON mEnumeratedRoleType, arg2: "" }
-  writeImpl Unbind_ = writeImpl { constructor: "Unbind_", arg1: "", arg2: "" }
+  writeImpl (RemoveAsFillerOfType enumeratedRoleType) = writeImpl { constructor: "RemoveAsFillerOfType", arg1: writeJSON enumeratedRoleType, arg2: "" }
+  writeImpl RemoveAsFiller = writeImpl { constructor: "RemoveAsFiller", arg1: "", arg2: "" }
+  writeImpl RemoveFiller = writeImpl { constructor: "RemoveFiller", arg1: "", arg2: "" }
   writeImpl (DeleteRole enumeratedRoleType) = writeImpl { constructor: "DeleteRole", arg1: writeJSON enumeratedRoleType, arg2: "" }
   writeImpl (DeleteContext roleType) = writeImpl { constructor: "DeleteContext", arg1: writeJSON roleType, arg2: "" }
   writeImpl (DeleteProperty enumeratedPropertyType) = writeImpl { constructor: "DeleteProperty", arg1: writeJSON enumeratedPropertyType, arg2: "" }
@@ -642,6 +659,8 @@ instance readForeignQueryFunction :: ReadForeign QueryFunction where
       "AssignmentOperator", functionName, _ -> AssignmentOperator <$> readJSON' functionName
       "WithFrame", _, _ -> pure $ WithFrame
       "FilterF", _, _ -> pure $ FilterF
+      "RoleTypeFilter", adt, _ -> pure $ RoleTypeFilter adt
+      "ContextTypeFilter", adt, _ -> pure $ ContextTypeFilter adt
       "TypeGetter", functionName, _ -> TypeGetter <$> readJSON' functionName
       "RoleTypeConstant", roleType, _ -> RoleTypeConstant <$> readJSON' roleType
       "ContextTypeConstant", contextType, _ -> ContextTypeConstant <$> readJSON' contextType
@@ -651,15 +670,19 @@ instance readForeignQueryFunction :: ReadForeign QueryFunction where
       "RoleIndividual", roleInstance, _ -> RoleIndividual <<< RoleInstance <$> readJSON' roleInstance
       "ContextIndividual", contextInstance, _ -> ContextIndividual <<< ContextInstance <$> readJSON' contextInstance
       "PublicContext", contextInstance, _ -> PublicContext <<< ContextInstance <$> readJSON' contextInstance
-      "PublicRole", roleInstance, _ -> PublicRole <<< RoleInstance <$> readJSON' roleInstance
+      "PublicRole", roleInstance, assertedType -> do
+        role <- RoleInstance <$> readJSON' roleInstance
+        if assertedType == "" then pure $ PublicRole role Nothing
+        else pure $ PublicRole role (Just assertedType)
       "CreateContext", contextType, roleType -> CreateContext <$> readJSON' contextType <*> readJSON' roleType
       "CreateRootContext", contextType, _ -> CreateRootContext <$> (readJSON' contextType)
       "CreateContext_", contextType, _ -> CreateContext_ <$> (readJSON' contextType)
       "CreateRole", enumeratedRoleType, _ -> CreateRole <$> readJSON' enumeratedRoleType
       "Bind", enumeratedRoleType, _ -> Bind <$> readJSON' enumeratedRoleType
       "Bind_", _, _ -> pure $ Bind_
-      "Unbind", mEnumeratedRoleType, _ -> Unbind <$> readJSON' mEnumeratedRoleType
-      "Unbind_", _, _ -> pure $ Unbind_
+      "RemoveAsFillerOfType", enumeratedRoleType, _ -> RemoveAsFillerOfType <$> readJSON' enumeratedRoleType
+      "RemoveAsFiller", _, _ -> pure $ RemoveAsFiller
+      "RemoveFiller", _, _ -> pure $ RemoveFiller
       "DeleteRole", enumeratedRoleType, _ -> DeleteRole <$> readJSON' enumeratedRoleType
       "DeleteContext", roleType, _ -> DeleteContext <$> readJSON' roleType
       "DeleteProperty", enumeratedPropertyType, _ -> DeleteProperty <$> readJSON' enumeratedPropertyType
@@ -703,6 +726,8 @@ instance ordQueryFunction :: Ord QueryFunction where
   compare WithFrame WithFrame = EQ
 
   compare FilterF FilterF = EQ
+  compare (RoleTypeFilter adt) (RoleTypeFilter adt') = compare adt adt'
+  compare (ContextTypeFilter adt) (ContextTypeFilter adt') = compare adt adt'
 
   compare (TypeGetter functionName) (TypeGetter functionName') = compare functionName functionName'
   compare (RoleTypeConstant roleType) (RoleTypeConstant roleType') = compare roleType roleType'
@@ -715,7 +740,10 @@ instance ordQueryFunction :: Ord QueryFunction where
   compare (ContextIndividual contextInstance) (ContextIndividual contextInstance') = compare contextInstance contextInstance'
 
   compare (PublicContext contextInstance) (PublicContext contextInstance') = compare contextInstance contextInstance'
-  compare (PublicRole roleInstance) (PublicRole roleInstance') = compare roleInstance roleInstance'
+  compare (PublicRole roleInstance assertedType) (PublicRole roleInstance' assertedType') =
+    case compare roleInstance roleInstance' of
+      EQ -> compare assertedType assertedType'
+      ordering -> ordering
 
   compare (CreateContext contextType roleType) (CreateContext contextType' roleType') = compare contextType contextType'
   compare (CreateRootContext contextType) (CreateRootContext contextType') = compare contextType contextType'
@@ -723,8 +751,9 @@ instance ordQueryFunction :: Ord QueryFunction where
   compare (CreateRole enumeratedRoleType) (CreateRole enumeratedRoleType') = compare enumeratedRoleType enumeratedRoleType'
   compare (Bind enumeratedRoleType) (Bind enumeratedRoleType') = compare enumeratedRoleType enumeratedRoleType'
   compare Bind_ Bind_ = EQ
-  compare (Unbind m1) (Unbind m2) = compare m1 m2
-  compare Unbind_ Unbind_ = EQ
+  compare (RemoveAsFillerOfType a) (RemoveAsFillerOfType b) = compare a b
+  compare RemoveAsFiller RemoveAsFiller = EQ
+  compare RemoveFiller RemoveFiller = EQ
   compare (DeleteRole enumeratedRoleType) (DeleteRole enumeratedRoleType') = compare enumeratedRoleType enumeratedRoleType'
   compare (DeleteContext roleType) (DeleteContext roleType') = compare roleType roleType'
   compare (DeleteProperty enumeratedPropertyType) (DeleteProperty enumeratedPropertyType') = compare enumeratedPropertyType enumeratedPropertyType'

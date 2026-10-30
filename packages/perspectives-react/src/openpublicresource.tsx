@@ -39,7 +39,7 @@ interface OpenEvent {
   preventDefault: () => void;
 }
 
-export default class OpenPublicResource extends PerspectivesComponent<OpenPublicResourceProps, {}>
+export default class OpenPublicResource extends PerspectivesComponent<OpenPublicResourceProps, object>
 {
   constructor( props : OpenPublicResourceProps )
   {
@@ -49,9 +49,9 @@ export default class OpenPublicResource extends PerspectivesComponent<OpenPublic
   handleKeyDown(e : React.KeyboardEvent<HTMLDivElement>)
   {
     const component = this;
-    switch (e.code){
+    switch (e.key){
       case "Enter": // Return
-      case "Space": // space
+      case " ": // space
         component.openPublicResource({stopPropagation: e.stopPropagation, preventDefault: e.preventDefault});
         break;
     }

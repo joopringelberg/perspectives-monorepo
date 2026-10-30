@@ -268,8 +268,11 @@ takeGuid s = case match discardStorageRegex s of
 -----------------------------------------------------------
 -- TEST THE SHAPE OF A PUBLIC RESOURCE IDENTIFIER
 -----------------------------------------------------------
-publicResourceRegex :: Regex
-publicResourceRegex = unsafeRegex "^pub:https://[^/]+/cw_[^/]+/#(.+)$" noFlags
+publicRemoteResourceRegex :: Regex
+publicRemoteResourceRegex = unsafeRegex "^pub:https://[^/]+/cw_[^/#]+/?#(.+)$" noFlags
+
+publicLocalResourceRegex :: Regex
+publicLocalResourceRegex = unsafeRegex "^pub:(cw_\\w+)#([_\\w\\d]+)$" noFlags
 
 hasPublicResourceShape :: String -> Boolean
-hasPublicResourceShape = test publicResourceRegex
+hasPublicResourceShape s = test publicRemoteResourceRegex s || test publicLocalResourceRegex s

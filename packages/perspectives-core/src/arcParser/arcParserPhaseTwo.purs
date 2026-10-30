@@ -31,17 +31,19 @@ import Data.Array (fromFoldable) as ARR
 import Data.Lens (over) as LN
 import Data.Lens.Record (prop)
 import Data.List (List(..), filter, findIndex, foldM, head)
-import Data.List.NonEmpty (head) as LNE
 import Data.Maybe (Maybe(..), isJust, maybe)
 import Data.Newtype (unwrap)
 import Data.String.Regex (test)
 import Data.Traversable (for, traverse)
 import Data.Tuple (Tuple(..))
-import Foreign.Object (Object, fromFoldable, insert, union)
+import Foreign.Object (Object, fromFoldable, insert, lookup, union)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord)
 import Perspectives.Identifiers (Namespace, isExternalRole, isTypeUri, newModelRegex, qualifyWith, typeUri2typeNameSpace_)
-import Perspectives.Parsing.Arc.AST (ContextE(..), ContextPart(..), FilledByAttribute(..), FilledBySpecification(..), FreeFormScreenE(..), PropertyE(..), PropertyMapping(..), PropertyPart(..), RoleE(..), RoleIdentification(..), RolePart(..), ScreenE(..), StateE(..), StateSpecification(..), ViewE(..), WhoWhatWhereScreenE(..))
+import Perspectives.Parsing.Arc.AST (ContextE(..), ContextPart(..), FreeFormScreenE(..), PropertyE(..), PropertyMapping(..), PropertyPart(..), RoleE(..), RoleIdentification(..), RolePart(..), ScreenE(..), StateE(..), StateSpecification(..), ViewE(..), WhoWhatWhereScreenE(..))
+import Perspectives.Parsing.Arc.Expression.AST (FilledByAttribute(..), TypeCombination(..))
+import Perspectives.Parsing.Arc.Position (ArcPosition)
+import Perspectives.Parsing.Arc.PhaseTwo.TypeCombination (compileRoleTypeCombination)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Query.ExpandPrefix (expandPrefix)
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), RoleInContext(..))
@@ -58,11 +60,11 @@ import Perspectives.Representation.QueryFunction (QueryFunction(..))
 import Perspectives.Representation.Range (Range(..))
 import Perspectives.Representation.State (State(..), StateFulObject(..), constructState)
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
-import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), StateIdentifier(..), ViewType(..), externalRoleType_, roletype2string)
+import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), StateIdentifier(..), ViewType(..), externalRoleType_, roletype2string)
 import Perspectives.Representation.TypeIdentifiers (RoleKind(..)) as TI
 import Perspectives.Representation.View (View(..)) as VIEW
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable)
-import Prelude (bind, discard, pure, show, void, ($), (&&), (<$>), (<<<), (<>), (==), (>>=), (||))
+import Prelude (Unit, bind, discard, pure, show, unit, void, ($), (&&), (<$>), (<<<), (<>), (==), (>>=), (||))
 import Type.Proxy (Proxy(..))
 
 -------------------
@@ -86,6 +88,7 @@ traverseContextE (ContextE { id, kindOfContext, public, contextParts, pos }) ns 
   contextIdentifier <- pure $ modelName id
   -- Notice that we use the test ns == "domain" to establish that this context is a domain, in which case the surrounding context is Nothing.
   context <- pure $ defaultContext contextIdentifier id kindOfContext (if ns == "domain" then Nothing else (Just ns)) pos public
+  ensureContextIsNewInDomeinFile context
   -- Add to state.namespaces (on the Domain level these are the default prefix-ModelUri combinations) all namespaces found in the contextParts, that is all declarations like 'use ns for model ...'.
   withNamespaces
     contextParts
@@ -110,7 +113,7 @@ traverseContextE (ContextE { id, kindOfContext, public, contextParts, pos }) ns 
             pure $ Cons (RE (RoleE { id: "External", kindOfRole: TI.ExternalRole, roleParts: Nil, pos })) contextParts
           otherwise -> pure contextParts
       context' <- foldM handleParts context contextParts'
-      modifyDF (\domeinFile -> addContextToDomeinFile context' domeinFile)
+      addContextToDomeinFile context'
       pure context'
 
   where
@@ -198,11 +201,19 @@ traverseContextE (ContextE { id, kindOfContext, public, contextParts, pos }) ns 
   -- We can safely ignore nested lists of StateQualifiedParts here, as they are already removed by the parser.
   handleParts c (CSQP _) = pure c
 
-  addContextToDomeinFile :: Context -> (DomeinFileRecord Readable) -> (DomeinFileRecord Readable)
-  addContextToDomeinFile c@(Context { id: (ContextType ident) }) domeinFile = LN.over
-    (prop (Proxy :: Proxy "contexts"))
-    (insert ident c)
-    domeinFile
+  ensureContextIsNewInDomeinFile :: Context -> PhaseTwo Unit
+  ensureContextIsNewInDomeinFile (Context { id: contextId@(ContextType ident), pos }) = do
+    domeinFile <- getDF
+    case lookup ident domeinFile.contexts of
+      Just _ -> throwError $ DuplicateContextDeclaration pos contextId
+      Nothing -> pure unit
+
+  addContextToDomeinFile :: Context -> PhaseTwo Unit
+  addContextToDomeinFile c@(Context { id: (ContextType ident) }) = do
+    ensureContextIsNewInDomeinFile c
+    modifyDF $ LN.over
+      (prop (Proxy :: Proxy "contexts"))
+      (insert ident c)
 
   -- Insert a sub-Context type into a Context type.
   insertInto :: Context -> Context -> Context
@@ -268,7 +279,7 @@ traverseRoleE r ns =
 
 traverseEnumeratedRoleE :: RoleE -> Namespace -> PhaseTwo Role
 traverseEnumeratedRoleE (RoleE { id, kindOfRole, roleParts, pos }) ns = do
-  -- TODO. Controleer op dubbele definities.
+  ensureRoleIsNewInDomeinFile pos (ENR $ EnumeratedRoleType (ns <> "$" <> id))
   role <- pure (defaultEnumeratedRole (ns <> "$" <> id) id kindOfRole ns pos)
   traverseEnumeratedRoleE_ role roleParts
 
@@ -315,43 +326,19 @@ traverseEnumeratedRoleE_ role@(EnumeratedRole { id: rn, kindOfRole }) roleParts 
   handleParts roleName (EnumeratedRole roleUnderConstruction) UnlinkedAttribute = pure (EnumeratedRole $ roleUnderConstruction { unlinked = true })
 
   -- FILLEDBYATTRIBUTE
-  handleParts roleName (EnumeratedRole roleUnderConstruction@{ id, binding }) (FilledBySpecifications spec) = case spec of
-    Alternatives attrs -> case LNE.head attrs of
-      FilledByAttribute "None" context -> pure (EnumeratedRole $ roleUnderConstruction { binding = Just $ UET $ RoleInContext { role: id, context } })
-      _ -> do
-        restrictions <- for attrs \(FilledByAttribute bnd context) -> do
-          ebnd <- expandBinding bnd
-          pure $ UET $ RoleInContext { role: EnumeratedRoleType ebnd, context }
-        pure $ EnumeratedRole $ roleUnderConstruction { binding = Just $ SUM (ARR.fromFoldable restrictions) }
+  handleParts roleName (EnumeratedRole roleUnderConstruction@{ id, binding }) (FilledBySpecifications (spec :: TypeCombination)) = do
+    spec' <-
+      if kindOfRole == TI.ContextRole then
+        case spec of
+          Alternatives attrs -> pure $ Alternatives (f <$> attrs)
+          Combination attrs -> pure $ Combination (f <$> attrs)
+          DisjunctionOfConjunctions groups -> pure $ DisjunctionOfConjunctions $ (\group -> f <$> group) <$> groups
+      else pure spec
+    bindingRestriction <- compileRoleTypeCombination id spec'
+    pure (EnumeratedRole $ roleUnderConstruction { binding = Just bindingRestriction })
 
-    Combination attrs -> do
-      restrictions <- for attrs \(FilledByAttribute bnd context) -> do
-        ebnd <- expandBinding bnd
-        pure $ UET $ RoleInContext { role: EnumeratedRoleType ebnd, context }
-      pure $ EnumeratedRole $ roleUnderConstruction { binding = Just $ PROD (ARR.fromFoldable restrictions) }
-
-    DisjunctionOfConjunctions groups -> do
-      conjunctions <- for groups \attrs -> do
-        restrictions <- for attrs \(FilledByAttribute bnd context) -> do
-          ebnd <- expandBinding bnd
-          pure $ UET $ RoleInContext { role: EnumeratedRoleType ebnd, context }
-        pure $ PROD (ARR.fromFoldable restrictions)
-      pure $ EnumeratedRole $ roleUnderConstruction { binding = Just $ SUM (ARR.fromFoldable conjunctions) }
-    -- We assume the result of expandBinding refers to an EnumeratedRoleType. This need not be so;
-    -- it will be repaired in PhaseThree.
-    -- Note that `context` may not yet be fully qualified.
-    -- It may also be unspecified, coded as an empty string.
-    -- PhaseThree will resolve both issues.
     where
-    expandBinding :: String -> PhaseTwo String
-    expandBinding bnd =
-      if kindOfRole == TI.ContextRole
-      -- If the RoleKind is ContextRole, we should construct the name of the External
-      -- Role of the binding (which then is a Context)
-      -- This is because the ArcIdentifier following 'filledBy' for a ContextRole, identifies the context - not its
-      -- external role.
-      then expandNamespace (externalRoleType_ bnd)
-      else expandNamespace bnd
+    f (FilledByAttribute bnd context) = FilledByAttribute (externalRoleType_ bnd) context
 
   -- ROLEASPECT
   handleParts roleName (EnumeratedRole roleUnderConstruction@{ context, roleAspects, propertyAliases }) (RoleAspect a pos' mPropertyMapping) = do
@@ -473,6 +460,7 @@ traverseViewE (ViewE { id, viewParts, pos }) rtype = do
   view <- pure $ VIEW.View
     { id: ViewType viewName
     , _rev: Nothing
+    , typeVersion: Nothing
     , displayName: id
     , readableName: ViewType viewName
     , propertyReferences: expandedPropertyReferences
@@ -503,11 +491,20 @@ addRoleToDomeinFile (C r@(CalculatedRole { id })) domeinFile = LN.over
 -- | Traverse a RoleE that results in an CalculatedRole.
 traverseCalculatedRoleE :: RoleE -> Namespace -> PhaseTwo Role
 traverseCalculatedRoleE (RoleE { id, kindOfRole, roleParts, pos }) ns = do
-  -- TODO. Controleer op dubbele definities.
+  ensureRoleIsNewInDomeinFile pos (CR $ CalculatedRoleType (ns <> "$" <> id))
   role <- pure (defaultCalculatedRole (ns <> "$" <> id) id kindOfRole ns pos)
   role' <- traverseCalculatedRoleE_ role roleParts
   modifyDF (\domeinFile -> addRoleToDomeinFile role' domeinFile)
   pure role'
+
+ensureRoleIsNewInDomeinFile :: ArcPosition -> RoleType -> PhaseTwo Unit
+ensureRoleIsNewInDomeinFile pos roleType = do
+  domeinFile <- getDF
+  let roleIdentifier = roletype2string roleType
+  case lookup roleIdentifier domeinFile.enumeratedRoles, lookup roleIdentifier domeinFile.calculatedRoles of
+    Just _, _ -> throwError $ DuplicateRoleDeclaration pos roleType
+    _, Just _ -> throwError $ DuplicateRoleDeclaration pos roleType
+    _, _ -> pure unit
 
 traverseCalculatedRoleE_ :: CalculatedRole -> List RolePart -> PhaseTwo Role
 traverseCalculatedRoleE_ role@(CalculatedRole { id: roleName, kindOfRole }) roleParts = do

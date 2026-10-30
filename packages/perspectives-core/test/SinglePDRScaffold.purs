@@ -1,0 +1,315 @@
+-- BEGIN LICENSE
+-- Perspectives Distributed Runtime
+-- SPDX-FileCopyrightText: 2019 Joop Ringelberg (joopringelberg@gmail.com), Cor Baars
+-- SPDX-License-Identifier: GPL-3.0-or-later
+--
+-- This program is free software: you can redistribute it and/or modify
+-- it under the terms of the GNU General Public License as published by
+-- the Free Software Foundation, either version 3 of the License, or
+-- (at your option) any later version.
+--
+-- This program is distributed in the hope that it will be useful,
+-- but WITHOUT ANY WARRANTY; without even the implied warranty of
+-- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+-- GNU General Public License for more details.
+--
+-- You should have received a copy of the GNU General Public License
+-- along with this program.  If not, see <https://www.gnu.org/licenses/>.
+--
+-- Full text of this license can be found in the LICENSE directory in the
+-- projects root.
+
+-- END LICENSE
+
+module Test.SinglePDRScaffold
+  ( TopicLogLevelPair
+  , LogConfiguration
+  , emptyLogConfiguration
+  , ModelTest
+  , TestModelLoadMethod(..)
+  , SinglePDRResults
+  , SinglePDRModelConfiguration
+  , getSinglePDRResults
+  , loadModel
+  , executeModelTest
+  , saveSuccessfulSnapshot
+  ) where
+
+import Prelude
+
+import Control.Monad.Cont (lift)
+import Control.Monad.Error.Class (throwError)
+import Control.Monad.Except.Trans (runExceptT)
+import Data.Array (find, null)
+import Data.Either (Either(..))
+import Data.Maybe (Maybe(..))
+import Data.Newtype (unwrap)
+import Data.Foldable (all, intercalate)
+import Data.Int (ceil)
+import Data.Time.Duration (Milliseconds(..))
+import Data.Traversable (for_, traverse)
+import Effect.Aff (Aff, error)
+import Effect.Class (liftEffect)
+import Effect.Class.Console (log)
+import Effect.Ref (Ref, new, read, write)
+import Effect.Unsafe (unsafePerformEffect)
+import Foreign.Object (empty) as OBJ
+import Node.Encoding (Encoding(..))
+import Node.FS.Aff (readTextFile)
+import Partial.Unsafe (unsafePartial)
+import Perspectives.ApiTypes (ContextSerialization(..), PropertySerialization(..), RolSerialization(..))
+import Perspectives.Assignment.RunAction (runContextAction)
+import Perspectives.CoreTypes (LogLevel(..), LogTopic(..), (##>))
+import Perspectives.Extern.Couchdb (addModelToLocalStore_)
+import Perspectives.Identifiers (buitenRol, modelUri2LocalName, unversionedModelUri)
+import Perspectives.Instances.Builders (createAndAddRoleInstance, constructContext)
+import Perspectives.Logging (ansiRed, infoTest)
+import Perspectives.ModelDependencies (sysUser)
+import Perspectives.Names (lookupIndexedContext)
+import Perspectives.PerspectivesState (defaultRuntimeOptions, disableAllLogging, setTopicLogLevel)
+import Perspectives.Query.UnsafeCompiler (getPropertyValues)
+import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance(..), Value(..))
+import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), IndexedContext(..), PropertyType(..), RoleType(..))
+import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransaction', shareWithPeers)
+import Perspectives.Sidecar.StableIdMapping (ModelUri(..), Stable)
+import Perspectives.Sidecar.ToStable (toStable)
+import Perspectives.TypePersistence.LoadArc (loadCompileAndStoreArcFile_)
+import Test.PDRInstance (SynchronisationResult, noBus, pollUntil, pollUntilTestFinishes, settleAndSave, snapshotPDR, testPouchdbUser, withPDRCached)
+import Test.PDRInstance.Types (PDRInstance, runInPDR)
+import Test.Test.PDRInstance.SubscribePDRtoAMQP (requireUnsubscribed)
+
+type TopicLogLevelPair =
+  { topic :: LogTopic
+  , logLevel :: LogLevel
+  }
+
+type LogConfiguration =
+  { pdr :: Array TopicLogLevelPair
+  }
+
+emptyLogConfiguration :: LogConfiguration
+emptyLogConfiguration =
+  { pdr: []
+  }
+
+type ModelTest =
+  { testContextTypeName :: String
+  , logConfiguration :: LogConfiguration
+  }
+
+type SinglePDRResults = Array SynchronisationResult
+
+data TestModelLoadMethod
+  = LoadModelFromRepository { modelUri :: String }
+  | CompileModelFromSource
+      { modelUri :: String
+      , sourcePath :: String
+      , modelUriReadable :: String
+      , basedOnVersion :: Maybe String
+      }
+
+-- | The models are loaded in the order in which they appear in `testModelLoadMethods`;
+-- | the entry for `testModel` must come last.
+type SinglePDRModelConfiguration =
+  { suiteName :: String
+  , snapshotDirectory :: String
+  , outputSnapshotDirectory :: Maybe String
+  , testModel :: String
+  , testModelLoadMethods :: Array TestModelLoadMethod
+  , indexedTestContext :: String
+  , testAppManager :: String
+  , testsType :: String
+  , testSucceededProperty :: String
+  , testNameProperty :: String
+  -- | Upper limit on the time each test in the suite may take to report a result.
+  , testTimeLimit :: Milliseconds
+  , setupLogConfiguration :: LogConfiguration
+  , tests :: Array ModelTest
+  }
+
+type CachedSinglePDRResults =
+  { cacheKey :: String
+  , results :: SinglePDRResults
+  }
+
+cachedSinglePDRResults :: Ref (Array CachedSinglePDRResults)
+cachedSinglePDRResults = unsafePerformEffect $ new []
+
+getSinglePDRResults :: SinglePDRModelConfiguration -> Aff SinglePDRResults
+getSinglePDRResults cfg = do
+  let cacheKey = singlePDRCacheKey cfg
+  let pouchdbUser = testPouchdbUser "alice"
+  cached <- liftEffect $ read cachedSinglePDRResults
+  case find (\result -> result.cacheKey == cacheKey) cached of
+    Just { results } -> pure results
+    Nothing -> do
+      results <- withPDRCached
+        pouchdbUser
+        defaultRuntimeOptions
+        (Just ansiRed)
+        noBus
+        cfg.snapshotDirectory
+        \pdr -> do
+          runInPDR pdr do
+            for_ cfg.setupLogConfiguration.pdr \{ topic, logLevel } -> setTopicLogLevel topic logLevel
+
+          runInPDR pdr do
+            infoTest "Loading test model"
+
+          for_ cfg.testModelLoadMethods (loadModel pdr)
+
+          testAppContext <- pollUntil 100 (Milliseconds 100.0)
+            "Indexed test context to appear after loading test model"
+            ( runInPDR pdr
+                do
+                  IndexedContext indexedTestContext' <- toStable (IndexedContext cfg.indexedTestContext)
+                  lookupIndexedContext indexedTestContext'
+            )
+
+          result <- traverse (\testCase -> executeModelTest pdr testAppContext testCase.testContextTypeName testCase.logConfiguration cfg) cfg.tests
+
+          settleAndSave pdr
+
+          case cfg.outputSnapshotDirectory of
+            Just outputSnapshotDirectory -> saveSuccessfulSnapshot result do
+              runInPDR pdr requireUnsubscribed
+              snapshotPDR pouchdbUser.systemIdentifier pouchdbUser.perspectivesUser outputSnapshotDirectory
+            Nothing -> pure unit
+
+          pure result
+
+      liftEffect $ write (cached <> [ { cacheKey, results } ]) cachedSinglePDRResults
+      pure results
+
+-- | Never replace a reusable baseline with a failed or empty test run.
+saveSuccessfulSnapshot :: SinglePDRResults -> Aff Unit -> Aff Unit
+saveSuccessfulSnapshot results save =
+  if not (null results) && all succeeded results then save
+  else log "[SinglePDRScaffold] Output snapshot not written: all tests must succeed and the run must not be empty."
+  where
+  succeeded (Right { testSucceeded }) = testSucceeded
+  succeeded (Left _) = false
+
+loadModel :: PDRInstance -> TestModelLoadMethod -> Aff Unit
+loadModel pdr = case _ of
+  LoadModelFromRepository { modelUri } -> runInPDR pdr do
+    infoTest ("Loading model from repository: " <> modelUri)
+    runMonadPerspectivesTransaction' shareWithPeers (ENR $ EnumeratedRoleType sysUser)
+      $ addModelToLocalStore_ [ modelUri ] (RoleInstance "Ignored")
+  CompileModelFromSource { modelUri, sourcePath, modelUriReadable, basedOnVersion } -> do
+    source <- readTextFile UTF8 sourcePath
+    runInPDR pdr do
+      infoTest ("Compiling and storing model from source: " <> sourcePath)
+      compilationResult <- runMonadPerspectivesTransaction' shareWithPeers (ENR $ EnumeratedRoleType sysUser)
+        ( loadCompileAndStoreArcFile_
+            (ModelUri modelUri :: ModelUri Stable)
+            source
+            true
+            (unsafePartial modelUri2LocalName $ unversionedModelUri modelUri)
+            modelUriReadable
+            basedOnVersion
+            Nothing
+        )
+      case compilationResult of
+        Left errs -> throwError $ error ("Failed to compile and store model " <> modelUri <> ": " <> show errs)
+        Right _ -> infoTest ("Successfully compiled and stored model " <> modelUri)
+
+singlePDRCacheKey :: SinglePDRModelConfiguration -> String
+singlePDRCacheKey cfg =
+  let
+    loadMethodKey = intercalate "," $ map
+      ( case _ of
+          LoadModelFromRepository { modelUri } -> "repository:" <> modelUri
+          CompileModelFromSource { sourcePath } -> "compile:" <> sourcePath
+      )
+      cfg.testModelLoadMethods
+    outputSnapshotKey = case cfg.outputSnapshotDirectory of
+      Just outputSnapshotDirectory -> outputSnapshotDirectory
+      Nothing -> "no-output-snapshot"
+  in
+    cfg.suiteName <> "|" <> loadMethodKey <> "|" <> outputSnapshotKey
+
+executeModelTest
+  :: forall r
+   . PDRInstance
+  -> ContextInstance
+  -> String
+  -> LogConfiguration
+  -> { testAppManager :: String
+     , testsType :: String
+     , testTimeLimit :: Milliseconds
+     , testNameProperty :: String
+     , testSucceededProperty :: String
+     | r
+     }
+  -> Aff SynchronisationResult
+executeModelTest pdr testAppContext testContextTypeR logConfiguration cfg = do
+  runInPDR pdr do
+    for_ logConfiguration.pdr \{ topic, logLevel } -> setTopicLogLevel topic logLevel
+
+  testContextType <- runInPDR pdr
+    (toStable (ContextType testContextTypeR))
+  testTesterType <- runInPDR pdr
+    (toStable (EnumeratedRoleType $ testContextTypeR <> "$Tester"))
+
+  theTest <- runInPDR pdr do
+    infoTest "Creating test context"
+    testAppManager' <- toStable (CalculatedRoleType cfg.testAppManager)
+    testsType' <- toStable (EnumeratedRoleType cfg.testsType)
+    runMonadPerspectivesTransaction' shareWithPeers (CR testAppManager')
+      do
+        result <- runExceptT $ constructContext (Just (ENR testsType'))
+          $ ContextSerialization
+              { id: Nothing
+              , ctype: unwrap testContextType
+              , prototype: Nothing
+              , rollen: OBJ.empty
+              , externeProperties: PropertySerialization OBJ.empty
+              }
+        case result of
+          Left err -> throwError $ error ("Failed to create test context: " <> show err)
+          Right testCtx -> do
+            void $ createAndAddRoleInstance testsType' (unwrap testAppContext)
+              ( RolSerialization
+                  { id: Nothing
+                  , properties: PropertySerialization OBJ.empty
+                  , binding: Just $ buitenRol (unwrap testCtx)
+                  }
+              )
+            pure testCtx
+
+  let testExternalRole = RoleInstance $ buitenRol (unwrap theTest)
+
+  runInPDR pdr do
+    runMonadPerspectivesTransaction' shareWithPeers (ENR testTesterType)
+      do
+        lift $ infoTest "Executing RunTest action"
+        runContextAction (unwrap testTesterType) "RunTest" (unwrap theTest)
+
+  -- Polling stops as soon as the test reports a result; the suite configures the upper time limit.
+  let pollInterval = 200.0
+  let Milliseconds timeLimit = cfg.testTimeLimit
+  r <- pollUntilTestFinishes (max 1 (ceil (timeLimit / pollInterval))) (Milliseconds pollInterval)
+    "Test to complete with a result"
+    ( runInPDR pdr
+        do
+          testNameProperty' <- toStable (EnumeratedPropertyType cfg.testNameProperty)
+          mtestName <- testExternalRole ##> getPropertyValues (ENP testNameProperty')
+          case mtestName of
+            Just (Value testName) -> do
+              infoTest ("Test has a name: " <> testName)
+              testSucceededProperty' <- toStable (EnumeratedPropertyType cfg.testSucceededProperty)
+              mtestSucceeded <- testExternalRole ##> getPropertyValues (ENP testSucceededProperty')
+              case mtestSucceeded of
+                Just (Value testSucceeded) -> pure (Right { testName, testSucceeded: testSucceeded == "true" })
+                Nothing -> pure (Left { testName, err: error "TestSucceeded property not found" })
+            Nothing -> pure (Left { testName: "unknown testname", err: error "TestName property not found" })
+    )
+
+  settleAndSave pdr
+
+  runInPDR pdr do
+    disableAllLogging
+    setTopicLogLevel TEST Debug
+
+  pure r

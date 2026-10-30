@@ -1,6 +1,6 @@
 import React, {createContext} from "react";
 import { RoleDataProper, RoleOnClipboard } from "perspectives-proxy";
-import { ContextInstanceT, ContextType, PropertyType, RoleInstanceT, RoleKind, RoleType, ValueT } from "perspectives-proxy";
+import { ContextInstanceT, ContextType, FillMode, PropertyType, RoleInstanceT, RoleKind, RoleType, ValueT } from "perspectives-proxy";
 
 // Two contexts, PSRol and PSRoleInstances, have the functions bind, bind_ and checkBinding. 
 // All return promises.
@@ -91,8 +91,8 @@ export type PSRolType =
   , contexttype: ContextType
   , roltype: RoleType
   , roleKind: RoleKind
-  , bind_: (roleData: RoleDataProper) => Promise<boolean>
-  , bind: (roleInstance: RoleInstanceT) => Promise<RoleInstanceT|void>
+  , bind_: (roleData: RoleDataProper, fillMode?: FillMode) => Promise<boolean>
+  , bind: (roleInstance: RoleInstanceT, fillMode?: FillMode) => Promise<RoleInstanceT|void>
   , checkbinding: (roleData: RoleDataProper) => Promise<boolean>
   , removerol: () => Promise<void>
   , removecontext: () => Promise<void>

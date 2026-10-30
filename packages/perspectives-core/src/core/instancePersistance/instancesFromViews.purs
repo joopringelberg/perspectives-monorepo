@@ -2,8 +2,8 @@ module Perspectives.Persistent.FromViews where
 
 import Prelude
 
+import Control.Monad.Error.Class (catchError)
 import Data.Foldable (for_)
-import Effect.Aff (catchError)
 import Persistence.Attachment (class Attachment)
 import Perspectives.CoreTypes (class Persistent, MonadPerspectives)
 import Perspectives.Persistence.API (Keys, getViewOnDatabase, resetViewIndex)
@@ -44,6 +44,8 @@ getSafeViewOnDatabase_
 getSafeViewOnDatabase_ f dbName viewname keys = do
   (results :: Array result) <- getViewOnDatabase dbName viewname keys
   -- Now try to put each instance in cache. 
+  -- If any of them fails, reset the view and try again.
+  -- That's because the view can be stale and refer to instances that are no longer in the database!
   catchError
     ( do
         for_ (f <$> results) (getPerspectEntiteit false)

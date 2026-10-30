@@ -35,6 +35,7 @@ import Persistence.Attachment (class Attachment)
 import Perspectives.Couchdb.Revision (class Revision)
 import Perspectives.Data.EncodableMap as ENCMAP
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, PerspectivesUser)
+import Perspectives.UnschemedIdentifiers (UnschemedResourceIdentifier)
 import Perspectives.Sync.DateTime (SerializableDateTime)
 import Perspectives.Sync.SignedDelta (SignedDelta)
 import Perspectives.Sync.Transaction (PublicKeyInfo)
@@ -62,6 +63,39 @@ instance showTransactionForPeer :: Show TransactionForPeer where
 derive newtype instance ReadForeign TransactionForPeer
 derive newtype instance WriteForeign TransactionForPeer
 
+type WrappedContentKey =
+  { recipient :: UnschemedResourceIdentifier
+  , wrappedKey :: String
+  }
+
+type EncryptedDeltas =
+  { ciphertext :: String
+  , iv :: String
+  , wrappedKeys :: Array WrappedContentKey
+  }
+
+newtype EncryptedTransactionForPeer = EncryptedTransactionForPeer
+  { author :: PerspectivesUser
+  , perspectivesSystem :: ContextInstance
+  , timeStamp :: SerializableDateTime
+  , encryptedDeltas :: EncryptedDeltas
+  , publicKeys :: ENCMAP.EncodableMap PerspectivesUser PublicKeyInfo
+  }
+
+derive instance genericRepEncryptedTransactionForPeer :: Generic EncryptedTransactionForPeer _
+
+derive instance newtypeEncryptedTransactionForPeer :: Newtype EncryptedTransactionForPeer _
+
+instance showEncryptedTransactionForPeer :: Show EncryptedTransactionForPeer where
+  show = genericShow
+
+derive newtype instance ReadForeign EncryptedTransactionForPeer
+derive newtype instance WriteForeign EncryptedTransactionForPeer
+
+instance Attachment EncryptedTransactionForPeer where
+  getAttachments _ = Nothing
+  setAttachment t _ = t
+
 instance Attachment TransactionForPeer where
   getAttachments _ = Nothing
   setAttachment t _ = t
@@ -82,8 +116,18 @@ instance revisionTransactionForPeer :: Revision TransactionForPeer where
   rev t = Nothing
   changeRevision _ t = t
 
+instance revisionEncryptedTransactionForPeer :: Revision EncryptedTransactionForPeer where
+  rev t = Nothing
+  changeRevision _ t = t
+
 instance eqTransactionForPeer :: Eq TransactionForPeer where
   eq (TransactionForPeer { timeStamp: t1, author: a1 }) (TransactionForPeer { timeStamp: t2, author: a2 }) = eq t1 t2 && eq a1 a2
 
+instance eqEncryptedTransactionForPeer :: Eq EncryptedTransactionForPeer where
+  eq (EncryptedTransactionForPeer { timeStamp: t1, author: a1 }) (EncryptedTransactionForPeer { timeStamp: t2, author: a2 }) = eq t1 t2 && eq a1 a2
+
 instance ordTransactionForPeer :: Ord TransactionForPeer where
   compare (TransactionForPeer { timeStamp: t1 }) (TransactionForPeer { timeStamp: t2 }) = compare t1 t2
+
+instance ordEncryptedTransactionForPeer :: Ord EncryptedTransactionForPeer where
+  compare (EncryptedTransactionForPeer { timeStamp: t1 }) (EncryptedTransactionForPeer { timeStamp: t2 }) = compare t1 t2

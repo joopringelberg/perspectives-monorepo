@@ -37,20 +37,22 @@ module Perspectives.Sidecar.NormalizeTypeNames
 
 import Prelude
 
+import Control.Monad.Error.Class (catchError)
 import Control.Monad.Reader (Reader, ask, runReaderT)
 import Data.Array (catMaybes, elem, foldM)
+import Data.Either (Either(..))
 import Data.Map (Map, empty, fromFoldable, insert, lookup, toUnfoldable, union) as Map
 import Data.Maybe (Maybe(..), maybe)
 import Data.Newtype (unwrap)
 import Data.Traversable (for, traverse)
 import Data.Tuple (Tuple(..))
-import Foreign.Object (Object, fromFoldable, toUnfoldable, values)
+import Foreign.Object (fromFoldable, toUnfoldable, values)
 import Foreign.Object as OBJ
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (MonadPerspectives, (##=), (##>))
-import Perspectives.Data.EncodableMap (EncodableMap, toUnfoldable, fromFoldable, empty) as EM
+import Perspectives.Data.EncodableMap (EncodableMap, empty, fromFoldable, toUnfoldable) as EM
 import Perspectives.DomeinFile (DomeinFile(..), SeparateInvertedQuery(..), UpstreamAutomaticEffect(..), UpstreamStateNotification(..))
-import Perspectives.Identifiers (qualifyWith, splitTypeUri, typeUri2typeNameSpace)
+import Perspectives.Identifiers (qualifyWith, splitTypeUri, typeUri2typeNameSpace, unversionedModelUri)
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..))
 import Perspectives.Instances.ObjectGetters (binding)
 import Perspectives.InvertedQuery (InvertedQuery(..), QueryWithAKink(..))
@@ -64,7 +66,7 @@ import Perspectives.Persistent (modelDatabaseName)
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), RoleInContext(..), traverseQfd)
 import Perspectives.Query.UnsafeCompiler (getPropertyValues, getRoleInstances)
 import Perspectives.Representation.ADT (ADT)
-import Perspectives.Representation.Action (Action(..), AutomaticAction(..))
+import Perspectives.Representation.Action (Action(..), ActionEffect, AutomaticAction(..), traverseActionEffect)
 import Perspectives.Representation.CNF (traverseDPROD)
 import Perspectives.Representation.CalculatedProperty (CalculatedProperty(..))
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
@@ -77,7 +79,7 @@ import Perspectives.Representation.ExplicitSet (ExplicitSet(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..))
 import Perspectives.Representation.Perspective (Perspective(..), StateSpec(..), stateSpec2StateIdentifier, PropertyVerbs(..))
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
-import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FieldConstraintDef, FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), TabDef(..), TableDef(..), TableFormDef(..), TableFormOrWhenDef(..), What(..), WhenDef(..), WhenTableFormDef(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef)
+import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FieldConstraintDef, FormDef(..), MarkDownDef(..), RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), TabDef(..), TableDef(..), TableFormDef(..), TableFormOrWhenDef(..), TypeAheadFillerDef(..), TypeAheadFormDef(..), What(..), WhenDef(..), WhenTableFormDef(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef, PropertyValueFillers)
 import Perspectives.Representation.Sentence (Sentence(..))
 import Perspectives.Representation.State (Notification(..), State(..), StateDependentPerspective(..), StateFulObject(..))
 import Perspectives.Representation.TypeIdentifiers (ActionIdentifier(..), CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), IndexedContext(..), IndexedRole(..), PropertyType(..), RoleType(..), StateIdentifier(..), ViewType(..))
@@ -85,6 +87,7 @@ import Perspectives.Representation.Verbs (PropertyVerb)
 import Perspectives.Representation.View (View(..))
 import Perspectives.Sidecar.HashQFD (qfdSignature)
 import Perspectives.Sidecar.StableIdMapping (ActionUri(..), ContextUri(..), ModelUri(..), PropertyUri(..), Readable, RoleUri(..), Stable, StableIdMapping, StateUri(..), ViewUri(..), fromLocalModels, idUriForContext, idUriForProperty, idUriForRole, idUriForState, idUriForView, loadStableMapping, lookupActionCuid, lookupContextIndividualId, lookupRoleIndividualId)
+import Simple.JSON (readJSON, writeJSON)
 
 -- Environment carried during normalization: sidecars and a perspective id rewrite map
 type Env =
@@ -129,13 +132,18 @@ getSideCars df@(DomeinFile { referredModels }) versioned = do
   cuidMap <- getinstalledModelCuids versioned
   standardModelSideCars <- getStandardModelSidecars versioned
   importedModelSideCars <- foldM
-    ( \sidecars (ModelUri referredModel) -> case Map.lookup (ModelUri referredModel) cuidMap of
-        Nothing -> pure sidecars
-        Just (domeinFileName :: ModelUri Stable) -> do
-          mmapping <- loadStableMapping domeinFileName fromLocalModels
-          case mmapping of
+    -- A `use` clause may pin a version, but type URIs never carry one: key the sidecars by the unversioned model URI.
+    ( \sidecars (ModelUri referredModel) ->
+        let
+          unversioned = ModelUri (unversionedModelUri referredModel) :: ModelUri Readable
+        in
+          case Map.lookup unversioned cuidMap of
             Nothing -> pure sidecars
-            Just submapping -> pure $ Map.insert (ModelUri referredModel) submapping sidecars
+            Just (domeinFileName :: ModelUri Stable) -> do
+              mmapping <- loadStableMapping domeinFileName fromLocalModels
+              case mmapping of
+                Nothing -> pure sidecars
+                Just submapping -> pure $ Map.insert unversioned submapping sidecars
     )
     Map.empty
     referredModels
@@ -167,8 +175,11 @@ getinstalledModelCuids fromRepository =
     getVersionedInstalledModelCuids
   else do
     modelsDb <- modelDatabaseName
-    result :: Array { id :: String, namespace :: String } <- getViewOnDatabase modelsDb "defaultViews/modelIdNamespace" (NoKey :: Keys String)
-    pure $ Map.fromFoldable $ ((\{ id, namespace } -> (Tuple (ModelUri namespace) (ModelUri id))) <$> result)
+    catchError
+      do
+        result :: Array { id :: String, namespace :: String } <- getViewOnDatabase modelsDb "defaultViews/modelIdNamespace" (NoKey :: Keys String)
+        pure $ Map.fromFoldable $ ((\{ id, namespace } -> (Tuple (ModelUri namespace) (ModelUri id))) <$> result)
+      \_ -> pure Map.empty
 
 -- | A map from ModelUri Readable to versioned ModelUri Stable, for all installed models (registered in the role PerspectivesSystem$ModelsInUse).
 -- | Not every installed model need have cuid, as long as we have not completely moved to stable identifiers!
@@ -213,7 +224,7 @@ instance NormalizeTypeNames (DomeinFile Readable) (ModelUri Readable) where
       (\(Tuple ct rle) -> Tuple <$> unwrap <$> (fqn2tid <<< CalculatedPropertyType) ct <*> normalizeTypeNames rle)
     states' <- fromFoldable <$> for ((toUnfoldable df.states) :: Array (Tuple String State))
       (\(Tuple ct st) -> Tuple <$> unwrap <$> (fqn2tid <<< StateIdentifier) ct <*> normalizeTypeNames st)
-    referredModels' <- for df.referredModels fqn2tid
+    referredModels' <- for df.referredModels (\(ModelUri m) -> fqn2tid (ModelUri (unversionedModelUri m) :: ModelUri Readable))
     invertedQueriesInOtherDomains' <- fromFoldable <$> for ((toUnfoldable df.invertedQueriesInOtherDomains) :: Array (Tuple String (Array SeparateInvertedQuery)))
       (\(Tuple ct q) -> Tuple <$> (unwrap <$> ((fqn2tid (ModelUri ct)) :: WithSideCars (ModelUri Readable))) <*> traverse normalize q)
     upstreamStateNotifications' <- fromFoldable <$> for ((toUnfoldable df.upstreamStateNotifications) :: Array (Tuple String (Array UpstreamStateNotification)))
@@ -411,7 +422,7 @@ normalizeActionsForState stateSpec obj = do
     pairs = OBJ.toUnfoldable obj :: Array (Tuple String Action)
   folded <- for pairs \(Tuple localName (Action { qfd, readable, id })) -> do
     id'@(ActionIdentifier actionName) <- normalize id
-    qfd' <- traverseQfd normalize qfd
+    qfd' <- normalize qfd
     pure $ Tuple actionName (Action { qfd: qfd', readable, id: id' })
   pure $ OBJ.fromFoldable folded
 
@@ -621,6 +632,8 @@ instance normalizeCalculation :: Normalize Calculation where
 instance normalizeQfdInst :: Normalize QueryFunctionDescription where
   normalize qfd = traverseQfd nQfd qfd
     where
+    -- traverseQfd already normalizes the sub-descriptions (bottom-up) before calling nQfd on the parent,
+    -- so nQfd must not recurse into them again; doing so makes normalization exponential in query depth.
     nQfd :: QueryFunctionDescription -> WithSideCars QueryFunctionDescription
     nQfd (SQD dom qf ran fun man) = do
       dom' <- normalizeDomain dom
@@ -630,22 +643,18 @@ instance normalizeQfdInst :: Normalize QueryFunctionDescription where
     nQfd (UQD dom qf subQfd ran fun man) = do
       dom' <- normalizeDomain dom
       qf' <- normalizeQueryFunction qf
-      subQfd' <- normalize subQfd
       ran' <- normalizeDomain ran
-      pure $ UQD dom' qf' subQfd' ran' fun man
+      pure $ UQD dom' qf' subQfd ran' fun man
     nQfd (BQD dom qf subQfd1 subQfd2 ran fun man) = do
       dom' <- normalizeDomain dom
       qf' <- normalizeQueryFunction qf
-      subQfd1' <- normalize subQfd1
-      subQfd2' <- normalize subQfd2
       ran' <- normalizeDomain ran
-      pure $ BQD dom' qf' subQfd1' subQfd2' ran' fun man
+      pure $ BQD dom' qf' subQfd1 subQfd2 ran' fun man
     nQfd (MQD dom qf subQfds ran fun man) = do
       dom' <- normalizeDomain dom
       qf' <- normalizeQueryFunction qf
-      subQfds' <- for subQfds normalize
       ran' <- normalizeDomain ran
-      pure $ MQD dom' qf' subQfds' ran' fun man
+      pure $ MQD dom' qf' subQfds ran' fun man
 
     normalizeDomain :: Domain -> WithSideCars Domain
     normalizeDomain (RDOM (d :: ADT RoleInContext)) = RDOM <$> (traverse normalize d)
@@ -664,7 +673,9 @@ instance normalizeQfdInst :: Normalize QueryFunctionDescription where
     normalizeQueryFunction (CreateContext_ ct) = CreateContext_ <$> fqn2tid ct
     normalizeQueryFunction (CreateRole rt) = CreateRole <$> fqn2tid rt
     normalizeQueryFunction (Bind rt) = Bind <$> fqn2tid rt
-    normalizeQueryFunction (Unbind rt) = Unbind <$> traverse fqn2tid rt
+    normalizeQueryFunction (RemoveAsFillerOfType rt) = RemoveAsFillerOfType <$> fqn2tid rt
+    normalizeQueryFunction RemoveAsFiller = pure RemoveAsFiller
+    normalizeQueryFunction RemoveFiller = pure RemoveFiller
     normalizeQueryFunction (DeleteRole rt) = DeleteRole <$> fqn2tid rt
     normalizeQueryFunction (DeleteContext rt) = DeleteContext <$> fqn2tid rt
     normalizeQueryFunction (DeleteProperty pt) = DeleteProperty <$> fqn2tid pt
@@ -703,6 +714,12 @@ instance normalizeQfdInst :: Normalize QueryFunctionDescription where
             Nothing -> Nothing
             Just sim -> lookupRoleIndividualId sim ident
       pure $ RoleIndividual (RoleInstance (maybe ident identity stableId))
+    normalizeQueryFunction (ContextTypeFilter serialisedADT) = do
+      case readJSON serialisedADT of
+        Left e -> pure $ ContextTypeFilter serialisedADT -- if we cannot parse the ADT, leave it as is
+        Right (adt :: ADT ContextType) -> do
+          adt' <- traverse fqn2tid adt
+          pure $ ContextTypeFilter $ writeJSON adt'
     normalizeQueryFunction f = pure f
 
 instance normalizeNotificationInst :: Normalize Notification where
@@ -726,6 +743,9 @@ instance normalizeAutomaticActionInst :: Normalize AutomaticAction where
     effect' <- normalize effect
     currentContextCalculation' <- normalize currentContextCalculation
     pure $ RoleAction facets { effect = effect', currentContextCalculation = currentContextCalculation' }
+
+instance normalizeActionEffectInst :: Normalize ActionEffect where
+  normalize = traverseActionEffect normalize
 
 instance normalizeSeparateInvertedQueryInst :: Normalize SeparateInvertedQuery where
   normalize (RoleInvertedQuery enumeratedRoleType typeName invertedQuery) = do
@@ -806,6 +826,8 @@ instance normalizeScreenElementDefInst :: Normalize ScreenElementDef where
   normalize (FormElementD f) = FormElementD <$> normalize f
   normalize (MarkDownElementD m) = MarkDownElementD <$> normalize m
   normalize (ChatElementD c) = ChatElementD <$> normalize c
+  normalize (TypeAheadFillerElementD t) = TypeAheadFillerElementD <$> normalize t
+  normalize (TypeAheadFormElementD t) = TypeAheadFormElementD <$> normalize t
   normalize (WhenElementD (WhenDef { condition, elements })) = do
     condition' <- normalize condition
     elements' <- traverse normalize elements
@@ -828,6 +850,16 @@ instance normalizeFormDefInst :: Normalize FormDef where
     markdown' <- traverse normalize r.markdown
     widgetCommonFields' <- normalizeWidgetCommonFields r.widgetCommonFields
     pure $ FormDef r { markdown = markdown', widgetCommonFields = widgetCommonFields' }
+
+instance Normalize TypeAheadFillerDef where
+  normalize (TypeAheadFillerDef r) = do
+    widgetCommonFields' <- normalizeWidgetCommonFields r.widgetCommonFields
+    pure $ TypeAheadFillerDef r { widgetCommonFields = widgetCommonFields' }
+
+instance Normalize TypeAheadFormDef where
+  normalize (TypeAheadFormDef r) = do
+    widgetCommonFields' <- normalizeWidgetCommonFields r.widgetCommonFields
+    pure $ TypeAheadFormDef r { widgetCommonFields = widgetCommonFields' }
 
 instance normalizeMarkDownDefInst :: Normalize MarkDownDef where
   normalize (MarkDownConstantDef r) = do
@@ -966,6 +998,7 @@ normalizeWidgetCommonFields w = do
   let perspMap = env.perspMap
   propertyRestrictions' <- traverse normalize w.propertyRestrictions
   withoutProperties' <- traverse (traverse fqn2tid) w.withoutProperties
+  requiredProperties' <- traverse (traverse fqn2tid) w.requiredProperties
   userRole' <- fqn2tid w.userRole
   -- rewrite perspectiveId if we have a stable id for it
   let
@@ -973,8 +1006,25 @@ normalizeWidgetCommonFields w = do
       Nothing -> w.perspectiveId
       Just stable -> stable
   fillFrom' <- traverse normalize w.fillFrom
+  fillPropertyFrom' <- traverse normalizePropertyValueFillers w.fillPropertyFrom
   fieldConstraints' <- traverse (traverse normalizeFieldConstraintDef) w.fieldConstraints
-  pure $ w { propertyRestrictions = propertyRestrictions', withoutProperties = withoutProperties', userRole = userRole', perspectiveId = perspectiveId', fillFrom = fillFrom', fieldConstraints = fieldConstraints' }
+  typeAheadFillFrom' <- traverse fqn2tid w.typeAheadFillFrom
+  pure $ w
+    { propertyRestrictions = propertyRestrictions'
+    , withoutProperties = withoutProperties'
+    , requiredProperties = requiredProperties'
+    , userRole = userRole'
+    , perspectiveId = perspectiveId'
+    , fillFrom = fillFrom'
+    , fillPropertyFrom = fillPropertyFrom'
+    , fieldConstraints = fieldConstraints'
+    , typeAheadFillFrom = typeAheadFillFrom'
+    }
+
+normalizePropertyValueFillers :: PropertyValueFillers -> WithSideCars PropertyValueFillers
+normalizePropertyValueFillers fillers = do
+  let pairs = EM.toUnfoldable fillers :: Array (Tuple PropertyType QueryFunctionDescription)
+  EM.fromFoldable <$> for pairs (\(Tuple k v) -> Tuple <$> fqn2tid k <*> normalize v)
 
 normalizeFieldConstraintDef :: FieldConstraintDef -> WithSideCars FieldConstraintDef
 normalizeFieldConstraintDef fc = do
@@ -1018,4 +1068,3 @@ buildPerspectiveIdMap (DomeinFile dfr) env0 =
           mkTuples ownerTid cr.perspectives
   in
     OBJ.fromFoldable (erTuples <> crTuples)
-

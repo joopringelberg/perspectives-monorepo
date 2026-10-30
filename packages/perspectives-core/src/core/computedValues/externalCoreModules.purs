@@ -31,8 +31,10 @@ import Data.Tuple (Tuple(..))
 import Foreign.Object (Object, fromFoldable, lookup)
 import Perspectives.Extern.Couchdb (externalFunctions) as ExternalCouchdb
 import Perspectives.Extern.Files (externalFunctions) as File
+import Perspectives.Extern.Help (externalFunctions) as Help
 import Perspectives.Extern.Parsing (externalFunctions) as Parsing
 import Perspectives.Extern.RabbitMQ (externalFunctions) as RabbitMQ
+import Perspectives.Extern.RunAction (externalFunctions) as RunAction
 import Perspectives.Extern.Sensors (externalFunctions) as Sensor
 import Perspectives.Extern.Utilities (externalFunctions) as Utilities
 import Perspectives.External.HiddenFunctionCache (HiddenFunctionDescription, hiddenFunctionInsert)
@@ -51,6 +53,8 @@ coreModules = fromFoldable
   , Tuple "model://perspectives.domains#Sensor" Sensor.externalFunctions
   , Tuple "model://perspectives.domains#RabbitMQ" RabbitMQ.externalFunctions
   , Tuple "model://perspectives.domains#Files" File.externalFunctions
+  , Tuple "model://perspectives.domains#HelpLib" Help.externalFunctions
+  , Tuple "model://perspectives.domains#RunAction" RunAction.externalFunctions
   ]
 
 addAllExternalFunctions :: forall m. Monad m => m Unit
@@ -62,6 +66,8 @@ addAllExternalFunctions = do
   addExternalFunctions Sensor.externalFunctions
   addExternalFunctions RabbitMQ.externalFunctions
   addExternalFunctions File.externalFunctions
+  addExternalFunctions Help.externalFunctions
+  addExternalFunctions RunAction.externalFunctions
 
 addExternalFunctions :: forall m. Monad m => Array (Tuple String HiddenFunctionDescription) -> m Unit
 addExternalFunctions externalFunctions = for_ externalFunctions \(Tuple n f) -> pure $ hiddenFunctionInsert n f.func f.nArgs f.isFunctional f.isEffect

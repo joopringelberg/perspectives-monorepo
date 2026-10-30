@@ -9,10 +9,10 @@ import Data.Traversable (for, for_)
 import Foreign.Object (Object, lookup)
 import Main.RecompileBasicModels (UninterpretedDomeinFile(..))
 import Perspectives.CoreTypes (MonadPerspectives)
+import Perspectives.Error.Pretty (renderMultiplePerspectivesErrors)
 import Perspectives.Logging (errorUpgrade)
 import Perspectives.Persistence.API (addDocument_, documentsInDatabase, includeDocs)
 import Perspectives.PerspectivesState (modelsDatabaseName)
-import Perspectives.ResourceIdentifiers (resourceIdentifier2WriteDocLocator)
 import Simple.JSON (read) as JSON
 
 -- | For each of the named files, retrieve the text source and replace the `arc` property of the 
@@ -32,6 +32,4 @@ patchModels replacements = do
     Nothing -> pure unit
     -- Store the model in Couchdb, that is: in the local store of models.
     Just replacement -> do
-      { database, documentName } <- resourceIdentifier2WriteDocLocator namespace
-      void $ addDocument_ database (dfr { arc = replacement }) documentName
-
+      void $ addDocument_ modelsDb (dfr { arc = replacement }) dfr._id

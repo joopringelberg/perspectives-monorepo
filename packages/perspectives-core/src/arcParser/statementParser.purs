@@ -24,22 +24,22 @@ module Perspectives.Parsing.Arc.Statement where
 
 import Control.Alt ((<|>))
 import Data.Array (fromFoldable)
-import Data.List (List(..))
+import Data.List (List(..), many)
 import Data.Maybe (Maybe(..), isJust)
 import Data.String.Regex (Regex, match)
 import Data.String.Regex.Flags (noFlags)
 import Data.String.Regex.Unsafe (unsafeRegex)
 import Data.Tuple (Tuple(..))
-import Perspectives.Parsing.Arc.Expression (step)
-import Perspectives.Parsing.Arc.Expression.AST (VarBinding(..))
-import Perspectives.Parsing.Arc.Identifiers (arcIdentifier, lowerCaseName, reserved)
-import Perspectives.Parsing.Arc.IndentParser (IP, getPosition, outdented', sameOrOutdented')
-import Perspectives.Parsing.Arc.Statement.AST (Assignment(..), AssignmentOperator(..), LetABinding(..), LetStep(..))
-import Perspectives.Parsing.Arc.Token (reservedIdentifier, token)
-import Prelude (bind, discard, pure, ($), (*>), (<$>), (<*), (<*>), (<>), (>>=))
-import Parsing.Indent.Monadic (indented', withPos)
 import Parsing (fail)
 import Parsing.Combinators (lookAhead, manyTill, option, optionMaybe, (<?>))
+import Parsing.Indent.Monadic (indented', withPos)
+import Perspectives.Parsing.Arc.Expression (parseLetVariableName, step)
+import Perspectives.Parsing.Arc.Expression.AST (VarBinding(..))
+import Perspectives.Parsing.Arc.Identifiers (arcIdentifier, reserved)
+import Perspectives.Parsing.Arc.IndentParser (IP, getPosition, outdented', sameOrOutdented')
+import Perspectives.Parsing.Arc.Statement.AST (Assignment(..), AssignmentOperator(..), LetABinding(..), LetStep(..), StatementStage, Statements(..))
+import Perspectives.Parsing.Arc.Token (reservedIdentifier, token)
+import Prelude (bind, discard, pure, ($), (*>), (<$>), (<*), (<*>), (<>), (>>=))
 
 assignment :: IP Assignment
 assignment = isPropertyAssignment >>=
@@ -48,19 +48,19 @@ assignment = isPropertyAssignment >>=
 
 roleAssignment :: IP Assignment
 roleAssignment = do
-  keyword <- lookAhead reservedIdentifier <?> "Expected remove, create, create_, move, bind, bind_, unbind, unbind_, delete, callEffect or callDestructiveEffect. "
+  keyword <- lookAhead reservedIdentifier <?> "Expected remove, create, create_, move, bind, bind_, delete, callEffect, callDestructiveEffect, runContextAction or runRoleAction. "
   case keyword of
     "remove" -> do
       (Tuple first second) <- twoReservedWords
       case first, second of
         "remove", "role" -> roleRemoval
         "remove", "context" -> contextRemoval
-        _, _ -> fail ("Expected 'role' or 'context' after 'remove'. ")
+        "remove", "filler" -> removeFiller
+        "remove", "as" -> removeAsFiller
+        _, _ -> fail ("Expected 'role', 'context', 'filler', or 'as' after 'remove'. ")
     "move" -> move
     "bind" -> bind'
     "bind_" -> bind_
-    "unbind" -> unbind
-    "unbind_" -> unbind_
     "delete" -> do
       (Tuple first second) <- twoReservedWords
       case first, second of
@@ -69,6 +69,8 @@ roleAssignment = do
         _, _ -> fail ("Expected 'role' or 'context' after 'delete'. ")
     "callEffect" -> callEffect
     "callDestructiveEffect" -> callDestructiveEffect
+    "runContextAction" -> runContextActionP
+    "runRoleAction" -> runRoleActionP
     "create" -> do
       (Tuple first second) <- twoReservedWords
       case first, second of
@@ -80,7 +82,7 @@ roleAssignment = do
       case first, second of
         "create_", "context" -> createContext_
         _, _ -> fail ("Expected 'context' after 'create_'.")
-    s -> fail ("Expected remove, create, create_, move, bind, bind_, unbind, unbind_, delete, callDestructiveEffect or callEffect but found '" <> s <> "'. ")
+    s -> fail ("Expected remove, create, create_, move, bind, bind_, delete, callDestructiveEffect, callEffect, runContextAction or runRoleAction but found '" <> s <> "'. ")
 
 roleRemoval :: IP Assignment
 roleRemoval = do
@@ -157,21 +159,42 @@ bind_ = do
   end <- getPosition
   pure $ Bind_ { start, end, bindingExpression, binderExpression }
 
-unbind :: IP Assignment
-unbind = do
+-- remove filler of <filled-role-expression>  →  RemoveFiller (UQD)
+-- remove filler <filler-role-expression> from <filled-role-expression>  →  RemoveFillerWith (BQD)
+removeFiller :: IP Assignment
+removeFiller = do
   start <- getPosition
-  bindingExpression <- (reserved "unbind" *> step)
-  roleIdentifier <- optionMaybe (reserved "from" *> arcIdentifier)
-  end <- getPosition
-  pure $ Unbind { start, end, bindingExpression, roleIdentifier }
+  reserved "remove"
+  reserved "filler"
+  hasOf <- isJust <$> optionMaybe (reserved "of")
+  if hasOf then do
+    filledExpression <- step
+    end <- getPosition
+    pure $ RemoveFiller { start, end, filledExpression }
+  else do
+    fillerExpression <- step
+    filledExpression <- reserved "from" *> step
+    end <- getPosition
+    pure $ RemoveFillerWith { start, end, fillerExpression, filledExpression }
 
-unbind_ :: IP Assignment
-unbind_ = do
+-- remove as filler of <RoleType> <filler-role-expression>  →  RemoveAsFillerOfType (UQD)
+-- remove as filler <filler-role-expression>  →  RemoveAsFiller (UQD)
+removeAsFiller :: IP Assignment
+removeAsFiller = do
   start <- getPosition
-  bindingExpression <- (reserved "unbind_" *> step)
-  binderExpression <- reserved "from" *> step
-  end <- getPosition
-  pure $ Unbind_ { start, end, bindingExpression, binderExpression }
+  reserved "remove"
+  reserved "as"
+  reserved "filler"
+  hasOf <- isJust <$> optionMaybe (reserved "of")
+  if hasOf then do
+    roleIdentifier <- arcIdentifier
+    fillerExpression <- step
+    end <- getPosition
+    pure $ RemoveAsFillerOfType { start, end, roleIdentifier, fillerExpression }
+  else do
+    fillerExpression <- step
+    end <- getPosition
+    pure $ RemoveAsFiller { start, end, fillerExpression }
 
 isPropertyAssignment :: IP Boolean
 isPropertyAssignment = do
@@ -317,20 +340,61 @@ callDestructiveEffect = do
   end <- getPosition
   pure $ ExternalDestructiveEffect { start, end, effectName, arguments: (fromFoldable arguments) }
 
+-- | runContextAction <ArcIdentifier> for <ArcIdentifier> in <step>
+runContextActionP :: IP Assignment
+runContextActionP = do
+  start <- getPosition
+  actionIdentifier <- reserved "runContextAction" *> arcIdentifier
+  userRoleIdentifier <- reserved "for" *> arcIdentifier
+  contextExpression <- reserved "in" *> step
+  end <- getPosition
+  pure $ RunContextAction { start, end, actionIdentifier, userRoleIdentifier, contextExpression }
+
+-- | runRoleAction <ArcIdentifier> for <ArcIdentifier> on <step> in <step>
+runRoleActionP :: IP Assignment
+runRoleActionP = do
+  start <- getPosition
+  actionIdentifier <- reserved "runRoleAction" *> arcIdentifier
+  userRoleIdentifier <- reserved "for" *> arcIdentifier
+  objectExpression <- reserved "on" *> step
+  contextExpression <- reserved "in" *> step
+  end <- getPosition
+  pure $ RunRoleAction { start, end, actionIdentifier, userRoleIdentifier, objectExpression, contextExpression }
+
 -- | A let with assignments: letA <binding>+ in <assignment>+.
 letWithAssignment :: IP LetStep
 letWithAssignment = withPos do
   start <- getPosition
   -- bindings <- reserved "letA" *> nestedBlock letABinding
   bindings <- reserved "letA" *> withPos (manyTill letABinding outdented')
-  -- assignments <- reserved "in" *> nestedBlock assignment
-  assignments <- reserved "in" *> withPos (manyTill assignment outdented')
+  stages <- reserved "in" *> stagedAssignments
   end <- getPosition
-  pure $ LetStep { start, end, bindings: fromFoldable bindings, assignments: fromFoldable assignments }
+  pure $ LetStep { start, end, bindings: fromFoldable bindings, stages }
+
+-- | A plain statement block can have settlement stages without introducing bindings.
+-- | Keep single-stage blocks unchanged; reuse LetStep for multi-stage execution.
+stagedStatements :: IP Statements
+stagedStatements = withPos do
+  start <- getPosition
+  stages <- stagedAssignments
+  end <- getPosition
+  pure $ case stages of
+    [ stage ] -> Statements stage
+    _ -> Let $ LetStep { start, end, bindings: [], stages }
+
+stagedAssignments :: IP (Array StatementStage)
+stagedAssignments = do
+  firstStage <- assignmentStage
+  rest <- many (reserved "once" *> reserved "settled" *> indented' *> assignmentStage)
+  pure $ fromFoldable (Cons firstStage rest)
+
+assignmentStage :: IP StatementStage
+assignmentStage = fromFoldable <$> withPos (manyTill assignment (lookAhead (reserved "once" *> reserved "settled") <|> outdented'))
 
 letABinding :: IP LetABinding
 letABinding = do
-  varName <- (lowerCaseName <* token.reservedOp "<-") <?> "lower case name followed by <-, "
+  varName <- parseLetVariableName
+  _ <- token.reservedOp "<-" <?> "Expected '<-' after letA variable name. "
   (Tuple first second) <- twoReservedWords
   case first, second of
     "create", "role" -> Stat <$> pure varName <*> roleCreation

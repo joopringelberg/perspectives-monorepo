@@ -125,6 +125,7 @@ data PerspectivesError
   | PropertyCannotBeCalculated String ArcPosition ArcPosition
   | NotASelfPerspective ArcPosition ArcPosition
   | UndeclaredPrefix ArcPosition ArcPosition String
+  | ProvideContext ArcPosition
 
   | UnauthorizedForProperty String RoleType RoleType PropertyType PropertyVerb (Maybe ArcPosition) (Maybe ArcPosition)
   | UnauthorizedForRole String RoleType RoleType (Array RoleVerb) (Maybe ArcPosition) (Maybe ArcPosition)
@@ -162,6 +163,8 @@ data PerspectivesError
   | FieldConstraintRequiresStringRange ArcPosition ArcPosition PropertyType
 
   | MultipleDefaultUserRoles ContextType
+  | DuplicateContextDeclaration ArcPosition ContextType
+  | DuplicateRoleDeclaration ArcPosition RoleType
 
   | Custom String
   -- Incoming transaction / delta errors
@@ -208,6 +211,8 @@ instance showPerspectivesError :: Show PerspectivesError where
   show (UnknownMarkDownAction start end actionName roletype) = "(UnknownMarkDownAction) The action '" <> actionName <> "' is not defined for the role '" <> show roletype <> "'! Between " <> show start <> " and " <> show end <> ")."
   show (FieldConstraintRequiresStringRange start end pt) = "(FieldConstraintRequiresStringRange) The property '" <> propertytype2string pt <> "' must have a String range to use minLines/maxLines constraints. Between " <> show start <> " and " <> show end <> "."
   show (MultipleDefaultUserRoles ctype) = "(MultipleDefaultUserRoles) The context '" <> unwrap ctype <> "' has more than one user role marked as default. At most one user role may be the default."
+  show (DuplicateContextDeclaration pos ctype) = "(DuplicateContextDeclaration) The context '" <> unwrap ctype <> "' is declared more than once. Each context type may be declared only once. At: " <> show pos
+  show (DuplicateRoleDeclaration pos rtype) = "(DuplicateRoleDeclaration) The role '" <> roletype2string rtype <> "' is declared more than once. Each role type may be declared only once within its context. At: " <> show pos
   show (ContextHasNoRole ctype qn start end) = "(ContextHasNoRole) The Context-type '" <> show ctype <> "' has no enumerated role with the name '" <> qn <> "' (it may have a calculated role but that cannot be used here). Between " <> show start <> " and " <> show end
   show (RoleHasNoProperty rtype qn start end) = "(RoleHasNoProperty) The Role-type '" <> show rtype <> "' has no property with the name '" <> qn <> "' (between " <> show start <> " and " <> show end <> ")."
   show (RoleHasNoEnumeratedProperty rtype qn start end) = "(RoleHasNoEnumeratedProperty) The Role-type '" <> show rtype <> "' has no enumerated property with the name '" <> qn <> "' (between " <> show start <> " and " <> show end <> "). It may have a calculated property, but we cannot use that in this situation."
@@ -215,7 +220,7 @@ instance showPerspectivesError :: Show PerspectivesError where
   show (RoleHasNoBinding pos rtype) = "(RoleHasNoBinding) The role '" <> show rtype <> "' has no binding. If it is a Sum-type, one of its members may have no binding " <> show pos
   show (RoleCannotHaveBinding start end roletype) = "(RoleCannotHaveBinding) External Roles cannot have a binding. " <> roletype <> ", from " <> show start <> " to " <> show end
   show (IncompatibleDomainsForJunction dom1 dom2) = "(IncompatibleDomainsForJunction) These two domains cannot be joined in a disjunction of conjunction: '" <> show dom1 <> "', '" <> show dom2 <> "'."
-  show (RoleDoesNotBind pos rtype adt) = "(RoleDoesNotBind) The role '" <> show rtype <> "' does not bind roles of type '" <> show adt <> "' (it may have an aspect that is stricter than its own filler restriction!), at: " <> show pos
+  show (RoleDoesNotBind pos rtype adt) = "(RoleDoesNotBind) The role '" <> show rtype <> "' cannot be filled by roles of type '" <> show adt <> "' (it may have an aspect that is stricter than its own filler restriction!), at: " <> show pos
   show (LocalRoleDoesNotBind start end lname adt) = "(LocalRoleDoesNotBind) The roles that name '" <> lname <> "' (from " <> show start <> " to " <> show end <> ") can be matched to, do not bind '" <> show adt <> "'."
   show (IncompatibleComposition pos left right) = "(IncompatibleComposition) The result of the left operand (" <> show left <> ") and the argument of the right operand (" <> show right <> ") are incompatible."
   show (IncompatibleDomains pos1 pos2) = "(IncompatibleDomains) The result of the expression at " <> show pos1 <> " and " <> show pos2 <> " have incompatible domains (both must be contexts, roles or values)."
@@ -234,7 +239,7 @@ instance showPerspectivesError :: Show PerspectivesError where
   show (ValueExpressionNotAllowed dom start end) = "(ValueExpressionNotAllowed) This expression has type: " <> show dom <> " but a Value is not allowed here " <> showPosition start end
   show (NotAStringDomain qfd start end) = "(NotAStringDomain) This expression should have a string type: " <> show qfd <> ", between " <> show start <> " and " <> show end
   show (DomainTypeRequired domains dom start end) = "(DomainTypeRequired) This expression should result in a " <> domains <> ", but instead is a " <> show dom <> showPosition start end
-  show (NotAContextRole start end) = "(NotAContextRole) All role types in this expression should be context roles (binding the external role of a context), between " <> show start <> " and " <> show end
+  show (NotAContextRole start end) = "(NotAContextRole) This expression should result in a sequence of external roles (representing contexts), between " <> show start <> " and " <> show end
   show (NotAContextDomain qfd dom start end) = "(NotAContextDomain) This expression:\n" <> prettyPrint qfd <> "\nshould return a context type, but has instead: " <> show dom <> ", between " <> show start <> " and " <> show end
   show (NotFunctional start end qfd) = "(NotFunctional) This expression is not a single value, between " <> show start <> " and " <> show end
   show (MaybeNotFunctional start end qfd) = "(MaybeNotFunctional) This expression might not be a single value, between " <> show start <> " and " <> show end
@@ -260,6 +265,7 @@ instance showPerspectivesError :: Show PerspectivesError where
   show (PropertyCannotBeCalculated prop start end) = "(PropertyCannotBeCalculated) This property cannot be calculated " <> showPosition start end
   show (NotASelfPerspective start end) = "(NotASelfPerspective) `selfOnly` is restricted to self-perspectives: a perspective for a user role on that user role. Consider `authorOnly` instead: it may be what you need " <> showPosition start end
   show (UndeclaredPrefix start end prefix) = "(UndeclaredPrefix) The prefix used in '" <> prefix <> "' has not been declared (between " <> show start <> " and " <> show end <> ")."
+  show (ProvideContext pos) = "(ProvideContext) Provide context at position " <> show pos
   show (UnauthorizedForProperty author userRole role property verb start end) = "(UnauthorizedForProperty) User " <> author <> " in role " <> show userRole <> " has no perspective on role " <> show role <> " that includes " <> show verb <> " for property " <> show property <> maybeShowPosition start end
   show (UnauthorizedForRole author userRole role verbs mstart mend) = "(UnauthorizedForRole) User " <> author <> " in role " <> show userRole <> " has no perspective on role " <> show role <> " that includes at least one of " <> show verbs <> maybeShowPosition mstart mend
   show (UnauthorizedForContext author userRole contextType) = "(UnauthorizedForContext) User " <> author <> " in role " <> show userRole <> " has no perspective on context " <> show contextType

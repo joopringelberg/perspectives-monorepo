@@ -18,16 +18,14 @@
 // Full text of this license can be found in the LICENSE file in the projects root.
 // END LICENSE
 
-import React, { createRef } from 'react';
+import React from 'react';
 
-import {PDRproxy, RoleInstanceT, RoleOnClipboard} from "perspectives-proxy";
+import {FillMode, PDRproxy, RoleInstanceT, RoleOnClipboard} from "perspectives-proxy";
 import PerspectivesComponent from "./perspectivesComponent";
 import {PSRol, PSRolType} from "./reactcontexts.js";
-import {PasteIcon} from '@primer/octicons-react';
 import i18next from "i18next";
 
-import {OverlayTrigger, Tooltip} from "react-bootstrap";
-import { OverlayInjectedProps } from 'react-bootstrap/esm/Overlay';
+import {Button, OverlayTrigger, Tooltip} from "react-bootstrap";
 
 import "././styles/components.css";
 
@@ -35,8 +33,12 @@ interface FormPasteRoleProps {
   systemexternalrole: RoleInstanceT;
 }
 interface FormPasteRoleState {
-  compatibleRole: boolean;
+  providedTypeCompatible: boolean;
+  requiredTypeCompatible: boolean;
+  providedTypeName?: string;
+  requiredTypeName?: string;
   roleOnClipboard: RoleInstanceT | undefined;
+  roleOnClipboardName?: string;
 }
 
 export default class FormPasteRole extends PerspectivesComponent<FormPasteRoleProps, FormPasteRoleState>
@@ -47,7 +49,8 @@ export default class FormPasteRole extends PerspectivesComponent<FormPasteRolePr
   {
     super(props);
     this.state =
-      { compatibleRole: false
+      { providedTypeCompatible: false
+      , requiredTypeCompatible: false
       , roleOnClipboard: undefined};
   }
 
@@ -64,45 +67,52 @@ export default class FormPasteRole extends PerspectivesComponent<FormPasteRolePr
               const clipboardContent = clipboardContents[0];
               if ( clipboardContent && clipboardContent.roleData && clipboardContent.roleData.rolinstance && clipboardContent.roleData.rolinstance != component.state.roleOnClipboard  )
                 {
-                  // checkBinding catches its own errors. We do not display a message if the binding is not allowed;
-                  // instead the button will be disabled.
-                  // checkBinding currently comes from RoleInstance only and relies on checkBindingP.
-                  component.context
-                    .checkbinding( {rolinstance: clipboardContent.roleData.rolinstance} )
-                    .then( compatibleRole => component.setState({compatibleRole, roleOnClipboard: clipboardContent.roleData.rolinstance}));
+                  Promise.all(
+                    [
+                      pproxy.checkBindingP(component.context.roltype, clipboardContent.roleData.rolinstance),
+                      pproxy.getRoleNameP(clipboardContent.roleData.rolinstance),
+                      pproxy.getMostGeneralAllowedBindingType(component.context.roltype, clipboardContent.roleData.rolinstance)
+                    ]
+                  )
+                    .then(([providedTypeCompatible, providedTypeName, requiredType]) =>
+                      component.setState(
+                        { providedTypeCompatible
+                        , requiredTypeCompatible: requiredType !== undefined
+                        , providedTypeName
+                        , requiredTypeName: requiredType?.readableName
+                        , roleOnClipboard: clipboardContent.roleData.rolinstance
+                        , roleOnClipboardName: clipboardContent.roleData.cardTitle
+                        }))
+                    .catch(() =>
+                      component.setState(
+                        { providedTypeCompatible: false
+                        , requiredTypeCompatible: false
+                        , providedTypeName: undefined
+                        , requiredTypeName: undefined
+                        , roleOnClipboard: clipboardContent.roleData.rolinstance
+                        , roleOnClipboardName: clipboardContent.roleData.cardTitle
+                        }));
                 }
               }
           ));
         });
   }
 
-  handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>)
+  pasteRole(fillMode: FillMode)
   {
     const component = this;
-    switch (e.code){
-      case "Enter": // Return
-      case "Space": // space
-        component.pasteRole();
-        e.stopPropagation();
-        break;
-    }
-  }
-
-  pasteRole()
-  {
-    const component = this;
-    const {roleOnClipboard, compatibleRole} = component.state;
+    const {roleOnClipboard, providedTypeCompatible, requiredTypeCompatible} = component.state;
+    const compatibleRole = fillMode === "provided" ? providedTypeCompatible : requiredTypeCompatible;
     if ( roleOnClipboard )
     {
       // No need to call checkBinding; it was done on mounting.
       if (compatibleRole && component.context.rolinstance )
       {
-        // bind_ catches its own errors and we do not give a message on success.
-        component.context.bind_( {rolinstance: roleOnClipboard} );
+        component.context.bind_({rolinstance: roleOnClipboard}, fillMode);
       }
       else if ( compatibleRole )
       {
-        component.context.bind( roleOnClipboard );
+        component.context.bind(roleOnClipboard, fillMode);
       }
     }
   }
@@ -110,44 +120,54 @@ export default class FormPasteRole extends PerspectivesComponent<FormPasteRolePr
   render()
   {
     const component = this;
-    const renderTooltip = (props : OverlayInjectedProps) => (
-    <Tooltip id="formPasteRole-tooltip" {...props}>
-      { component.context.rolinstance
-        ? ( component.state.compatibleRole
-            ? i18next.t("formPasteRole_Fill", {ns: "preact"})
-            : i18next.t("tablePasteRole_Incompatible", {ns: "preact"})
-          )
-        : ( component.state.compatibleRole
-            ? i18next.t("tablePasteRole_Create", {ns: "preact"})
-            : i18next.t("tablePasteRole_Incompatible", {ns: "preact"})
-          )
-      }
-    </Tooltip> );
-
-    const eventDiv = createRef<HTMLDivElement>();
-
     if ( component.stateIsComplete(["roleOnClipboard"]) )
     {
-      return  <OverlayTrigger
-                      placement="left"
-                      delay={{ show: 250, hide: 400 }}
-                      overlay={renderTooltip}
-                    >
-                    <div
-                        ref={eventDiv}
-                        className="ml-3 mr-3"
-                        aria-describedby="formPasteRole-tooltip"
-                        tabIndex={0}
-                        onKeyDown={ e => component.handleKeyDown(e) }
-                        onClick={ () => component.pasteRole()}
-                    >
-                    <PasteIcon
-                      aria-label={ i18next.t("tablePasteRole_Alt", {ns: "preact"}) }
-                      className={`iconStyle ${component.state.compatibleRole ? "" : "disabledIcon"}`}
-                      size="medium"
-                    />
-                    </div>
-              </OverlayTrigger>;
+      const providedTooltip = (
+        <Tooltip id="formPasteRole-provided-tooltip">
+          {
+            i18next.t(
+              "tableContextMenu_fillWithProvidedType",
+              { ns: "preact"
+              , roleName: component.state.roleOnClipboardName
+              , typeName: component.state.providedTypeName
+              })
+          }
+        </Tooltip>
+      );
+      const requiredTooltip = (
+        <Tooltip id="formPasteRole-required-tooltip">
+          {
+            i18next.t(
+              "tableContextMenu_fillWithRequiredType",
+              { ns: "preact"
+              , roleName: component.state.roleOnClipboardName
+              , typeName: component.state.requiredTypeName
+              })
+          }
+        </Tooltip>
+      );
+      return <div className="d-flex gap-2 align-items-center">
+        <OverlayTrigger placement="left" delay={{ show: 250, hide: 400 }} overlay={providedTooltip}>
+          <Button
+            size="sm"
+            variant="outline-secondary"
+            disabled={!component.state.providedTypeCompatible}
+            onClick={ () => component.pasteRole("provided")}
+          >
+            {i18next.t("pasteRole_ProvidedShort", {ns: "preact"})}
+          </Button>
+        </OverlayTrigger>
+        <OverlayTrigger placement="left" delay={{ show: 250, hide: 400 }} overlay={requiredTooltip}>
+          <Button
+            size="sm"
+            variant="outline-secondary"
+            disabled={!component.state.requiredTypeCompatible}
+            onClick={ () => component.pasteRole("required")}
+          >
+            {i18next.t("pasteRole_RequiredShort", {ns: "preact"})}
+          </Button>
+        </OverlayTrigger>
+      </div>;
     }
     else {
       return null;

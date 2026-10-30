@@ -31,18 +31,20 @@ import Control.Monad.AvarMonadAsk (gets)
 import Control.Monad.Error.Class (throwError, try)
 import Control.Monad.Reader (runReaderT)
 import Control.Monad.Trans.Class (lift)
-import Data.Array (head, singleton)
+import Data.Array (head, mapMaybe, singleton)
 import Data.Either (Either(..))
+import Data.Foldable (foldl)
 import Data.Function (flip)
 import Data.HTTP.Method (Method(..))
 import Data.Int (floor)
 import Data.Map (catMaybes)
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
-import Data.String (Pattern(..), Replacement(..))
+import Data.String (Pattern(..), Replacement(..), split)
 import Data.String (replace) as String
-import Data.String.Regex (regex, replace) as REGEX
-import Data.String.Regex.Flags (noFlags)
+import Data.String.Regex (regex, replace, test) as REGEX
+import Data.String.Regex.Flags (global, noFlags)
+import Data.String.Regex.Unsafe (unsafeRegex)
 import Data.Traversable (for)
 import Data.Tuple (Tuple(..))
 import Data.Unit (Unit, unit)
@@ -61,6 +63,7 @@ import Perspectives.Authenticate (getMyPublicKey)
 import Perspectives.CoreTypes (MonadPerspectivesQuery, MonadPerspectivesTransaction, mkLibFunc2)
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..), runArrayT)
 import Perspectives.Error.Boundaries (handleExternalFunctionError)
+import Perspectives.Error.Pretty (renderMultiplePerspectivesErrors)
 import Perspectives.External.HiddenFunctionCache (HiddenFunctionDescription)
 import Perspectives.Identifiers (getFirstMatch)
 import Perspectives.Instances.ObjectGetters (bottom, context, contextType, roleType)
@@ -158,6 +161,51 @@ selectR patterns value =
     )
     >>= handleExternalFunctionError "model://perspectives.domains#Utilities$SelectR"
 
+type ModelVersion =
+  { modelName :: String
+  , version :: String
+  }
+
+-- Use like this:
+-- #util:ApplyModelVersions(
+--   "RebootUniverse=1.1; CouchdbManagement=12.5; Couchdb=4.0"
+-- )
+applyModelVersions :: String -> String -> String
+applyModelVersions versionSpecification arcSource =
+  foldl applyVersion arcSource $ mapMaybe parseAssignment $ split (Pattern ";") versionSpecification
+  where
+  parseAssignment :: String -> Maybe ModelVersion
+  parseAssignment assignment =
+    case split (Pattern "=") $ REGEX.replace (unsafeRegex "\\s" global) "" assignment of
+      [ modelName, version ]
+        | REGEX.test (unsafeRegex "^[A-Za-z][A-Za-z0-9_]*$" noFlags) modelName
+        , REGEX.test (unsafeRegex "^[0-9]+\\.[0-9]+$" noFlags) version -> Just { modelName, version }
+      _ -> Nothing
+
+  applyVersion :: String -> ModelVersion -> String
+  applyVersion source { modelName, version } =
+    REGEX.replace
+      ( unsafeRegex
+          ( "(^|\\n)([\\t ]*(?:domain|use[\\t ]+[^\\s]+[\\t ]+for)[\\t ]+model://[^\\s#]+#"
+              <> modelName
+              <> ")(?:@[0-9]+\\.[0-9]+)?(?=[\\t ]*(?:\\r?$|\\n))"
+          )
+          global
+      )
+      ("$1$2@" <> version)
+      source
+
+applyModelVersions_ :: Array String -> String -> MonadPerspectivesQuery String
+applyModelVersions_ versionSpecifications arcSource =
+  try
+    ( case head versionSpecifications of
+        Just versionSpecification -> do
+          let result = applyModelVersions versionSpecification arcSource
+          pure result
+        Nothing -> pure arcSource
+    )
+    >>= handleExternalFunctionError "model://perspectives.domains#Utilities$ApplyModelVersions"
+
 -- | See https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/DateTimeFormat for the values of Locale and 
 -- | the shape that the options can have.
 
@@ -190,6 +238,9 @@ instance Show EvaluationResult where
   show (PE parseError) = "error#" <> show parseError
   show (PSPE errs) = "error#" <> show errs
 
+showPerspectivesErrors :: MultiplePerspectivesErrors -> MonadPerspectivesQuery String
+showPerspectivesErrors errs = lift $ lift $ ("error#" <> _) <$> renderMultiplePerspectivesErrors errs
+
 -- | Evaluate the expression and apply it to the role instance.
 -- | The result is a (series of) error message(s) that will start with "error#" or a valid result in string form preceded by "result#".
 evalExpression :: String -> RoleInstance -> MonadPerspectivesQuery String
@@ -202,13 +253,13 @@ evalExpression expr roleId@(RoleInstance id) = do
     Right (parseTree :: Step) -> do
       s <- liftAff $ evalPhaseTwo' (expandPrefix parseTree)
       case s of
-        Left e -> pure $ show (PSPE e)
+        Left e -> showPerspectivesErrors e
         Right parseTree' -> do
           lift $ lift $ void $ ensureModel parseTree'
           (t :: Either MultiplePerspectivesErrors QueryFunctionDescription) <- lift $ lift $ evalPhaseTwo'
             (ExpressionCompiler.compileExpression (RDOM $ UET $ RoleInContext { context: ct, role: rt }) parseTree')
           case t of
-            Left errs -> pure $ show (PSPE errs)
+            Left errs -> showPerspectivesErrors errs
             Right qfd -> do
               -- Get a list of all models in the installation.
               modelUriMap <- lift $ lift $ getModelUris
@@ -249,13 +300,13 @@ compileExpression expr roleId = do
     Right (parseTree :: Step) -> do
       s <- liftAff $ evalPhaseTwo' (expandPrefix parseTree)
       case s of
-        Left e -> pure $ show (PSPE e)
+        Left e -> showPerspectivesErrors e
         Right parseTree' -> do
           lift $ lift $ void $ ensureModel parseTree'
           (t :: Either MultiplePerspectivesErrors QueryFunctionDescription) <- lift $ lift $ evalPhaseTwo'
             (ExpressionCompiler.compileExpression (RDOM $ UET $ RoleInContext { context: ct, role: rt }) parseTree')
           case t of
-            Left errs -> pure $ show (PSPE errs)
+            Left errs -> showPerspectivesErrors errs
             Right qfd -> do
               -- Get a list of all models in the installation.
               modelUriMap <- lift $ lift $ getModelUris
@@ -404,6 +455,7 @@ externalFunctions =
   , Tuple "model://perspectives.domains#Utilities$Replace" { func: unsafeCoerce replace, nArgs: 2, isFunctional: True, isEffect: false }
   , Tuple "model://perspectives.domains#Utilities$ReplaceR" { func: unsafeCoerce replaceR, nArgs: 2, isFunctional: True, isEffect: false }
   , Tuple "model://perspectives.domains#Utilities$SelectR" { func: unsafeCoerce selectR, nArgs: 1, isFunctional: True, isEffect: false }
+  , Tuple "model://perspectives.domains#Utilities$ApplyModelVersions" { func: unsafeCoerce applyModelVersions_, nArgs: 1, isFunctional: True, isEffect: false }
   , Tuple "model://perspectives.domains#Utilities$Random" { func: unsafeCoerce random, nArgs: 2, isFunctional: True, isEffect: false }
   , Tuple "model://perspectives.domains#Utilities$FormatDateTime" { func: unsafeCoerce formatDateTime_, nArgs: 3, isFunctional: True, isEffect: false }
   , Tuple "model://perspectives.domains#Utilities$EvalExpression" { func: unsafeCoerce evalExpression_, nArgs: 1, isFunctional: Unknown, isEffect: false }

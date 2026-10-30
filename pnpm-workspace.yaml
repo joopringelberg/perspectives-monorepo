@@ -6,7 +6,9 @@ packages:
   - packages/perspectives-highlightjs
   - packages/perspectives-pageworker
   - packages/perspectives-proxy
+  - packages/perspectives-rabbitmq-service
   - packages/perspectives-react
+  - packages/perspectives-sharedfilestorage
   - packages/perspectives-sharedworker
   - packages/perspectives-tcp
   - packages/perspectives-utilities

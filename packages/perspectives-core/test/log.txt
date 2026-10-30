@@ -1,0 +1,1270 @@
+
+> perspectives-core@3.3.10 test:amqp /Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core
+> pnpm exec spago build && ROLLUP_INPUT=./output/Test.AMQPTests/index.js ROLLUP_OUTPUT=./dist/test.amqp.node.js rollup -c rollup.node.config.js && clear && NODE_EXTRA_CA_CERTS="$(mkcert -CAROOT)/rootCA.pem" node dist/test.amqp.node.js
+
+[3J[H[2J[31m[INFO] [TEST] [31mRestoring PDR instance for user: alice_macbook[0m[0m
+[31m[INFO] [TEST] withTwoPDRsCachedNoBus: Setting log levels for PDR1[0m
+[31m[INFO] [TEST] alice_macbook loaded AMQP test setup model[0m
+[31m[INFO] [TEST] alice_macbook created public database for BrokerService instance[0m
+[31m[INFO] [TEST] alice_macbook found the AMQPtestSetupApp context[0m
+[31m[INFO] [TEST] alice_macbook ran SetupBrokerService action to create a BrokerService instance[0m
+[31m[INFO] [TEST] alice_macbook ran ConfigureBrokerService action to configure the BrokerService instance[0m
+[31m[INFO] [TEST] alice_macbook ran SetCredentials action to provide the Administrator with credentials for the BrokerService instance[0m
+[31m[INFO] [TEST] alice_macbook retrieved public BrokerService instance address[0m
+[31m[INFO] [TEST] alice_macbook loaded BrokerService model[0m
+[31m[INFO] [TEST] alice_macbook executed SignUp action to subscribe to AMQP using the public BrokerService instance"def:#cmydkd3dpj"[0m
+[35m[INFO] [TEST] [35mRestoring PDR instance for user: bob_macbook[0m[0m
+[35m[INFO] [TEST] withTwoPDRsCachedNoBus: Setting log levels for PDR2[0m
+[35m[INFO] [TEST] bob_macbook loaded BrokerService model[0m
+[35m[INFO] [TEST] bob_macbook executed SignUp action to subscribe to AMQP using the public BrokerService instance"def:#zw1p467cbl"[0m
+[35m[DEBUG] [STATE] Entering phase1 of transaction 10[0m
+[35m[DEBUG] [STATE] Entering phase2 of transaction 10[0m
+[35m[DEBUG] [STATE] run sharing transaction from nonsharing transaction 10[0m
+[35m[DEBUG] [STATE]   Starting embedded sharing transaction because it was necessary.[0m
+[35m[DEBUG] [STATE]   Starting sharing transaction 11[0m
+[35m[DEBUG] [STATE]   Evaluate states - processing 0 invertedQueryResults[0m
+[35m[DEBUG] [STATE]   Entering phase1 of transaction 11[0m
+[35m[DEBUG] [STATE]   Entering phase2 of transaction 11[0m
+[35m[DEBUG] [STATE]   Evaluate states - processing 0 invertedQueryResults[0m
+[35m[DEBUG] [STATE]   Exiting phase 2 for transaction 11.[0m
+[35m[DEBUG] [STATE]   Ending transaction 11[0m
+[35m[DEBUG] [STATE]   Ending transaction that needed to be embedded.[0m
+[35m[DEBUG] [STATE] returning to nonsharing transaction 10 from sharing transaction.[0m
+[35m[DEBUG] [STATE] Exiting phase 2 for transaction 10.[0m
+[35m[DEBUG] [STATE] Ending transaction 10[0m
+[35m[DEBUG] [BROKER] Sending 1 outgoing transactions that were waiting in the post database[0m
+[31m[TRACE] [TEST] Running in PDR instance: alice_macbook[0m
+[31m[INFO] [TEST] Patching and recompiling model://perspectives.domains#CouchdbManagement from src/model/couchdbManagement@12.4.arc[0m
+[35m[DEBUG] [BROKER] Received receipt for message with id "alice(Year_2026)October(Day 28)T(Hour 10)(Minute 42)(Second 58)(Millisecond 787)", deleting from post database[0m
+[31m[DEBUG] [BROKER] There are 1 pending incoming transactions[0m
+[31m[DEBUG] [BROKER] Executing incoming post transaction from author bob and timestamp (Year_2026)October(Day 28)T(Hour 10)(Minute 42)(Second 48)(Millisecond 128)[0m
+[31m[DEBUG] [STATE] Starting non-sharing transaction 22[0m
+[31m[ERROR] [UPGRADE] Cannot interpret model document as UninterpretedDomeinFile: '_design/defaultViews' (NonEmptyList (NonEmpty (ErrorAtProperty "arc" (TypeMismatch "String" "Undefined")) ((ErrorAtProperty "id" (TypeMismatch "String" "Undefined")) : (ErrorAtProperty "namespace" (TypeMismatch "String" "Undefined")) : (ErrorAtProperty "referredModels" (TypeMismatch "array" "Undefined")) : Nil)))[0m
+[31m[DEBUG] [STATE] Entering phase1 of transaction 22[0m
+[31m[DEBUG] [STATE] run sharing transaction from nonsharing transaction 22[0m
+[31m[DEBUG] [STATE]   Starting embedded sharing transaction because it was necessary.[0m
+[31m[DEBUG] [STATE]   Starting non-sharing transaction 23[0m
+[35m[DEBUG] [BROKER] Setting connection state to false[0m
+[35m[DEBUG] [STATE] Starting non-sharing transaction 12[0m
+[35m[DEBUG] [STATE] Entering phase1 of transaction 12[0m
+[35m[DEBUG] [STATE] Entering phase2 of transaction 12[0m
+[35m[DEBUG] [STATE] run sharing transaction from nonsharing transaction 12[0m
+[35m[DEBUG] [STATE]   Starting embedded sharing transaction because it was necessary.[0m
+[35m[DEBUG] [STATE]   Starting sharing transaction 13[0m
+[35m[DEBUG] [STATE]   Evaluate states - processing 0 invertedQueryResults[0m
+[35m[DEBUG] [STATE]   Entering phase1 of transaction 13[0m
+[35m[DEBUG] [STATE]   Entering phase2 of transaction 13[0m
+[35m[DEBUG] [STATE]   Evaluate states - processing 0 invertedQueryResults[0m
+[35m[DEBUG] [STATE]   Exiting phase 2 for transaction 13.[0m
+[35m[DEBUG] [STATE]   Ending transaction 13[0m
+[35m[DEBUG] [STATE]   Ending transaction that needed to be embedded.[0m
+[35m[DEBUG] [STATE] returning to nonsharing transaction 12 from sharing transaction.[0m
+[35m[DEBUG] [STATE] Exiting phase 2 for transaction 12.[0m
+[35m[DEBUG] [STATE] Ending transaction 12[0m
+[31m[DEBUG] [STATE]   Entering phase1 of transaction 23[0m
+[31m[DEBUG] [STATE]   Entering phase2 of transaction 23[0m
+[31m[DEBUG] [STATE]   run sharing transaction from nonsharing transaction 23[0m
+[31m[DEBUG] [STATE]     Starting embedded sharing transaction because it was necessary.[0m
+[31m[DEBUG] [STATE]     Starting sharing transaction 24[0m
+[31m[DEBUG] [STATE]     Entering context state model://perspectives.domains#BrokerServices$BrokerContract for context def:#artuo1klz8[0m
+[31m[TRACE] [STATE]     (ContextStateNotValid) Context "def:#artuo1klz8" is not in state StateIdentifier model://perspectives.domains#BrokerServices$BrokerContract$NoAdministrator[0m
+[31m[TRACE] [STATE]     (ContextStateNotValid) Context "def:#artuo1klz8" is not in state StateIdentifier model://perspectives.domains#BrokerServices$BrokerContract$NoAccountHolder[0m
+[31m[TRACE] [STATE]     (ContextStateNotValid) Context "def:#artuo1klz8" is not in state StateIdentifier model://perspectives.domains#BrokerServices$BrokerContract$CanRegister[0m
+[31m[TRACE] [STATE]     (ContextStateNotValid) Context "def:#artuo1klz8" is not in state StateIdentifier model://perspectives.domains#BrokerServices$BrokerContract$Terminated[0m
+[31m[TRACE] [STATE]     (ContextStateNotValid) Context "def:#artuo1klz8" is not in state StateIdentifier model://perspectives.domains#BrokerServices$BrokerContract$ReadyToDeregister[0m
+[31m[DEBUG] [STATE]     Entering context state model://perspectives.domains#BrokerServices$BrokerContract$Active for context def:#artuo1klz8[0m
+[31m[TRACE] [STATE]     (ContextStateNotValid) Context "def:#artuo1klz8" is not in state StateIdentifier model://perspectives.domains#BrokerServices$BrokerContract$InitializeUpgrading[0m
+[31m[DEBUG] [STATE]     Entering context state model://perspectives.domains#System$ContextWithNotification for context def:#artuo1klz8[0m
+[31m[DEBUG] [STATE]     Entering context state model://perspectives.domains#System$Invitation for context def:#artuo1klz8[0m
+[31m[TRACE] [STATE]     (ContextStateNotValid) Context "def:#artuo1klz8" is not in state StateIdentifier model://perspectives.domains#System$Invitation$NoInviter[0m
+[31m[TRACE] [STATE]     (ContextStateNotValid) Context "def:#artuo1klz8" is not in state StateIdentifier model://perspectives.domains#System$Invitation$NoInvitee[0m
+[31m[TRACE] [STATE]     (ContextStateNotValid) Context "def:#artuo1klz8" is not in state StateIdentifier model://perspectives.domains#System$Invitation$UnlockInvitation[0m
+[31m[DEBUG] [STATE]     Entering phase1 of transaction 24[0m
+[31m[DEBUG] [STATE]     Entering phase2 of transaction 24[0m
+[31m[DEBUG] [STATE]     Evaluate states - processing 0 invertedQueryResults[0m
+[31m[DEBUG] [STATE]     Exiting phase 2 for transaction 24.[0m
+[31m[DEBUG] [STATE]     Ending transaction 24[0m
+[31m[DEBUG] [STATE]   Starting sharing transaction 25[0m
+[31m[DEBUG] [STATE]   Evaluate states - processing 0 invertedQueryResults[0m
+[31m[DEBUG] [STATE]   Entering phase1 of transaction 25[0m
+[31m[DEBUG] [STATE]   Entering phase2 of transaction 25[0m
+[31m[DEBUG] [STATE]   Evaluate states - processing 0 invertedQueryResults[0m
+[31m[DEBUG] [STATE]   Exiting phase 2 for transaction 25.[0m
+[31m[DEBUG] [STATE]   Ending transaction that needed to be embedded.[0m
+[31m[DEBUG] [STATE]   Ending transaction 25[0m
+[31m[DEBUG] [STATE] returning to nonsharing transaction 22 from sharing transaction.[0m
+[31m[DEBUG] [STATE] run sharing transaction from nonsharing transaction 22[0m
+[31m[DEBUG] [STATE]     Ending transaction that needed to be embedded.[0m
+[31m[DEBUG] [STATE]   returning to nonsharing transaction 23 from sharing transaction.[0m
+[31m[DEBUG] [STATE]   Starting embedded sharing transaction because it was necessary.[0m
+[31m[DEBUG] [STATE]   Exiting phase 2 for transaction 23.[0m
+[31m[DEBUG] [STATE]   Ending transaction 23[0m
+[31m[DEBUG] [STATE]   Starting sharing transaction 26[0m
+[31m[TRACE] [STATE]   Entering role state model://perspectives.domains#System$TheWorld$PerspectivesUsers for role def:#bob[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Patching and recompiling model://perspectives.domains#CouchdbManagement from src/model/couchdbManagement@12.4.arc[0m
+[35m[ERROR] [UPGRADE] Cannot interpret model document as UninterpretedDomeinFile: '_design/defaultViews' (NonEmptyList (NonEmpty (ErrorAtProperty "arc" (TypeMismatch "String" "Undefined")) ((ErrorAtProperty "id" (TypeMismatch "String" "Undefined")) : (ErrorAtProperty "namespace" (TypeMismatch "String" "Undefined")) : (ErrorAtProperty "referredModels" (TypeMismatch "array" "Undefined")) : Nil)))[0m
+[35m[DEBUG] [STATE] Starting non-sharing transaction 14[0m
+[31m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$TheWorld$PerspectivesUsers$NoKey: def:#bob[0m
+[31m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#bob" is not in state StateIdentifier model://perspectives.domains#System$TheWorld$PerspectivesUsers$NoKey[0m
+[31m[TRACE] [STATE]   Entering role state model://perspectives.domains#System$UserWithHasKey for role def:#bob[0m
+[31m[TRACE] [STATE]   Entering role state model://perspectives.domains#System$Addressable for role def:#bob[0m
+[31m[TRACE] [STATE]   Entering role state model://perspectives.domains#System$Identifiable for role def:#bob[0m
+[31m[TRACE] [STATE]   Entering role state model://perspectives.domains#BrokerServices$BrokerContract$External for role def:#artuo1klz8$External[0m
+[31m[TRACE] [STATE]   Entering role state model://perspectives.domains#System$ContextWithNotification$External for role def:#artuo1klz8$External[0m
+[31m[TRACE] [STATE]   Entering role state model://perspectives.domains#System$Invitation$External for role def:#artuo1klz8$External[0m
+[31m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$Invitation$External$Message: def:#artuo1klz8$External[0m
+[31m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#artuo1klz8$External" is not in state StateIdentifier model://perspectives.domains#System$Invitation$External$Message[0m
+[31m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$Invitation$External$CreateInvitation: def:#artuo1klz8$External[0m
+[31m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#artuo1klz8$External" is not in state StateIdentifier model://perspectives.domains#System$Invitation$External$CreateInvitation[0m
+[31m[TRACE] [STATE]   Entering role state model://perspectives.domains#BrokerServices$BrokerContract$Administrator for role def:#hic4mb960d[0m
+[31m[TRACE] [STATE]   Entering role state model://perspectives.domains#System$Invitation$Inviter for role def:#hic4mb960d[0m
+[31m[TRACE] [STATE]   Entering role state model://perspectives.domains#BrokerServices$BrokerService$Accounts for role def:#ra8d4it8o3[0m
+[31m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#BrokerServices$BrokerService$Accounts$ReadyToRemove: def:#ra8d4it8o3[0m
+[31m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#ra8d4it8o3" is not in state StateIdentifier model://perspectives.domains#BrokerServices$BrokerService$Accounts$ReadyToRemove[0m
+[31m[TRACE] [STATE]   Entering role state model://perspectives.domains#BrokerServices$BrokerContract$AccountHolder for role def:#gso0h18qkz[0m
+[31m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#BrokerServices$BrokerContract$AccountHolder$PrepareAccount: def:#gso0h18qkz[0m
+[31m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#gso0h18qkz" is not in state StateIdentifier model://perspectives.domains#BrokerServices$BrokerContract$AccountHolder$PrepareAccount[0m
+[31m[TRACE] [STATE]   Entering role state model://perspectives.domains#System$ContextWithNotification$NotifiedUser for role def:#gso0h18qkz[0m
+[31m[TRACE] [STATE]   Entering role state model://perspectives.domains#System$Invitation$Invitee for role def:#gso0h18qkz[0m
+[35m[DEBUG] [BROKER] Setting connection state to true[0m
+[31m[TRACE] [STATE]   Entering role state model://perspectives.domains#System$SocialEnvironment$Persons for role def:#odisyjksda[0m
+[31m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$SocialEnvironment$Persons$HasLastName: def:#odisyjksda[0m
+[31m[TRACE] [STATE]   Entering role state model://perspectives.domains#System$SocialEnvironment$Persons$HasLastName for role def:#odisyjksda[0m
+[31m[TRACE] [STATE]   (RunRoleStateAutomaticAction) Running automatic action for state StateIdentifier model://perspectives.domains#System$SocialEnvironment$Persons$HasLastName in role "def:#odisyjksda"[0m
+[31m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$SocialEnvironment$Persons$Unfilled: def:#odisyjksda[0m
+[31m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#odisyjksda" is not in state StateIdentifier model://perspectives.domains#System$SocialEnvironment$Persons$Unfilled[0m
+[31m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$SocialEnvironment$Persons$NonUser: def:#odisyjksda[0m
+[31m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#odisyjksda" is not in state StateIdentifier model://perspectives.domains#System$SocialEnvironment$Persons$NonUser[0m
+[31m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$SocialEnvironment$Persons$User: def:#odisyjksda[0m
+[31m[TRACE] [STATE]   Entering role state model://perspectives.domains#System$SocialEnvironment$Persons$User for role def:#odisyjksda[0m
+[31m[TRACE] [STATE]   Entering role state model://perspectives.domains#System$RoleWithFilter for role def:#odisyjksda[0m
+[31m[TRACE] [STATE]   Entering role state model://perspectives.domains#BrokerServices$BrokerContract$Queues for role def:#i41f5bgbzm[0m
+[31m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#BrokerServices$BrokerContract$Queues$ReadyToDelete: def:#i41f5bgbzm[0m
+[31m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#i41f5bgbzm" is not in state StateIdentifier model://perspectives.domains#BrokerServices$BrokerContract$Queues$ReadyToDelete[0m
+[31m[DEBUG] [STATE]   Entering phase1 of transaction 26[0m
+[31m[DEBUG] [STATE]   Entering phase2 of transaction 26[0m
+[31m[DEBUG] [STATE]   Evaluate states - processing 0 invertedQueryResults[0m
+[31m[DEBUG] [BROKER] Saving transaction for user bob in OutgoingTransactions post database with transaction timestamp (Year_2026)October(Day 28)T(Hour 10)(Minute 43)(Second 52)(Millisecond 209)[0m
+[31m[DEBUG] [BROKER] Sending transaction for user bob to AMQP broker with transaction timestamp (Year_2026)October(Day 28)T(Hour 10)(Minute 43)(Second 52)(Millisecond 209)[0m
+[31m[DEBUG] [STATE]   Exiting phase 2 for transaction 26.[0m
+[31m[DEBUG] [STATE]   Ending transaction 26[0m
+[31m[DEBUG] [STATE]   Ending transaction that needed to be embedded.[0m
+[31m[DEBUG] [STATE] returning to nonsharing transaction 22 from sharing transaction.[0m
+[31m[DEBUG] [STATE] Entering phase2 of transaction 22[0m
+[31m[DEBUG] [STATE] run sharing transaction from nonsharing transaction 22[0m
+[31m[DEBUG] [STATE]   Starting embedded sharing transaction because it was necessary.[0m
+[31m[DEBUG] [STATE]   Starting sharing transaction 27[0m
+[31m[DEBUG] [STATE]   Evaluate states - processing 15 invertedQueryResults[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (ContextStateQuery StateIdentifier model://perspectives.domains#zjuzxbqpgc$tdr96p2qj0$pd0vyxwjrb ["def:#artuo1klz8"])[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#tiodn6tcyc$v39ynwzgqa$i1vm2kn9bh$xb7ac3twkw ["def:#odisyjksda"])[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (ContextStateQuery StateIdentifier model://perspectives.domains#tiodn6tcyc$nkllrx0n2x$mx20uw8740 ["def:#artuo1klz8"])[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (ContextStateQuery StateIdentifier model://perspectives.domains#zjuzxbqpgc$tdr96p2qj0$qtuc6aby7f ["def:#artuo1klz8"])[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (ContextStateQuery StateIdentifier model://perspectives.domains#zjuzxbqpgc$tdr96p2qj0$yde31xe747 ["def:#artuo1klz8"])[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (ContextStateQuery StateIdentifier model://perspectives.domains#zjuzxbqpgc$tdr96p2qj0$g4qjgmcgey ["def:#artuo1klz8"])[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#zjuzxbqpgc$tdr96p2qj0$gpwpevx4e5$j5drdftvfk ["def:#gso0h18qkz"])[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (ContextStateQuery StateIdentifier model://perspectives.domains#zjuzxbqpgc$tdr96p2qj0$a1su1gj7o7 ["def:#artuo1klz8"])[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#tiodn6tcyc$v39ynwzgqa$i1vm2kn9bh$zjyu76fvda ["def:#odisyjksda"])[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#tiodn6tcyc$v39ynwzgqa$i1vm2kn9bh$wo9eghsybo ["def:#odisyjksda"])[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#tiodn6tcyc$v39ynwzgqa$i1vm2kn9bh$ns9yj2e4lu ["def:#odisyjksda"])[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#zjuzxbqpgc$ou26ew3npp$gu1peg7mtj$uvgufulnbv ["def:#ra8d4it8o3"])[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#zjuzxbqpgc$tdr96p2qj0$rcu2nweeb1$k7gbsb36jr ["def:#i41f5bgbzm"])[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (ContextStateQuery StateIdentifier model://perspectives.domains#tiodn6tcyc$nkllrx0n2x$d3iyzkfjuy ["def:#artuo1klz8"])[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#tiodn6tcyc$nkllrx0n2x$External$n1x9i9xl1j ["def:#artuo1klz8$External"])[0m
+[31m[DEBUG] [STATE]   ==========RUNNING 15 UNIQUE STATE EVALUATIONS============[0m
+[31m[TRACE] [STATE]   (AlreadyInContextState) Context "def:#artuo1klz8" is already in state StateIdentifier model://perspectives.domains#BrokerServices$BrokerContract$Active[0m
+[31m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$SocialEnvironment$Persons$HasLastName: def:#odisyjksda[0m
+[31m[TRACE] [STATE]   (AlreadyInRoleState) Role "def:#odisyjksda" is already in state StateIdentifier model://perspectives.domains#System$SocialEnvironment$Persons$HasLastName[0m
+[31m[TRACE] [STATE]   (ContextStateNotValid) Context "def:#artuo1klz8" is not in state StateIdentifier model://perspectives.domains#System$Invitation$NoInviter[0m
+[31m[TRACE] [STATE]   (ContextStateNotValid) Context "def:#artuo1klz8" is not in state StateIdentifier model://perspectives.domains#BrokerServices$BrokerContract$NoAccountHolder[0m
+[31m[TRACE] [STATE]   (ContextStateNotValid) Context "def:#artuo1klz8" is not in state StateIdentifier model://perspectives.domains#BrokerServices$BrokerContract$NoAdministrator[0m
+[31m[TRACE] [STATE]   (ContextStateNotValid) Context "def:#artuo1klz8" is not in state StateIdentifier model://perspectives.domains#BrokerServices$BrokerContract$CanRegister[0m
+[31m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#BrokerServices$BrokerContract$AccountHolder$PrepareAccount: def:#gso0h18qkz[0m
+[31m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#gso0h18qkz" is not in state StateIdentifier model://perspectives.domains#BrokerServices$BrokerContract$AccountHolder$PrepareAccount[0m
+[31m[TRACE] [STATE]   (ContextStateNotValid) Context "def:#artuo1klz8" is not in state StateIdentifier model://perspectives.domains#BrokerServices$BrokerContract$ReadyToDeregister[0m
+[31m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$SocialEnvironment$Persons$Unfilled: def:#odisyjksda[0m
+[31m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#odisyjksda" is not in state StateIdentifier model://perspectives.domains#System$SocialEnvironment$Persons$Unfilled[0m
+[31m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$SocialEnvironment$Persons$NonUser: def:#odisyjksda[0m
+[31m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#odisyjksda" is not in state StateIdentifier model://perspectives.domains#System$SocialEnvironment$Persons$NonUser[0m
+[31m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$SocialEnvironment$Persons$User: def:#odisyjksda[0m
+[31m[TRACE] [STATE]   (AlreadyInRoleState) Role "def:#odisyjksda" is already in state StateIdentifier model://perspectives.domains#System$SocialEnvironment$Persons$User[0m
+[31m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#BrokerServices$BrokerService$Accounts$ReadyToRemove: def:#ra8d4it8o3[0m
+[31m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#ra8d4it8o3" is not in state StateIdentifier model://perspectives.domains#BrokerServices$BrokerService$Accounts$ReadyToRemove[0m
+[31m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#BrokerServices$BrokerContract$Queues$ReadyToDelete: def:#i41f5bgbzm[0m
+[31m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#i41f5bgbzm" is not in state StateIdentifier model://perspectives.domains#BrokerServices$BrokerContract$Queues$ReadyToDelete[0m
+[31m[TRACE] [STATE]   (ContextStateNotValid) Context "def:#artuo1klz8" is not in state StateIdentifier model://perspectives.domains#System$Invitation$NoInvitee[0m
+[31m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$Invitation$External$CreateInvitation: def:#artuo1klz8$External[0m
+[31m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#artuo1klz8$External" is not in state StateIdentifier model://perspectives.domains#System$Invitation$External$CreateInvitation[0m
+[31m[DEBUG] [STATE]   Entering phase1 of transaction 27[0m
+[31m[DEBUG] [STATE]   Entering phase2 of transaction 27[0m
+[31m[DEBUG] [STATE]   Evaluate states - processing 0 invertedQueryResults[0m
+[31m[DEBUG] [STATE]   Exiting phase 2 for transaction 27.[0m
+[31m[DEBUG] [STATE]   Ending transaction 27[0m
+[31m[DEBUG] [STATE]   Ending transaction that needed to be embedded.[0m
+[31m[DEBUG] [STATE] returning to nonsharing transaction 22 from sharing transaction.[0m
+[31m[DEBUG] [STATE] Exiting phase 2 for transaction 22.[0m
+[31m[DEBUG] [STATE] Ending transaction 22[0m
+[31m[DEBUG] [STATE] Starting non-sharing transaction 28[0m
+[31m[DEBUG] [STATE] Entering phase1 of transaction 28[0m
+[31m[DEBUG] [STATE] Entering phase2 of transaction 28[0m
+[31m[DEBUG] [STATE] run sharing transaction from nonsharing transaction 28[0m
+[31m[DEBUG] [STATE]   Starting embedded sharing transaction because it was necessary.[0m
+[31m[DEBUG] [STATE]   Starting sharing transaction 29[0m
+[31m[DEBUG] [STATE]   Evaluate states - processing 5 invertedQueryResults[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#tiodn6tcyc$v39ynwzgqa$i1vm2kn9bh$zjyu76fvda ["pub:cw_test_amqp_broker_service#o07snwcaq6"])[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#tiodn6tcyc$v39ynwzgqa$i1vm2kn9bh$xb7ac3twkw ["pub:cw_test_amqp_broker_service#o07snwcaq6"])[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#tiodn6tcyc$v39ynwzgqa$i1vm2kn9bh$wo9eghsybo ["pub:cw_test_amqp_broker_service#o07snwcaq6"])[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#tiodn6tcyc$v39ynwzgqa$i1vm2kn9bh$ns9yj2e4lu ["pub:cw_test_amqp_broker_service#o07snwcaq6"])[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#zjuzxbqpgc$me48uhv82h$xp1l1ho8k4$rjugc3xb21 ["def:#cmydkd3dpj"])[0m
+[31m[DEBUG] [STATE]   ==========RUNNING 5 UNIQUE STATE EVALUATIONS============[0m
+[31m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$SocialEnvironment$Persons$Unfilled: pub:cw_test_amqp_broker_service#o07snwcaq6[0m
+[31m[TRACE] [STATE]   (RoleStateNotValid) Role "pub:cw_test_amqp_broker_service#o07snwcaq6" is not in state StateIdentifier model://perspectives.domains#System$SocialEnvironment$Persons$Unfilled[0m
+[31m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$SocialEnvironment$Persons$HasLastName: pub:cw_test_amqp_broker_service#o07snwcaq6[0m
+[31m[TRACE] [STATE]   (AlreadyInRoleState) Role "pub:cw_test_amqp_broker_service#o07snwcaq6" is already in state StateIdentifier model://perspectives.domains#System$SocialEnvironment$Persons$HasLastName[0m
+[31m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$SocialEnvironment$Persons$NonUser: pub:cw_test_amqp_broker_service#o07snwcaq6[0m
+[31m[TRACE] [STATE]   (RoleStateNotValid) Role "pub:cw_test_amqp_broker_service#o07snwcaq6" is not in state StateIdentifier model://perspectives.domains#System$SocialEnvironment$Persons$NonUser[0m
+[31m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$SocialEnvironment$Persons$User: pub:cw_test_amqp_broker_service#o07snwcaq6[0m
+[31m[TRACE] [STATE]   (AlreadyInRoleState) Role "pub:cw_test_amqp_broker_service#o07snwcaq6" is already in state StateIdentifier model://perspectives.domains#System$SocialEnvironment$Persons$User[0m
+[31m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#BrokerServices$BrokerServices$PublicBrokers$NoContract: def:#cmydkd3dpj[0m
+[31m[TRACE] [STATE]   Exiting role state model://perspectives.domains#BrokerServices$BrokerServices$PublicBrokers$NoContract for role def:#cmydkd3dpj[0m
+[31m[DEBUG] [STATE]   Entering phase1 of transaction 29[0m
+[31m[DEBUG] [STATE]   Entering phase2 of transaction 29[0m
+[31m[DEBUG] [STATE]   Evaluate states - processing 0 invertedQueryResults[0m
+[31m[DEBUG] [STATE]   Exiting phase 2 for transaction 29.[0m
+[31m[DEBUG] [STATE]   Ending transaction 29[0m
+[31m[DEBUG] [STATE]   Ending transaction that needed to be embedded.[0m
+[31m[DEBUG] [STATE] returning to nonsharing transaction 28 from sharing transaction.[0m
+[31m[DEBUG] [STATE] Exiting phase 2 for transaction 28.[0m
+[31m[DEBUG] [STATE] Ending transaction 28[0m
+[31m[DEBUG] [BROKER] There are 2 pending incoming transactions[0m
+[31m[DEBUG] [BROKER] There are 2 pending incoming transactions[0m
+[31m[DEBUG] [BROKER] Executing incoming post transaction from author bob and timestamp (Year_2026)October(Day 28)T(Hour 10)(Minute 42)(Second 48)(Millisecond 128)[0m
+[31m[DEBUG] [STATE] Starting non-sharing transaction 30[0m
+[35m[DEBUG] [STATE] Entering phase1 of transaction 14[0m
+[35m[DEBUG] [STATE] Entering phase2 of transaction 14[0m
+[35m[DEBUG] [STATE] run sharing transaction from nonsharing transaction 14[0m
+[35m[DEBUG] [STATE]   Starting embedded sharing transaction because it was necessary.[0m
+[35m[DEBUG] [STATE]   Starting non-sharing transaction 15[0m
+[35m[DEBUG] [STATE]   Entering phase1 of transaction 15[0m
+[35m[DEBUG] [STATE]   Entering phase2 of transaction 15[0m
+[35m[DEBUG] [STATE]   run sharing transaction from nonsharing transaction 15[0m
+[35m[DEBUG] [STATE]     Starting embedded sharing transaction because it was necessary.[0m
+[35m[DEBUG] [STATE]     Starting sharing transaction 16[0m
+[35m[DEBUG] [STATE]     Evaluate states - processing 0 invertedQueryResults[0m
+[35m[DEBUG] [STATE]     Entering phase1 of transaction 16[0m
+[35m[DEBUG] [STATE]     Entering phase2 of transaction 16[0m
+[35m[DEBUG] [STATE]     Evaluate states - processing 0 invertedQueryResults[0m
+[35m[DEBUG] [STATE]     Exiting phase 2 for transaction 16.[0m
+[35m[DEBUG] [STATE]     Ending transaction 16[0m
+[35m[DEBUG] [STATE]   Starting sharing transaction 17[0m
+[35m[DEBUG] [STATE]   Evaluate states - processing 0 invertedQueryResults[0m
+[35m[DEBUG] [STATE]   Entering phase1 of transaction 17[0m
+[35m[DEBUG] [STATE]   Entering phase2 of transaction 17[0m
+[35m[DEBUG] [STATE]   Evaluate states - processing 0 invertedQueryResults[0m
+[35m[DEBUG] [STATE]   Exiting phase 2 for transaction 17.[0m
+[35m[DEBUG] [STATE]   Ending transaction that needed to be embedded.[0m
+[35m[DEBUG] [STATE]   Ending transaction 17[0m
+[35m[DEBUG] [STATE] returning to nonsharing transaction 14 from sharing transaction.[0m
+[35m[DEBUG] [STATE] Exiting phase 2 for transaction 14.[0m
+[35m[DEBUG] [STATE]     Ending transaction that needed to be embedded.[0m
+[35m[DEBUG] [STATE] Ending transaction 14[0m
+[35m[DEBUG] [STATE]   returning to nonsharing transaction 15 from sharing transaction.[0m
+[35m[DEBUG] [STATE]   Exiting phase 2 for transaction 15.[0m
+[35m[DEBUG] [STATE]   Ending transaction 15[0m
+[31m[TRACE] [TEST] Running in PDR instance: alice_macbook[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[DEBUG] [BROKER] There are 1 pending incoming transactions[0m
+[35m[DEBUG] [BROKER] Executing incoming post transaction from author alice and timestamp (Year_2026)October(Day 28)T(Hour 10)(Minute 43)(Second 52)(Millisecond 209)[0m
+[31m[TRACE] [TEST] Running in PDR instance: alice_macbook[0m
+[31m[INFO] [TEST] Alice compiles and stores test model from source[0m
+[35m[DEBUG] [STATE] Starting non-sharing transaction 18[0m
+[35m[DEBUG] [STATE] Entering phase1 of transaction 18[0m
+[35m[DEBUG] [STATE] run sharing transaction from nonsharing transaction 18[0m
+[35m[DEBUG] [STATE]   Starting embedded sharing transaction because it was necessary.[0m
+[35m[DEBUG] [STATE]   Starting sharing transaction 19[0m
+[35m[DEBUG] [STATE]   Entering context state model://perspectives.domains#BrokerServices$BrokerService for context def:#oad4uofr5y[0m
+[35m[TRACE] [STATE]   (ContextStateNotValid) Context "def:#oad4uofr5y" is not in state StateIdentifier model://perspectives.domains#BrokerServices$BrokerService$NoAdministrator[0m
+[35m[TRACE] [STATE]   (ContextStateNotValid) Context "def:#oad4uofr5y" is not in state StateIdentifier model://perspectives.domains#BrokerServices$BrokerService$InitializeUpgrading[0m
+[35m[DEBUG] [STATE]   Entering phase1 of transaction 19[0m
+[35m[DEBUG] [STATE]   Entering phase2 of transaction 19[0m
+[35m[DEBUG] [STATE]   Evaluate states - processing 0 invertedQueryResults[0m
+[35m[DEBUG] [STATE]   Processing public role transaction for user "def:#am7hyekd7a" in transaction 19[0m
+[35m[DEBUG] [STATE]   Cannot compute a URL to publish to for this user role type and instance: EnumeratedRoleType "model://perspectives.domains#BrokerServices$BrokerService$VisitorProxy" ('"def:#am7hyekd7a"')[0m
+[35m[DEBUG] [STATE]   Exiting phase 2 for transaction 19.[0m
+[35m[DEBUG] [STATE]   Ending transaction 19[0m
+[35m[DEBUG] [STATE]   Ending transaction that needed to be embedded.[0m
+[35m[DEBUG] [STATE] returning to nonsharing transaction 18 from sharing transaction.[0m
+[35m[DEBUG] [STATE] run sharing transaction from nonsharing transaction 18[0m
+[35m[DEBUG] [STATE]   Starting embedded sharing transaction because it was necessary.[0m
+[35m[DEBUG] [STATE]   Starting sharing transaction 20[0m
+[35m[TRACE] [STATE]   Entering role state model://perspectives.domains#System$TheWorld$PerspectivesUsers for role def:#alice[0m
+[35m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$TheWorld$PerspectivesUsers$NoKey: def:#alice[0m
+[35m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#alice" is not in state StateIdentifier model://perspectives.domains#System$TheWorld$PerspectivesUsers$NoKey[0m
+[35m[TRACE] [STATE]   Entering role state model://perspectives.domains#System$UserWithHasKey for role def:#alice[0m
+[35m[TRACE] [STATE]   Entering role state model://perspectives.domains#System$Addressable for role def:#alice[0m
+[35m[TRACE] [STATE]   Entering role state model://perspectives.domains#System$Identifiable for role def:#alice[0m
+[35m[TRACE] [STATE]   Entering role state model://perspectives.domains#BrokerServices$BrokerService$External for role def:#oad4uofr5y$External[0m
+[35m[TRACE] [STATE]   Entering role state model://perspectives.domains#BrokerServices$BrokerService$VisitorProxy for role def:#am7hyekd7a[0m
+[35m[TRACE] [STATE]   Entering role state model://perspectives.domains#System$SocialEnvironment$Persons for role def:#o07snwcaq6[0m
+[35m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$SocialEnvironment$Persons$HasLastName: def:#o07snwcaq6[0m
+[35m[TRACE] [STATE]   Entering role state model://perspectives.domains#System$SocialEnvironment$Persons$HasLastName for role def:#o07snwcaq6[0m
+[35m[TRACE] [STATE]   (RunRoleStateAutomaticAction) Running automatic action for state StateIdentifier model://perspectives.domains#System$SocialEnvironment$Persons$HasLastName in role "def:#o07snwcaq6"[0m
+[35m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$SocialEnvironment$Persons$Unfilled: def:#o07snwcaq6[0m
+[35m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#o07snwcaq6" is not in state StateIdentifier model://perspectives.domains#System$SocialEnvironment$Persons$Unfilled[0m
+[35m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$SocialEnvironment$Persons$NonUser: def:#o07snwcaq6[0m
+[35m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#o07snwcaq6" is not in state StateIdentifier model://perspectives.domains#System$SocialEnvironment$Persons$NonUser[0m
+[35m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$SocialEnvironment$Persons$User: def:#o07snwcaq6[0m
+[35m[TRACE] [STATE]   Entering role state model://perspectives.domains#System$SocialEnvironment$Persons$User for role def:#o07snwcaq6[0m
+[35m[TRACE] [STATE]   Entering role state model://perspectives.domains#System$RoleWithFilter for role def:#o07snwcaq6[0m
+[35m[TRACE] [STATE]   Entering role state model://perspectives.domains#BrokerServices$BrokerService$Administrator for role def:#ts02ll73wu[0m
+[35m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#BrokerServices$BrokerService$Administrator$WithCredentials: def:#ts02ll73wu[0m
+[35m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#ts02ll73wu" is not in state StateIdentifier model://perspectives.domains#BrokerServices$BrokerService$Administrator$WithCredentials[0m
+[35m[DEBUG] [STATE]   Entering phase1 of transaction 20[0m
+[35m[DEBUG] [STATE]   Entering phase2 of transaction 20[0m
+[35m[DEBUG] [STATE]   Evaluate states - processing 0 invertedQueryResults[0m
+[35m[DEBUG] [BROKER] Saving transaction for user alice in OutgoingTransactions post database with transaction timestamp (Year_2026)October(Day 28)T(Hour 10)(Minute 44)(Second 34)(Millisecond 458)[0m
+[35m[DEBUG] [BROKER] Sending transaction for user alice to AMQP broker with transaction timestamp (Year_2026)October(Day 28)T(Hour 10)(Minute 44)(Second 34)(Millisecond 458)[0m
+[35m[DEBUG] [STATE]   Exiting phase 2 for transaction 20.[0m
+[35m[DEBUG] [STATE]   Ending transaction 20[0m
+[35m[DEBUG] [STATE]   Ending transaction that needed to be embedded.[0m
+[35m[DEBUG] [STATE] returning to nonsharing transaction 18 from sharing transaction.[0m
+[35m[DEBUG] [STATE] Entering phase2 of transaction 18[0m
+[35m[DEBUG] [STATE] run sharing transaction from nonsharing transaction 18[0m
+[35m[DEBUG] [STATE]   Starting embedded sharing transaction because it was necessary.[0m
+[35m[DEBUG] [STATE]   Starting sharing transaction 21[0m
+[35m[DEBUG] [STATE]   Evaluate states - processing 5 invertedQueryResults[0m
+[35m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#tiodn6tcyc$v39ynwzgqa$i1vm2kn9bh$xb7ac3twkw ["def:#o07snwcaq6"])[0m
+[35m[DEBUG] [STATE]     computing state evaluations for: (ContextStateQuery StateIdentifier model://perspectives.domains#zjuzxbqpgc$ou26ew3npp$lprp5pv8oy ["def:#oad4uofr5y"])[0m
+[35m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#tiodn6tcyc$v39ynwzgqa$i1vm2kn9bh$wo9eghsybo ["def:#o07snwcaq6"])[0m
+[35m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#tiodn6tcyc$v39ynwzgqa$i1vm2kn9bh$ns9yj2e4lu ["def:#o07snwcaq6"])[0m
+[35m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#tiodn6tcyc$v39ynwzgqa$i1vm2kn9bh$zjyu76fvda ["def:#o07snwcaq6"])[0m
+[35m[DEBUG] [STATE]   ==========RUNNING 5 UNIQUE STATE EVALUATIONS============[0m
+[35m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$SocialEnvironment$Persons$HasLastName: def:#o07snwcaq6[0m
+[35m[TRACE] [STATE]   (AlreadyInRoleState) Role "def:#o07snwcaq6" is already in state StateIdentifier model://perspectives.domains#System$SocialEnvironment$Persons$HasLastName[0m
+[35m[TRACE] [STATE]   (ContextStateNotValid) Context "def:#oad4uofr5y" is not in state StateIdentifier model://perspectives.domains#BrokerServices$BrokerService$NoAdministrator[0m
+[35m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$SocialEnvironment$Persons$NonUser: def:#o07snwcaq6[0m
+[35m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#o07snwcaq6" is not in state StateIdentifier model://perspectives.domains#System$SocialEnvironment$Persons$NonUser[0m
+[35m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$SocialEnvironment$Persons$User: def:#o07snwcaq6[0m
+[35m[TRACE] [STATE]   (AlreadyInRoleState) Role "def:#o07snwcaq6" is already in state StateIdentifier model://perspectives.domains#System$SocialEnvironment$Persons$User[0m
+[35m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$SocialEnvironment$Persons$Unfilled: def:#o07snwcaq6[0m
+[35m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#o07snwcaq6" is not in state StateIdentifier model://perspectives.domains#System$SocialEnvironment$Persons$Unfilled[0m
+[35m[DEBUG] [STATE]   Entering phase1 of transaction 21[0m
+[35m[DEBUG] [STATE]   Entering phase2 of transaction 21[0m
+[35m[DEBUG] [STATE]   Evaluate states - processing 0 invertedQueryResults[0m
+[35m[DEBUG] [STATE]   Exiting phase 2 for transaction 21.[0m
+[35m[DEBUG] [STATE]   Ending transaction 21[0m
+[35m[DEBUG] [STATE]   Ending transaction that needed to be embedded.[0m
+[35m[DEBUG] [STATE] returning to nonsharing transaction 18 from sharing transaction.[0m
+[35m[DEBUG] [STATE] Exiting phase 2 for transaction 18.[0m
+[35m[DEBUG] [STATE] Ending transaction 18[0m
+[35m[DEBUG] [STATE] Starting non-sharing transaction 22[0m
+[35m[DEBUG] [STATE] Entering phase1 of transaction 22[0m
+[35m[DEBUG] [STATE] Entering phase2 of transaction 22[0m
+[35m[DEBUG] [STATE] run sharing transaction from nonsharing transaction 22[0m
+[35m[DEBUG] [STATE]   Starting embedded sharing transaction because it was necessary.[0m
+[35m[DEBUG] [STATE]   Starting sharing transaction 23[0m
+[35m[DEBUG] [STATE]   Evaluate states - processing 17 invertedQueryResults[0m
+[35m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#xyfxpg3lzq$purp0vollf$ghdhfh0c6p$h79vbyld0q ["pub:https://perspectives.domains/cw_perspectives_domains/#fn1jp0bukc"])[0m
+[35m[DEBUG] [STATE]     computing state evaluations for: (ContextStateQuery StateIdentifier model://perspectives.domains#xyfxpg3lzq$purp0vollf$i3315cobkx ["pub:https://perspectives.domains/cw_perspectives_domains/#perspectives_domains-zjuzxbqpgc"])[0m
+[35m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$ikjc543of4$i2kcqqdck4 ["def:#mubd6pvaqu"])[0m
+[35m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$ikjc543of4$faxv6sb7ji ["def:#mubd6pvaqu"])[0m
+[35m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$ikjc543of4$hzpuw2f3t0 ["def:#mubd6pvaqu"])[0m
+[35m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$ikjc543of4$ntakkoof5h ["def:#mubd6pvaqu"])[0m
+[35m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#xyfxpg3lzq$purp0vollf$ghdhfh0c6p$h79vbyld0q ["pub:https://perspectives.domains/cw_perspectives_domains/#og5l7uh17m"])[0m
+[35m[DEBUG] [STATE]     computing state evaluations for: (ContextStateQuery StateIdentifier model://perspectives.domains#xyfxpg3lzq$purp0vollf$i3315cobkx ["pub:https://perspectives.domains/cw_perspectives_domains/#perspectives_domains-m203lt2idk"])[0m
+[35m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$ikjc543of4$i2kcqqdck4 ["def:#bjqeg1xzoa"])[0m
+[35m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$ikjc543of4$faxv6sb7ji ["def:#bjqeg1xzoa"])[0m
+[35m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$ikjc543of4$hzpuw2f3t0 ["def:#bjqeg1xzoa"])[0m
+[35m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$ikjc543of4$ntakkoof5h ["def:#bjqeg1xzoa"])[0m
+[35m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#zjuzxbqpgc$me48uhv82h$xp1l1ho8k4$rjugc3xb21 ["def:#zw1p467cbl"])[0m
+[35m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#tiodn6tcyc$v39ynwzgqa$i1vm2kn9bh$wo9eghsybo ["pub:cw_test_amqp_broker_service#o07snwcaq6"])[0m
+[35m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#tiodn6tcyc$v39ynwzgqa$i1vm2kn9bh$ns9yj2e4lu ["pub:cw_test_amqp_broker_service#o07snwcaq6"])[0m
+[35m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#tiodn6tcyc$v39ynwzgqa$i1vm2kn9bh$xb7ac3twkw ["pub:cw_test_amqp_broker_service#o07snwcaq6"])[0m
+[35m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#tiodn6tcyc$v39ynwzgqa$i1vm2kn9bh$zjyu76fvda ["pub:cw_test_amqp_broker_service#o07snwcaq6"])[0m
+[35m[DEBUG] [STATE]   ==========RUNNING 17 UNIQUE STATE EVALUATIONS============[0m
+[35m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#CouchdbManagement$ModelManifest$Versions$ReadyToMake: pub:https://perspectives.domains/cw_perspectives_domains/#fn1jp0bukc[0m
+[35m[TRACE] [STATE]   (RoleStateNotValid) Role "pub:https://perspectives.domains/cw_perspectives_domains/#fn1jp0bukc" is not in state StateIdentifier model://perspectives.domains#CouchdbManagement$ModelManifest$Versions$ReadyToMake[0m
+[35m[TRACE] [STATE]   (AlreadyInContextState) Context "pub:https://perspectives.domains/cw_perspectives_domains/#perspectives_domains-zjuzxbqpgc" is already in state StateIdentifier model://perspectives.domains#CouchdbManagement$ModelManifest$NoRecommendations[0m
+[35m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$UnFilled: def:#mubd6pvaqu[0m
+[35m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#mubd6pvaqu" is not in state StateIdentifier model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$UnFilled[0m
+[35m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$InstallBuild: def:#mubd6pvaqu[0m
+[35m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#mubd6pvaqu" is not in state StateIdentifier model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$InstallBuild[0m
+[35m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$InstallUpdate: def:#mubd6pvaqu[0m
+[35m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#mubd6pvaqu" is not in state StateIdentifier model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$InstallUpdate[0m
+[35m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$Filled: def:#mubd6pvaqu[0m
+[35m[TRACE] [STATE]   (AlreadyInRoleState) Role "def:#mubd6pvaqu" is already in state StateIdentifier model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$Filled[0m
+[35m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#CouchdbManagement$ModelManifest$Versions$ReadyToMake: pub:https://perspectives.domains/cw_perspectives_domains/#og5l7uh17m[0m
+[35m[TRACE] [STATE]   (RoleStateNotValid) Role "pub:https://perspectives.domains/cw_perspectives_domains/#og5l7uh17m" is not in state StateIdentifier model://perspectives.domains#CouchdbManagement$ModelManifest$Versions$ReadyToMake[0m
+[35m[TRACE] [STATE]   (AlreadyInContextState) Context "pub:https://perspectives.domains/cw_perspectives_domains/#perspectives_domains-m203lt2idk" is already in state StateIdentifier model://perspectives.domains#CouchdbManagement$ModelManifest$NoRecommendations[0m
+[35m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$UnFilled: def:#bjqeg1xzoa[0m
+[35m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#bjqeg1xzoa" is not in state StateIdentifier model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$UnFilled[0m
+[35m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$InstallBuild: def:#bjqeg1xzoa[0m
+[35m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#bjqeg1xzoa" is not in state StateIdentifier model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$InstallBuild[0m
+[35m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$InstallUpdate: def:#bjqeg1xzoa[0m
+[35m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#bjqeg1xzoa" is not in state StateIdentifier model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$InstallUpdate[0m
+[35m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$Filled: def:#bjqeg1xzoa[0m
+[35m[TRACE] [STATE]   (AlreadyInRoleState) Role "def:#bjqeg1xzoa" is already in state StateIdentifier model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$Filled[0m
+[35m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#BrokerServices$BrokerServices$PublicBrokers$NoContract: def:#zw1p467cbl[0m
+[35m[TRACE] [STATE]   Exiting role state model://perspectives.domains#BrokerServices$BrokerServices$PublicBrokers$NoContract for role def:#zw1p467cbl[0m
+[35m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$SocialEnvironment$Persons$NonUser: pub:cw_test_amqp_broker_service#o07snwcaq6[0m
+[35m[TRACE] [STATE]   (RoleStateNotValid) Role "pub:cw_test_amqp_broker_service#o07snwcaq6" is not in state StateIdentifier model://perspectives.domains#System$SocialEnvironment$Persons$NonUser[0m
+[35m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$SocialEnvironment$Persons$User: pub:cw_test_amqp_broker_service#o07snwcaq6[0m
+[35m[TRACE] [STATE]   (AlreadyInRoleState) Role "pub:cw_test_amqp_broker_service#o07snwcaq6" is already in state StateIdentifier model://perspectives.domains#System$SocialEnvironment$Persons$User[0m
+[35m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$SocialEnvironment$Persons$HasLastName: pub:cw_test_amqp_broker_service#o07snwcaq6[0m
+[35m[TRACE] [STATE]   (AlreadyInRoleState) Role "pub:cw_test_amqp_broker_service#o07snwcaq6" is already in state StateIdentifier model://perspectives.domains#System$SocialEnvironment$Persons$HasLastName[0m
+[35m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$SocialEnvironment$Persons$Unfilled: pub:cw_test_amqp_broker_service#o07snwcaq6[0m
+[35m[TRACE] [STATE]   (RoleStateNotValid) Role "pub:cw_test_amqp_broker_service#o07snwcaq6" is not in state StateIdentifier model://perspectives.domains#System$SocialEnvironment$Persons$Unfilled[0m
+[35m[DEBUG] [STATE]   Entering phase1 of transaction 23[0m
+[35m[DEBUG] [STATE]   Entering phase2 of transaction 23[0m
+[35m[DEBUG] [STATE]   Evaluate states - processing 0 invertedQueryResults[0m
+[35m[DEBUG] [STATE]   Exiting phase 2 for transaction 23.[0m
+[35m[DEBUG] [STATE]   Ending transaction 23[0m
+[35m[DEBUG] [STATE]   Ending transaction that needed to be embedded.[0m
+[35m[DEBUG] [STATE] returning to nonsharing transaction 22 from sharing transaction.[0m
+[35m[DEBUG] [STATE] Exiting phase 2 for transaction 22.[0m
+[35m[DEBUG] [STATE] Ending transaction 22[0m
+[35m[DEBUG] [BROKER] There are no pending incoming transactions[0m
+[35m[DEBUG] [BROKER] Received receipt for message with id "alice(Year_2026)October(Day 28)T(Hour 10)(Minute 44)(Second 34)(Millisecond 510)", deleting from post database[0m
+[31m[DEBUG] [STATE] Entering phase1 of transaction 30[0m
+[31m[DEBUG] [STATE] Entering phase2 of transaction 30[0m
+[31m[DEBUG] [STATE] run sharing transaction from nonsharing transaction 30[0m
+[31m[DEBUG] [STATE]   Starting embedded sharing transaction because it was necessary.[0m
+[31m[DEBUG] [STATE]   Starting sharing transaction 31[0m
+[31m[DEBUG] [STATE]   Entering phase1 of transaction 31[0m
+[31m[DEBUG] [STATE]   Entering context state model://joopringelberg.nl#AMQPtestModel for context def:#joopringelberg_nl-xyyehk9bpc_modelRootContext[0m
+[31m[DEBUG] [STATE]   Entering context state model://joopringelberg.nl#AMQPtestModel$ReadyToInstall for context def:#joopringelberg_nl-xyyehk9bpc_modelRootContext[0m
+[31m[TRACE] [STATE]   (RunContextStateAutomaticAction) Running automatic action for state StateIdentifier model://joopringelberg.nl#AMQPtestModel$ReadyToInstall in context "def:#joopringelberg_nl-xyyehk9bpc_modelRootContext"[0m
+[31m[TRACE] [STATE]   Entering role state model://joopringelberg.nl#AMQPtestModel$External for role def:#joopringelberg_nl-xyyehk9bpc_modelRootContext$External[0m
+[31m[TRACE] [STATE]   Entering role state model://perspectives.domains#System$PerspectivesSystem$Installer for role def:#oj2np5vt3m[0m
+[31m[TRACE] [STATE]   Entering role state model://perspectives.domains#System$PerspectivesSystem$ModelsInUse for role def:#hyu92c8ctv[0m
+[31m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$InstallBuild: def:#hyu92c8ctv[0m
+[31m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#hyu92c8ctv" is not in state StateIdentifier model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$InstallBuild[0m
+[31m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$InstallUpdate: def:#hyu92c8ctv[0m
+[31m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#hyu92c8ctv" is not in state StateIdentifier model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$InstallUpdate[0m
+[31m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$Filled: def:#hyu92c8ctv[0m
+[31m[TRACE] [STATE]   Entering role state model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$Filled for role def:#hyu92c8ctv[0m
+[31m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$UnFilled: def:#hyu92c8ctv[0m
+[31m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#hyu92c8ctv" is not in state StateIdentifier model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$UnFilled[0m
+[31m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$CanBeRemoved: def:#hyu92c8ctv[0m
+[31m[TRACE] [STATE]   Entering role state model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$CanBeRemoved for role def:#hyu92c8ctv[0m
+[31m[DEBUG] [STATE]   Entering phase1 of transaction 31[0m
+[31m[TRACE] [STATE]   Entering role state model://perspectives.domains#System$PerspectivesSystem$StartContexts for role def:#u230sis7aj[0m
+[31m[DEBUG] [STATE]   Entering phase2 of transaction 31[0m
+[31m[DEBUG] [STATE]   Evaluate states - processing 19 invertedQueryResults[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$ikjc543of4$faxv6sb7ji ["def:#hyu92c8ctv"])[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$ikjc543of4$hzpuw2f3t0 ["def:#hyu92c8ctv"])[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$ikjc543of4$i2kcqqdck4 ["def:#hyu92c8ctv"])[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$ikjc543of4$ntakkoof5h ["def:#hyu92c8ctv"])[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (ContextStateQuery StateIdentifier model://joopringelberg.nl#xyyehk9bpc$whdze1c1pd ["def:#joopringelberg_nl-xyyehk9bpc_modelRootContext"])[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (ContextStateQuery StateIdentifier model://perspectives.domains#zs6x290shy$jzed2hq586 ["def:#joopringelberg_nl-xyyehk9bpc_modelRootContext"])[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (ContextStateQuery StateIdentifier model://perspectives.domains#xyfxpg3lzq$ub07gh0l1m ["def:#joopringelberg_nl-xyyehk9bpc_modelRootContext"])[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (ContextStateQuery StateIdentifier model://joopringelberg.nl#jdqywnil7h$qafr761k2i ["def:#joopringelberg_nl-xyyehk9bpc_modelRootContext"])[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (ContextStateQuery StateIdentifier model://joopringelberg.nl#eqcwpoi6u6$frdj3kkks2 ["def:#joopringelberg_nl-xyyehk9bpc_modelRootContext"])[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (ContextStateQuery StateIdentifier model://perspectives.domains#siqjgdxh28$df0sj6e5qn ["def:#joopringelberg_nl-xyyehk9bpc_modelRootContext"])[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (ContextStateQuery StateIdentifier model://perspectives.domains#kxrm2cilp9$o7uw53s51k ["def:#joopringelberg_nl-xyyehk9bpc_modelRootContext"])[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (ContextStateQuery StateIdentifier model://perspectives.domains#xjrfkxrzyt$frkk3wrx3p ["def:#joopringelberg_nl-xyyehk9bpc_modelRootContext"])[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (ContextStateQuery StateIdentifier model://joopringelberg.nl#hj1bh3wydo$rb4baerbsx ["def:#joopringelberg_nl-xyyehk9bpc_modelRootContext"])[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (ContextStateQuery StateIdentifier model://perspectives.domains#k1bnh6wqk9$q2t2mr8xz9 ["def:#joopringelberg_nl-xyyehk9bpc_modelRootContext"])[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (ContextStateQuery StateIdentifier model://perspectives.domains#zjuzxbqpgc$y4u2rwmphz ["def:#joopringelberg_nl-xyyehk9bpc_modelRootContext"])[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (ContextStateQuery StateIdentifier model://perspectives.domains#vwx1yglbsu$w78041h6xm ["def:#joopringelberg_nl-xyyehk9bpc_modelRootContext"])[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (ContextStateQuery StateIdentifier model://joopringelberg.nl#whku0vufat$v1vaowxekl ["def:#joopringelberg_nl-xyyehk9bpc_modelRootContext"])[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (ContextStateQuery StateIdentifier model://joopringelberg.nl#avsm5dpqjk$hwdraulhxq ["def:#joopringelberg_nl-xyyehk9bpc_modelRootContext"])[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (ContextStateQuery StateIdentifier model://joopringelberg.nl#u01vncbjik$sna1kl3j61 ["def:#joopringelberg_nl-xyyehk9bpc_modelRootContext"])[0m
+[31m[DEBUG] [STATE]   ==========RUNNING 19 UNIQUE STATE EVALUATIONS============[0m
+[31m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$InstallBuild: def:#hyu92c8ctv[0m
+[31m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#hyu92c8ctv" is not in state StateIdentifier model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$InstallBuild[0m
+[31m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$InstallUpdate: def:#hyu92c8ctv[0m
+[31m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#hyu92c8ctv" is not in state StateIdentifier model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$InstallUpdate[0m
+[31m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$UnFilled: def:#hyu92c8ctv[0m
+[31m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#hyu92c8ctv" is not in state StateIdentifier model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$UnFilled[0m
+[31m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$Filled: def:#hyu92c8ctv[0m
+[31m[TRACE] [STATE]   (AlreadyInRoleState) Role "def:#hyu92c8ctv" is already in state StateIdentifier model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$Filled[0m
+[31m[TRACE] [STATE]   (AlreadyInContextState) Context "def:#joopringelberg_nl-xyyehk9bpc_modelRootContext" is already in state StateIdentifier model://joopringelberg.nl#AMQPtestModel$ReadyToInstall[0m
+[31m[DEBUG] [STATE]   Exiting phase 2 for transaction 31.[0m
+[31m[DEBUG] [STATE]   Ending transaction 31[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob compiles and stores test model from source, reusing Alice's stable-id mapping[0m
+[31m[DEBUG] [STATE]   Starting sharing transaction 32[0m
+[31m[DEBUG] [STATE]   Evaluate states - processing 0 invertedQueryResults[0m
+[35m[DEBUG] [STATE] Starting sharing transaction 24[0m
+[31m[DEBUG] [STATE]   Entering phase1 of transaction 32[0m
+[31m[DEBUG] [STATE]   Entering phase2 of transaction 32[0m
+[31m[DEBUG] [STATE]   Evaluate states - processing 0 invertedQueryResults[0m
+[31m[DEBUG] [STATE]   Exiting phase 2 for transaction 32.[0m
+[31m[DEBUG] [STATE]   Ending transaction 32[0m
+[31m[DEBUG] [STATE]   Ending transaction that needed to be embedded.[0m
+[31m[DEBUG] [STATE] returning to nonsharing transaction 30 from sharing transaction.[0m
+[31m[DEBUG] [STATE] Exiting phase 2 for transaction 30.[0m
+[31m[DEBUG] [STATE] Ending transaction 30[0m
+[31m[DEBUG] [STATE] Starting non-sharing transaction 33[0m
+[31m[DEBUG] [STATE] Entering phase1 of transaction 33[0m
+[31m[DEBUG] [STATE] Entering phase2 of transaction 33[0m
+[31m[DEBUG] [STATE] run sharing transaction from nonsharing transaction 33[0m
+[31m[DEBUG] [STATE]   Starting embedded sharing transaction because it was necessary.[0m
+[31m[DEBUG] [STATE]   Starting sharing transaction 34[0m
+[31m[DEBUG] [STATE]   Evaluate states - processing 10 invertedQueryResults[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$ikjc543of4$i2kcqqdck4 ["def:#hyu92c8ctv"])[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$ikjc543of4$hzpuw2f3t0 ["def:#hyu92c8ctv"])[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$ikjc543of4$faxv6sb7ji ["def:#hyu92c8ctv"])[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$ikjc543of4$ntakkoof5h ["def:#hyu92c8ctv"])[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#xyfxpg3lzq$purp0vollf$ghdhfh0c6p$h79vbyld0q ["pub:https://joopringelberg.nl/cw_joopringelberg_nl/#r9l2v4dt22"])[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (ContextStateQuery StateIdentifier model://perspectives.domains#xyfxpg3lzq$purp0vollf$i3315cobkx ["pub:https://joopringelberg.nl/cw_joopringelberg_nl/#joopringelberg_nl-xyyehk9bpc"])[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$ikjc543of4$i2kcqqdck4 ["def:#aak38qxzq3"])[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$ikjc543of4$hzpuw2f3t0 ["def:#aak38qxzq3"])[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$ikjc543of4$faxv6sb7ji ["def:#aak38qxzq3"])[0m
+[31m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$ikjc543of4$ntakkoof5h ["def:#aak38qxzq3"])[0m
+[31m[DEBUG] [STATE]   ==========RUNNING 10 UNIQUE STATE EVALUATIONS============[0m
+[31m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$UnFilled: def:#hyu92c8ctv[0m
+[31m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#hyu92c8ctv" is not in state StateIdentifier model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$UnFilled[0m
+[31m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$InstallUpdate: def:#hyu92c8ctv[0m
+[31m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#hyu92c8ctv" is not in state StateIdentifier model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$InstallUpdate[0m
+[31m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$InstallBuild: def:#hyu92c8ctv[0m
+[31m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#hyu92c8ctv" is not in state StateIdentifier model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$InstallBuild[0m
+[31m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$Filled: def:#hyu92c8ctv[0m
+[31m[TRACE] [STATE]   (AlreadyInRoleState) Role "def:#hyu92c8ctv" is already in state StateIdentifier model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$Filled[0m
+[31m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#CouchdbManagement$ModelManifest$Versions$ReadyToMake: pub:https://joopringelberg.nl/cw_joopringelberg_nl/#r9l2v4dt22[0m
+[31m[TRACE] [STATE]   (RoleStateNotValid) Role "pub:https://joopringelberg.nl/cw_joopringelberg_nl/#r9l2v4dt22" is not in state StateIdentifier model://perspectives.domains#CouchdbManagement$ModelManifest$Versions$ReadyToMake[0m
+[31m[TRACE] [STATE]   (AlreadyInContextState) Context "pub:https://joopringelberg.nl/cw_joopringelberg_nl/#joopringelberg_nl-xyyehk9bpc" is already in state StateIdentifier model://perspectives.domains#CouchdbManagement$ModelManifest$NoRecommendations[0m
+[31m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$UnFilled: def:#aak38qxzq3[0m
+[31m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#aak38qxzq3" is not in state StateIdentifier model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$UnFilled[0m
+[31m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$InstallUpdate: def:#aak38qxzq3[0m
+[31m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#aak38qxzq3" is not in state StateIdentifier model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$InstallUpdate[0m
+[31m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$InstallBuild: def:#aak38qxzq3[0m
+[31m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#aak38qxzq3" is not in state StateIdentifier model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$InstallBuild[0m
+[31m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$Filled: def:#aak38qxzq3[0m
+[31m[TRACE] [STATE]   (AlreadyInRoleState) Role "def:#aak38qxzq3" is already in state StateIdentifier model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$Filled[0m
+[31m[DEBUG] [STATE]   Entering phase1 of transaction 34[0m
+[31m[DEBUG] [STATE]   Entering phase2 of transaction 34[0m
+[31m[DEBUG] [STATE]   Evaluate states - processing 0 invertedQueryResults[0m
+[31m[DEBUG] [STATE]   Exiting phase 2 for transaction 34.[0m
+[31m[DEBUG] [STATE]   Ending transaction 34[0m
+[31m[DEBUG] [STATE]   Ending transaction that needed to be embedded.[0m
+[31m[DEBUG] [STATE] returning to nonsharing transaction 33 from sharing transaction.[0m
+[31m[DEBUG] [STATE] Exiting phase 2 for transaction 33.[0m
+[31m[DEBUG] [STATE] Ending transaction 33[0m
+[31m[DEBUG] [BROKER] There are 2 pending incoming transactions[0m
+[31m[DEBUG] [BROKER] Setting connection state to false[0m
+[31m[DEBUG] [STATE] Starting non-sharing transaction 35[0m
+[31m[DEBUG] [STATE] Entering phase1 of transaction 35[0m
+[31m[DEBUG] [STATE] Entering phase2 of transaction 35[0m
+[31m[DEBUG] [STATE] run sharing transaction from nonsharing transaction 35[0m
+[31m[DEBUG] [STATE]   Starting embedded sharing transaction because it was necessary.[0m
+[31m[DEBUG] [STATE]   Starting sharing transaction 36[0m
+[31m[DEBUG] [STATE]   Evaluate states - processing 0 invertedQueryResults[0m
+[31m[DEBUG] [STATE]   Entering phase1 of transaction 36[0m
+[31m[DEBUG] [STATE]   Entering phase2 of transaction 36[0m
+[31m[DEBUG] [STATE]   Evaluate states - processing 0 invertedQueryResults[0m
+[31m[DEBUG] [STATE]   Exiting phase 2 for transaction 36.[0m
+[31m[DEBUG] [STATE]   Ending transaction 36[0m
+[31m[DEBUG] [STATE]   Ending transaction that needed to be embedded.[0m
+[31m[DEBUG] [STATE] returning to nonsharing transaction 35 from sharing transaction.[0m
+[31m[DEBUG] [STATE] Exiting phase 2 for transaction 35.[0m
+[31m[DEBUG] [STATE] Ending transaction 35[0m
+[31m[DEBUG] [BROKER] Setting connection state to true[0m
+[31m[DEBUG] [STATE] Starting non-sharing transaction 37[0m
+[31m[DEBUG] [STATE] Entering phase1 of transaction 37[0m
+[31m[DEBUG] [STATE] Entering phase2 of transaction 37[0m
+[31m[DEBUG] [STATE] run sharing transaction from nonsharing transaction 37[0m
+[31m[DEBUG] [STATE]   Starting embedded sharing transaction because it was necessary.[0m
+[31m[DEBUG] [STATE]   Starting sharing transaction 38[0m
+[31m[DEBUG] [STATE]   Evaluate states - processing 0 invertedQueryResults[0m
+[31m[DEBUG] [STATE]   Entering phase1 of transaction 38[0m
+[31m[DEBUG] [STATE]   Entering phase2 of transaction 38[0m
+[31m[DEBUG] [STATE]   Evaluate states - processing 0 invertedQueryResults[0m
+[31m[DEBUG] [STATE]   Exiting phase 2 for transaction 38.[0m
+[31m[DEBUG] [STATE]   Ending transaction 38[0m
+[31m[DEBUG] [STATE]   Ending transaction that needed to be embedded.[0m
+[31m[DEBUG] [STATE] returning to nonsharing transaction 37 from sharing transaction.[0m
+[31m[DEBUG] [STATE] Exiting phase 2 for transaction 37.[0m
+[31m[DEBUG] [STATE] Ending transaction 37[0m
+[31m[DEBUG] [BROKER] Sending 1 outgoing transactions that were waiting in the post database[0m
+[31m[DEBUG] [BROKER] There are 3 pending incoming transactions[0m
+[31m[DEBUG] [BROKER] Executing incoming post transaction from author bob and timestamp (Year_2026)October(Day 28)T(Hour 10)(Minute 42)(Second 48)(Millisecond 128)[0m
+[35m[DEBUG] [BROKER] There are 1 pending incoming transactions[0m
+[35m[DEBUG] [BROKER] Executing incoming post transaction from author alice and timestamp (Year_2026)October(Day 28)T(Hour 10)(Minute 43)(Second 52)(Millisecond 209)[0m
+[31m[DEBUG] [STATE] Starting non-sharing transaction 39[0m
+[35m[DEBUG] [STATE] Entering phase1 of transaction 24[0m
+[35m[DEBUG] [STATE] Entering context state model://joopringelberg.nl#AMQPtestModel for context def:#joopringelberg_nl-xyyehk9bpc_modelRootContext[0m
+[35m[DEBUG] [STATE] Entering context state model://joopringelberg.nl#AMQPtestModel$ReadyToInstall for context def:#joopringelberg_nl-xyyehk9bpc_modelRootContext[0m
+[35m[TRACE] [STATE] (RunContextStateAutomaticAction) Running automatic action for state StateIdentifier model://joopringelberg.nl#AMQPtestModel$ReadyToInstall in context "def:#joopringelberg_nl-xyyehk9bpc_modelRootContext"[0m
+[35m[DEBUG] [STATE]   Starting embedded non-sharing transaction because it was necessary.[0m
+[35m[DEBUG] [STATE]   Starting non-sharing transaction 25[0m
+[35m[TRACE] [STATE]   Entering role state model://joopringelberg.nl#AMQPtestModel$External for role def:#joopringelberg_nl-xyyehk9bpc_modelRootContext$External[0m
+[35m[TRACE] [STATE]   Entering role state model://perspectives.domains#System$PerspectivesSystem$Installer for role def:#pj9shrvej1[0m
+[35m[TRACE] [STATE]   Entering role state model://perspectives.domains#System$PerspectivesSystem$ModelsInUse for role def:#mgbvdxp3f0[0m
+[35m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$InstallBuild: def:#mgbvdxp3f0[0m
+[35m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#mgbvdxp3f0" is not in state StateIdentifier model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$InstallBuild[0m
+[35m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$InstallUpdate: def:#mgbvdxp3f0[0m
+[35m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#mgbvdxp3f0" is not in state StateIdentifier model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$InstallUpdate[0m
+[35m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$Filled: def:#mgbvdxp3f0[0m
+[35m[TRACE] [STATE]   Entering role state model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$Filled for role def:#mgbvdxp3f0[0m
+[35m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$UnFilled: def:#mgbvdxp3f0[0m
+[35m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#mgbvdxp3f0" is not in state StateIdentifier model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$UnFilled[0m
+[35m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$CanBeRemoved: def:#mgbvdxp3f0[0m
+[35m[TRACE] [STATE]   Entering role state model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$CanBeRemoved for role def:#mgbvdxp3f0[0m
+[35m[DEBUG] [STATE]   Entering phase1 of transaction 24[0m
+[35m[DEBUG] [STATE]   Entering context state model://joopringelberg.nl#AMQPtestModel$TestApp for context def:#vv46p7m567[0m
+[35m[DEBUG] [STATE]   Entering context state model://perspectives.domains#System$RootContext for context def:#vv46p7m567[0m
+[35m[TRACE] [STATE]   Entering role state model://joopringelberg.nl#AMQPtestModel$TestApp$External for role def:#vv46p7m567$External[0m
+[35m[TRACE] [STATE]   Entering role state model://perspectives.domains#System$RootContext$External for role def:#vv46p7m567$External[0m
+[35m[TRACE] [STATE]   Entering role state model://perspectives.domains#System$PerspectivesSystem$StartContexts for role def:#xfjlj8wgjd[0m
+[35m[DEBUG] [STATE]   Entering phase2 of transaction 24[0m
+[35m[DEBUG] [STATE]   Evaluate states - processing 8 invertedQueryResults[0m
+[35m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$ikjc543of4$faxv6sb7ji ["def:#mgbvdxp3f0"])[0m
+[35m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$ikjc543of4$hzpuw2f3t0 ["def:#mgbvdxp3f0"])[0m
+[35m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$ikjc543of4$i2kcqqdck4 ["def:#mgbvdxp3f0"])[0m
+[35m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$ikjc543of4$ntakkoof5h ["def:#mgbvdxp3f0"])[0m
+[35m[DEBUG] [STATE]     computing state evaluations for: (ContextStateQuery StateIdentifier model://perspectives.domains#k1bnh6wqk9$q2t2mr8xz9 ["def:#joopringelberg_nl-xyyehk9bpc_modelRootContext"])[0m
+[35m[DEBUG] [STATE]     computing state evaluations for: (ContextStateQuery StateIdentifier model://joopringelberg.nl#xyyehk9bpc$whdze1c1pd ["def:#joopringelberg_nl-xyyehk9bpc_modelRootContext"])[0m
+[35m[DEBUG] [STATE]     computing state evaluations for: (ContextStateQuery StateIdentifier model://perspectives.domains#zjuzxbqpgc$y4u2rwmphz ["def:#joopringelberg_nl-xyyehk9bpc_modelRootContext"])[0m
+[35m[DEBUG] [STATE]     computing state evaluations for: (ContextStateQuery StateIdentifier model://perspectives.domains#xyfxpg3lzq$ub07gh0l1m ["def:#joopringelberg_nl-xyyehk9bpc_modelRootContext"])[0m
+[35m[DEBUG] [STATE]   ==========RUNNING 8 UNIQUE STATE EVALUATIONS============[0m
+[35m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$InstallBuild: def:#mgbvdxp3f0[0m
+[35m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#mgbvdxp3f0" is not in state StateIdentifier model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$InstallBuild[0m
+[35m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$InstallUpdate: def:#mgbvdxp3f0[0m
+[35m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#mgbvdxp3f0" is not in state StateIdentifier model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$InstallUpdate[0m
+[35m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$UnFilled: def:#mgbvdxp3f0[0m
+[35m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#mgbvdxp3f0" is not in state StateIdentifier model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$UnFilled[0m
+[35m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$Filled: def:#mgbvdxp3f0[0m
+[35m[TRACE] [STATE]   (AlreadyInRoleState) Role "def:#mgbvdxp3f0" is already in state StateIdentifier model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$Filled[0m
+[35m[TRACE] [STATE]   (AlreadyInContextState) Context "def:#joopringelberg_nl-xyyehk9bpc_modelRootContext" is already in state StateIdentifier model://joopringelberg.nl#AMQPtestModel$ReadyToInstall[0m
+[35m[DEBUG] [STATE]   Exiting phase 2 for transaction 24.[0m
+[35m[DEBUG] [STATE] Ending transaction 24[0m
+[31m[TRACE] [TEST] Running in PDR instance: alice_macbook[0m
+[35m[DEBUG] [STATE]   Starting non-sharing transaction 26[0m
+[31m[TRACE] [TEST] Running in PDR instance: alice_macbook[0m
+[31m[INFO] [TEST] Alice gives Bob the role Follower in the App in PDRA[0m
+[35m[DEBUG] [STATE]   Entering phase1 of transaction 25[0m
+[35m[DEBUG] [STATE]   Entering phase2 of transaction 25[0m
+[35m[DEBUG] [STATE]   run sharing transaction from nonsharing transaction 25[0m
+[35m[DEBUG] [STATE]     Starting embedded sharing transaction because it was necessary.[0m
+[35m[DEBUG] [STATE]     Starting sharing transaction 27[0m
+[35m[DEBUG] [STATE]     Evaluate states - processing 0 invertedQueryResults[0m
+[35m[DEBUG] [STATE]     Entering phase1 of transaction 27[0m
+[35m[DEBUG] [STATE]     Entering phase2 of transaction 27[0m
+[35m[DEBUG] [STATE]     Evaluate states - processing 0 invertedQueryResults[0m
+[35m[DEBUG] [STATE]     Exiting phase 2 for transaction 27.[0m
+[35m[DEBUG] [STATE]     Ending transaction 27[0m
+[35m[DEBUG] [STATE]     Ending transaction that needed to be embedded.[0m
+[35m[DEBUG] [STATE]   returning to nonsharing transaction 25 from sharing transaction.[0m
+[35m[DEBUG] [STATE]   Exiting phase 2 for transaction 25.[0m
+[35m[DEBUG] [STATE]   Ending transaction 25[0m
+[35m[DEBUG] [STATE]   Starting non-sharing transaction 28[0m
+[35m[DEBUG] [STATE]   Entering phase1 of transaction 26[0m
+[35m[DEBUG] [STATE]   run sharing transaction from nonsharing transaction 26[0m
+[35m[DEBUG] [STATE]     Starting embedded sharing transaction because it was necessary.[0m
+[35m[DEBUG] [STATE]     Starting sharing transaction 29[0m
+[35m[TRACE] [STATE]     Entering role state model://perspectives.domains#System$PerspectivesSystem$IndexedContexts for role def:#bbgx4rmyq1[0m
+[35m[DEBUG] [STATE]     Entering phase1 of transaction 29[0m
+[35m[DEBUG] [STATE]     Entering phase2 of transaction 29[0m
+[35m[DEBUG] [STATE]     Evaluate states - processing 0 invertedQueryResults[0m
+[35m[DEBUG] [STATE]     Exiting phase 2 for transaction 29.[0m
+[35m[DEBUG] [STATE]     Ending transaction 29[0m
+[35m[DEBUG] [STATE]     Ending transaction that needed to be embedded.[0m
+[35m[DEBUG] [STATE]   returning to nonsharing transaction 26 from sharing transaction.[0m
+[35m[DEBUG] [STATE]   Entering phase2 of transaction 26[0m
+[35m[DEBUG] [STATE]   run sharing transaction from nonsharing transaction 26[0m
+[35m[DEBUG] [STATE]     Starting embedded sharing transaction because it was necessary.[0m
+[35m[DEBUG] [STATE]     Starting sharing transaction 30[0m
+[35m[DEBUG] [STATE]     Evaluate states - processing 0 invertedQueryResults[0m
+[35m[DEBUG] [STATE]     Entering phase1 of transaction 30[0m
+[35m[DEBUG] [STATE]     Entering phase2 of transaction 30[0m
+[35m[DEBUG] [STATE]     Evaluate states - processing 0 invertedQueryResults[0m
+[35m[DEBUG] [STATE]     Exiting phase 2 for transaction 30.[0m
+[35m[DEBUG] [STATE]     Ending transaction 30[0m
+[35m[DEBUG] [STATE]     Ending transaction that needed to be embedded.[0m
+[35m[DEBUG] [STATE]   returning to nonsharing transaction 26 from sharing transaction.[0m
+[35m[DEBUG] [STATE]   Exiting phase 2 for transaction 26.[0m
+[35m[DEBUG] [STATE]   Ending transaction 26[0m
+[35m[DEBUG] [STATE]   Ending transaction that needed to be embedded.[0m
+[35m[DEBUG] [STATE] Entering phase1 of transaction 28[0m
+[35m[DEBUG] [STATE] Entering phase2 of transaction 28[0m
+[35m[DEBUG] [STATE] run sharing transaction from nonsharing transaction 28[0m
+[35m[DEBUG] [STATE]   Starting embedded sharing transaction because it was necessary.[0m
+[35m[DEBUG] [STATE]   Starting sharing transaction 31[0m
+[35m[DEBUG] [STATE]   Evaluate states - processing 6 invertedQueryResults[0m
+[35m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$ikjc543of4$i2kcqqdck4 ["def:#mgbvdxp3f0"])[0m
+[35m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$ikjc543of4$faxv6sb7ji ["def:#mgbvdxp3f0"])[0m
+[35m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$ikjc543of4$hzpuw2f3t0 ["def:#mgbvdxp3f0"])[0m
+[35m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$ikjc543of4$ntakkoof5h ["def:#mgbvdxp3f0"])[0m
+[35m[DEBUG] [STATE]     computing state evaluations for: (RoleStateQuery StateIdentifier model://perspectives.domains#xyfxpg3lzq$purp0vollf$ghdhfh0c6p$h79vbyld0q ["pub:https://joopringelberg.nl/cw_joopringelberg_nl/#r9l2v4dt22"])[0m
+[35m[DEBUG] [STATE]     computing state evaluations for: (ContextStateQuery StateIdentifier model://perspectives.domains#xyfxpg3lzq$purp0vollf$i3315cobkx ["pub:https://joopringelberg.nl/cw_joopringelberg_nl/#joopringelberg_nl-xyyehk9bpc"])[0m
+[35m[DEBUG] [STATE]   ==========RUNNING 6 UNIQUE STATE EVALUATIONS============[0m
+[35m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$UnFilled: def:#mgbvdxp3f0[0m
+[35m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#mgbvdxp3f0" is not in state StateIdentifier model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$UnFilled[0m
+[35m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$InstallBuild: def:#mgbvdxp3f0[0m
+[35m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#mgbvdxp3f0" is not in state StateIdentifier model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$InstallBuild[0m
+[35m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$InstallUpdate: def:#mgbvdxp3f0[0m
+[35m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#mgbvdxp3f0" is not in state StateIdentifier model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$InstallUpdate[0m
+[35m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$Filled: def:#mgbvdxp3f0[0m
+[35m[TRACE] [STATE]   (AlreadyInRoleState) Role "def:#mgbvdxp3f0" is already in state StateIdentifier model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$Filled[0m
+[35m[TRACE] [STATE]   Evaluating role state model://perspectives.domains#CouchdbManagement$ModelManifest$Versions$ReadyToMake: pub:https://joopringelberg.nl/cw_joopringelberg_nl/#r9l2v4dt22[0m
+[35m[TRACE] [STATE]   (RoleStateNotValid) Role "pub:https://joopringelberg.nl/cw_joopringelberg_nl/#r9l2v4dt22" is not in state StateIdentifier model://perspectives.domains#CouchdbManagement$ModelManifest$Versions$ReadyToMake[0m
+[35m[TRACE] [STATE]   (AlreadyInContextState) Context "pub:https://joopringelberg.nl/cw_joopringelberg_nl/#joopringelberg_nl-xyyehk9bpc" is already in state StateIdentifier model://perspectives.domains#CouchdbManagement$ModelManifest$NoRecommendations[0m
+[35m[DEBUG] [STATE]   Entering phase1 of transaction 31[0m
+[35m[DEBUG] [STATE]   Entering phase2 of transaction 31[0m
+[35m[DEBUG] [STATE]   Evaluate states - processing 0 invertedQueryResults[0m
+[35m[DEBUG] [STATE]   Exiting phase 2 for transaction 31.[0m
+[35m[DEBUG] [STATE]   Ending transaction 31[0m
+[35m[DEBUG] [STATE]   Ending transaction that needed to be embedded.[0m
+[35m[DEBUG] [STATE] returning to nonsharing transaction 28 from sharing transaction.[0m
+[35m[DEBUG] [STATE] Exiting phase 2 for transaction 28.[0m
+[35m[DEBUG] [STATE]   Ending transaction 28[0m
+[35m[DEBUG] [BROKER] There are no pending incoming transactions[0m
+[31m[DEBUG] [STATE] Entering phase1 of transaction 39[0m
+[31m[DEBUG] [STATE] Entering phase2 of transaction 39[0m
+[31m[DEBUG] [STATE] run sharing transaction from nonsharing transaction 39[0m
+[31m[DEBUG] [STATE]   Starting embedded sharing transaction because it was necessary.[0m
+[31m[DEBUG] [STATE]   Starting sharing transaction 40[0m
+[31m[DEBUG] [STATE]   Entering phase1 of transaction 40[0m
+[31m[TRACE] [STATE]   Entering role state model://joopringelberg.nl#AMQPtestModel$TestApp$Follower for role def:#rbf91o6oz3[0m
+[31m[DEBUG] [STATE]   Entering phase2 of transaction 40[0m
+[31m[DEBUG] [STATE]   Evaluate states - processing 0 invertedQueryResults[0m
+[31m[DEBUG] [BROKER] Saving transaction for user bob in OutgoingTransactions post database with transaction timestamp (Year_2026)October(Day 28)T(Hour 10)(Minute 44)(Second 40)(Millisecond 910)[0m
+[31m[DEBUG] [BROKER] Sending transaction for user bob to AMQP broker with transaction timestamp (Year_2026)October(Day 28)T(Hour 10)(Minute 44)(Second 40)(Millisecond 910)[0m
+[31m[DEBUG] [STATE]   Exiting phase 2 for transaction 40.[0m
+[31m[DEBUG] [STATE]   Ending transaction 40[0m
+[31m[TRACE] [TEST] Running in PDR instance: alice_macbook[0m
+[31m[INFO] [TEST] Alice checks that the Follower role has been constructed and filled in pdrA[0m
+[31m[DEBUG] [STATE]   Starting sharing transaction 41[0m
+[31m[DEBUG] [STATE]   Evaluate states - processing 0 invertedQueryResults[0m
+[31m[DEBUG] [STATE]   Entering phase1 of transaction 41[0m
+[31m[TRACE] [TEST] Running in PDR instance: alice_macbook[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[31m[TRACE] [TEST] Running in PDR instance: alice_macbook[0m
+[31m[DEBUG] [STATE]   Entering phase2 of transaction 41[0m
+[31m[DEBUG] [STATE]   Evaluate states - processing 0 invertedQueryResults[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[31m[DEBUG] [STATE]   Exiting phase 2 for transaction 41.[0m
+[31m[TRACE] [TEST] Running in PDR instance: alice_macbook[0m
+[31m[DEBUG] [STATE]   Ending transaction 41[0m
+[31m[DEBUG] [STATE]   Ending transaction that needed to be embedded.[0m
+[31m[TRACE] [TEST] Running in PDR instance: alice_macbook[0m
+[31m[DEBUG] [STATE] returning to nonsharing transaction 39 from sharing transaction.[0m
+[31m[TRACE] [TEST] Running in PDR instance: alice_macbook[0m
+[31m[DEBUG] [STATE] Exiting phase 2 for transaction 39.[0m
+[31m[DEBUG] [STATE] Ending transaction 39[0m
+[31m[TRACE] [TEST] Running in PDR instance: alice_macbook[0m
+[31m[DEBUG] [BROKER] There are 1 pending incoming transactions[0m
+[31m[INFO] [TEST] Alice creates a test in PDRA[0m
+[31m[DEBUG] [BROKER] Received receipt for message with id "bob(Year_2026)October(Day 28)T(Hour 10)(Minute 44)(Second 31)(Millisecond 258)", deleting from post database[0m
+[31m[DEBUG] [STATE] Starting sharing transaction 42[0m
+[31m[TRACE] [RESOURCE] (ConstructContext) Constructing context of type ContextType "model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database" with id "def:#lae8v3brdv" in authorized role ENR EnumeratedRoleType "model://joopringelberg.nl#AMQPtestModel$TestApp$Tests"[0m
+[31m[DEBUG] [BROKER] There are 3 pending incoming transactions[0m
+[31m[DEBUG] [BROKER] Executing incoming post transaction from author bob and timestamp (Year_2026)October(Day 28)T(Hour 10)(Minute 44)(Second 34)(Millisecond 458)[0m
+[35m[DEBUG] [BROKER] There are 1 pending incoming transactions[0m
+[35m[DEBUG] [BROKER] Executing incoming post transaction from author alice and timestamp (Year_2026)October(Day 28)T(Hour 10)(Minute 44)(Second 40)(Millisecond 910)[0m
+[31m[TRACE] [RESOURCE] Created context instance def:#lae8v3brdv of type ContextType "model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database"[0m
+[35m[DEBUG] [STATE] Starting non-sharing transaction 32[0m
+[35m[TRACE] [SYNC] (ExecutingUniverseRoleDelta) ConstructEmptyRole for/from "def:#TheWorld" with id "def:#alice" with type EnumeratedRoleType "model://perspectives.domains#System$TheWorld$PerspectivesUsers" for user role CR CalculatedRoleType model://perspectives.domains#System$TheWorld$Initializer[0m
+[35m[TRACE] [SYNC] (ExecutingContextDelta) AddRoleInstancesToContext to/from "def:#TheWorld" and "def:#alice"[0m
+[35m[TRACE] [SYNC] (ExecutingRolePropertyDelta) SetProperty for "def:#alice" and property EnumeratedPropertyType "model://perspectives.domains#System$Identifiable$PublicKey"[0m
+[35m[WARN] [RESOURCE] (RoleInstanceAlreadyHasPropertyValue) Role instance "def:#alice" already has value ["{\"key_ops\":[\"verify\"],\"ext\":true,\"kty\":\"EC\",\"x\":\"qbdj672qs3TUwcj0yUMH341lYeNeoNJNyKRN90xZozuEiR7lG9SwNk-ozgJSBmBC\",\"y\":\"uxtPfMRnHyvB47yAISoMhfEHGHQNebdx7P9ZFkHX79CvU7WvBY5WMlA6xFmGzwwL\",\"crv\":\"P-384\"}"] for property model://perspectives.domains#System$Identifiable$PublicKey[0m
+[35m[TRACE] [SYNC] (ExecutingRolePropertyDelta) SetProperty for "def:#alice" and property EnumeratedPropertyType "model://perspectives.domains#System$Identifiable$TransportPublicKey"[0m
+[35m[WARN] [RESOURCE] (RoleInstanceAlreadyHasPropertyValue) Role instance "def:#alice" already has value ["{\"key_ops\":[\"encrypt\"],\"ext\":true,\"kty\":\"RSA\",\"n\":\"vpKUElXJICZEkoVjI5L8fmnSaJqpPqtFQpha-Ih0iG-HFOqiUck-mZVZ-gtMDXVu6CXLhOKTFuDYRUWbbo6MmiHyO1fhLeDU0Np_NK5TEzTQpFpPANhFos-bUEQS7mRE3SwQi-4MabYCVaaeBCDwpn36ca-9JyBaAZDlE-mMJZ5pj2aERnzyf-2Y8ReC0RtmaY8zV3qqOcjXCqwcSEVOabHeJZ8KXzKwOnBRlA5XgDCrIpTQ5B5_CDELlRdE2B73whshvWtwdf4518yppcqkBeK4htWfHyQ9szljKCq-i385AHvbTv-ceqc0Iwh3aNviGezPmCDf_LtSRicberYLUPQAAAmdnef1NtpwcV80_dSSBpRoZ4w0Ni18uOjvd688AwtL2-3Fr04xLtnCrPVd_H_lYTKnwGL0bl5JExUF5AU_nDs6d8E0CW6w-wCG5_hf2zvYdNXnFxtC4nd6x_iGYIg5LBWhrvbhAOeKSDQUM6Av9pAeI-yEZnNUye8Rm9AnpnUfTJXDFKi3qmNyYrPJjb8qF0PY8Y9C0LAZiuIXQsobNIOHyLHXXolulIgdkpp-mDgCi6y_QSb56xudjtddgViVY577jwQyMmutw-s96mHqfXiQ73l_keMj6gcOH-lhfegKxR5OmVJB86JrmShP96SRsc-Bg1rCkH4AiXvJgU8\",\"e\":\"AQAB\",\"alg\":\"RSA-OAEP-256\"}"] for property model://perspectives.domains#System$Identifiable$TransportPublicKey[0m
+[31m[TRACE] [RESOURCE] (FilledRoleInstance) Filled role instance "def:#nkbavxxmxc" of type  EnumeratedRoleType "model://joopringelberg.nl#AMQPtestModel$TestApp$Tests" by filler "def:#lae8v3brdv$External" of type  EnumeratedRoleType "model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$External"[0m
+[31m[TRACE] [RESOURCE] Created role instance def:#nkbavxxmxc of type EnumeratedRoleType "model://joopringelberg.nl#AMQPtestModel$TestApp$Tests" in context def:#fxhckzk0in[0m
+[31m[DEBUG] [STATE] Entering phase1 of transaction 42[0m
+[31m[DEBUG] [STATE] Entering context state model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database for context def:#lae8v3brdv[0m
+[31m[DEBUG] [STATE] Entering context state model://joopringelberg.nl#AMQPtestModel$Test for context def:#lae8v3brdv[0m
+[31m[DEBUG] [STATE] Entering context state model://joopringelberg.nl#AMQPtestModel$Test$AppfollowerReachable for context def:#lae8v3brdv[0m
+[31m[TRACE] [STATE] (RunContextStateAutomaticAction) Running automatic action for state StateIdentifier model://joopringelberg.nl#AMQPtestModel$Test$AppfollowerReachable in context "def:#lae8v3brdv"[0m
+[31m[TRACE] [SYNC] (ConstructedMinimalSelfPerspective) Constructed a minimal self-perspective for context type ContextType "model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database" and role type ENR EnumeratedRoleType "model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$Follower"[0m
+[31m[DEBUG] [SYNC] Serialising perspective for users ["def:#becypfhiky"] of type model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$Follower(based on perspective starting at  on role types ["model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$Follower"]) with properties [].[0m
+[31m[DEBUG] [SYNC] Serialising perspective for users ["def:#becypfhiky"] of type model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$Follower(based on perspective starting at Perspective source position: line 210, column 22 on role types ["model://joopringelberg.nl#AMQPtestModel$TestContext$TestData"]) with properties ["model://joopringelberg.nl#AMQPtestModel$TestContext$TestData$Value"].[0m
+[31m[DEBUG] [SYNC] Serialising perspective for users ["def:#becypfhiky"] of type model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$Follower(based on perspective starting at Perspective source position: line 208, column 22 on role types ["model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$TestContexts"]) with properties [].[0m
+[31m[DEBUG] [SYNC] Serialising perspective for users ["def:#becypfhiky"] of type model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$Follower(based on perspective starting at Perspective source position: line 205, column 22 on role types ["model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$External"]) with properties ["model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$External$TestContextCreated","model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$External$BespokeDatabaseReady","model://joopringelberg.nl#AMQPtestModel$Test$External$TestSucceeded","model://joopringelberg.nl#AMQPtestModel$Test$External$TestName"].[0m
+[31m[DEBUG] [SYNC] Serialising perspective for users ["def:#becypfhiky"] of type model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$Follower(based on perspective starting at Perspective source position: line 99, column 22 on role types ["model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$Leader"]) with properties ["model://perspectives.domains#System$Identifiable$FirstName"].[0m
+[31m[DEBUG] [SYNC] Serialising perspective for users ["def:#becypfhiky"] of type model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$Follower(based on perspective starting at Perspective source position: line 101, column 22 on role types ["model://joopringelberg.nl#AMQPtestModel$Test$External"]) with properties ["model://joopringelberg.nl#AMQPtestModel$Test$External$TestSucceeded","model://joopringelberg.nl#AMQPtestModel$Test$External$TestName"].[0m
+[31m[DEBUG] [SYNC] Serialising perspective for users ["def:#becypfhiky"] of type model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$Follower(based on perspective starting at Perspective source position: line 99, column 22 on role types ["model://joopringelberg.nl#AMQPtestModel$Test$Leader"]) with properties ["model://perspectives.domains#System$Identifiable$FirstName"].[0m
+[31m[TRACE] [RESOURCE] (FilledRoleInstance) Filled role instance "def:#becypfhiky" of type  EnumeratedRoleType "model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$Follower" by filler "def:#bob" of type  EnumeratedRoleType "model://perspectives.domains#System$TheWorld$PerspectivesUsers"[0m
+[31m[TRACE] [RESOURCE] Created role instance def:#becypfhiky of type EnumeratedRoleType "model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$Follower" in context def:#lae8v3brdv[0m
+[35m[TRACE] [SYNC] (ExecutingUniverseRoleDelta) ConstructExternalRole for/from "def:#fxhckzk0in" with id "def:#fxhckzk0in$External" with type EnumeratedRoleType "model://joopringelberg.nl#AMQPtestModel$TestApp$External" for user role ENR EnumeratedRoleType "model://perspectives.domains#System$PerspectivesSystem$User"[0m
+[35m[TRACE] [SYNC] (ConstructingExternalRole) ConstructExternalRole in "def:#fxhckzk0in"[0m
+[31m[DEBUG] [SYNC] These users ["def:#becypfhiky"] of type model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$Follower(based on perspective starting at Perspective source position: line 99, column 22)  have a perspective through a context step on role instance def:#xnp857fgtr of type model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$Leader.[0m
+[31m[DEBUG] [SYNC] These users ["def:#becypfhiky"] of type model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$Follower(based on perspective starting at Perspective source position: line 99, column 22)  have a perspective through a context step on role instance def:#xnp857fgtr of type model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$Leader.[0m
+[31m[DEBUG] [SYNC] These users ["def:#becypfhiky"] of type model://joopringelberg.nl#AMQPtestModel$Test$Follower(based on perspective starting at Perspective source position: line 99, column 22)  have a perspective through a context step on role instance def:#xnp857fgtr of type model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$Leader.[0m
+[31m[DEBUG] [SYNC] These users ["def:#becypfhiky"] of type model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$Follower(based on perspective starting at Perspective source position: line 99, column 22)  have a perspective from filler role def:#o07snwcaq6 of type model://perspectives.domains#System$SocialEnvironment$Personson its filled def:#xnp857fgtr of type model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$Leader.[0m
+[31m[DEBUG] [SYNC] These users ["def:#becypfhiky"] of type model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$Follower(based on perspective starting at Perspective source position: line 99, column 22)  have a perspective from filler role def:#o07snwcaq6 of type model://perspectives.domains#System$SocialEnvironment$Personson its filled def:#xnp857fgtr of type model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$Leader.[0m
+[31m[DEBUG] [SYNC] These users ["def:#becypfhiky"] of type model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$Follower(based on perspective starting at Perspective source position: line 99, column 22)  have a perspective from filler role def:#alice of type model://perspectives.domains#System$TheWorld$PerspectivesUserson its filled def:#xnp857fgtr of type model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$Leader.[0m
+[31m[DEBUG] [SYNC] These users ["def:#becypfhiky"] of type model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$Follower(based on perspective starting at Perspective source position: line 99, column 22)  have a perspective from filler role def:#alice of type model://perspectives.domains#System$TheWorld$PerspectivesUserson its filled def:#xnp857fgtr of type model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$Leader.[0m
+[31m[TRACE] [RESOURCE] (FilledRoleInstance) Filled role instance "def:#xnp857fgtr" of type  EnumeratedRoleType "model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$Leader" by filler "def:#o07snwcaq6" of type  EnumeratedRoleType "model://perspectives.domains#System$SocialEnvironment$Persons"[0m
+[31m[TRACE] [RESOURCE] Created role instance def:#xnp857fgtr of type EnumeratedRoleType "model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$Leader" in context def:#lae8v3brdv[0m
+[31m[TRACE] [STATE] Entering role state model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$External for role def:#lae8v3brdv$External[0m
+[31m[TRACE] [STATE] Evaluating role state model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$External$DatabaseReady: def:#lae8v3brdv$External[0m
+[31m[TRACE] [STATE] (RoleStateNotValid) Role "def:#lae8v3brdv$External" is not in state StateIdentifier model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$External$DatabaseReady[0m
+[31m[TRACE] [STATE] Evaluating role state model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$External$ContextCreated: def:#lae8v3brdv$External[0m
+[31m[TRACE] [STATE] (RoleStateNotValid) Role "def:#lae8v3brdv$External" is not in state StateIdentifier model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$External$ContextCreated[0m
+[31m[TRACE] [STATE] Entering role state model://joopringelberg.nl#AMQPtestModel$Test$External for role def:#lae8v3brdv$External[0m
+[31m[TRACE] [STATE] Entering role state model://joopringelberg.nl#AMQPtestModel$TestApp$Tests for role def:#nkbavxxmxc[0m
+[31m[DEBUG] [STATE] Entering phase1 of transaction 42[0m
+[31m[TRACE] [STATE] Entering role state model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$Follower for role def:#becypfhiky[0m
+[31m[TRACE] [STATE] Entering role state model://joopringelberg.nl#AMQPtestModel$Test$Follower for role def:#becypfhiky[0m
+[31m[TRACE] [STATE] Entering role state model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$Leader for role def:#xnp857fgtr[0m
+[31m[TRACE] [STATE] Entering role state model://joopringelberg.nl#AMQPtestModel$Test$Leader for role def:#xnp857fgtr[0m
+[31m[DEBUG] [STATE] Entering phase2 of transaction 42[0m
+[31m[DEBUG] [STATE] Evaluate states - processing 1 invertedQueryResults[0m
+[31m[DEBUG] [STATE]   computing state evaluations for: (ContextStateQuery StateIdentifier model://joopringelberg.nl#xyyehk9bpc$vghcfquc3r$tjpqv8igsg ["def:#lae8v3brdv"])[0m
+[31m[DEBUG] [STATE] ==========RUNNING 1 UNIQUE STATE EVALUATIONS============[0m
+[31m[TRACE] [STATE] (AlreadyInContextState) Context "def:#lae8v3brdv" is already in state StateIdentifier model://joopringelberg.nl#AMQPtestModel$Test$AppfollowerReachable[0m
+[31m[DEBUG] [BROKER] Saving transaction for user bob in OutgoingTransactions post database with transaction timestamp (Year_2026)October(Day 28)T(Hour 10)(Minute 44)(Second 41)(Millisecond 568)[0m
+[31m[DEBUG] [BROKER] Sending transaction for user bob to AMQP broker with transaction timestamp (Year_2026)October(Day 28)T(Hour 10)(Minute 44)(Second 41)(Millisecond 568)[0m
+[31m[DEBUG] [STATE] Exiting phase 2 for transaction 42.[0m
+[31m[DEBUG] [STATE] Ending transaction 42[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[31m[DEBUG] [STATE] Starting non-sharing transaction 43[0m
+[31m[TRACE] [SYNC] (ExecutingUniverseRoleDelta) ConstructEmptyRole for/from "def:#TheWorld" with id "def:#bob" with type EnumeratedRoleType "model://perspectives.domains#System$TheWorld$PerspectivesUsers" for user role CR CalculatedRoleType model://perspectives.domains#System$TheWorld$Initializer[0m
+[31m[TRACE] [SYNC] (ExecutingContextDelta) AddRoleInstancesToContext to/from "def:#TheWorld" and "def:#bob"[0m
+[31m[TRACE] [SYNC] (ExecutingRolePropertyDelta) SetProperty for "def:#bob" and property EnumeratedPropertyType "model://perspectives.domains#System$Identifiable$PublicKey"[0m
+[31m[WARN] [RESOURCE] (RoleInstanceAlreadyHasPropertyValue) Role instance "def:#bob" already has value ["{\"key_ops\":[\"verify\"],\"ext\":true,\"kty\":\"EC\",\"x\":\"ozHlEnANMLIgDHjPEA94g_2tZHvOa2zAhdHO_stz6OyItvBNecP8q71xduvbWJTN\",\"y\":\"ZthU9Tu6wgUoycCrp0jK554n1aGorcyYS2kAX2jVplp0oXksXvW2Az0TwWmBBewP\",\"crv\":\"P-384\"}"] for property model://perspectives.domains#System$Identifiable$PublicKey[0m
+[31m[TRACE] [SYNC] (ExecutingRolePropertyDelta) SetProperty for "def:#bob" and property EnumeratedPropertyType "model://perspectives.domains#System$Identifiable$TransportPublicKey"[0m
+[31m[WARN] [RESOURCE] (RoleInstanceAlreadyHasPropertyValue) Role instance "def:#bob" already has value ["{\"key_ops\":[\"encrypt\"],\"ext\":true,\"kty\":\"RSA\",\"n\":\"niOpSWRAQ539G2x81PVH0oajvCGPz829OOneFNUQHVS4L9GC6c1KXjy1OuRs3Kec5n9QfPAysAysaEYz69XT1vrkU2T1w1VA4bFXSWcS1Pqor5QbCnU9iGzAf199ysWNjH4V_WGredilQzoAuj3o6FxQsDDaYKvo3wC6lhgO8j4YS3OKLwL3nchr09_9F6wZWPm_Cv1Y2q-CHEwkn9KtxK-iBr22GLoFO6QNP4_FClRLyosQ_gikWxm3zkZlJ25J9cuoBv0DW7aOD9I984h8VT0_q18G45nilhaYRguQUc_bL0u9BjJ2hUEOZfHkUq6YbSgzKK_FjuaTZXWhNnym_NBDBwVCskK9lYwPnxnVh4drV54U-tmeTDxMe0sMYRB7W4HktmV1aTVC_V6fHTitutDO75WLHesefESpnHJkxBtL1hUWj6FBgKFr3v4jF5EcANXGAP87ztpIgiUFihVMuE2fmhqQEPFF-KthrO04KmsDTbUhSC0TIDeegKNnS2EejJ6ffmviEgqb9VFKaWt_gcol8NrIZMemWWUtpLhQMhb47D7RxGkDhxuJtGqcjrB64o8f20kS2eFsIoCrqN8GRVL0nVFrgFS24sHJ_aS_joMUG-aw01IdyJ4qBxpdHuFGuI8Dg4_B2Eo7rL2yf79wv9-iLEbmJMsW12Y92BmZOfM\",\"e\":\"AQAB\",\"alg\":\"RSA-OAEP-256\"}"] for property model://perspectives.domains#System$Identifiable$TransportPublicKey[0m
+[35m[TRACE] [SYNC] (ExecutingUniverseContextDelta) ConstructEmptyContext with id "def:#fxhckzk0in" and with type ContextType "model://joopringelberg.nl#AMQPtestModel$TestApp"[0m
+[35m[TRACE] [SYNC] (ExecutingContextDelta) AddExternalRole to/from "def:#fxhckzk0in" and "def:#fxhckzk0in$External"[0m
+[35m[TRACE] [SYNC] (ExecutingUniverseRoleDelta) ConstructEmptyRole for/from "def:#fxhckzk0in" with id "def:#rbf91o6oz3" with type EnumeratedRoleType "model://joopringelberg.nl#AMQPtestModel$TestApp$Follower" for user role CR CalculatedRoleType model://joopringelberg.nl#AMQPtestModel$TestApp$Manager[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[TRACE] [SYNC] (ExecutingContextDelta) AddRoleInstancesToContext to/from "def:#fxhckzk0in" and "def:#rbf91o6oz3"[0m
+[31m[DEBUG] [STATE] Entering phase1 of transaction 43[0m
+[31m[DEBUG] [STATE] Entering phase2 of transaction 43[0m
+[31m[DEBUG] [STATE] run sharing transaction from nonsharing transaction 43[0m
+[31m[DEBUG] [STATE]   Starting embedded sharing transaction because it was necessary.[0m
+[31m[DEBUG] [STATE]   Starting sharing transaction 44[0m
+[31m[DEBUG] [STATE]   Evaluate states - processing 0 invertedQueryResults[0m
+[31m[DEBUG] [STATE]   Entering phase1 of transaction 44[0m
+[31m[DEBUG] [STATE]   Entering phase2 of transaction 44[0m
+[31m[DEBUG] [STATE]   Evaluate states - processing 0 invertedQueryResults[0m
+[31m[DEBUG] [STATE]   Exiting phase 2 for transaction 44.[0m
+[31m[DEBUG] [STATE]   Ending transaction 44[0m
+[31m[DEBUG] [STATE]   Ending transaction that needed to be embedded.[0m
+[31m[DEBUG] [STATE] returning to nonsharing transaction 43 from sharing transaction.[0m
+[31m[DEBUG] [STATE] Exiting phase 2 for transaction 43.[0m
+[31m[DEBUG] [STATE] Ending transaction 43[0m
+[31m[DEBUG] [BROKER] There are no pending incoming transactions[0m
+[31m[DEBUG] [BROKER] Received receipt for message with id "bob(Year_2026)October(Day 28)T(Hour 10)(Minute 44)(Second 31)(Millisecond 258)", deleting from post database[0m
+[31m[DEBUG] [BROKER] Received receipt for message with id "bob(Year_2026)October(Day 28)T(Hour 10)(Minute 44)(Second 41)(Millisecond 566)", deleting from post database[0m
+[31m[DEBUG] [BROKER] Received receipt for message with id "bob(Year_2026)October(Day 28)T(Hour 10)(Minute 44)(Second 41)(Millisecond 927)", deleting from post database[0m
+[35m[TRACE] [SYNC] (ExecutingRoleBindingDelta) SetFirstBinding of "def:#rbf91o6oz3" (to) (Just "def:#bob")[0m
+[35m[TRACE] [RESOURCE] (FilledRoleInstance) Filled role instance "def:#rbf91o6oz3" of type  EnumeratedRoleType "model://joopringelberg.nl#AMQPtestModel$TestApp$Follower" by filler "def:#bob" of type  EnumeratedRoleType "model://perspectives.domains#System$TheWorld$PerspectivesUsers"[0m
+[35m[DEBUG] [STATE] Entering phase1 of transaction 32[0m
+[35m[DEBUG] [STATE] run sharing transaction from nonsharing transaction 32[0m
+[35m[DEBUG] [STATE]   Starting embedded sharing transaction because it was necessary.[0m
+[35m[DEBUG] [STATE]   Starting sharing transaction 33[0m
+[35m[DEBUG] [STATE]   Entering context state model://joopringelberg.nl#AMQPtestModel$TestApp for context def:#fxhckzk0in[0m
+[35m[DEBUG] [STATE]   Entering context state model://perspectives.domains#System$RootContext for context def:#fxhckzk0in[0m
+[35m[DEBUG] [STATE]   Entering phase1 of transaction 33[0m
+[35m[DEBUG] [STATE]   Entering phase2 of transaction 33[0m
+[35m[DEBUG] [STATE]   Evaluate states - processing 0 invertedQueryResults[0m
+[35m[DEBUG] [STATE]   Exiting phase 2 for transaction 33.[0m
+[35m[DEBUG] [STATE]   Ending transaction 33[0m
+[35m[DEBUG] [STATE]   Ending transaction that needed to be embedded.[0m
+[35m[DEBUG] [STATE] returning to nonsharing transaction 32 from sharing transaction.[0m
+[35m[DEBUG] [STATE] run sharing transaction from nonsharing transaction 32[0m
+[35m[DEBUG] [STATE]   Starting embedded sharing transaction because it was necessary.[0m
+[35m[DEBUG] [STATE]   Starting sharing transaction 34[0m
+[35m[TRACE] [STATE]   Entering role state model://joopringelberg.nl#AMQPtestModel$TestApp$External for role def:#fxhckzk0in$External[0m
+[35m[TRACE] [STATE]   Entering role state model://perspectives.domains#System$RootContext$External for role def:#fxhckzk0in$External[0m
+[35m[TRACE] [STATE]   Entering role state model://joopringelberg.nl#AMQPtestModel$TestApp$Follower for role def:#rbf91o6oz3[0m
+[35m[DEBUG] [STATE]   Entering phase1 of transaction 34[0m
+[35m[DEBUG] [STATE]   Entering phase2 of transaction 34[0m
+[35m[DEBUG] [STATE]   Evaluate states - processing 0 invertedQueryResults[0m
+[35m[DEBUG] [STATE]   Exiting phase 2 for transaction 34.[0m
+[35m[DEBUG] [STATE]   Ending transaction 34[0m
+[35m[DEBUG] [STATE]   Ending transaction that needed to be embedded.[0m
+[35m[DEBUG] [STATE] returning to nonsharing transaction 32 from sharing transaction.[0m
+[35m[DEBUG] [STATE] Entering phase2 of transaction 32[0m
+[35m[DEBUG] [STATE] run sharing transaction from nonsharing transaction 32[0m
+[35m[DEBUG] [STATE]   Starting embedded sharing transaction because it was necessary.[0m
+[35m[DEBUG] [STATE]   Starting sharing transaction 35[0m
+[35m[DEBUG] [STATE]   Evaluate states - processing 0 invertedQueryResults[0m
+[35m[DEBUG] [STATE]   Entering phase1 of transaction 35[0m
+[35m[DEBUG] [STATE]   Entering phase2 of transaction 35[0m
+[35m[DEBUG] [STATE]   Evaluate states - processing 0 invertedQueryResults[0m
+[35m[DEBUG] [STATE]   Exiting phase 2 for transaction 35.[0m
+[35m[DEBUG] [STATE]   Ending transaction 35[0m
+[35m[DEBUG] [STATE]   Ending transaction that needed to be embedded.[0m
+[35m[DEBUG] [STATE] returning to nonsharing transaction 32 from sharing transaction.[0m
+[35m[DEBUG] [STATE] Exiting phase 2 for transaction 32.[0m
+[35m[DEBUG] [STATE] Ending transaction 32[0m
+[35m[DEBUG] [BROKER] There are 1 pending incoming transactions[0m
+[35m[DEBUG] [BROKER] There are 2 pending incoming transactions[0m
+[35m[DEBUG] [BROKER] Executing incoming post transaction from author alice and timestamp (Year_2026)October(Day 28)T(Hour 10)(Minute 44)(Second 41)(Millisecond 568)[0m
+[35m[DEBUG] [STATE] Starting non-sharing transaction 36[0m
+[35m[TRACE] [SYNC] (ExecutingUniverseRoleDelta) ConstructEmptyRole for/from "def:#TheWorld" with id "def:#alice" with type EnumeratedRoleType "model://perspectives.domains#System$TheWorld$PerspectivesUsers" for user role CR CalculatedRoleType model://perspectives.domains#System$TheWorld$Initializer[0m
+[35m[TRACE] [SYNC] (ExecutingContextDelta) AddRoleInstancesToContext to/from "def:#TheWorld" and "def:#alice"[0m
+[35m[TRACE] [SYNC] (ExecutingRolePropertyDelta) SetProperty for "def:#alice" and property EnumeratedPropertyType "model://perspectives.domains#System$Identifiable$PublicKey"[0m
+[35m[WARN] [RESOURCE] (RoleInstanceAlreadyHasPropertyValue) Role instance "def:#alice" already has value ["{\"key_ops\":[\"verify\"],\"ext\":true,\"kty\":\"EC\",\"x\":\"qbdj672qs3TUwcj0yUMH341lYeNeoNJNyKRN90xZozuEiR7lG9SwNk-ozgJSBmBC\",\"y\":\"uxtPfMRnHyvB47yAISoMhfEHGHQNebdx7P9ZFkHX79CvU7WvBY5WMlA6xFmGzwwL\",\"crv\":\"P-384\"}"] for property model://perspectives.domains#System$Identifiable$PublicKey[0m
+[35m[TRACE] [SYNC] (ExecutingRolePropertyDelta) SetProperty for "def:#alice" and property EnumeratedPropertyType "model://perspectives.domains#System$Identifiable$TransportPublicKey"[0m
+[35m[WARN] [RESOURCE] (RoleInstanceAlreadyHasPropertyValue) Role instance "def:#alice" already has value ["{\"key_ops\":[\"encrypt\"],\"ext\":true,\"kty\":\"RSA\",\"n\":\"vpKUElXJICZEkoVjI5L8fmnSaJqpPqtFQpha-Ih0iG-HFOqiUck-mZVZ-gtMDXVu6CXLhOKTFuDYRUWbbo6MmiHyO1fhLeDU0Np_NK5TEzTQpFpPANhFos-bUEQS7mRE3SwQi-4MabYCVaaeBCDwpn36ca-9JyBaAZDlE-mMJZ5pj2aERnzyf-2Y8ReC0RtmaY8zV3qqOcjXCqwcSEVOabHeJZ8KXzKwOnBRlA5XgDCrIpTQ5B5_CDELlRdE2B73whshvWtwdf4518yppcqkBeK4htWfHyQ9szljKCq-i385AHvbTv-ceqc0Iwh3aNviGezPmCDf_LtSRicberYLUPQAAAmdnef1NtpwcV80_dSSBpRoZ4w0Ni18uOjvd688AwtL2-3Fr04xLtnCrPVd_H_lYTKnwGL0bl5JExUF5AU_nDs6d8E0CW6w-wCG5_hf2zvYdNXnFxtC4nd6x_iGYIg5LBWhrvbhAOeKSDQUM6Av9pAeI-yEZnNUye8Rm9AnpnUfTJXDFKi3qmNyYrPJjb8qF0PY8Y9C0LAZiuIXQsobNIOHyLHXXolulIgdkpp-mDgCi6y_QSb56xudjtddgViVY577jwQyMmutw-s96mHqfXiQ73l_keMj6gcOH-lhfegKxR5OmVJB86JrmShP96SRsc-Bg1rCkH4AiXvJgU8\",\"e\":\"AQAB\",\"alg\":\"RSA-OAEP-256\"}"] for property model://perspectives.domains#System$Identifiable$TransportPublicKey[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[TRACE] [SYNC] (ExecutingUniverseRoleDelta) ConstructExternalRole for/from "def:#lae8v3brdv" with id "def:#lae8v3brdv$External" with type EnumeratedRoleType "model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$External" for user role CR CalculatedRoleType model://joopringelberg.nl#AMQPtestModel$TestApp$Manager[0m
+[35m[TRACE] [SYNC] (ConstructingExternalRole) ConstructExternalRole in "def:#lae8v3brdv"[0m
+[35m[TRACE] [SYNC] (ExecutingUniverseContextDelta) ConstructEmptyContext with id "def:#lae8v3brdv" and with type ContextType "model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database"[0m
+[35m[TRACE] [SYNC] (ExecutingContextDelta) AddExternalRole to/from "def:#lae8v3brdv" and "def:#lae8v3brdv$External"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob has verified that he has the test context in PDRB[0m
+[35m[TRACE] [SYNC] (ExecutingUniverseRoleDelta) ConstructEmptyRole for/from "def:#lae8v3brdv" with id "def:#becypfhiky" with type EnumeratedRoleType "model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$Follower" for user role CR CalculatedRoleType model://joopringelberg.nl#AMQPtestModel$Test$Initializer[0m
+[35m[TRACE] [SYNC] (ExecutingUniverseRoleDelta) ConstructEmptyRole for/from "def:#lae8v3brdv" with id "def:#xnp857fgtr" with type EnumeratedRoleType "model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$Leader" for user role CR CalculatedRoleType model://joopringelberg.nl#AMQPtestModel$Test$Initializer[0m
+[35m[TRACE] [SYNC] (ExecutingContextDelta) AddRoleInstancesToContext to/from "def:#lae8v3brdv" and "def:#becypfhiky"[0m
+[35m[TRACE] [SYNC] (ExecutingContextDelta) AddRoleInstancesToContext to/from "def:#lae8v3brdv" and "def:#xnp857fgtr"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob has verified that he has the test context in PDRB[0m
+[35m[INFO] [TEST] Bob has verified that he has the Follower role in the test in PDRB[0m
+[31m[TRACE] [TEST] Running in PDR instance: alice_macbook[0m
+[31m[DEBUG] [STATE] Starting sharing transaction 45[0m
+[31m[INFO] [TEST] Alice executes a test in PDRA[0m
+[31m[DEBUG] [SYNC] These users ["def:#becypfhiky","def:#becypfhiky"] of type model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$Follower(based on perspective starting at Perspective source position: line 205, column 22)  have a perspective on the property model://joopringelberg.nl#AMQPtestModel$Test$External$TestName of role instance def:#lae8v3brdv$External of type model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$External.[0m
+[31m[DEBUG] [SYNC] These users ["def:#becypfhiky"] of type model://joopringelberg.nl#AMQPtestModel$Test$Follower(based on perspective starting at Perspective source position: line 101, column 22)  have a perspective on the property model://joopringelberg.nl#AMQPtestModel$Test$External$TestName of role instance def:#lae8v3brdv$External of type model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$External.[0m
+[31m[DEBUG] [SYNC] These users ["def:#becypfhiky","def:#becypfhiky"] of type model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$Follower(based on perspective starting at Perspective source position: line 205, column 22)  have a perspective on the property model://joopringelberg.nl#AMQPtestModel$Test$External$TestName of role instance def:#lae8v3brdv$External of type model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$External.[0m
+[31m[DEBUG] [RESOURCE] setProperty: set property model://joopringelberg.nl#AMQPtestModel$Test$External$TestName on role instance def:#lae8v3brdv$External to values ["Create a bespoke database for Bob"][0m
+[31m[TRACE] [RESOURCE] (NoBinder) No role instance found to fill in context "def:#lae8v3brdv"[0m
+[31m[TRACE] [RESOURCE] (NoBinding) No filler found in context "def:#lae8v3brdv"[0m
+[31m[TRACE] [RESOURCE] (NoBinder) No role instance found to fill in context "def:#lae8v3brdv"[0m
+[31m[WARN] [RESOURCE] (NoRoleInstanceToSetProperty) No role instance found for property model://perspectives.domains#CouchdbManagement$CouchdbServer$BespokeDatabases$EnteredDatabaseName to set value ["cw_bobsdatabase/"][0m
+[31m[WARN] [RESOURCE] (NoRoleInstanceToSetProperty) No role instance found for property model://perspectives.domains#CouchdbManagement$BespokeDatabase$External$Endorsed to set value ["true"][0m
+[31m[WARN] [RESOURCE] (NoRoleInstanceToSetProperty) No role instance found for property model://perspectives.domains#CouchdbManagement$BespokeDatabase$External$Public to set value ["true"][0m
+[31m[DEBUG] [STATE] Entering phase1 of transaction 45[0m
+[31m[DEBUG] [STATE] Entering phase2 of transaction 45[0m
+[31m[DEBUG] [STATE] Evaluate states - processing 0 invertedQueryResults[0m
+[31m[DEBUG] [BROKER] Saving transaction for user bob in OutgoingTransactions post database with transaction timestamp (Year_2026)October(Day 28)T(Hour 10)(Minute 44)(Second 42)(Millisecond 328)[0m
+[31m[DEBUG] [BROKER] Sending transaction for user bob to AMQP broker with transaction timestamp (Year_2026)October(Day 28)T(Hour 10)(Minute 44)(Second 42)(Millisecond 328)[0m
+[31m[DEBUG] [STATE] Exiting phase 2 for transaction 45.[0m
+[31m[DEBUG] [STATE] Ending transaction 45[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[31m[DEBUG] [BROKER] Received receipt for message with id "bob(Year_2026)October(Day 28)T(Hour 10)(Minute 44)(Second 42)(Millisecond 371)", deleting from post database[0m
+[35m[TRACE] [SYNC] (ExecutingRoleBindingDelta) SetFirstBinding of "def:#becypfhiky" (to) (Just "def:#bob")[0m
+[35m[TRACE] [RESOURCE] (FilledRoleInstance) Filled role instance "def:#becypfhiky" of type  EnumeratedRoleType "model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$Follower" by filler "def:#bob" of type  EnumeratedRoleType "model://perspectives.domains#System$TheWorld$PerspectivesUsers"[0m
+[35m[TRACE] [SYNC] (ExecutingRoleBindingDelta) SetFirstBinding of "def:#xnp857fgtr" (to) (Just "def:#o07snwcaq6")[0m
+[35m[TRACE] [SYNC] (ConstructedMinimalSelfPerspective) Constructed a minimal self-perspective for context type ContextType "model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database" and role type ENR EnumeratedRoleType "model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$Leader"[0m
+[35m[DEBUG] [SYNC] Serialising perspective for users ["def:#xnp857fgtr"] of type model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$Leader(based on perspective starting at  on role types ["model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$Leader"]) with properties [].[0m
+[35m[DEBUG] [SYNC] Serialising perspective for users ["def:#xnp857fgtr"] of type model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$Leader(based on perspective starting at Perspective source position: line 181, column 22 on role types ["model://perspectives.domains#CouchdbManagement$BespokeDatabase$Owner"]) with properties [].[0m
+[35m[DEBUG] [SYNC] Serialising perspective for users ["def:#xnp857fgtr"] of type model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$Leader(based on perspective starting at Perspective source position: line 178, column 22 on role types ["model://perspectives.domains#CouchdbManagement$CouchdbServer$BespokeDatabases"]) with properties ["model://perspectives.domains#CouchdbManagement$BespokeDatabase$External$Endorsed","model://perspectives.domains#CouchdbManagement$BespokeDatabase$External$Public","model://perspectives.domains#CouchdbManagement$CouchdbServer$BespokeDatabases$EnteredDatabaseName"].[0m
+[35m[DEBUG] [SYNC] Serialising perspective for users ["def:#xnp857fgtr"] of type model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$Leader(based on perspective starting at Perspective source position: line 176, column 22 on role types ["model://perspectives.domains#CouchdbManagement$CouchdbServer$Accounts"]) with properties [].[0m
+[35m[DEBUG] [SYNC] Serialising perspective for users ["def:#xnp857fgtr"] of type model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$Leader(based on perspective starting at Perspective source position: line 173, column 22 on role types ["model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$External"]) with properties ["model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$External$TestContextCreated","model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$External$BespokeDatabaseReady","model://joopringelberg.nl#AMQPtestModel$Test$External$TestName"].[0m
+[35m[DEBUG] [SYNC] Serialising perspective for users ["def:#xnp857fgtr"] of type model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$Leader(based on perspective starting at Perspective source position: line 95, column 22 on role types ["model://joopringelberg.nl#AMQPtestModel$Test$External"]) with properties ["model://joopringelberg.nl#AMQPtestModel$Test$External$TestName"].[0m
+[35m[TRACE] [RESOURCE] (FilledRoleInstance) Filled role instance "def:#xnp857fgtr" of type  EnumeratedRoleType "model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$Leader" by filler "def:#o07snwcaq6" of type  EnumeratedRoleType "model://perspectives.domains#System$SocialEnvironment$Persons"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[TRACE] [SYNC] (ExecutingRolePropertyDelta) SetProperty for "def:#alice" and property EnumeratedPropertyType "model://perspectives.domains#System$Identifiable$FirstName"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[DEBUG] [RESOURCE] setProperty: set property model://perspectives.domains#System$Identifiable$FirstName on role instance def:#alice to values ["alice"][0m
+[35m[DEBUG] [STATE] Entering phase1 of transaction 36[0m
+[35m[DEBUG] [STATE] run sharing transaction from nonsharing transaction 36[0m
+[35m[DEBUG] [STATE]   Starting embedded sharing transaction because it was necessary.[0m
+[35m[DEBUG] [STATE]   Starting sharing transaction 37[0m
+[35m[DEBUG] [STATE]   Entering context state model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database for context def:#lae8v3brdv[0m
+[35m[DEBUG] [STATE]   Entering context state model://joopringelberg.nl#AMQPtestModel$Test for context def:#lae8v3brdv[0m
+[35m[TRACE] [STATE]   (ContextStateNotValid) Context "def:#lae8v3brdv" is not in state StateIdentifier model://joopringelberg.nl#AMQPtestModel$Test$AppfollowerReachable[0m
+[35m[DEBUG] [STATE]   Entering phase1 of transaction 37[0m
+[35m[DEBUG] [STATE]   Entering phase2 of transaction 37[0m
+[35m[DEBUG] [STATE]   Evaluate states - processing 0 invertedQueryResults[0m
+[35m[DEBUG] [STATE]   Exiting phase 2 for transaction 37.[0m
+[35m[DEBUG] [STATE]   Ending transaction 37[0m
+[35m[DEBUG] [STATE]   Ending transaction that needed to be embedded.[0m
+[35m[DEBUG] [STATE] returning to nonsharing transaction 36 from sharing transaction.[0m
+[35m[DEBUG] [STATE] run sharing transaction from nonsharing transaction 36[0m
+[35m[DEBUG] [STATE]   Starting embedded sharing transaction because it was necessary.[0m
+[35m[DEBUG] [STATE]   Starting sharing transaction 38[0m
+[35m[TRACE] [STATE]   Entering role state model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$External for role def:#lae8v3brdv$External[0m
+[35m[TRACE] [STATE]   Evaluating role state model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$External$DatabaseReady: def:#lae8v3brdv$External[0m
+[35m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#lae8v3brdv$External" is not in state StateIdentifier model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$External$DatabaseReady[0m
+[35m[TRACE] [STATE]   Evaluating role state model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$External$ContextCreated: def:#lae8v3brdv$External[0m
+[35m[TRACE] [STATE]   (RoleStateNotValid) Role "def:#lae8v3brdv$External" is not in state StateIdentifier model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$External$ContextCreated[0m
+[35m[TRACE] [STATE]   Entering role state model://joopringelberg.nl#AMQPtestModel$Test$External for role def:#lae8v3brdv$External[0m
+[35m[TRACE] [STATE]   Entering role state model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$Follower for role def:#becypfhiky[0m
+[35m[TRACE] [STATE]   Entering role state model://joopringelberg.nl#AMQPtestModel$Test$Follower for role def:#becypfhiky[0m
+[35m[TRACE] [STATE]   Entering role state model://joopringelberg.nl#AMQPtestModel$Create_A_Bespoke_Database$Leader for role def:#xnp857fgtr[0m
+[35m[TRACE] [STATE]   Entering role state model://joopringelberg.nl#AMQPtestModel$Test$Leader for role def:#xnp857fgtr[0m
+[35m[DEBUG] [STATE]   Entering phase1 of transaction 38[0m
+[35m[DEBUG] [STATE]   Entering phase2 of transaction 38[0m
+[35m[DEBUG] [STATE]   Evaluate states - processing 0 invertedQueryResults[0m
+[35m[DEBUG] [STATE]   Exiting phase 2 for transaction 38.[0m
+[35m[DEBUG] [STATE]   Ending transaction 38[0m
+[35m[DEBUG] [STATE]   Ending transaction that needed to be embedded.[0m
+[35m[DEBUG] [STATE] returning to nonsharing transaction 36 from sharing transaction.[0m
+[35m[DEBUG] [STATE] Entering phase2 of transaction 36[0m
+[35m[DEBUG] [STATE] run sharing transaction from nonsharing transaction 36[0m
+[35m[DEBUG] [STATE]   Starting embedded sharing transaction because it was necessary.[0m
+[35m[DEBUG] [STATE]   Starting sharing transaction 39[0m
+[35m[DEBUG] [STATE]   Evaluate states - processing 0 invertedQueryResults[0m
+[35m[DEBUG] [STATE]   Entering phase1 of transaction 39[0m
+[35m[DEBUG] [STATE]   Entering phase2 of transaction 39[0m
+[35m[DEBUG] [STATE]   Evaluate states - processing 0 invertedQueryResults[0m
+[35m[DEBUG] [STATE]   Exiting phase 2 for transaction 39.[0m
+[35m[DEBUG] [STATE]   Ending transaction 39[0m
+[35m[DEBUG] [STATE]   Ending transaction that needed to be embedded.[0m
+[35m[DEBUG] [STATE] returning to nonsharing transaction 36 from sharing transaction.[0m
+[35m[DEBUG] [STATE] Exiting phase 2 for transaction 36.[0m
+[35m[DEBUG] [STATE] Ending transaction 36[0m
+[35m[DEBUG] [BROKER] There are 1 pending incoming transactions[0m
+[35m[DEBUG] [BROKER] There are 2 pending incoming transactions[0m
+[35m[DEBUG] [BROKER] Executing incoming post transaction from author alice and timestamp (Year_2026)October(Day 28)T(Hour 10)(Minute 44)(Second 42)(Millisecond 328)[0m
+[35m[DEBUG] [STATE] Starting non-sharing transaction 40[0m
+[35m[TRACE] [SYNC] (ExecutingUniverseRoleDelta) ConstructEmptyRole for/from "def:#TheWorld" with id "def:#alice" with type EnumeratedRoleType "model://perspectives.domains#System$TheWorld$PerspectivesUsers" for user role CR CalculatedRoleType model://perspectives.domains#System$TheWorld$Initializer[0m
+[35m[TRACE] [SYNC] (ExecutingContextDelta) AddRoleInstancesToContext to/from "def:#TheWorld" and "def:#alice"[0m
+[35m[TRACE] [SYNC] (ExecutingRolePropertyDelta) SetProperty for "def:#alice" and property EnumeratedPropertyType "model://perspectives.domains#System$Identifiable$PublicKey"[0m
+[35m[WARN] [RESOURCE] (RoleInstanceAlreadyHasPropertyValue) Role instance "def:#alice" already has value ["{\"key_ops\":[\"verify\"],\"ext\":true,\"kty\":\"EC\",\"x\":\"qbdj672qs3TUwcj0yUMH341lYeNeoNJNyKRN90xZozuEiR7lG9SwNk-ozgJSBmBC\",\"y\":\"uxtPfMRnHyvB47yAISoMhfEHGHQNebdx7P9ZFkHX79CvU7WvBY5WMlA6xFmGzwwL\",\"crv\":\"P-384\"}"] for property model://perspectives.domains#System$Identifiable$PublicKey[0m
+[35m[TRACE] [SYNC] (ExecutingRolePropertyDelta) SetProperty for "def:#alice" and property EnumeratedPropertyType "model://perspectives.domains#System$Identifiable$TransportPublicKey"[0m
+[35m[WARN] [RESOURCE] (RoleInstanceAlreadyHasPropertyValue) Role instance "def:#alice" already has value ["{\"key_ops\":[\"encrypt\"],\"ext\":true,\"kty\":\"RSA\",\"n\":\"vpKUElXJICZEkoVjI5L8fmnSaJqpPqtFQpha-Ih0iG-HFOqiUck-mZVZ-gtMDXVu6CXLhOKTFuDYRUWbbo6MmiHyO1fhLeDU0Np_NK5TEzTQpFpPANhFos-bUEQS7mRE3SwQi-4MabYCVaaeBCDwpn36ca-9JyBaAZDlE-mMJZ5pj2aERnzyf-2Y8ReC0RtmaY8zV3qqOcjXCqwcSEVOabHeJZ8KXzKwOnBRlA5XgDCrIpTQ5B5_CDELlRdE2B73whshvWtwdf4518yppcqkBeK4htWfHyQ9szljKCq-i385AHvbTv-ceqc0Iwh3aNviGezPmCDf_LtSRicberYLUPQAAAmdnef1NtpwcV80_dSSBpRoZ4w0Ni18uOjvd688AwtL2-3Fr04xLtnCrPVd_H_lYTKnwGL0bl5JExUF5AU_nDs6d8E0CW6w-wCG5_hf2zvYdNXnFxtC4nd6x_iGYIg5LBWhrvbhAOeKSDQUM6Av9pAeI-yEZnNUye8Rm9AnpnUfTJXDFKi3qmNyYrPJjb8qF0PY8Y9C0LAZiuIXQsobNIOHyLHXXolulIgdkpp-mDgCi6y_QSb56xudjtddgViVY577jwQyMmutw-s96mHqfXiQ73l_keMj6gcOH-lhfegKxR5OmVJB86JrmShP96SRsc-Bg1rCkH4AiXvJgU8\",\"e\":\"AQAB\",\"alg\":\"RSA-OAEP-256\"}"] for property model://perspectives.domains#System$Identifiable$TransportPublicKey[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[TRACE] [SYNC] (ExecutingRolePropertyDelta) SetProperty for "def:#lae8v3brdv$External" and property EnumeratedPropertyType "model://joopringelberg.nl#AMQPtestModel$Test$External$TestName"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[DEBUG] [RESOURCE] setProperty: set property model://joopringelberg.nl#AMQPtestModel$Test$External$TestName on role instance def:#lae8v3brdv$External to values ["Create a bespoke database for Bob"][0m
+[35m[DEBUG] [STATE] Entering phase1 of transaction 40[0m
+[35m[DEBUG] [STATE] Entering phase2 of transaction 40[0m
+[35m[DEBUG] [STATE] run sharing transaction from nonsharing transaction 40[0m
+[35m[DEBUG] [STATE]   Starting embedded sharing transaction because it was necessary.[0m
+[35m[DEBUG] [STATE]   Starting sharing transaction 41[0m
+[35m[DEBUG] [STATE]   Evaluate states - processing 0 invertedQueryResults[0m
+[35m[DEBUG] [STATE]   Entering phase1 of transaction 41[0m
+[35m[DEBUG] [STATE]   Entering phase2 of transaction 41[0m
+[35m[DEBUG] [STATE]   Evaluate states - processing 0 invertedQueryResults[0m
+[35m[DEBUG] [STATE]   Exiting phase 2 for transaction 41.[0m
+[35m[DEBUG] [STATE]   Ending transaction 41[0m
+[35m[DEBUG] [STATE]   Ending transaction that needed to be embedded.[0m
+[35m[DEBUG] [STATE] returning to nonsharing transaction 40 from sharing transaction.[0m
+[35m[DEBUG] [STATE] Exiting phase 2 for transaction 40.[0m
+[35m[DEBUG] [STATE] Ending transaction 40[0m
+[35m[DEBUG] [BROKER] There are no pending incoming transactions[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[35m[INFO] [TEST] Bob sees that the test has a name: "Create a bespoke database for Bob"[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[31m[TRACE] [TEST] Running in PDR instance: alice_macbook[0m
+[35m[TRACE] [TEST] Running in PDR instance: bob_macbook[0m
+[31m[TRACE] [TEST] Running in PDR instance: alice_macbook[0m
+[withTwoPDRsCachedNoBus] Starting AMQP unsubscribe for pdr2
+[withTwoPDRsCachedNoBus] AMQP unsubscribe completed for pdr2
+shutting down bob_macbook
+[withTwoPDRsCachedNoBus] Starting AMQP unsubscribe for pdr1
+[35m[INFO] [BROKER] Stopped reading post for queue b2fhxb6sbu[0m
+[withTwoPDRsCachedNoBus] AMQP unsubscribe completed for pdr1
+shutting down alice_macbook
+[35m[WARN] [STATE] No active context instances for state evaluation in ["def:#artuo1klz8"][0m
+[withPDRCached] Snapshot saved to: test/pdr-snapshot/universe/alice/snapshot-after-tests
+- Suite: AMQP synchronisation tests
+  ☠ Failed: test 'Create a bespoke database for Bob' failed with error because Bob should see that the test succeeded, but got error: Error: pollUntilTestFinishes timed out after 100 attempts of 100.0 ms waiting for: Bob to have a value for the test to succeed in pdrB. Last poll result: TestSucceeded property not found
+    at error$1 (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.amqp.node.js:5026:10)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.amqp.node.js:232979:46
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.amqp.node.js:232984:31
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.amqp.node.js:232990:57
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.amqp.node.js:4161:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.amqp.node.js:4231:19
+    at drain (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.amqp.node.js:4003:9)
+    at Object.enqueue (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.amqp.node.js:4024:11)
+    at Timeout._onTimeout (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.amqp.node.js:4222:27)
+    at listOnTimeout (node:internal/timers:614:17)
+
+1 test failed:
+
+In "AMQP synchronisation tests":
+  In "test 'Create a bespoke database for Bob' failed with error":
+Error: Error: Bob should see that the test succeeded, but got error: Error: pollUntilTestFinishes timed out after 100 attempts of 100.0 ms waiting for: Bob to have a value for the test to succeed in pdrB. Last poll result: TestSucceeded property not found
+    at error$1 (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.amqp.node.js:5026:10)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.amqp.node.js:232979:46
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.amqp.node.js:232984:31
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.amqp.node.js:232990:57
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.amqp.node.js:4161:22)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.amqp.node.js:4231:19
+    at drain (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.amqp.node.js:4003:9)
+    at Object.enqueue (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.amqp.node.js:4024:11)
+    at Timeout._onTimeout (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.amqp.node.js:4222:27)
+    at listOnTimeout (node:internal/timers:614:17)
+    at error$1 (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.amqp.node.js:5026:10)
+    at failure (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.amqp.node.js:233786:25)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.amqp.node.js:233840:20
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.amqp.node.js:234651:177
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.amqp.node.js:2208:36
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.amqp.node.js:1731:15
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.amqp.node.js:92:24
+    at synchronisationSuite (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.amqp.node.js:234647:61)
+    at file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.amqp.node.js:234760:31
+    at run (file:///Users/joopringelberg/Code/perspectives-monorepo/packages/perspectives-core/dist/test.amqp.node.js:4161:22)
+
+ ELIFECYCLE  Command failed with exit code 1.

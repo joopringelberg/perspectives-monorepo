@@ -360,9 +360,8 @@ domain model://perspectives.domains#CouchdbManagement@12.2
               callEffect cdb:AddCredentials( AuthorizedDomain, UserName, Password)
         state ThisIsMe = origin filledBy me
           -- Accounts needs this perspective to be able to add the CouchdbServer to his cm:MyCouchdbApp!
-          perspective of Accounts 
-            perspective on extern >> binder CouchdbServers
-              only (Create, Fill)
+          perspective on extern >> binder CouchdbServers
+            only (Create, Fill)
           on entry
             -- When a peer assigns the current user to the Accounts role,
             -- we make sure that the current user has the CouchdbServer bound
@@ -483,7 +482,7 @@ domain model://perspectives.domains#CouchdbManagement@12.2
               without props (IsPublic, Repositories$NameSpace)
             detail
 
-    context PublicRepositories = filter Repositories with IsPublic
+    context PublicRepositories = (filter Repositories with IsPublic) >> binding
 
     -- A Repositories instance comes complete with an (empty) Admin role.
     -- Moreover, as a side effect, both a read- and write database are created
@@ -554,7 +553,7 @@ domain model://perspectives.domains#CouchdbManagement@12.2
             bind context >> Admin to Admin in binding >> context
 
     context BespokeDatabases (relational) filledBy BespokeDatabase
-    context MyBespokeDatabases = filter BespokeDatabases with binding >> context >> Owner filledBy sys:Me
+    context MyBespokeDatabases = (filter BespokeDatabases with binding >> context >> Owner filledBy sys:Me) >> binding
     aspect thing sys:ContextWithNotification$Notifications
   -------------------------------------------------------------------------------
   ---- BESPOKEDATABASE
@@ -616,10 +615,6 @@ domain model://perspectives.domains#CouchdbManagement@12.2
     aspect sys:ContextWithNotification
 
     state Endorsed = extern >> binder Repositories >> AdminEndorses
-      perspective of Admin
-        perspective on Authors
-          only (Create, Fill, Remove)
-          props (FirstName, LastName) verbs (Consult)
 
     -- Embedded contexts are not removed automatically with their embedder!
     on exit
@@ -707,6 +702,11 @@ domain model://perspectives.domains#CouchdbManagement@12.2
 
       on exit 
         notify "You are no longer the administrator of the repository { context >> extern >> NameSpace_ }."
+
+      in context state Endorsed
+        perspective on Authors
+          only (Create, Fill, Remove)
+          props (FirstName, LastName) verbs (Consult)
 
       
       perspective on External
@@ -1178,10 +1178,12 @@ domain model://perspectives.domains#CouchdbManagement@12.2
       -- This state triggers UploadToRepository.
       state ProcessArc = AutoUpload 
               and (exists ArcSource) 
-              and ((callExternal sensor:ReadSensor( "clock", "now" ) returns DateTime > LastChangeDT + 10 seconds) or not exists LastChangeDT)
+              and ((callExternal sensor:ReadSensor( "clock", "now" ) returns DateTime > LastChangeDT + 1 seconds) or not exists LastChangeDT)
               and (IsTheOnlyVersion or (exists context >> BasedOnVersion))
         on entry
           do for Author
+            ArcFeedback = "Parsing and compiling the Arc source file for " + VersionedModelURI + "..."
+          do for Author after 500 Milliseconds
             -- If BasedOnVersion is not set, the PDR will generate new CUIDs.
             ArcFeedback = callExternal p:ParseAndCompileArc( VersionedModelURI, ArcSource, context >> BasedOnVersion >> VersionedModelURI ) returns String
             -- Even though we set LastChangeDT, state ProcessArc is not exited.
@@ -1193,7 +1195,7 @@ domain model://perspectives.domains#CouchdbManagement@12.2
         -- Why not roll up both states into one? I hope this design ensures that the required files are available.!
         state UploadToRepository = Store == "Repository"
           on entry
-            do for Author
+            do for Author after 500 Milliseconds
               -- This will upload an empty Translations table, too. VersionedModelURI should be Stable.
               callEffect p:UploadToRepository( VersionedModelURI, 
                 callExternal util:ReplaceR( "bind publicrole.*in sys:MySystem", "", ArcSource ) returns String, context >> BasedOnVersion >> VersionedModelURI)
@@ -1205,7 +1207,7 @@ domain model://perspectives.domains#CouchdbManagement@12.2
         
         state StoreInLocalDatabase = Store == "Locally"
           on entry
-            do for Author
+            do for Author after 500 Milliseconds
               callEffect p:StoreModelLocally( VersionedModelURI, ArcSource, context >> BasedOnVersion >> VersionedModelURI )
               Build = Build + 1
               MustUpload = false
@@ -1214,7 +1216,7 @@ domain model://perspectives.domains#CouchdbManagement@12.2
 
         state ApplyImmediately = ApplyInSession
           on entry
-            do for Author
+            do for Author after 500 Milliseconds
               callEffect p:ApplyImmediately( VersionedModelURI, ArcSource, context >> BasedOnVersion >> VersionedModelURI )
               MustUpload = false
             notify Author
@@ -1222,7 +1224,7 @@ domain model://perspectives.domains#CouchdbManagement@12.2
         
         state NoAction = not ApplyInSession
           on entry
-            do for Author
+            do for Author after 500 Milliseconds
               MustUpload = false
             notify Author
               "Version {External$Version} (build {Build}) has not been stored in the local store or applied to the current session."
@@ -1276,6 +1278,11 @@ domain model://perspectives.domains#CouchdbManagement@12.2
       perspective on extern
         props (DomeinFileName, Version, ArcSource, LastUpload) verbs (Consult)
         props (ArcFile, ArcFeedback, Description, IsRecommended, Build, Patch, LastChangeDT, MustUpload, AutoUpload, Store, ApplyInSession) verbs (Consult, SetPropertyValue)
+        -- It may happen that MustUpload is not set to false and then the Manifest sticks to (a substate of) AfterSuccesfulParse.
+        -- That means that no further change will cause one of the sustates to be re-entered. Hence we do not upload the model, store it in the local database or apply it immediately.
+        -- The Author can set MustUpload to false to exit AfterSuccesfulParse.
+        action UnlockForProcessing
+          MustUpload = false
       perspective on Translation
         only (Create, Remove, Delete)
         props (TranslationYaml, GenerateYaml, LastYamlChangeDT) verbs (Consult, SetPropertyValue, DeleteProperty)

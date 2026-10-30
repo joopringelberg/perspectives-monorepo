@@ -44,12 +44,13 @@ import Perspectives.Persistence.API (MonadPouchdb, deleteDocument)
 import Perspectives.Persistence.State (getCouchdbCredentials)
 import Perspectives.Persistence.Types (Credential(..))
 import Perspectives.Persistent.ChangesFeed (DocProducer, EventSource, createEventSource, docProducer)
-import Perspectives.PerspectivesState (transactionLevel)
+import Perspectives.PerspectivesState (transactionLevel, withTransactionPriority)
 import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), RoleType(..))
 import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransaction')
 import Perspectives.Sync.Channel (postDbName)
 import Perspectives.Sync.HandleTransaction (executeTransaction)
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer)
+import Perspectives.TransactionQueue (TransactionPriority(..))
 import Prelude (Unit, bind, discard, pure, unit, void, ($), (<>), (<))
 
 type URL = String
@@ -82,7 +83,7 @@ incomingPost url = do
         padding <- lift transactionLevel
         log $ padding <> "Executing incoming post transaction"
         lift
-          ( runMonadPerspectivesTransaction'
+          ( withTransactionPriority BackgroundTransaction $ runMonadPerspectivesTransaction'
               false
               (ENR $ EnumeratedRoleType sysUser)
               (executeTransaction t)

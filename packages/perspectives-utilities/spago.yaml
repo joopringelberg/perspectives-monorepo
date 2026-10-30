@@ -1,5 +1,11 @@
 package:
   name: perspectives-utilities
+  build:
+    censorProjectWarnings: all
+  test:
+    main: Test.Main
+    censorTestWarnings: all
+    dependencies: []
   dependencies:
     - arrays
     - console
@@ -13,6 +19,9 @@ package:
     - transformers
     - tuples
 workspace:
+  buildOpts:
+    censorLibraryWarnings: all
+    statVerbosity: no-stats
   packageSet:
     registry: 60.6.0
   extraPackages: {}

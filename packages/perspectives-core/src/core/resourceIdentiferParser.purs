@@ -56,10 +56,10 @@ isResourceIdentifier resId =
 
 -- TODO: replace the first part of the match by a regex that captures Couchdb database names;
 -- replace the second part by a regex that captures a GUID.
--- Match an arbitrary string built from word characters, separated by "#" from a
+-- Match a local Couchdb database name that starts with cw_, separated by "#" from a
 -- string built from word characters, digits and underscore.
 locRegex :: Regex
-locRegex = unsafeRegex "^(\\w+)#([_\\w\\d]+)$" noFlags
+locRegex = unsafeRegex "^(cw_\\w+)#([\\w$]+)$" noFlags
 
 parseResourceIdentifier :: forall f. ResourceIdentifier -> MonadPouchdb f DecomposedResourceIdentifier
 parseResourceIdentifier resId =
@@ -78,16 +78,20 @@ parseResourceIdentifier resId =
             Just (Just dbName), Just (Just g) -> pure $ Local dbName g
             _, _ -> throwError (error $ "Cannot parse this as a Local resource identifier: " <> resId)
         -- rem:url#guid
-        "rem" -> case match publicResourceUrlRegex rest of
+        "rem" -> case match remoteResourceUrlRegex rest of
           Nothing -> throwError (error $ "Cannot parse this as a Remote resource identifier: " <> resId)
           Just remMatches -> case index remMatches 1, index remMatches 2 of
-            Just (Just url), Just (Just g) -> pure $ Remote (url <> "/") g
+            Just (Just url), Just (Just g) -> pure $ Remote url g
             _, _ -> throwError (error $ "Cannot parse this as a Remote resource identifier: " <> resId)
-        "pub" -> case match publicResourceUrlRegex rest of
-          Nothing -> throwError (error $ "Cannot parse this as a Public resource identifier: " <> resId)
+        "pub" -> case match remoteResourceUrlRegex rest of
           Just remMatches -> case index remMatches 1, index remMatches 2 of
-            Just (Just url), Just (Just g) -> pure $ Remote (url <> "/") g
+            Just (Just url), Just (Just g) -> pure $ Public url g
             _, _ -> throwError (error $ "Cannot parse this as a Public resource identifier: " <> resId)
+          Nothing -> case match locRegex rest of
+            Just locMatches -> case index locMatches 1, index locMatches 2 of
+              Just (Just dbName), Just (Just g) -> pure $ Public dbName g
+              _, _ -> throwError (error $ "Cannot parse this as a Public resource identifier: " <> resId)
+            Nothing -> throwError (error $ "Cannot parse this as a Public resource identifier: " <> resId)
         "model" -> do
           sysId <- getSystemIdentifier
           { documentName } <- pure $ unsafePartial modelUri2ModelUrl resId
@@ -100,17 +104,17 @@ parseResourceIdentifier resId =
 -----------------------------------------------------------
 -- TEST THE SHAPE OF A PUBLIC RESOURCE URL
 -----------------------------------------------------------
--- | A pattern to match https://{authority}/cw_{databasename}/{SegmentedIdentifier} exactly.
--- | It is very permissive, allowing any character in the authority except the forward slash.
--- | The model name must start on an upper case alphabetic character.
--- | index 1 is the authority (scheme plus domain name).
--- | index 2 is the database name.
--- | index 3 is the resource name.
-publicResourceUrlPattern :: String
-publicResourceUrlPattern = "^(https://[^/]+/cw_[^/]+)/#(.+)$"
+-- | Match a remote endpoint whose database segment starts with cw_, followed by # and a guid.
+-- | Examples:
+-- |   https://perspectives.domains/cw_servers_and_repositories/#abc
+-- |   https://perspectives.domains/cw_servers_and_repositories#abc
+-- | index 1 is the endpoint URL.
+-- | index 2 is the resource name.
+remoteResourceUrlPattern :: String
+remoteResourceUrlPattern = "^(https://[^/]+/cw_[^/#]+/?)#(.+)$"
 
-publicResourceUrlRegex :: Regex
-publicResourceUrlRegex = unsafeRegex publicResourceUrlPattern noFlags
+remoteResourceUrlRegex :: Regex
+remoteResourceUrlRegex = unsafeRegex remoteResourceUrlPattern noFlags
 
 -----------------------------------------------------------
 -- THE DATABASE PART (POSSIBLY A URL) OF A RESOURCE IDENTIFIER TO READ FROM

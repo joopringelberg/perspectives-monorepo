@@ -44,6 +44,7 @@ import Data.Traversable (for_)
 import Data.TraversableWithIndex (traverseWithIndex)
 import Data.Tuple (Tuple(..))
 import Effect.Aff (error, killFiber)
+import Effect.Aff.Class (liftAff)
 import Foreign.Object (singleton)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.ApiTypes (PropertySerialization(..), RolSerialization(..))
@@ -51,15 +52,17 @@ import Perspectives.Assignment.SentenceCompiler (CompiledSentence, compileRoleSe
 import Perspectives.Assignment.SerialiseAsDeltas (serialiseRoleInstancesAndProperties)
 import Perspectives.Assignment.StateCache (CompiledAutomaticAction, CompiledNotification, CompiledRoleState, CompiledStateDependentPerspective, cacheCompiledRoleState, retrieveCompiledRoleState)
 import Perspectives.Assignment.Update (ConditionResult(..), isUndetermined, setActiveRoleState, setInActiveRoleState)
+import Perspectives.CompileActionEffect (compileActionEffectWith)
 import Perspectives.CompileRoleAssignment (compileAssignmentFromRole, withAuthoringRole)
 import Perspectives.CompileTimeFacets (addTimeFacets)
-import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), MP, MonadPerspectives, MonadPerspectivesTransaction, Updater, WithAssumptions, liftToInstanceLevel, runMonadPerspectivesQuery, (##=), (##>>), (###>>))
-import Perspectives.Identifiers (buitenRol)
+import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), LogLevel(..), LogTopic(..), MP, MonadPerspectives, MonadPerspectivesTransaction, Updater, WithAssumptions, liftToInstanceLevel, runMonadPerspectivesQuery, (##=), (##>>), (###>>))
+import Perspectives.Error.Pretty (humanizePerspectivesWarning)
+import Perspectives.Identifiers (buitenRol, typeUri2typeNameSpace_)
 import Perspectives.Instances.Builders (createAndAddRoleInstance)
 import Perspectives.Instances.Combinators (filter, not') as COMB
 import Perspectives.Instances.Me (isMe)
 import Perspectives.Instances.ObjectGetters (Filled_(..), Filler_(..), contextType, filledBy, getActiveRoleStates_, roleType_)
-import Perspectives.Logging (traceState)
+import Perspectives.Logging (logWhen, traceState)
 import Perspectives.ModelDependencies (contextWithNotification, notificationMessage, notifications)
 import Perspectives.Names (getMySystem)
 import Perspectives.PerspectivesState (addBinding, addWarning, getPerspectivesUser, pushFrame, restoreFrame, transactionLevel)
@@ -72,11 +75,12 @@ import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunctio
 import Perspectives.Representation.Range (Range(..))
 import Perspectives.Representation.State (Notification(..), State(..), StateDependentPerspective(..), StateFulObject(..))
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
-import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedRoleType(..), RoleType, StateIdentifier)
+import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedRoleType(..), RoleType, StateIdentifier(..))
 import Perspectives.ScheduledAssignment (StateEvaluation(..))
 import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.Sync.Transaction (Transaction(..))
 import Perspectives.Types.ObjectGetters (hasContextAspect, roleRootState, subStates_)
+import Perspectives.Warning (PerspectivesWarning(..))
 
 -- | This function has a Partial constraint because it only handles the AutomaticRoleAction case of AutomaticAction,
 -- | and idem of Notification and StateDependentPerspective.
@@ -114,7 +118,7 @@ compileState stateId = do
   compileEffect :: Partial => RoleType -> AutomaticAction -> MP CompiledAutomaticAction
   compileEffect subject (RoleAction r@{ effect, currentContextCalculation }) = do
     contextGetter <- role2context currentContextCalculation
-    updater' <- compileAssignmentFromRole effect >>= pure <<< withAuthoringRole subject
+    updater' <- compileActionEffectWith compileAssignmentFromRole effect subject (Just stateId) >>= pure <<< withAuthoringRole subject
     updater <- addTimeFacets updater' r subject stateId
     pure { updater, contextGetter }
 
@@ -136,26 +140,37 @@ evaluateRootRoleState roleId = do
 -- | Put an error boundary around this function.
 evaluateRoleState :: RoleInstance -> StateIdentifier -> MonadPerspectivesTransaction Unit
 evaluateRoleState roleId stateId = do
-  roleIsInState' <- conditionSatisfied roleId stateId
-  case roleIsInState' of
-    Determined roleIsInState ->
-      if roleIsInState then do
-        roleWasInState <- lift $ isActive stateId roleId
-        if roleWasInState then do
-          padding <- lift transactionLevel
-          lift $ toReadable stateId >>= \readableStateId -> traceState (padding <> "Already in role state " <> unwrap readableStateId <> ": " <> unwrap roleId)
-          subStates <- lift $ subStates_ stateId
-          for_ subStates (evaluateRoleState roleId)
-        else enteringRoleState roleId stateId
-      else do
-        roleWasInState <- lift $ isActive stateId roleId
-        if roleWasInState then exitingRoleState roleId stateId
-        else pure unit
-    Undetermined -> modify
-      ( \t -> over Transaction
-          (\tr -> tr { postponedStateEvaluations = cons (RoleStateEvaluation stateId roleId) tr.postponedStateEvaluations })
-          t
-      )
+  -- an extra guard: if the role is not in the parent state, then it cannot be in this state either.
+  -- Make an exception for the root state, which has no parent state.
+  rType <- lift $ roleType_ roleId
+  let (parentStateId :: StateIdentifier) = (over StateIdentifier typeUri2typeNameSpace_) stateId
+  isInParentState <- lift $ isActive parentStateId roleId
+  if unwrap stateId == unwrap rType || isInParentState then do
+    padding <- lift transactionLevel
+    lift $ toReadable stateId >>= \readableStateId -> traceState (padding <> "Evaluating role state " <> unwrap readableStateId <> ": " <> unwrap roleId)
+    roleIsInState' <- conditionSatisfied roleId stateId
+    case roleIsInState' of
+      Determined roleIsInState ->
+        if roleIsInState then do
+          roleWasInState <- lift $ isActive stateId roleId
+          if roleWasInState then do
+            lift $ logWhen Trace STATE
+              ((<>) padding <$> (show <$> (humanizePerspectivesWarning $ AlreadyInRoleState roleId stateId)))
+            subStates <- lift $ subStates_ stateId
+            for_ subStates (evaluateRoleState roleId)
+          else enteringRoleState roleId stateId
+        else do
+          roleWasInState <- lift $ isActive stateId roleId
+          if roleWasInState then exitingRoleState roleId stateId
+          else do
+            lift $ logWhen Trace STATE
+              ((<>) padding <$> (show <$> (humanizePerspectivesWarning $ RoleStateNotValid roleId stateId)))
+      Undetermined -> modify
+        ( \t -> over Transaction
+            (\tr -> tr { postponedStateEvaluations = cons (RoleStateEvaluation stateId roleId) tr.postponedStateEvaluations })
+            t
+        )
+  else pure unit
 
 -- | This function is only called (and should only be called) on states whose condition is valid.
 -- | On entering a state, we register that state with the role instance and trigger client query updates.
@@ -186,6 +201,7 @@ enteringRoleState roleId stateId = do
     contextGetter
     allowedUser
     \currentactors cid rid -> do
+      lift $ humanizePerspectivesWarning (RunRoleStateAutomaticAction roleId stateId) >>= \warning -> traceState (padding <> show warning)
       oldFrame <- lift pushFrame
       -- no need to add currentcontext for context states; a binding has been added compile time.
       lift $ addBinding "currentcontext" [ (unwrap cid) ]
@@ -194,7 +210,16 @@ enteringRoleState roleId stateId = do
         (updater rid)
         \e ->
           -- setInActiveRoleState stateId roleId 
-          lift $ addWarning ({ message: padding <> "Error in automatic action in state " <> show stateId <> " of role instance " <> show roleId <> ".", error: show e, externalRoleId: "", contextName: "" })
+          do
+            warning <- lift $ humanizePerspectivesWarning (AutomaticActionError stateId)
+            traceState (padding <> show warning)
+            lift $ addWarning
+              ( { message: padding <> show warning <> " in role instance " <> show roleId <> "."
+                , error: show e
+                , externalRoleId: ""
+                , contextName: ""
+                }
+              )
       lift $ restoreFrame oldFrame
 
   forWithIndex_ notifyOnEntry \(allowedUser :: RoleType) ({ contextGetter, updater } :: CompiledNotification) -> whenRightUser
@@ -313,7 +338,9 @@ exitingRoleState roleId stateId = do
   case lookup (Tuple (unwrap roleId) stateId) fibers of
     Nothing -> pure unit
     Just f -> do
-      lift $ lift $ killFiber (error "Stopped execution of repeating action in state") f
+      readableStateId <- lift $ toReadable stateId
+      traceState (padding <> "Stopping repeating action in state " <> unwrap readableStateId)
+      lift $ liftAff $ killFiber (error ("Stopped execution of repeating action in state " <> unwrap readableStateId)) f
       lift $ modify \s@{ transactionFibers } -> s { transactionFibers = delete (Tuple (unwrap roleId) stateId) transactionFibers }
 
   { automaticOnExit, notifyOnExit } <- getCompiledState stateId

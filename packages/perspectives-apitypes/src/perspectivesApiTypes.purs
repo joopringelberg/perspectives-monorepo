@@ -66,6 +66,8 @@ data RequestType
   | GetPerspectives
   | GetPerspective
   | GetPerspectiveForUser
+  | GetHelpConversation
+  | GetConversationBranch
   | GetScreen
   | GetTableForm
   | GetContextActions
@@ -77,10 +79,12 @@ data RequestType
   | GetFile
   | GetPublicUrl
   | GetSelectedRoleFromClipboard
+  | SubscribeSelectedRoleFromClipboard
   | GetSettings
   | GetWiderContexts
   | GetInspectableContext
   | GetInspectableRole
+  | GetModelContextGraph
 
   | RemoveRoleFromClipboard
   | AddRoleToClipboard
@@ -94,8 +98,11 @@ data RequestType
   | RemoveContext
   | DeleteRole
   | Bind_ -- Formerly SetBinding
+  | FillWithProvidedType
+  | FillWithRequiredType
   | RemoveBinding
   | SetProperty
+  | SaveConversationBranch
   | DeleteProperty
 
   | Action
@@ -117,10 +124,10 @@ data RequestType
   | Unsubscribe
   | ShutDown
   | CheckBinding
+  | GetMostGeneralAllowedBindingType
   | WrongRequest
   | EvaluateRoleInstance
   | RestoreContextForUser
-  | DeleteResource
 
 derive instance genericRequestType :: Generic RequestType _
 
@@ -143,10 +150,12 @@ instance decodeRequestType :: ReadForeign RequestType where
     "GetFile" -> GetFile
     "GetPublicUrl" -> GetPublicUrl
     "GetSelectedRoleFromClipboard" -> GetSelectedRoleFromClipboard
+    "SubscribeSelectedRoleFromClipboard" -> SubscribeSelectedRoleFromClipboard
     "GetSettings" -> GetSettings
     "GetWiderContexts" -> GetWiderContexts
     "GetInspectableContext" -> GetInspectableContext
     "GetInspectableRole" -> GetInspectableRole
+    "GetModelContextGraph" -> GetModelContextGraph
     "RemoveRoleFromClipboard" -> RemoveRoleFromClipboard
     "AddRoleToClipboard" -> AddRoleToClipboard
 
@@ -158,6 +167,8 @@ instance decodeRequestType :: ReadForeign RequestType where
     "GetPerspectives" -> GetPerspectives
     "GetPerspective" -> GetPerspective
     "GetPerspectiveForUser" -> GetPerspectiveForUser
+    "GetHelpConversation" -> GetHelpConversation
+    "GetConversationBranch" -> GetConversationBranch
     "GetScreen" -> GetScreen
     "GetTableForm" -> GetTableForm
     "GetContextActions" -> GetContextActions
@@ -179,10 +190,14 @@ instance decodeRequestType :: ReadForeign RequestType where
     "RemoveContext" -> RemoveContext
     "DeleteRole" -> DeleteRole
     "Bind_" -> Bind_
+    "FillWithProvidedType" -> FillWithProvidedType
+    "FillWithRequiredType" -> FillWithRequiredType
     "RemoveBinding" -> RemoveBinding
     "Bind" -> Bind
     "CheckBinding" -> CheckBinding
+    "GetMostGeneralAllowedBindingType" -> GetMostGeneralAllowedBindingType
     "SetProperty" -> SetProperty
+    "SaveConversationBranch" -> SaveConversationBranch
     "DeleteProperty" -> DeleteProperty
     "Action" -> Action
     "ContextAction" -> ContextAction
@@ -193,7 +208,6 @@ instance decodeRequestType :: ReadForeign RequestType where
     "Save" -> Save
     "EvaluateRoleInstance" -> EvaluateRoleInstance
     "RestoreContextForUser" -> RestoreContextForUser
-    "DeleteResource" -> DeleteResource
     _ -> WrongRequest
 
 instance showRequestType :: Show RequestType where

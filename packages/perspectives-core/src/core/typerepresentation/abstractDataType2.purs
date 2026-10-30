@@ -34,7 +34,6 @@
 module Perspectives.Representation.ADT where
 
 import Data.Array (catMaybes, findIndex, fold, intercalate, intersect, length, nub, singleton, union)
-import Data.Eq.Generic (genericEq)
 import Data.Foldable (class Foldable, foldMap, foldlDefault, foldrDefault)
 import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe(..), isJust)
@@ -81,7 +80,13 @@ instance (Show a) => PrettyPrint (ADT a) where
   prettyPrint' t (SUM terms) = t <> "(SUM [\n" <> (intercalate ",\n" $ prettyPrint' (t <> "  ") <$> terms) <> "\n" <> t <> "  ])"
 
 instance eqADT :: (Eq a) => Eq (ADT a) where
-  eq b1 b2 = genericEq b1 b2
+  eq (ST a1) (ST a2) = a1 == a2
+  eq (ST a1) (UET a2) = a1 == a2
+  eq (UET a1) (ST a2) = a1 == a2
+  eq (UET a1) (UET a2) = a1 == a2
+  eq (SUM adts1) (SUM adts2) = adts1 == adts2
+  eq (PROD adts1) (PROD adts2) = adts1 == adts2
+  eq _ _ = false
 
 derive instance ordADT :: (Ord a) => Ord (ADT a)
 

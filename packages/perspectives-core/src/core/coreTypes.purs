@@ -32,8 +32,10 @@ module Perspectives.CoreTypes
   , AssumptionRegister
   , AssumptionTracking
   , BrokerService
+  , ConversationCache
   , ContextInstances
   , ContextPropertyValueGetter
+  , CapturedBindings
   , CryptoKey'
   , DbName
   , DeltaCache
@@ -42,7 +44,7 @@ module Perspectives.CoreTypes
   , InformedAssumption(..)
   , IntegrityFix(..)
   , JustInTimeModelLoad(..)
-  , LibEffect1
+  , class MonadPerspectivesWithState
   , LibEffect2
   , LibEffect3
   , LibFunc1
@@ -59,6 +61,7 @@ module Perspectives.CoreTypes
   , MonadPerspectivesTransaction
   , ObjectsGetter
   , OrderedDelta(..)
+  , PendingSettledStack
   , PerspectivesExtraState
   , PerspectivesState
   , PropertyValueGetter
@@ -87,6 +90,8 @@ module Perspectives.CoreTypes
   , addPublicResource
   , assumption
   , class Cacheable
+  , class HasPerspectivesState
+  , class MonadPerspectivesClass
   , class Persistent
   , dbLocalName
   , evalMonadPerspectivesQuery
@@ -94,18 +99,30 @@ module Perspectives.CoreTypes
   , execMonadPerspectivesQuery
   , forceArray
   , forceTypeArray
+  , getPS
   , liftToInstanceLevel
   , mkLibEffect1
   , mkLibEffect2
   , mkLibEffect3
+  , mkLibEffect4
+  , mkLibEffect5
   , mkLibFunc1
   , mkLibFunc2
   , mkLibFunc3
+  , mkLibFunc4
+  , mkLibFunc5
+  , modifyPS
+  , newPendingSettledStack
+  , pushPendingSettledFrame
+  , appendPendingSettled
+  , popPendingSettledFrame
+  , perspectivesState
   , removeInternally
   , representInternally
   , resourceIdToBeStored
   , resourceToBeStored
   , retrieveInternally
+  , runMonadPerspectives
   , runMonadPerspectivesQuery
   , runMonadPerspectivesQueryToObject
   , runTypeLevelToArray
@@ -119,9 +136,12 @@ module Perspectives.CoreTypes
   ) where
 
 import Control.Monad.AvarMonadAsk (gets, modify)
-import Control.Monad.Reader (ReaderT, lift)
+import Control.Monad.Error.Class (class MonadError, class MonadThrow)
+import Control.Monad.Except (ExceptT)
+import Control.Monad.Reader (ReaderT, ask, lift)
 import Control.Monad.Writer (WriterT, runWriterT)
 import Data.Array (cons, foldMap, foldl, foldr, head, union)
+import Data.Array (uncons) as Array
 import Data.Eq.Generic (genericEq)
 import Data.Foldable (class Foldable)
 import Data.Generic.Rep (class Generic)
@@ -132,11 +152,16 @@ import Data.Nullable (Nullable)
 import Data.Ord.Generic (genericCompare)
 import Data.Show.Generic (genericShow)
 import Data.Tuple (Tuple(..))
+import Effect (Effect)
 import Effect.Aff (Aff, Fiber, throwError)
-import Effect.Aff.AVar (AVar, empty)
-import Effect.Aff.Class (liftAff)
-import Effect.Class (liftEffect)
-import Effect.Exception (error)
+import Effect.Aff.AVar (AVar, empty, put, read, take)
+import Effect.Aff.Class (class MonadAff, liftAff)
+import Effect.Class (class MonadEffect, liftEffect)
+import Effect.Exception (Error, error)
+import Effect.Ref (Ref)
+import Effect.Ref (new, modify_, read, write) as Ref
+import Effect.Unsafe (unsafePerformEffect)
+import Foreign (Foreign)
 import Foreign.Object (Object)
 import Foreign.Object as F
 import LRUCache (Cache, defaultGetOptions, delete, get, set)
@@ -147,13 +172,13 @@ import Perspectives.DependencyTracking.Array.Trans (ArrayT(..), runArrayT)
 import Perspectives.DomeinFile (DomeinFile)
 import Perspectives.External.HiddenFunctionCache (HiddenFunctionDescription)
 import Perspectives.InstanceRepresentation (PerspectContext, PerspectRol)
-import Perspectives.Instances.Environment (Environment)
 import Perspectives.InvertedQuery (InvertedQuery)
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord)
 import Perspectives.Persistence.State (getSystemIdentifier)
-import Perspectives.Persistence.Types (PouchdbState)
+import Perspectives.Persistence.Types (PouchdbState, MonadPouchdb, runMonadPouchdbWithState)
 import Perspectives.Persistent.ChangesFeed (EventSource)
 import Perspectives.Repetition (Duration)
+import Perspectives.Representation.Action (StartMoment)
 import Perspectives.Representation.Class.Identifiable (class Identifiable, identifier)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value)
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic)
@@ -161,7 +186,8 @@ import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedPrope
 import Perspectives.ResourceIdentifiers.Parser (pouchdbDatabaseName)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri, Readable, Stable)
 import Perspectives.Sync.Transaction (Transaction)
-import Prelude (class Eq, class Monoid, class Ord, class Semigroup, class Show, Unit, bind, compare, eq, pure, show, unit, ($), (<<<), (<>), (>>=))
+import Perspectives.TransactionQueue (TransactionQueue)
+import Prelude (class Eq, class Monad, class Monoid, class Ord, class Semigroup, class Show, Unit, bind, compare, eq, pure, show, unit, ($), (<$>), (<<<), (<>), (*>), (>>=))
 import Simple.JSON (class ReadForeign, class WriteForeign)
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -186,7 +212,12 @@ type ResourceDeltasCache = Cache (Array DeltaStoreRecord)
 -- | In-memory cache for getDeltasForRoleInstance results, keyed by safe role instance ID.
 type RoleInstanceDeltasCache = Cache (Array DeltaStoreRecord)
 
+-- | Decoded conversations.json values, keyed by stable model URI.
+type ConversationCache = Object Foreign
+
 type BrokerService = ConnectAndSubscriptionParameters (url :: String)
+
+type CapturedBindings = Array (Tuple String (Array String))
 
 type PerspectivesState = PouchdbState PerspectivesExtraState
 
@@ -215,8 +246,6 @@ type PerspectivesExtraState =
 
   , queryAssumptionRegister :: AssumptionRegister
 
-  , variableBindings :: Environment (Array String)
-
   , indexedRoles :: Object RoleInstance
 
   , indexedContexts :: Object ContextInstance
@@ -235,10 +264,17 @@ type PerspectivesExtraState =
 
   , stompClient :: Maybe StompClient
 
+  -- | Factory used to create a Stomp client for the given broker URL.
+  -- | Defaults to the real `createStompClient` implementation.
+  -- | In tests this field can be replaced with a stub factory that creates an
+  -- | in-process message-bus client, so no real RabbitMQ connection is required.
+  , stompClientFactory :: String -> Effect StompClient
+
   , warnings :: Array Warning
 
   -- Do not confuse with transactionNumber! This member is used in runMonadPerspectivesTransaction.
   , transactionFlag :: AVar Boolean
+  , transactionQueue :: TransactionQueue
 
   , transactionWithTiming :: AVar RepeatingTransaction
 
@@ -271,7 +307,9 @@ type PerspectivesExtraState =
 
   , translations :: Object TranslationTable
 
-  , setPDRStatus :: String -> String -> Unit
+  , conversations :: ConversationCache
+
+  , setPDRStatus :: String -> String -> String -> Unit
 
   , typeToBeFixed :: AVar TypeFix
 
@@ -280,6 +318,16 @@ type PerspectivesExtraState =
   , modelUris :: Map (ModelUri Readable) (ModelUri Stable)
 
   , logConfig :: LogConfig
+
+  -- | Optional ANSI color escape prefix used to color full log messages for this PDR instance.
+  -- | Use `Nothing` for uncolored output.
+  , logColor :: Maybe String
+
+  -- | A stack of frames, one per currently open (nested) runMonadPerspectivesTransaction' call.
+  -- | `scheduleSettledTransaction` appends to the top frame instead of dispatching immediately, so that
+  -- | a "once settled" continuation is only handed to `transactionWithTiming` after the transaction that
+  -- | scheduled it (including everything it triggered) has actually finished. See transaction-execution.md.
+  , pendingSettledTransactions :: PendingSettledStack
   )
 
 type Warning = { message :: String, error :: String, externalRoleId :: String, contextName :: String }
@@ -287,7 +335,7 @@ type Warning = { message :: String, error :: String, externalRoleId :: String, c
 -----------------------------------------------------------
 -- STRUCTURED LOGGING
 -----------------------------------------------------------
-data LogTopic = SYNC | BROKER | QUERY | PERSISTENCE | STATE | AUTH | MODEL | UPGRADE | PARSER | COMPILER | INSTALL | OTHER
+data LogTopic = SYNC | BROKER | QUERY | PERSISTENCE | STATE | AUTH | MODEL | UPGRADE | PARSER | COMPILER | INSTALL | DELTA | TEST | RESOURCE | STARTUP | ACTION | OTHER
 
 instance Show LogTopic where
   show SYNC = "SYNC"
@@ -301,6 +349,11 @@ instance Show LogTopic where
   show PARSER = "PARSER"
   show COMPILER = "COMPILER"
   show INSTALL = "INSTALL"
+  show DELTA = "DELTA"
+  show TEST = "TEST"
+  show RESOURCE = "RESOURCE"
+  show STARTUP = "STARTUP"
+  show ACTION = "ACTION"
   show OTHER = "OTHER"
 
 instance Eq LogTopic where
@@ -313,6 +366,7 @@ data LogLevel = Trace | Debug | Info | Warn | Error | Silent
 
 derive instance eqLogLevel :: Eq LogLevel
 
+-- Ord is derived from the order of the constructors, so Trace < Debug < Info < Warn < Error < Silent
 derive instance ordLogLevel :: Ord LogLevel
 
 instance showLogLevel :: Show LogLevel where
@@ -338,6 +392,10 @@ type RuntimeOptions =
   , privateKey :: Maybe CryptoKey'
   -- Default: the CryptoKey object that has been created on setting up the installation. This is extractable.
   , publicKey :: Maybe CryptoKey'
+  -- Default: the RSA-OAEP CryptoKey object that has been created on setting up the installation. This is not extractable.
+  , transportPrivateKey :: Maybe CryptoKey'
+  -- Default: the RSA-OAEP CryptoKey object that has been created on setting up the installation. This is extractable.
+  , transportPublicKey :: Maybe CryptoKey'
   -- Default: the package number taken from package.json
   , myContextsVersion :: String
   }
@@ -357,7 +415,7 @@ data RepeatingTransaction
       , instanceId :: String
       , stateId :: StateIdentifier
       , authoringRole :: RoleType
-      , startMoment :: Maybe Duration
+      , startMoment :: StartMoment
       , endMoment :: Maybe Duration
       }
   | RepeatNtimes
@@ -367,7 +425,7 @@ data RepeatingTransaction
       , instanceId :: String
       , stateId :: StateIdentifier
       , authoringRole :: RoleType
-      , startMoment :: Maybe Duration
+      , startMoment :: StartMoment
       , endMoment :: Maybe Duration
       }
   | PostponedTransaction
@@ -377,8 +435,57 @@ data RepeatingTransaction
       , authoringRole :: RoleType
       , startMoment :: Duration
       }
+  | SettledTransaction
+      { transaction :: MonadPerspectivesTransaction Unit
+      , instanceId :: String
+      , stateId :: Maybe StateIdentifier
+      , authoringRole :: RoleType
+      , capturedBindings :: CapturedBindings
+      }
+
+-----------------------------------------------------------
+-- PENDINGSETTLEDSTACK
+-----------------------------------------------------------
+-- | A mutable stack of frames of not-yet-dispatched `SettledTransaction`s.
+-- | Each `runMonadPerspectivesTransaction'` call (top-level or embedded) pushes a fresh, empty frame
+-- | before running its action, and pops (and drains) its own frame right before it finally raises the
+-- | transaction flag again. `scheduleSettledTransaction` appends to the top frame instead of dispatching
+-- | to `transactionWithTiming` right away. This nests correctly because embedded transactions push and
+-- | pop their own frame around their own execution, so an outer frame is only drained after every
+-- | frame nested inside it (including cascading automatic-action sub-transactions) has been drained first.
+newtype PendingSettledStack = PendingSettledStack (Ref (Array (Array RepeatingTransaction)))
+
+-- | Creates a new, empty stack. Takes a dummy argument to prevent the CAF from being shared.
+newPendingSettledStack :: Unit -> PendingSettledStack
+newPendingSettledStack _ = unsafePerformEffect (PendingSettledStack <$> Ref.new [])
+
+pushPendingSettledFrame :: PendingSettledStack -> Effect Unit
+pushPendingSettledFrame (PendingSettledStack ref) = Ref.modify_ (\stack -> [] `cons` stack) ref
+
+appendPendingSettled :: PendingSettledStack -> RepeatingTransaction -> Effect Unit
+appendPendingSettled (PendingSettledStack ref) rt = Ref.modify_ appendToTop ref
+  where
+  appendToTop :: Array (Array RepeatingTransaction) -> Array (Array RepeatingTransaction)
+  appendToTop stack = case Array.uncons stack of
+    Nothing -> [ [ rt ] ]
+    Just { head: frame, tail } -> (frame <> [ rt ]) `cons` tail
+
+-- | Pops the top frame off the stack, returning its (possibly empty) contents.
+popPendingSettledFrame :: PendingSettledStack -> Effect (Array RepeatingTransaction)
+popPendingSettledFrame (PendingSettledStack ref) = do
+  stack <- Ref.read ref
+  case Array.uncons stack of
+    Nothing -> pure []
+    Just { head: frame, tail } -> Ref.write tail ref *> pure frame
 
 data JustInTimeModelLoad = LoadModel (ModelUri Stable) | ModelLoaded | LoadingFailed String | Stop | HotLine (AVar JustInTimeModelLoad)
+
+instance Show JustInTimeModelLoad where
+  show (LoadModel uri) = "LoadModel " <> unwrap uri
+  show ModelLoaded = "ModelLoaded"
+  show (LoadingFailed msg) = "LoadingFailed " <> msg
+  show Stop = "Stop"
+  show (HotLine _) = "HotLine <AVar>"
 
 -----------------------------------------------------------
 -- ASSUMPTIONS
@@ -428,9 +535,17 @@ instance Ord InformedAssumption where
 -----------------------------------------------------------
 -- MONADPERSPECTIVES
 -----------------------------------------------------------
--- | MonadPerspectives is an instance of MonadAff.
--- | So, with liftAff we lift an operation in Aff to MonadPerspectives.
-type MonadPerspectives = ReaderT (AVar PerspectivesState) Aff
+-- | MonadPerspectives is a type alias for MonadPouchdb PerspectivesExtraState.
+-- | It inherits all instances (Functor, Apply, Applicative, Bind, Monad, MonadEffect,
+-- | MonadAff, MonadAsk (AVar PerspectivesState), MonadReader (AVar PerspectivesState),
+-- | MonadThrow Error, MonadError Error, MonadRec, Alt) from MonadPouchdb.
+-- | Use runMonadPerspectives to run a MonadPerspectives computation given the state AVar.
+type MonadPerspectives = MonadPouchdb PerspectivesExtraState
+
+-- | Run a MonadPerspectives action given the state AVar.
+-- | The action gets its own, fresh variable bindings (they are not shared with other fibers).
+runMonadPerspectives :: forall a. MonadPerspectives a -> AVar PerspectivesState -> Aff a
+runMonadPerspectives = runMonadPouchdbWithState
 
 type MP = MonadPerspectives
 
@@ -605,6 +720,92 @@ liftToInstanceLevel f = ArrayT <<< lift <<< runArrayT <<< f
 type MonadPerspectivesTransaction = ReaderT (AVar Transaction) MonadPerspectives
 
 type MPT = MonadPerspectivesTransaction
+
+-----------------------------------------------------------
+-- MONADPERSPECTIVESCLASS
+-----------------------------------------------------------
+-- | Capability class for all monads in the Perspectives monad stack.
+-- | Restricts error boundary functions and other utilities to Perspectives-related monads
+-- | (MonadPerspectives, MonadPerspectivesTransaction, AssumptionTracking, MonadPerspectivesQuery).
+-- | State access is intentionally not a superclass here: the generic ReaderT instance
+-- | for MonadPerspectivesTransaction changes the Reader environment, so a separate
+-- | state capability should be introduced when functions are generalized.
+-- | Because these capabilities are superclasses, any function that requires them
+-- | can be called wherever a MonadPerspectivesClass constraint is satisfied.
+class
+  ( Monad m
+  , MonadEffect m
+  , MonadAff m
+  , MonadThrow Error m
+  , MonadError Error m
+  ) <=
+  MonadPerspectivesClass m
+
+class (MonadPerspectivesClass m, HasPerspectivesState s m) <= MonadPerspectivesWithState s m | m -> s
+
+instance monadPerspectivesWithStateMP :: MonadPerspectivesWithState f (MonadPouchdb f)
+
+instance monadPerspectivesWithStateMPT :: MonadPerspectivesWithState s m => MonadPerspectivesWithState s (ReaderT e m)
+
+instance monadPerspectivesWithStateAssumptionTracking :: (Monoid w, MonadPerspectivesWithState s m) => MonadPerspectivesWithState s (WriterT w m)
+
+instance monadPerspectivesWithStateMPQ :: MonadPerspectivesWithState s m => MonadPerspectivesWithState s (ArrayT m)
+
+instance monadPerspectivesWithStateExceptT :: MonadPerspectivesWithState s m => MonadPerspectivesWithState s (ExceptT Error m)
+
+instance monadPerspectivesClassMP :: MonadPerspectivesClass (MonadPouchdb f)
+
+instance monadPerspectivesClassMPT :: MonadPerspectivesClass m => MonadPerspectivesClass (ReaderT e m)
+
+instance monadPerspectivesClassAssumptionTracking :: (Monoid w, MonadPerspectivesClass m) => MonadPerspectivesClass (WriterT w m)
+
+instance monadPerspectivesClassMPQ :: MonadPerspectivesClass m => MonadPerspectivesClass (ArrayT m)
+
+instance monadPerspectivesClassExceptT :: MonadPerspectivesClass m => MonadPerspectivesClass (ExceptT Error m)
+
+-----------------------------------------------------------
+-- HASPERSPECTIVESSTATE
+-----------------------------------------------------------
+-- | Capability class for monads that can access a Pouchdb-backed Perspectives state.
+-- | The row parameter allows this to work for MonadPouchdb directly while still
+-- | supporting the concrete PerspectivesExtraState row used by MonadPerspectives.
+class MonadAff m <= HasPerspectivesState (s :: Row Type) m | m -> s where
+  perspectivesState :: m (AVar (PouchdbState s))
+
+instance hasPerspectivesStateMP :: HasPerspectivesState f (MonadPouchdb f) where
+  perspectivesState = ask
+
+instance hasPerspectivesStateMPT :: HasPerspectivesState s m => HasPerspectivesState s (ReaderT e m) where
+  perspectivesState = lift perspectivesState
+
+instance hasPerspectivesStateAssumptionTracking :: (Monoid w, HasPerspectivesState s m) => HasPerspectivesState s (WriterT w m) where
+  perspectivesState = lift perspectivesState
+
+instance hasPerspectivesStateMPQ :: HasPerspectivesState s m => HasPerspectivesState s (ArrayT m) where
+  perspectivesState = ArrayT (perspectivesState >>= pure <<< pure)
+
+instance hasPerspectivesStateExceptT :: HasPerspectivesState s m => HasPerspectivesState s (ExceptT e m) where
+  perspectivesState = lift perspectivesState
+
+getPS
+  :: forall m a
+   . HasPerspectivesState PerspectivesExtraState m
+  => (PerspectivesState -> a)
+  -> m a
+getPS f = do
+  st <- perspectivesState
+  s <- liftAff $ read st
+  pure (f s)
+
+modifyPS
+  :: forall m
+   . HasPerspectivesState PerspectivesExtraState m
+  => (PerspectivesState -> PerspectivesState)
+  -> m Unit
+modifyPS f = do
+  st <- perspectivesState
+  s <- liftAff $ take st
+  liftAff $ put (f s) st
 
 -----------------------------------------------------------
 -- UPDATER
@@ -823,3 +1024,23 @@ type LibFunc3 = Array String -> Array String -> Array String -> (RoleInstance ~~
 
 mkLibFunc3 :: String -> ThreeValuedLogic -> LibFunc3 -> Tuple String HiddenFunctionDescription
 mkLibFunc3 name isFunctional f = Tuple name { func: unsafeCoerce f, nArgs: 3, isFunctional, isEffect: false }
+
+type LibEffect4 = Array String -> Array String -> Array String -> Array String -> RoleInstance -> MonadPerspectivesTransaction Unit
+
+mkLibEffect4 :: String -> ThreeValuedLogic -> LibEffect4 -> Tuple String HiddenFunctionDescription
+mkLibEffect4 name isFunctional f = Tuple name { func: unsafeCoerce f, nArgs: 4, isFunctional, isEffect: true }
+
+type LibFunc4 = Array String -> Array String -> Array String -> Array String -> (RoleInstance ~~> Value)
+
+mkLibFunc4 :: String -> ThreeValuedLogic -> LibFunc4 -> Tuple String HiddenFunctionDescription
+mkLibFunc4 name isFunctional f = Tuple name { func: unsafeCoerce f, nArgs: 4, isFunctional, isEffect: false }
+
+type LibEffect5 = Array String -> Array String -> Array String -> Array String -> Array String -> RoleInstance -> MonadPerspectivesTransaction Unit
+
+mkLibEffect5 :: String -> ThreeValuedLogic -> LibEffect5 -> Tuple String HiddenFunctionDescription
+mkLibEffect5 name isFunctional f = Tuple name { func: unsafeCoerce f, nArgs: 5, isFunctional, isEffect: true }
+
+type LibFunc5 = Array String -> Array String -> Array String -> Array String -> Array String -> (RoleInstance ~~> Value)
+
+mkLibFunc5 :: String -> ThreeValuedLogic -> LibFunc5 -> Tuple String HiddenFunctionDescription
+mkLibFunc5 name isFunctional f = Tuple name { func: unsafeCoerce f, nArgs: 5, isFunctional, isEffect: false }

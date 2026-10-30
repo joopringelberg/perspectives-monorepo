@@ -34,6 +34,18 @@ export function createStompClientImpl ( url )
   return client;
 }
 
+export function deactivateImpl (stompClient)
+{
+  try
+  {
+    stompClient.deactivate();
+  }
+  catch (_)
+  {
+    // Best effort shutdown; tests should not fail on already-closed clients.
+  }
+}
+
 // This function will be called to create a Producer of Messages.
 // emitStep will be bound to the constructor Emit, finishStep will be the constructor Finish.
 // login and passcode must be the RabbitMQ credentials.
@@ -44,6 +56,23 @@ export function createStompClientImpl ( url )
 // on server shutdown.
 export function connectAndSubscribeImpl (stompClient, params, emitStep, finishStep, emit)
 {
+  let pendingIncomingMessageCount = 0;
+  stompClient.getPendingIncomingMessageCount = function()
+  {
+    return pendingIncomingMessageCount;
+  };
+
+  function emitInternalMessage(body)
+  {
+    emit(emitStep(
+      { body
+      , ack: function() {}
+      , markHandled: function() { return pendingIncomingMessageCount; }
+      , pendingCount: pendingIncomingMessageCount
+      }
+    ))();
+  }
+
   stompClient.connectHeaders =
     { login: params.login
     , passcode: params.passcode
@@ -62,6 +91,21 @@ export function connectAndSubscribeImpl (stompClient, params, emitStep, finishSt
       emit( emitStep( message ) )();
     };
 
+  stompClient.forwardIncomingMessage = function(message)
+    {
+      pendingIncomingMessageCount += 1;
+      stompClient.emitToPurescript(
+        { body: message.body
+        , ack: message.ack.bind(message)
+        , markHandled: function()
+          {
+            pendingIncomingMessageCount = Math.max(0, pendingIncomingMessageCount - 1);
+            return pendingIncomingMessageCount;
+          }
+        , pendingCount: pendingIncomingMessageCount
+        });
+    };
+
   stompClient.onConnect =
     function()
     {
@@ -71,7 +115,7 @@ export function connectAndSubscribeImpl (stompClient, params, emitStep, finishSt
         "/topic/" + params.topic,
         // publish to the default exchange.
         // "/queue/" + params.queueId,
-        stompClient.emitToPurescript,
+        stompClient.forwardIncomingMessage,
         { durable: true
         , "auto-delete": false
         // This will be the id that we identify the STOMP-subscription with.
@@ -79,7 +123,12 @@ export function connectAndSubscribeImpl (stompClient, params, emitStep, finishSt
         , ack: "client"
         , "x-queue-name": params.queueId
         });
-        emit( emitStep( {body: "connection"} ) )();
+        // Defer the connection signal so the STOMP client can finish its own
+        // activation work before we try to flush queued outgoing messages.
+        setTimeout(function()
+        {
+          emitInternalMessage("connection");
+        }, 0);
       };
     stompClient.onStompError = function (frame) {
         // Will be invoked in case of error encountered at Broker
@@ -91,11 +140,11 @@ export function connectAndSubscribeImpl (stompClient, params, emitStep, finishSt
       };
     stompClient.onDisconnect = function ()
       {
-        emit( emitStep( {body: "noConnection"} ) )();
+        emitInternalMessage("noConnection");
       };
     stompClient.onWebSocketClose = function ()
       {
-        emit( emitStep( {body: "noConnection"} ) )();
+        emitInternalMessage("noConnection");
       };
     stompClient.onUnhandledMessage = function(message)
     {
@@ -113,15 +162,56 @@ export function unsubscribeImpl( stompClient, queueId )
 // Send a message. We do not support additional headers.
 export function sendImpl( stompClient, destination, receiptId, messageString )
 {
-  stompClient.watchForReceipt( receiptId,
-    function()
+  var attemptSend = function(attempt)
+  {
+    if (!stompClient.connected)
     {
-      stompClient.emitToPurescript( {body: "receipt:" + receiptId} );
-    })
-  stompClient.publish(
-    { destination: destination
-    , body: messageString
-    , headers: {receipt: receiptId}
-    // , skipContentLengthHeader: true
-    });
+      if (attempt < 200)
+      {
+        setTimeout(function()
+        {
+          attemptSend(attempt + 1);
+        }, 25);
+      }
+      return;
+    }
+
+    try
+    {
+      stompClient.watchForReceipt( receiptId,
+        function()
+        {
+          const pendingIncomingMessageCount =
+            typeof stompClient.getPendingIncomingMessageCount === "function"
+              ? stompClient.getPendingIncomingMessageCount()
+              : 0;
+          stompClient.emitToPurescript(
+            { body: "receipt:" + receiptId
+            , ack: function() {}
+            , markHandled: function() { return pendingIncomingMessageCount; }
+            , pendingCount: pendingIncomingMessageCount
+            } );
+        })
+      stompClient.publish(
+        { destination: destination
+        , body: messageString
+        , headers: {receipt: receiptId}
+        // , skipContentLengthHeader: true
+        });
+    }
+    catch (error)
+    {
+      if (error instanceof TypeError && error.message === "There is no underlying STOMP connection" && attempt < 200)
+      {
+        setTimeout(function()
+        {
+          attemptSend(attempt + 1);
+        }, 25);
+        return;
+      }
+      throw error;
+    }
+  };
+
+  attemptSend(0);
 }

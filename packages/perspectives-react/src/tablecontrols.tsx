@@ -108,9 +108,9 @@ export default class TableControls extends PerspectivesComponent<TableControlsPr
   handleKeyDown (event : React.KeyboardEvent)
     {
       const component = this;
-        switch(event.keyCode){
-          case 13: // Return
-          case 32: // Space
+        switch(event.key){
+          case "Enter": // Return
+          case " ": // Space
             component.createRole( function() {});
             event.preventDefault();
             event.stopPropagation();

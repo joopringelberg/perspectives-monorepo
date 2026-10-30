@@ -25,14 +25,12 @@
 module Perspectives.Instances.Indexed where
 
 import Control.Monad.AvarMonadAsk (get) as AMA
-import Control.Monad.Error.Class (throwError, try)
-import Data.Array (foldM, foldl, head, cons)
+import Control.Monad.Error.Class (try)
+import Data.Array (catMaybes, cons, foldM, foldl, head)
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
 import Data.String (Pattern(..), Replacement(..), replaceAll)
 import Data.Tuple (Tuple(..))
-import Effect.Class.Console (log)
-import Effect.Exception (error)
 import Foreign.Object (Object, fromFoldable, keys)
 import Foreign.Object.Unsafe (unsafeIndex)
 import Perspectives.ContextAndRole (rol_binding, rol_property)
@@ -40,6 +38,7 @@ import Perspectives.CoreTypes (MonadPerspectives, (##>))
 import Perspectives.Error.Boundaries (handlePerspectRolError')
 import Perspectives.InstanceRepresentation (PerspectRol)
 import Perspectives.Instances.ObjectGetters (binding, context)
+import Perspectives.Logging (warnStartup)
 import Perspectives.ModelDependencies (indexedContextName, indexedRoleName)
 import Perspectives.Persistent (getPerspectRol)
 import Perspectives.Representation.Class.Identifiable (identifier, identifier_)
@@ -69,10 +68,12 @@ indexedRoles_ roleIds = do
   where
   f :: PerspectRol -> MonadPerspectives (Tuple String RoleInstance)
   f r = case rol_binding r of
-    Nothing -> throwError (error ("An instance of sys:PerspectivesSystem$IndexedRoles has no binding: " <> identifier_ r))
+    Nothing -> do
+      warnStartup ("An instance of sys:PerspectivesSystem$IndexedRoles has no binding: " <> identifier_ r)
+      pure (Tuple ("<unnamed indexed role " <> identifier_ r <> ">") (identifier r))
     Just b -> case head $ rol_property r (EnumeratedPropertyType indexedRoleName) of
       Nothing -> do
-        log ("An instance of sys:PerspectivesSystem$IndexedRoles$Name has no value: " <> identifier_ r)
+        warnStartup ("An instance of sys:PerspectivesSystem$IndexedRoles$Name has no value: " <> identifier_ r)
         pure (Tuple ("<unnamed indexed role " <> identifier_ r <> ">") b)
       Just (Value iname) -> pure (Tuple iname b)
 
@@ -87,18 +88,22 @@ indexedContexts_ contextRoleIds = do
     )
     []
     contextRoleIds
-  pure $ fromFoldable rows
+  pure $ fromFoldable $ catMaybes rows
   where
-  f :: PerspectRol -> MonadPerspectives (Tuple String ContextInstance)
+  f :: PerspectRol -> MonadPerspectives (Maybe (Tuple String ContextInstance))
   f r = case head $ rol_property r (EnumeratedPropertyType indexedContextName) of
     Nothing -> do
-      log ("An instance of sys:PerspectivesSystem$IndexedContexts$Name has no value: " <> identifier_ r)
+      warnStartup ("An instance of sys:PerspectivesSystem$IndexedContexts$Name has no value: " <> identifier_ r)
       mcontextId <- (identifier r) ##> binding >=> context
       case mcontextId of
-        Nothing -> throwError (error ("An instance of sys:PerspectivesSystem$IndexedContexts has no context bound to it: " <> identifier_ r))
-        Just c -> pure (Tuple ("<unnamed indexed context " <> identifier_ r <> ">") c)
+        Nothing -> do
+          warnStartup ("An instance of sys:PerspectivesSystem$IndexedContexts has no context bound to it: " <> identifier_ r)
+          pure Nothing
+        Just c -> pure $ Just (Tuple ("<unnamed indexed context " <> identifier_ r <> ">") c)
     Just (Value iname) -> do
       mcontextId <- (identifier r) ##> binding >=> context
       case mcontextId of
-        Nothing -> throwError (error ("An instance of sys:PerspectivesSystem$IndexedContexts has no context bound to it: " <> identifier_ r))
-        Just c -> pure (Tuple iname c)
+        Nothing -> do
+          warnStartup ("An instance of sys:PerspectivesSystem$IndexedContexts has no context bound to it: " <> identifier_ r)
+          pure Nothing
+        Just c -> pure $ Just (Tuple iname c)

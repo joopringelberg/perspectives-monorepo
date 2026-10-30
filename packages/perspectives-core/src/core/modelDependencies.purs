@@ -38,6 +38,9 @@ perspectivesUsersCancelled = "model://perspectives.domains#tiodn6tcyc$xku8d2dtb7
 perspectivesUsersPublicKey :: String
 perspectivesUsersPublicKey = "model://perspectives.domains#tiodn6tcyc$xku8d2dtb7$atijsr67hl"
 
+perspectivesUsersTransportPublicKey :: String
+perspectivesUsersTransportPublicKey = "model://perspectives.domains#tiodn6tcyc$xku8d2dtb7$l6efjjgjpi"
+
 modelDataUpgrade :: String
 modelDataUpgrade = "model://perspectives.domains#tiodn6tcyc$s9ayjqlfrd"
 
@@ -59,9 +62,6 @@ socialEnvironmentSystemUser = "model://perspectives.domains#tiodn6tcyc$v39ynwzgq
 systemModelName :: String
 systemModelName = "model://perspectives.domains#tiodn6tcyc" -- System
 
-addressBookModelName :: String
-addressBookModelName = "model://perspectives.domains#ofhpcy5a0x" -- AddressBook
-
 repositoryRegistryModelName :: String
 repositoryRegistryModelName = "model://perspectives.domains#k1bnh6wqk9" -- RepositoryRegistry
 
@@ -76,6 +76,9 @@ theSystem = "model://perspectives.domains#tiodn6tcyc$gu4otpfq9c"
 
 sysUser :: String
 sysUser = "model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$auftu9ldl2"
+
+backupAutomatically :: String
+backupAutomatically = "model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$auftu9ldl2$ut7iyjcrnq"
 
 idProperty :: String
 idProperty = "model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$auftu9ldl2$hjk0vdu7pc"
@@ -136,6 +139,16 @@ selectedClipboardItem = "model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$ji08
 
 chatAspect :: String
 chatAspect = "model://perspectives.domains#tiodn6tcyc$s6roz183wh"
+
+-- | The Filter role aspect. Roles that carry this aspect have a FilterValue property
+-- | which can be used to find them via the filterValueView.
+-- | NOTE: these URIs must match the actual URIs generated for the Filter aspect
+-- | and its FilterValue property in the System model ARC source.
+filterAspect :: String
+filterAspect = "model://perspectives.domains#tiodn6tcyc$x96ouy1wig"
+
+filterValueProperty :: String
+filterValueProperty = "model://perspectives.domains#tiodn6tcyc$x96ouy1wig$iakqeqsarz"
 
 recentContexts :: String
 recentContexts = "model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$chuol755yg"
@@ -219,9 +232,6 @@ domeinFileNameOnVersionedModelManifest = "model://perspectives.domains#tiodn6tcy
 domeinFileNameWithVersion :: String
 domeinFileNameWithVersion = "model://perspectives.domains#tiodn6tcyc$mo66to1n9c$External$vm82xl40mj"
 
-versionedModelManifestModelCuid :: String
-versionedModelManifestModelCuid = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$External$k8068785f1"
-
 patch :: String
 patch = "model://perspectives.domains#tiodn6tcyc$mo66to1n9c$External$ijlb1ixfjo"
 
@@ -233,6 +243,12 @@ installedPatch = "model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$ikjc543of4$
 
 installedBuild :: String
 installedBuild = "model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$ikjc543of4$g3nqpdejmj"
+
+localModelNameProperty :: String
+localModelNameProperty = "model://perspectives.domains#tiodn6tcyc$ude5ocuk4n$u8fu3p5asn$gdyohe743u"
+
+modelCuidProperty :: String
+modelCuidProperty = "model://perspectives.domains#tiodn6tcyc$huw4rt0uj8$External$z58i6r2enz"
 
 ------------------------------------------------------------------------------------
 -- COUCHDBMANAGEMENT
@@ -249,8 +265,50 @@ modelURI = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$External$lv7ca4f7
 versionedModelURI :: String
 versionedModelURI = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$External$hp8fq71nqg"
 
+conversationSources :: String
+conversationSources = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$t93c222nct"
+
+conversationSourceDocumentName :: String
+conversationSourceDocumentName = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$t93c222nct$qhdqfn7sff"
+
+conversationSourceDocumentKind :: String
+conversationSourceDocumentKind = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$t93c222nct$x8hxas4o7w"
+
+conversationSourceContextType :: String
+conversationSourceContextType = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$t93c222nct$wfu03odqxe"
+
+conversationSourceYaml :: String
+conversationSourceYaml = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$t93c222nct$j3nnom60iw"
+
+conversationSourceLastYamlChangeDT :: String
+conversationSourceLastYamlChangeDT = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$t93c222nct$ee6ccgs91b"
+
 modelURIReadable :: String
 modelURIReadable = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$External$b8y8q4gqqz"
+
+versionedModelManifestModelCuid :: String
+versionedModelManifestModelCuid = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$External$k8068785f1"
+
+versionedModelManifestPublished :: String
+versionedModelManifestPublished = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$External$gt6c8qghah"
+
+modelDependency :: String
+modelDependency = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$qrou5s8995"
+
+modelDependencyModelId :: String
+modelDependencyModelId = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$qrou5s8995$wjue2mrlfd"
+
+modelDependencyDeclaredRequirement :: String
+modelDependencyDeclaredRequirement = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$qrou5s8995$mpunl362yp"
+
+modelDependencyResolvedModel :: String
+modelDependencyResolvedModel = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$qrou5s8995$wggwazq9a9"
+
+modelDependencyResolvedVersion :: String
+modelDependencyResolvedVersion = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew$qrou5s8995$thmfgjfem7"
+
+manifestsRole :: String
+manifestsRole = "model://perspectives.domains#xyfxpg3lzq$r6cizdyven$murhlatx75"
 
 ------------------------------------------------------------------------------------
 -- INVITATION
@@ -356,11 +414,52 @@ sharedFileServices :: String
 sharedFileServices = "model://perspectives.domains#xjrfkxrzyt" -- SharedFileServices
 
 mySharedFileServices :: String
-mySharedFileServices = "model://perspectives.domains#xjrfkxrzyt$ul1y1ukzye$tp551lll1t"
+mySharedFileServices = "model://perspectives.domains#xjrfkxrzyt$p6irsi0fot$zbhqrtftsu"
 
 actualSharedFileServer :: String
-actualSharedFileServer = "model://perspectives.domains#xjrfkxrzyt$ul1y1ukzye$jx2xqh4f1w"
+actualSharedFileServer = "model://perspectives.domains#xjrfkxrzyt$p6irsi0fot$ee6lcb9jxh"
 
 fileShareCredentials :: String
-fileShareCredentials = "model://perspectives.domains#xjrfkxrzyt$fvq0e98r87$mnfe8z3j7a"
+fileShareCredentials = "model://perspectives.domains#xjrfkxrzyt$z685qvaro6$r7vvr6u68p"
 
+------------------------------------------------------------------------------------
+-- USED IN TESTS
+------------------------------------------------------------------------------------
+outgoingInvitationsType :: String
+outgoingInvitationsType = "model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$mgp2b54oym"
+
+inviterType :: String
+inviterType = "model://perspectives.domains#tiodn6tcyc$nkllrx0n2x$h65m7d31n8"
+
+inviteeType :: String
+inviteeType = "model://perspectives.domains#tiodn6tcyc$nkllrx0n2x$qzucadvv8p"
+
+invitationGuestType :: String
+invitationGuestType = "model://perspectives.domains#tiodn6tcyc$nkllrx0n2x$mt9x7durns"
+
+invitationMessageProp :: String
+invitationMessageProp = "model://perspectives.domains#tiodn6tcyc$nkllrx0n2x$External$rr9p8rvjp8"
+
+serialisedInvitationProp :: String
+serialisedInvitationProp = "model://perspectives.domains#tiodn6tcyc$nkllrx0n2x$External$t8txixzv0y"
+
+------------------------------------------------------------------------------------
+-- HELPPROJECT
+------------------------------------------------------------------------------------
+helpProject :: String
+helpProject = "model://perspectives.domains#siqjgdxh28$d5od2wfzb1"
+
+helpProjectModel :: String
+helpProjectModel = "model://perspectives.domains#siqjgdxh28$d5od2wfzb1$pxyando20i"
+
+conversationBranches :: String
+conversationBranches = "model://perspectives.domains#siqjgdxh28$d5od2wfzb1$n1aurnot6t"
+
+conversationText :: String
+conversationText = "model://perspectives.domains#siqjgdxh28$lssfjn8xok$External$x9c758uu9l"
+
+conversationBranchecontextType :: String
+conversationBranchecontextType = "model://perspectives.domains#siqjgdxh28$lssfjn8xok$External$muafe4rs03"
+
+conversationBranchIdentifier :: String
+conversationBranchIdentifier = "model://perspectives.domains#siqjgdxh28$lssfjn8xok$External$dchiw5pxy1"

@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Accordion, Col, Container, Navbar, NavDropdown, Offcanvas, Row, Tab, Tabs, DropdownDivider, Modal, OverlayTrigger, Tooltip, Button, Form } from 'react-bootstrap';
+import { Accordion, Col, Container, Navbar, NavDropdown, Offcanvas, Row, Tab, Tabs, DropdownDivider, Modal, OverlayTrigger, Tooltip, Button, Form, Nav } from 'react-bootstrap';
 
 // Add axe to the Window interface for TypeScript
 declare global {
@@ -10,7 +10,7 @@ declare global {
 import './styles/www.css';
 import './styles/accessibility.css'
 import {addRoleToClipboard, externalRoleType, i18next, FileDropZone, sendTransactionToProxy} from 'perspectives-react';
-import { ContextInstanceT, ContextType, CONTINUOUS, FIREANDFORGET, PDRproxy, RoleInstanceT, RoleType, ScreenDefinition, SharedWorkerChannelPromise, Unsubscriber, RoleOnClipboard, PropertySerialization, ValueT, Perspective, InspectableContext, InspectableRole, Warning } from 'perspectives-proxy';
+import { ContextInstanceT, ContextType, CONTINUOUS, FIREANDFORGET, PDRproxy, RoleInstanceT, RoleType, ScreenDefinition, SharedWorkerChannelPromise, Unsubscriber, RoleOnClipboard, PropertySerialization, ValueT, Perspective, InspectableContext, InspectableRole, Warning, ConversationBranch } from 'perspectives-proxy';
 import {AppContext, deconstructContext, deconstructLocalName, EndUserNotifier, externalRole, initUserMessaging, ModelDependencies, PerspectivesComponent, PSContext, UserMessagingPromise, UserMessagingMessage, ChoiceMessage, UserChoice, InspectableContextView, InspectableRoleInstanceView} from 'perspectives-react';
 import { constructPouchdbUser, getInstallationData } from './installationData';
 import { Me } from './me';
@@ -29,6 +29,9 @@ import { InternetConnectivityCheck } from './internetConnectivityCheck';
 import { changeLanguage } from './i18next';
 import { About } from './about';
 import FlippingTitle from './flippingTitle';
+import ConversationViewer, { positionNearTarget, type HelpViewerContent } from './conversationViewer';
+import ConversationEditor from './conversationEditor';
+import { HelpModeContext, type HelpActivation, type HelpTarget } from './helpTypes';
 
 const mycontextStartPage = __STARTPAGE__ as RoleInstanceT; 
 
@@ -42,7 +45,7 @@ interface WWWComponentState {
   isSmallScreen: boolean;
   title: string;
   doubleSection: Section;
-  whatOnly: boolean;
+  colWidths: [number, number, number];
   showNotifications: boolean;
   leftPanelContent: 'about' | 'me' | 'settings' | 'apps' | 'myroles' | false;
   activeSection: Section;
@@ -53,6 +56,7 @@ interface WWWComponentState {
   openContextUserType?: RoleType
   screen?: ScreenDefinition;
   endUserMessage: UserMessagingMessage;
+  systemMessage: string;
   choiceMessage: ChoiceMessage;
   actions?: Record<string, string>;
   roleOnClipboard?: RoleOnClipboard;
@@ -68,11 +72,30 @@ interface WWWComponentState {
   invitationData?: { message: string; transaction: any; confirmation: string; };
   importConfirmationCode: string;
   importCodeInvalid: boolean;
+  helpModeActive: boolean;
+  helpViewer?: {
+    target: HelpTarget;
+    content: HelpViewerContent;
+    initialPosition: { left: number; top: number };
+    requestId: number;
+    branch?: ConversationBranch;
+    editorOpen: boolean;
+    editorSaving: boolean;
+    editorError?: string;
+  };
 }
 
 class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponentState> {
   getScreenUnsubscriber: Unsubscriber | undefined;
   getMeForContextUnsubscriber: Unsubscriber | undefined;
+  systemMessageUnsubscriber?: () => void;
+  systemMessageMounted = false;
+  // Every open or close advances this generation. Late proxy callbacks can
+  // therefore never replace the conversation selected most recently.
+  helpRequestId = 0;
+  // Kept outside React state because it is an imperative focus destination,
+  // not information that affects rendering.
+  helpTriggerElement?: HTMLElement;
 
   constructor(props:  WWWComponentProps) {
     super(props);
@@ -81,7 +104,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
       { isSmallScreen: false
       , title: 'MyContexts'
       , doubleSection: 'what'
-      , whatOnly: false
+      , colWidths: [25, 50, 25]
       , showNotifications: false
       , leftPanelContent: false
       , activeSection: 'what' 
@@ -89,6 +112,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
       , systemUser: '' as RoleInstanceT
       , screen: undefined
       , endUserMessage: {title: ''}
+      , systemMessage: ''
       , choiceMessage: {title: '', choices: {}, chosen: () => {}}
       , isOnline: false
       , openContext: mycontextStartPage
@@ -100,6 +124,8 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
       , invitationData: undefined
       , importConfirmationCode: ''
       , importCodeInvalid: false
+      , helpModeActive: false
+      , helpViewer: undefined
     };
     this.checkScreenSize = this.checkScreenSize.bind(this);
     this.getScreenUnsubscriber = undefined;
@@ -139,6 +165,14 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
 
   componentDidMount() {
     const component = this;
+    this.systemMessageMounted = true;
+    PDRproxy.then(pproxy => {
+      if (this.systemMessageMounted) {
+        this.systemMessageUnsubscriber = pproxy.subscribeSystemMessages(
+          systemMessage => this.setState({ systemMessage }, this.checkScreenSize)
+        );
+      }
+    });
     SharedWorkerChannelPromise.then( pdrHandler => {
       getInstallationData().then( installationData => {
         const systemIdentifier = "def:#" + installationData.perspectivesUserId! + installationData.deviceName! as ContextInstanceT;
@@ -155,7 +189,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
 
               // Compute systemUser immediately and store it; do not wait for clipboard subscription.
               // const resolvedSystemUser = (systemIdentifier + "$" + deconstructLocalName( ModelDependencies.sysUser)) as RoleInstanceT
-              const resolvedSystemUser = (systemIdentifier + "$User") as RoleInstanceT
+              const resolvedSystemUser = (systemIdentifier + "$auftu9ldl2") as RoleInstanceT
               component.setState({ systemIdentifier, systemUser: resolvedSystemUser })
 
               component.addUnsubscriber(
@@ -280,6 +314,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
     const component = this;
     const promises : Promise<any>[] = [];
     if (this.state.openContext !== prevState.openContext) {
+      this.closeHelpViewer();
       if (this.getMeForContextUnsubscriber) {
         promises.push( PDRproxy.then( pproxy => pproxy.send(component.getMeForContextUnsubscriber!, function(){})));
       }
@@ -293,9 +328,138 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
   }
 
   componentWillUnmount() {
+    this.systemMessageMounted = false;
+    this.systemMessageUnsubscriber?.();
+    this.helpRequestId += 1;
     window.removeEventListener('resize', this.checkScreenSize);
     document.removeEventListener('keydown', this.handleKeyboardNavigation);
+    window.removeEventListener('mousemove', this.onColumnDragMove);
+    window.removeEventListener('mouseup', this.onColumnDragEnd);
   }
+
+  openHelp = (activation: HelpActivation) => {
+    const requestId = ++this.helpRequestId;
+    this.helpTriggerElement = activation.triggerElement;
+    this.setState({
+      helpViewer: {
+        target: activation.target,
+        content: { status: 'loading' },
+        initialPosition: positionNearTarget(activation.anchorRect),
+        requestId,
+        branch: undefined,
+        editorOpen: false,
+        editorSaving: false,
+        editorError: undefined,
+      },
+    });
+
+    PDRproxy.then(pproxy => pproxy.getHelpConversation(
+      activation.target.contextInstance,
+      activation.target.userRoleType,
+      activation.target.kind === 'role' ? activation.target.roleType : undefined,
+      activation.target.kind === 'role' ? activation.target.perspectiveId : undefined,
+      conversations => {
+        if (requestId !== this.helpRequestId) return;
+        this.setState(state => state.helpViewer?.requestId === requestId
+          ? { helpViewer: { ...state.helpViewer, content: conversations[0] ? { status: 'open', conversation: conversations[0] } : { status: 'unavailable' } } }
+          : null);
+      },
+      () => {
+        if (requestId !== this.helpRequestId) return;
+        this.setState(state => state.helpViewer?.requestId === requestId
+          ? { helpViewer: { ...state.helpViewer, content: { status: 'error' } } }
+          : null);
+      }
+    )).catch(() => {
+      if (requestId !== this.helpRequestId) return;
+      this.setState(state => state.helpViewer?.requestId === requestId
+        ? { helpViewer: { ...state.helpViewer, content: { status: 'error' } } }
+        : null);
+    });
+
+    if (activation.target.kind === 'role' && activation.target.perspectiveId) {
+      const target = activation.target;
+      PDRproxy.then(pproxy => pproxy.getConversationBranch(
+        target.contextType,
+        target.perspectiveId,
+        branches => {
+          if (requestId !== this.helpRequestId) return;
+          this.setState(state => state.helpViewer?.requestId === requestId
+            ? { helpViewer: { ...state.helpViewer, branch: branches[0], editorError: undefined } }
+            : null);
+        },
+        () => {
+          if (requestId !== this.helpRequestId) return;
+          this.setState(state => state.helpViewer?.requestId === requestId
+            ? { helpViewer: { ...state.helpViewer, branch: undefined } }
+            : null);
+        }
+      )).catch(() => undefined);
+    }
+  };
+
+  closeHelpViewer = () => {
+    if (!this.state.helpViewer) return;
+    this.helpRequestId += 1;
+    const triggerElement = this.helpTriggerElement;
+    this.helpTriggerElement = undefined;
+    this.setState({ helpViewer: undefined }, () => {
+      if (triggerElement?.isConnected) triggerElement.focus();
+    });
+  };
+
+  toggleHelpMode = () => {
+    if (this.state.helpModeActive) {
+      this.setState({ helpModeActive: false }, this.closeHelpViewer);
+      return;
+    }
+    this.setState({ helpModeActive: true });
+  };
+
+  openConversationEditor = () => {
+    this.setState(state => state.helpViewer?.branch
+      ? { helpViewer: { ...state.helpViewer, editorOpen: true, editorError: undefined } }
+      : null);
+  };
+
+  closeConversationEditor = () => {
+    this.setState(state => state.helpViewer
+      ? { helpViewer: { ...state.helpViewer, editorOpen: false, editorSaving: false, editorError: undefined } }
+      : null);
+  };
+
+  saveConversationEditor = (conversationText: string) => {
+    const helpViewer = this.state.helpViewer;
+    if (!helpViewer?.branch) return;
+    const branch = helpViewer.branch;
+    this.setState(state => state.helpViewer
+      ? { helpViewer: { ...state.helpViewer, editorSaving: true, editorError: undefined } }
+      : null);
+
+    PDRproxy.then(pproxy =>
+      pproxy
+        .setProperty(branch.branchExternal, branch.conversationTextPropertyType, conversationText as ValueT, branch.authoringRoleType)
+        .then(() =>
+          pproxy.saveConversationBranch(
+            branch.branchExternal,
+            branch.contextTypePropertyType,
+            branch.conversationIdentifierPropertyType,
+            branch.conversationTextPropertyType,
+            branch.authoringRoleType
+          )
+        )
+    )
+      .then(() => {
+        this.setState(state => state.helpViewer
+          ? { helpViewer: { ...state.helpViewer, editorOpen: false, editorSaving: false, editorError: undefined, branch: { ...state.helpViewer.branch!, conversationText } } }
+          : null);
+      })
+      .catch(error => {
+        this.setState(state => state.helpViewer
+          ? { helpViewer: { ...state.helpViewer, editorSaving: false, editorError: error?.toString?.() ?? String(error) } }
+          : null);
+      });
+  };
 
   // Inspector helpers
   openInspectorForContext = (contextId: ContextInstanceT) => {
@@ -362,26 +526,10 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
   }
 
   checkScreenSize(){
-    function computeDoubleSection( )
-    {
-      if (window.innerWidth < 768)
-      {
-        return "none";
-      }
-      else if (component.state.isSmallScreen)
-      {
-        return "what";
-      }
-      else
-      {
-        return component.state.doubleSection;
-      }
-    }
     const component = this;
     const topNavbar = document.querySelector('#top-navbar');
     const bottomNavbar = document.querySelector('#bottom-navbar');
     const mobileTabs = document.querySelector('#mobile-tabs');
-    const whoHeader = document.querySelector('#whoHeader');
     // Includes the padding of the navbar.
     const topNavbarHeight = topNavbar ? (topNavbar as HTMLElement).offsetHeight : 40;
     const bottomNavbarHeight = bottomNavbar ? (bottomNavbar as HTMLElement).offsetHeight : 40;
@@ -394,9 +542,9 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
     document.documentElement.style.setProperty('--bottom-navbar-height', `${bottomNavbarHeight}px`);
     document.documentElement.style.setProperty('--tabs-height', `${mobileTabsHeight}px`); 
     document.documentElement.style.setProperty('--mobile-content-height', `${mobileContentHeight}px`); 
-    document.documentElement.style.setProperty('--who-header-height', `${whoHeader ? (whoHeader as HTMLElement).offsetHeight : 0}px`);  
+    document.documentElement.style.setProperty('--who-header-height', '0px');
     this.setState(
-      { isSmallScreen: window.innerWidth < 768, doubleSection: computeDoubleSection() } );
+      { isSmallScreen: window.innerWidth < 768 } );
   }
 
   prepareMyContextsScreen( systemUserOverride?: RoleInstanceT )
@@ -703,7 +851,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
               role="navigation"
               aria-label="Section navigation"
               >
-              <Tab eventKey="who" title={ i18next.t("www_who", {ns: 'mycontexts'}) } className='bg-primary full-mobile-height px-2 scrollable-content' style={{'--bs-bg-opacity': '.2'} as React.CSSProperties}>
+              <Tab eventKey="who" title={ i18next.t("www_who", {ns: 'mycontexts'}) } className='bg-body full-mobile-height px-2 scrollable-content'>
                 { this.state.screen?.whoWhatWhereScreen ?
                   <Who 
                     screenelements={ this.state.screen.whoWhatWhereScreen.who } 
@@ -713,14 +861,14 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
                   <p className='bg-light-subtle'>Ga ergens heen</p>
                 }
               </Tab>
-              <Tab eventKey="what" title={ i18next.t("www_what", {ns: 'mycontexts'}) } className='bg-primary full-mobile-height px-2 scrollable-content' style={{'--bs-bg-opacity': '.4'} as React.CSSProperties}>
+              <Tab eventKey="what" title={ i18next.t("www_what", {ns: 'mycontexts'}) } className='bg-body full-mobile-height px-2 scrollable-content'>
                 { this.state.screen?.whoWhatWhereScreen ? 
                     <What screenelements={  this.state.screen.whoWhatWhereScreen.what } showTablesAndForm={!this.state.isSmallScreen || this.state.doubleSection == "what"}/>
                     : 
                   <div>Ga ergens heen.</div>
                 }
               </Tab>
-              <Tab eventKey="where" title={ i18next.t("www_where", {ns: 'mycontexts'}) } className='bg-primary full-mobile-height px-2 scrollable-content' style={{'--bs-bg-opacity': '.6'} as React.CSSProperties}>
+              <Tab eventKey="where" title={ i18next.t("www_where", {ns: 'mycontexts'}) } className='bg-body full-mobile-height px-2 scrollable-content'>
               { this.state.screen?.whoWhatWhereScreen ? 
                 <Where 
                   screenelements={ this.state.screen.whoWhatWhereScreen.whereto } 
@@ -728,6 +876,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
                   systemUser={component.state.systemUser}
                   systemIdentifier={component.state.systemIdentifier}
                   openContext={component.state.openContext}
+                  currentContextType={this.state.openContextType}
                   />
                 : 
                   <div>Ga ergens heen.</div>
@@ -748,11 +897,11 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
   renderTopNavBar() {
     const component = this;
     return (<header> {/* Add header landmark */}
-      <Navbar bg="primary" expand="xs" className="py-0 ps-2" id="top-navbar" role="navigation" aria-label="Main navigation">
+      <Navbar bg="body" expand="xs" className="py-0 ps-2 border-bottom" id="top-navbar" role="navigation" aria-label="Main navigation">
       <NavDropdown 
         title={
           <>
-            <i className="bi bi-list text-light fs-2" aria-hidden="true"></i>
+            <i className="bi bi-list text-body fs-2" aria-hidden="true"></i>
             <span className="visually-hidden">{i18next.t("mainMenu", {ns: "mycontexts"})}</span>
           </>
         } 
@@ -765,25 +914,58 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
         <NavDropdown.Item onClick={() => component.setState({leftPanelContent: 'apps'})}>Apps</NavDropdown.Item>
         <NavDropdown.Item onClick={() => component.setState({leftPanelContent: 'settings'})}>Settings</NavDropdown.Item>
         { component.state.openContext ? <NavDropdown.Item onClick={ () => component.setState( {leftPanelContent: 'myroles'} ) }>{ i18next.t("www_myroles", {ns: 'mycontexts'}) }</NavDropdown.Item> : null }
-        <DropdownDivider />
-        <NavDropdown.Item onClick={() => component.setState({showImportTransaction: true})}>{ i18next.t("www_importTransaction", {ns: 'mycontexts'}) }</NavDropdown.Item>
-        { component.state.actions && Object.keys( component.state.actions ).length > 0 ?
-          <>
-          <DropdownDivider />
-          { Object.keys( component.state.actions ).map( action => <NavDropdown.Item key={action} onClick={() => component.runAction(action)}>{ component.state.actions![action]}</NavDropdown.Item>) }
-          </>
-          : null }
-        { component.state.openContext ? <NavDropdown.Item onClick={ () => component.pinContext( component.state.openContext! ) }>{ i18next.t("www_pincontext", {ns: 'mycontexts'}) }</NavDropdown.Item> : null }
-        { component.state.openContext ? <NavDropdown.Item onClick={ () => component.copyContext( component.state.openContext! ) }>{ i18next.t("www_copycontext", {ns: 'mycontexts'}) }</NavDropdown.Item> : null }
       </NavDropdown>
-      <Navbar.Brand href="#home" className='me-auto text-light navbar-title'>
+        <NavDropdown
+          title={
+            <>
+              <span>{i18next.t("www_contextActions", {ns: "mycontexts"})}</span>
+            </>
+          }
+          className="hide-caret px-2 py-1"
+          id="context-actions-dropdown"
+        >
+          { component.state.openContext ? <NavDropdown.Item onClick={ () => component.pinContext( component.state.openContext! ) }>{ i18next.t("www_pincontext", {ns: 'mycontexts'}) }</NavDropdown.Item> : null }
+          { component.state.openContext ? <NavDropdown.Item onClick={ () => component.copyContext( component.state.openContext! ) }>{ i18next.t("www_copycontext", {ns: 'mycontexts'}) }</NavDropdown.Item> : null }
+          <NavDropdown.Item onClick={() => component.setState({showImportTransaction: true})}>{ i18next.t("www_importTransaction", {ns: 'mycontexts'}) }</NavDropdown.Item>
+          { component.state.actions && Object.keys( component.state.actions ).length > 0 ? 
+            <>
+              <NavDropdown.Divider />
+              {Object.keys( component.state.actions ).map( action => <NavDropdown.Item key={action} onClick={() => component.runAction(action)}>{ component.state.actions![action]}</NavDropdown.Item>)}
+            </>
+            :
+            null }
+        </NavDropdown>
+      <Navbar.Brand href="#home" className='me-auto text-body navbar-title'>
         {/* TODO If the available width is large enough, display both context- and role name. */}
         <FlippingTitle
           title={this.state.title} 
           userRoleType={this.state.screen ? this.state.screen.userRole : (this.state.openContextUserType ? deconstructLocalName(this.state.openContextUserType) : '')} 
+          showTitleClass="text-primary"
+          helpModeActive={this.state.helpModeActive}
+          onHelpTarget={this.state.openContextType && this.state.openContextUserType ? anchor => this.openHelp({
+            target: {
+              kind: 'context',
+              contextInstance: deconstructContext(this.state.openContext!) as ContextInstanceT,
+              contextType: this.state.openContextType!,
+              userRoleType: this.state.openContextUserType!,
+              label: this.state.title,
+            },
+            anchorRect: anchor.getBoundingClientRect(),
+            triggerElement: anchor,
+          }) : undefined}
         />
 
       </Navbar.Brand>
+      <Button
+        variant={this.state.helpModeActive ? 'primary' : 'link'}
+        className="help-mode-toggle"
+        onClick={this.toggleHelpMode}
+        aria-pressed={this.state.helpModeActive}
+        aria-label={i18next.t(this.state.helpModeActive ? 'help_mode_disable' : 'help_mode_enable', { ns: 'mycontexts' })}
+        title={i18next.t(this.state.helpModeActive ? 'help_mode_disable' : 'help_mode_enable', { ns: 'mycontexts' })}
+      >
+        <i className="bi bi-question-lg" aria-hidden="true" />
+      </Button>
       <InternetConnectivityCheck reportBack={ (isOnline : boolean) => component.state.isOnline !== isOnline ? component.setState({isOnline}) : null}/>
       {component.state.systemIdentifier ? <ConnectedToAMQP roleinstance={ externalRole( component.state.systemIdentifier )} isOnline={component.state.isOnline} /> : null}
     </Navbar>
@@ -974,14 +1156,15 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
 
     return (
       <nav aria-label="History navigation"> {/* Add nav landmark */}
-        <Navbar id="bottom-navbar" fixed="bottom" bg="primary" expand="xs" className="justify-content-between py-0 px-3">
+        <Navbar id="bottom-navbar" fixed="bottom" bg="body" expand="xs" className="justify-content-between py-0 px-3 border-top">
+          <div className="d-flex align-items-center justify-content-between w-50">
           <Navbar.Brand 
             onClick={e => {window.history.back(); e.stopPropagation();}} 
             onKeyDown={(e) => {if (e.key === ' ' || e.key === 'Enter') window.history.back(); e.stopPropagation();}} 
             role="button" 
             tabIndex={0} 
             aria-label={i18next.t("bottom_goBack", {ns: 'mycontexts'})}>
-              <i className="bi bi-arrow-left text-light"></i>
+              <i className="bi bi-arrow-left text-body"></i>
           </Navbar.Brand>
           <Navbar.Brand 
             onClick={e => { component.setState({ showNotifications: true }); e.stopPropagation(); }} 
@@ -989,7 +1172,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
             role="button" 
             tabIndex={0} 
             aria-label={i18next.t("bottom_showNotifications", {ns: 'mycontexts'})}>
-              <i className="bi bi-arrow-up text-light"></i>
+              <i className="bi bi-arrow-up text-body"></i>
           </Navbar.Brand>
           <Navbar.Brand 
             onClick={e => {window.history.forward(); e.stopPropagation();}} 
@@ -997,8 +1180,18 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
             role="button" 
             tabIndex={0} 
             aria-label={i18next.t("bottom_goForward", {ns: 'mycontexts'})}>
-              <i className="bi bi-arrow-right text-light"></i>
+              <i className="bi bi-arrow-right text-body"></i>
           </Navbar.Brand>
+          </div>
+          <div
+            id="system-message"
+            className="w-50 small text-end ps-2"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            style={{ overflowWrap: 'anywhere' }}>
+            {component.state.systemMessage}
+          </div>
         </Navbar>
       </nav>
       );
@@ -1053,8 +1246,92 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
           );
   }
 
+  // Draggable column divider state (not in React state to avoid re-renders during drag)
+  private _dragState: { divider: 0 | 1; startX: number; startWidths: [number, number, number] } | null = null;
+
+  private static readonly MIN_COLUMN_WIDTH = 10; // minimum % each column may occupy
+  private static readonly KEYBOARD_STEP = 5;     // % moved per arrow-key press
+
+  private computeDoubleSectionFromWidths(widths: [number, number, number]): Section {
+    const sections: Section[] = ['who', 'what', 'where'];
+    const max = Math.max(...widths);
+    const leading = sections[widths.indexOf(max)];
+    // Preserve the current doubleSection if it is tied for widest.
+    return leading !== this.state.doubleSection
+      && widths[sections.indexOf(this.state.doubleSection)] === max
+      ? this.state.doubleSection
+      : leading;
+  }
+
+  private cloneColWidths(): [number, number, number] {
+    return [...this.state.colWidths] as [number, number, number];
+  }
+
+  startColumnDrag = (divider: 0 | 1, e: React.MouseEvent) => {
+    e.preventDefault();
+    this._dragState = {
+      divider,
+      startX: e.clientX,
+      startWidths: [...this.state.colWidths] as [number, number, number],
+    };
+    window.addEventListener('mousemove', this.onColumnDragMove);
+    window.addEventListener('mouseup', this.onColumnDragEnd);
+  };
+
+  onColumnDragMove = (e: MouseEvent) => {
+    if (!this._dragState) return;
+    const { divider, startX, startWidths } = this._dragState;
+    const containerWidth = window.innerWidth;
+    const deltaPercent = ((e.clientX - startX) / containerWidth) * 100;
+    const MIN = WWWComponent.MIN_COLUMN_WIDTH;
+    const newWidths: [number, number, number] = [...startWidths] as [number, number, number];
+
+    if (divider === 0) {
+      const sum = startWidths[0] + startWidths[1];
+      const left = Math.min(Math.max(startWidths[0] + deltaPercent, MIN), sum - MIN);
+      newWidths[0] = left;
+      newWidths[1] = sum - left;
+    } else {
+      const sum = startWidths[1] + startWidths[2];
+      const mid = Math.min(Math.max(startWidths[1] + deltaPercent, MIN), sum - MIN);
+      newWidths[1] = mid;
+      newWidths[2] = sum - mid;
+    }
+
+    this.setState({ colWidths: newWidths, doubleSection: this.computeDoubleSectionFromWidths(newWidths) });
+  };
+
+  onColumnDragEnd = () => {
+    this._dragState = null;
+    window.removeEventListener('mousemove', this.onColumnDragMove);
+    window.removeEventListener('mouseup', this.onColumnDragEnd);
+  };
+
+  adjustColumnWithKeyboard = (divider: 0 | 1, e: React.KeyboardEvent) => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    e.preventDefault();
+    const delta = e.key === 'ArrowRight' ? WWWComponent.KEYBOARD_STEP : -WWWComponent.KEYBOARD_STEP;
+    const MIN = WWWComponent.MIN_COLUMN_WIDTH;
+    const newWidths = this.cloneColWidths();
+
+    if (divider === 0) {
+      const sum = newWidths[0] + newWidths[1];
+      const left = Math.min(Math.max(newWidths[0] + delta, MIN), sum - MIN);
+      newWidths[0] = left;
+      newWidths[1] = sum - left;
+    } else {
+      const sum = newWidths[1] + newWidths[2];
+      const mid = Math.min(Math.max(newWidths[1] + delta, MIN), sum - MIN);
+      newWidths[1] = mid;
+      newWidths[2] = sum - mid;
+    }
+
+    this.setState({ colWidths: newWidths, doubleSection: this.computeDoubleSectionFromWidths(newWidths) });
+  };
+
   renderDesktop() {
     const component = this;
+    const [w0, w1, w2] = this.state.colWidths;
     return (
       <PSContext.Provider value={
         { contextinstance: deconstructContext( this.state.openContext!) as ContextInstanceT
@@ -1064,65 +1341,71 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
           {component.renderTopNavBar()}
           <main id="main-content">
             <div tabIndex={0} className="content-section-area">
-              <Row className='mx-0 px-0'>
-                <Col 
-                  className='bg-primary full-height animated-column' 
-                  xs={ this.state.whatOnly ? 1 : this.state.doubleSection === "who" ? 6 : 3 } 
-                  style={{'--bs-bg-opacity': '.1'} as React.CSSProperties}>
-                  <Row id="whoHeader" onClick={() => component.setState( {'doubleSection': "who"} )}>
-                    <h2 className='text-center text-dark column-heading' aria-keyshortcuts="alt+1" tabIndex={0}>{ i18next.t("www_who", {ns: 'mycontexts'}) }</h2>
-                  </Row>
-                  <Row className='px-1 full-www-content-height scrollable-content px-0'>
-                    { this.state.screen?.whoWhatWhereScreen ?
-                      <Who screenelements={ this.state.screen.whoWhatWhereScreen.who } 
-                        showTablesAndForm={this.state.isSmallScreen || this.state.doubleSection == "who"}
-                      />
-                      :
-                      <p className='bg-light-subtle'>Ga ergens heen</p>
-                    }
-                  </Row>
-                </Col>
-                <Col 
-                  className='bg-primary animated-column' 
-                  xs={ this.state.whatOnly ? 10 : this.state.doubleSection === "what" ? 6 : 3} 
-                  style={{'--bs-bg-opacity': '.2'} as React.CSSProperties}>
-                  <Row onClick={() => component.setState( {'doubleSection': "what"} )}
-                    onDoubleClick={() => component.setState( {'whatOnly': !component.state.whatOnly} )}
-                  >
-                    <h2 className='text-center column-heading' aria-keyshortcuts="alt+2" tabIndex={0}>{ i18next.t("www_what", {ns: 'mycontexts'}) }</h2>
-                  </Row>
-                  {/* In the desktop, MSComponent will render a row with px-1 */}
-                  {/* Here we render either an arbitrary screen: {tag: "FreeFormScreen", elements: MainScreenElements}, or all TableFormDef elements in the {tag: "TableForms", elements: TableFormDef[]} variant of What. */}
-                  <Row className="full-www-content-height scrollable-content px-0">
+              <div className='www-columns full-height mx-0 px-0'>
+                {/* WHO column */}
+                <div
+                  className='bg-body full-height scrollable-content'
+                  style={{ width: `${w0}%`, minWidth: 0 }}
+                >
+                  { this.state.screen?.whoWhatWhereScreen ?
+                    <Who screenelements={ this.state.screen.whoWhatWhereScreen.who } 
+                      showTablesAndForm={this.state.isSmallScreen || this.state.doubleSection == "who"}
+                    />
+                    :
+                    <p className='bg-light-subtle'>Ga ergens heen</p>
+                  }
+                </div>
+                {/* Divider 0: who | what */}
+                <div
+                  className='www-column-divider'
+                  onMouseDown={(e) => component.startColumnDrag(0, e)}
+                  onKeyDown={(e) => component.adjustColumnWithKeyboard(0, e)}
+                  role="separator"
+                  tabIndex={0}
+                  aria-orientation="vertical"
+                  aria-label="Resize who and what columns"
+                />
+                {/* WHAT column */}
+                <div
+                  className='bg-body full-height scrollable-content'
+                  style={{ width: `${w1}%`, minWidth: 0 }}
+                >
                   {this.state.screen?.whoWhatWhereScreen ? 
-                        <What screenelements={  this.state.screen.whoWhatWhereScreen.what } showTablesAndForm={this.state.isSmallScreen || this.state.doubleSection == "what"}/>
-                        : 
-                      <div>Ga ergens heen.</div>
-                      }
-                  </Row>
-                </Col>
-                <Col 
-                  className='bg-primary full-height animated-column'
-                  xs={ this.state.whatOnly ? 1 : this.state.doubleSection === "where" ? 6 : 3} 
-                  style={{'--bs-bg-opacity': '.3'} as React.CSSProperties}>
-                  <Row onClick={() => component.setState( {'doubleSection': "where"} )}>
-                    <h2 className='text-center column-heading' aria-keyshortcuts="alt+3" tabIndex={0}>{ i18next.t("www_where", {ns: 'mycontexts'}) }</h2>
-                  </Row>  
-                  <Row className="px-1 full-www-content-height scrollable-content px-0" style={{overflow: 'auto'}}>
+                    <What screenelements={ this.state.screen.whoWhatWhereScreen.what } showTablesAndForm={this.state.isSmallScreen || this.state.doubleSection == "what"}/>
+                    : 
+                    <div>Ga ergens heen.</div>
+                  }
+                </div>
+                {/* Divider 1: what | where */}
+                <div
+                  className='www-column-divider'
+                  onMouseDown={(e) => component.startColumnDrag(1, e)}
+                  onKeyDown={(e) => component.adjustColumnWithKeyboard(1, e)}
+                  role="separator"
+                  tabIndex={0}
+                  aria-orientation="vertical"
+                  aria-label="Resize what and where columns"
+                />
+                {/* WHERE column */}
+                <div
+                  className='bg-body full-height scrollable-content'
+                  style={{ width: `${w2}%`, minWidth: 0 }}
+                >
                   { this.state.screen?.whoWhatWhereScreen ? 
                     <Where 
-                      screenelements={  this.state.screen.whoWhatWhereScreen.whereto } 
+                      screenelements={ this.state.screen.whoWhatWhereScreen.whereto } 
                       showTablesAndForm={this.state.isSmallScreen || this.state.doubleSection == "where"} 
                       systemUser={component.state.systemUser}
                       systemIdentifier={component.state.systemIdentifier}
                       openContext={component.state.openContext}
+                      currentContextType={this.state.openContextType}
+                      currentContextTitle={this.state.screen?.title}
                     />
                     : 
-                      <div>Ga ergens heen.</div>
-                    }
-                  </Row>
-                </Col>
-              </Row>
+                    <div>Ga ergens heen.</div>
+                  }
+                </div>
+              </div>
             </div>
           </main>
           { component.renderBottomNavBar() }
@@ -1136,6 +1419,13 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
 
   // Add to WWWComponent class
   handleKeyboardNavigation = (e: KeyboardEvent) => {    
+    if (e.key === 'Escape' && this.state.helpViewer) {
+      if (this.state.helpViewer.editorOpen) this.closeConversationEditor();
+      else this.closeHelpViewer();
+      e.preventDefault();
+      return;
+    }
+
     // Open inspector with Ctrl+I
     if (e.ctrlKey && (e.key === 'i' || e.key === 'I')) {
       if (this.state.openContext) {
@@ -1145,24 +1435,11 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
         return;
       }
     }
-    if (e.altKey && e.key === '¡') {
-      // Focus Who section
-      this.setState({'doubleSection': "who"});
-      e.preventDefault();
-    } else if (e.altKey && e.key === '€') {
-      // Focus What section
-      this.setState({'doubleSection': "what"});
-      e.preventDefault();
-    } else if (e.altKey && e.key === '£') {
-      // Focus Where section
-      this.setState({'doubleSection': "where"});
-      e.preventDefault();
-    }
   };
 
   runAccessibilityScan(elementId: string = 'main-content') {
     // Only run in development
-    if (import.meta.env.DEV) {
+    if (import.meta.env.DEV && import.meta.env.VITE_DISABLE_AXE !== 'true') {
       // Wait for content to fully render
       setTimeout(() => {
         // Check if axe is available
@@ -1241,9 +1518,31 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
               { i18next.t("skip_to_content", {ns: 'mycontexts'}) }
             </a>
             
-            { this.state.openContext ? this.state.isSmallScreen ? this.renderMobile() : this.renderDesktop() : null }
-            {this.notificationsAndClipboard()}
-            {this.leftPanel()}
+            <HelpModeContext.Provider value={{ active: this.state.helpModeActive, openHelp: this.openHelp }}>
+              { this.state.openContext ? this.state.isSmallScreen ? this.renderMobile() : this.renderDesktop() : null }
+              {this.notificationsAndClipboard()}
+              {this.leftPanel()}
+            </HelpModeContext.Provider>
+            {this.state.helpViewer ? (
+              <ConversationViewer
+                target={this.state.helpViewer.target}
+                content={this.state.helpViewer.content}
+                initialPosition={this.state.helpViewer.initialPosition}
+                requestId={this.state.helpViewer.requestId}
+                canEdit={this.state.helpViewer.content.status === 'open' && !!this.state.helpViewer.branch}
+                onEdit={this.openConversationEditor}
+                onClose={this.closeHelpViewer}
+              />
+            ) : null}
+            {this.state.helpViewer?.editorOpen && this.state.helpViewer.branch ? (
+              <ConversationEditor
+                branch={this.state.helpViewer.branch}
+                saving={this.state.helpViewer.editorSaving}
+                error={this.state.helpViewer.editorError}
+                onCancel={this.closeConversationEditor}
+                onSave={this.saveConversationEditor}
+              />
+            ) : null}
             <div className="keyboard-nav-instructions" id="keyboard-instructions">
               Press Tab to navigate between sections. Use arrow keys to navigate within a section. 
               Press Enter to select an item. Press Escape to return to the main navigation.

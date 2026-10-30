@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { deconstructLocalName, i18next } from 'perspectives-react';
+import { i18next } from 'perspectives-react';
 
 interface FlippingTitleProps {
   title: string;
@@ -7,6 +7,8 @@ interface FlippingTitleProps {
   revertAfterMs?: number;
   showTitleClass?: string;
   showRoleClass?: string;
+  helpModeActive?: boolean;
+  onHelpTarget?: (anchor: HTMLElement) => void;
 }
 
 const FlippingTitle: React.FC<FlippingTitleProps> = ({ 
@@ -14,7 +16,9 @@ const FlippingTitle: React.FC<FlippingTitleProps> = ({
   userRoleType, 
   revertAfterMs = 3000, 
   showTitleClass = "text-light", 
-  showRoleClass = "text-dark bg-primary-subtle p-1 rounded" 
+  showRoleClass = "text-dark bg-primary-subtle p-1 rounded",
+  helpModeActive = false,
+  onHelpTarget,
 }) => {
   const [showUserRole, setShowUserRole] = useState<boolean>(false);
   const [timer, setTimer] = useState<number | null>(null);
@@ -25,6 +29,8 @@ const FlippingTitle: React.FC<FlippingTitleProps> = ({
 
   // Format the role type to be more readable
   const formattedRoleType = userRoleType ? i18next.t("flipping_title", {ns: 'mycontexts', userRoleType }) : '';
+  const youAre = i18next.t("you_are", {ns: 'mycontexts'});
+  const wordIn = i18next.t("word_in", {ns: 'mycontexts'});
   
   // Determine if there is enough space to show both title and role
   // side by side. We measure a hidden span with the combined text
@@ -114,22 +120,33 @@ const FlippingTitle: React.FC<FlippingTitleProps> = ({
 
   // If there is enough space and we have a role, show both title
   // and role statically; otherwise, use the flipping behaviour.
-  const interactive = !!userRoleType && !canShowBoth;
+  const interactive = helpModeActive || (!!userRoleType && !canShowBoth);
+  const activate = (element: HTMLElement) => {
+    if (helpModeActive) {
+      onHelpTarget?.(element);
+      return;
+    }
+    if (userRoleType && !canShowBoth) {
+      flipToRoleAndRevert();
+    }
+  };
 
   return (
     <h1
       ref={headingRef}
-      className={`fs-4 mb-0 ${interactive ? 'cursor-pointer' : ''} ${!canShowBoth && showUserRole ? showRoleClass : showTitleClass}`}
-      onClick={interactive ? flipToRoleAndRevert : undefined}
+      className={`fs-4 mb-0 ${interactive ? 'cursor-pointer' : ''} ${helpModeActive ? 'help-target-active' : ''} ${!canShowBoth && showUserRole ? showRoleClass : showTitleClass}`}
+      onClick={interactive ? event => activate(event.currentTarget) : undefined}
       onKeyDown={interactive ? (e => {
         if (e.key === 'Enter' || e.key === ' ') {
-          flipToRoleAndRevert();
+          activate(e.currentTarget);
           e.preventDefault();
         }
       }) : undefined}
       tabIndex={interactive ? 0 : -1}
       role={interactive ? 'button' : undefined}
-      aria-label={interactive
+      aria-label={helpModeActive
+        ? i18next.t('help_context_target', { ns: 'mycontexts', context: title })
+        : interactive
         ? (showUserRole
           ? `${formattedRoleType}. Click to show context name.`
           : `Context: ${title}. Click to show your role.`)
@@ -147,14 +164,14 @@ const FlippingTitle: React.FC<FlippingTitleProps> = ({
           pointerEvents: 'none',
         }}
       >
-        {title}{formattedRoleType ? ` ${formattedRoleType}` : ''}
+        {formattedRoleType ? `${youAre}${formattedRoleType}${wordIn}${title}` : title}
       </span>
 
       {canShowBoth && formattedRoleType
         ? (
           <>
-            <span className={showTitleClass}>{formattedRoleType}</span>
-            {' in'}
+            <span className={showTitleClass}>{youAre}{formattedRoleType}</span>
+            {wordIn}
             <span className={showTitleClass}>{title}</span>
           </>
         )

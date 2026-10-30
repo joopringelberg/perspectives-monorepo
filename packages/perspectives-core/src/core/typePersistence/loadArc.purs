@@ -25,6 +25,8 @@ module Perspectives.TypePersistence.LoadArc where
 import Control.Alt (void)
 import Control.Monad.Error.Class (catchError, throwError)
 import Control.Monad.Trans.Class (lift)
+import Data.MediaType (MediaType(..))
+import Effect.Aff.Class (liftAff)
 import Data.Array (delete, null)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
@@ -32,17 +34,24 @@ import Data.List (List(..))
 import Data.Map (lookup)
 import Data.Maybe (Maybe(..))
 import Data.Newtype (over, unwrap)
+import Data.String.Regex (Regex, replace) as Regex
+import Data.String.Regex.Flags (noFlags)
+import Data.String.Regex.Unsafe (unsafeRegex)
 import Data.Tuple (Tuple(..))
 import Data.Unit (unit)
+import Effect.Class (liftEffect)
 import Effect.Exception (error)
+import Foreign (unsafeToForeign)
 import Foreign.Object (empty)
 import Parsing (ParseError(..))
 import Perspectives.Checking.PerspectivesTypeChecker (checkDomeinFile)
+import Perspectives.Assignment.StateCache (clearModelStates)
 import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction)
 import Perspectives.DomeinCache (retrieveDomeinFile, storeDomeinFileInCache)
-import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, defaultDomeinFileRecord)
+import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, defaultDomeinFileRecord, deriveModelDependencies, stampDomeinFileTypeVersion)
+import Perspectives.Extern.Couchdb (installModelLocally)
 import Perspectives.Identifiers (modelUriVersion, unversionedModelUri)
-import Perspectives.InvertedQuery.Storable (StoredQueries)
+import Perspectives.InvertedQuery.Storable (StoredQueries, removeInvertedQueriesContributedByModel)
 import Perspectives.Parsing.Arc (domain)
 import Perspectives.Parsing.Arc.AST (ContextE(..))
 import Perspectives.Parsing.Arc.IndentParser (position2ArcPosition, runIndentParser)
@@ -50,12 +59,16 @@ import Perspectives.Parsing.Arc.PhaseThree (phaseThree)
 import Perspectives.Parsing.Arc.PhaseTwo (traverseDomain)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseTwoState, runPhaseTwo_', toStableModelUri)
 import Perspectives.Parsing.Messages (MultiplePerspectivesErrors, PerspectivesError(..))
-import Perspectives.ResourceIdentifiers (takeGuid)
+import Perspectives.Persistence.API (addAttachment, retrieveDocumentVersion, toFile)
+import Perspectives.Persistent (modelDatabaseName)
+import Perspectives.PerspectivesState (clearQueryCache)
+import Perspectives.ResourceIdentifiers (resourceIdentifier2WriteDocLocator, takeGuid)
 import Perspectives.SideCar.PhantomTypedNewtypes (Readable)
 import Perspectives.Sidecar.NormalizeTypeNames (StableIdMappingForModel, getinstalledModelCuids, normalizeInvertedQueries, normalizeTypes)
 import Perspectives.Sidecar.StableIdMapping (ContextUri(..), ModelUri(..), Stable, StableIdMapping, fromLocalModels, fromRepository, idUriForContext, loadStableMapping)
 import Perspectives.Sidecar.UniqueTypeNames as UTN
-import Prelude (bind, discard, pure, show, ($), (/=), (<<<), (<>), (==), (>=>))
+import Prelude (bind, discard, pure, show, ($), (/=), (<<<), (<>), (==), (>=>), (<$>))
+import Simple.JSON (writeJSON)
 
 -- | The functions in this module load Arc files and parse and compile them to DomeinFiles.
 -- | Some functions expect a CRL file with the same name and add the instances found in them
@@ -87,79 +100,146 @@ loadAndCompileArcFile_ dfid text saveInCache modelCuid modelUriReadable mbasedOn
       mmapping <- case mbasedOnVersion of
         -- In this case, we take the mapping from the indicated version, from the Repository.
         Just basedOnVersion -> lift $ loadStableMapping (ModelUri basedOnVersion) fromRepository
-        -- In this case, we take the mapping from the local models.
-        Nothing -> lift $ loadStableMapping dfid fromLocalModels
+        -- In this case, we take the mapping from the local models (stored under unversioned document names).
+        Nothing -> lift $ loadStableMapping (over ModelUri unversionedModelUri dfid) fromLocalModels
       -- In this case, we generate new CUIDs. Most likely this is the first version ever for this model.
       -- Nothing -> pure Nothing
-      loadAndCompileArcFileWithSidecar_ (over ModelUri unversionedModelUri dfid) text saveInCache mmapping modelCuid modelUriReadable version
+      loadAndCompileArcFileWithSidecar_ (over ModelUri unversionedModelUri dfid) text saveInCache mmapping modelCuid modelUriReadable (Just version)
     -- The case below is when we've compiled this version before.
-    Just _ -> loadAndCompileArcFileWithSidecar_ (over ModelUri unversionedModelUri dfid) text saveInCache mMapping modelCuid modelUriReadable version
+    Just _ -> loadAndCompileArcFileWithSidecar_ (over ModelUri unversionedModelUri dfid) text saveInCache mMapping modelCuid modelUriReadable (Just version)
+
+-- | Parses and compiles the ARC file and persists all compilation products locally:
+-- | 1. the DomeinFile in the local models database,
+-- | 2. the inverted queries in the local inverted-query database,
+-- | 3. the stable-id mapping as `stableIdMapping.json` attachment on the local model document.
+-- | If compilation fails, returns the compilation errors unchanged.
+-- | `mExistingMapping`, if given, is reused as the basis for stable-id assignment (e.g. the mapping
+-- | produced by a previous compilation of the same source elsewhere), so no new CUIDs are coined for
+-- | the types and individuals it already covers.
+-- | Otherwise reuse the installed model's mapping; if none exists, use the normal repository /
+-- | `mbasedOnVersion` mapping lookup. Recompiling an installed model must preserve its stable IDs.
+-- | Replaces its previous inverted queries and invalidates cached queries and state definitions
+-- | before installation can evaluate the new model's initial instances.
+-- | NOTE: this function is only used from module Test.SinglePDRScaffold and Test.Layer3Scaffold
+loadCompileAndStoreArcFile_ :: ModelUri Stable -> Source -> Boolean -> String -> String -> Maybe String -> Maybe StableIdMapping -> MonadPerspectivesTransaction (Either (Array PerspectivesError) (Tuple (DomeinFile Stable) (Tuple StoredQueries StableIdMapping)))
+loadCompileAndStoreArcFile_ dfid text saveInCache modelCuid modelUriReadable mbasedOnVersion mExistingMapping = do
+  version <- case modelUriVersion (unwrap dfid) of
+    Nothing -> throwError $ error ("ModelUri " <> show dfid <> " is expected to be versioned.")
+    Just v -> pure v
+  mapping <- case mExistingMapping of
+    Just _ -> pure mExistingMapping
+    Nothing -> lift $ loadStableMapping (over ModelUri unversionedModelUri dfid) fromLocalModels
+  result <- case mapping of
+    Nothing -> loadAndCompileArcFile_ dfid text saveInCache modelCuid modelUriReadable mbasedOnVersion
+    Just _ -> loadAndCompileArcFileWithSidecar_
+      (over ModelUri unversionedModelUri dfid)
+      text
+      saveInCache
+      mapping
+      modelCuid
+      modelUriReadable
+      (Just version)
+  case result of
+    Left errs -> pure $ Left errs
+    Right (Tuple df@(DomeinFile dfr@{ id }) (Tuple invertedQueries mapping')) -> do
+      lift do
+        removeInvertedQueriesContributedByModel id
+        clearQueryCache
+        void $ pure $ clearModelStates id
+      -- Install the compiled model locally so initial instances and dependencies are handled the same way
+      -- as in addModelToLocalStore_.
+      installModelLocally (Tuple dfr empty) true invertedQueries
+      -- Persist the stable mapping sidecar as attachment on the local model document.
+      db <- lift modelDatabaseName
+      { documentName } <- lift $ resourceIdentifier2WriteDocLocator (unwrap id)
+      mRev <- lift $ retrieveDocumentVersion db documentName
+      mappingFile <- liftEffect $ toFile "stableIdMapping.json" "application/json" (unsafeToForeign $ writeJSON mapping')
+      void $ lift $ addAttachment db documentName mRev "stableIdMapping.json" mappingFile (MediaType "application/json")
+      pure $ Right (Tuple df (Tuple invertedQueries mapping'))
 
 -- New: sidecar-aware API that returns the updated mapping with results.
 -- | ModelUri should be Stable and unversioned.
 -- | Version should equal the version of the domain declaration in the ARC file.
 -- | modelUriReadable should be the Readable ModelUri with version for error reporting.
-loadAndCompileArcFileWithSidecar_ :: ModelUri Stable -> Source -> Boolean -> Maybe StableIdMapping -> String -> String -> String -> MonadPerspectivesTransaction (Either (Array PerspectivesError) (Tuple (DomeinFile Stable) (Tuple StoredQueries StableIdMapping)))
-loadAndCompileArcFileWithSidecar_ dfid@(ModelUri stableModelUri) text saveInCache mMapping modelCuid modelUriReadable version =
+loadAndCompileArcFileWithSidecar_ :: ModelUri Stable -> Source -> Boolean -> Maybe StableIdMapping -> String -> String -> Maybe String -> MonadPerspectivesTransaction (Either (Array PerspectivesError) (Tuple (DomeinFile Stable) (Tuple StoredQueries StableIdMapping)))
+loadAndCompileArcFileWithSidecar_ dfid@(ModelUri stableModelUri) rawText saveInCache mMapping modelCuid modelUriReadable mversion =
   catchError
     ( do
-        (r :: Either ParseError ContextE) <- lift $ lift $ runIndentParser text domain
+        (r :: Either ParseError ContextE) <- lift $ liftAff $ runIndentParser text domain
         case r of
           Left e -> pure $ Left [ parseError2PerspectivesError e ]
-          Right (ContextE rec@{ id: sourceIdReadable, pos }) -> do
+          Right rec@(ContextE { id: sourceIdReadable }) -> do
             -- sourceIdReadable should be versioned.
             -- If we have a mapping, it is sure to have the enclosing Domein context, so then we can map ModelUri Readable to ModelUri Stable.
             mversionOfSourceIdReadable <- pure $ modelUriVersion sourceIdReadable
-            case mversionOfSourceIdReadable of
-              Nothing -> throwError $ error ("The domain declaration in the ARC file should be versioned. Found: " <> show sourceIdReadable)
-              Just versionInArc ->
+            case mversionOfSourceIdReadable, mversion of
+              Nothing, _ -> throwError $ error ("The domain declaration in the ARC file should be versioned. Found: " <> show sourceIdReadable)
+              Just _, Nothing -> compileIt rec
+              Just versionInArc, Just version ->
                 if versionInArc /= version then throwError $ error ("The version in the domain declaration in the ARC file should match the version in the function argument. Found version " <> show versionInArc <> " but expected " <> show version)
-                else if testModelName (unversionedModelUri sourceIdReadable) then do
-                  unversionedCtxt <- pure $ ContextE rec { id = unversionedModelUri sourceIdReadable }
-                  (Tuple result state :: Tuple (Either MultiplePerspectivesErrors (DomeinFile Readable)) PhaseTwoState) <-
-                    lift $ lift $ runPhaseTwo_' (traverseDomain unversionedCtxt) defaultDomeinFileRecord empty empty Nil
-                  case result of
-                    Left e -> pure $ Left e
-                    Right (DomeinFile dr'@{ id }) -> do
-                      dr''@{ referredModels } <- pure dr' { referredModels = (delete id state.referredModels) }
-                      -- We should load referred models if they are missing (but not the model we're compiling!).
-                      -- Throw an error if a referred model is not installed. It will show up in the arc feedback.
-                      installedModelCuids <- lift $ getinstalledModelCuids fromLocalModels
-                      for_ referredModels (lift <<< (toStable installedModelCuids >=> retrieveDomeinFile))
-
-                      (x' :: Either MultiplePerspectivesErrors (Tuple (DomeinFileRecord Readable) StoredQueries)) <-
-                        lift $ phaseThree dr'' state.postponedStateQualifiedParts state.screens
-                      case x' of
-                        Left e -> pure $ Left e
-                        Right (Tuple correctedDFR invertedQueries) -> do
-                          -- Compute updated StableIdMapping (with cuids and individuals) in one call
-                          mapping2 <- UTN.updateStableMappingForModel dfid modelCuid correctedDFR mMapping
-
-                          -- Run the type checker (NOTE: but a stub, right now).
-                          typeCheckErrors <- lift $ checkDomeinFile (DomeinFile correctedDFR)
-                          if null typeCheckErrors then do
-                            -- Add the source and _id.
-                            df <- pure $ DomeinFile correctedDFR
-                              { arc = text
-                              -- Notice that this is the UNVERSIONED id. It will be overwritten with the versioned id when uploading to the repository.
-                              , _id = takeGuid $ unwrap id
-                              }
-                            -- Now replace the readable name given by the modeller with a cuid, in FQNs:
-                            normalizedDf <- lift $ normalizeTypes df mapping2
-
-                            if saveInCache then void $ lift $ storeDomeinFileInCache (toStableModelUri id) normalizedDf else pure unit
-
-                            normalizedInvertedQueries <- lift $ normalizeInvertedQueries df mapping2 invertedQueries
-
-                            pure $ Right $ Tuple normalizedDf (Tuple normalizedInvertedQueries mapping2)
-                          else
-                            pure $ Left typeCheckErrors
-                else
-                  pure $ Left [ (DomeinFileIdIncompatible modelUriReadable sourceIdReadable pos) ]
+                else compileIt rec
     )
     (\e -> pure $ Left [ Custom (show e) ])
 
   where
+  -- Strip trailing whitespace beyond a single newline so the parser (which requires exactly
+  -- one trailing newline and no trailing blank lines) always succeeds.
+  text :: String
+  text = normalizeTrailingWhitespace rawText
+
+  compileIt :: ContextE -> MonadPerspectivesTransaction (Either (Array PerspectivesError) (Tuple (DomeinFile Stable) (Tuple StoredQueries StableIdMapping)))
+  compileIt (ContextE rec@{ id: sourceIdReadable, pos }) =
+    if testModelName (unversionedModelUri sourceIdReadable) then do
+      unversionedCtxt <- pure $ ContextE rec { id = unversionedModelUri sourceIdReadable }
+      (Tuple result state :: Tuple (Either MultiplePerspectivesErrors (DomeinFile Readable)) PhaseTwoState) <-
+        lift $ liftAff $ runPhaseTwo_' (traverseDomain unversionedCtxt) defaultDomeinFileRecord empty empty Nil
+      case result of
+        Left e -> pure $ Left e
+        Right (DomeinFile dr'@{ id }) -> do
+          dr''@{ referredModels } <- pure $ dr' { referredModels = (delete id state.referredModels) }
+          -- We should load referred models if they are missing (but not the model we're compiling!).
+          -- Throw an error if a referred model is not installed. It will show up in the arc feedback.
+          installedModelCuids <- lift $ getinstalledModelCuids fromLocalModels
+          -- At this point, the referredModels are qualified with a version. We should use the unversioned ModelUri 
+          -- before making sure they are installed.
+          for_ (over ModelUri unversionedModelUri <$> referredModels) (lift <<< (toStable installedModelCuids >=> retrieveDomeinFile))
+
+          (x' :: Either MultiplePerspectivesErrors (Tuple (DomeinFileRecord Readable) StoredQueries)) <-
+            lift $ phaseThree dr'' state.postponedStateQualifiedParts state.screens
+          case x' of
+            Left e -> pure $ Left e
+            Right (Tuple correctedDFR invertedQueries) -> do
+              -- Compute updated StableIdMapping (with cuids and individuals) in one call
+              mapping2 <- UTN.updateStableMappingForModel dfid modelCuid correctedDFR mMapping
+
+              -- Run the type checker (NOTE: but a stub, right now).
+              typeCheckErrors <- lift $ checkDomeinFile (DomeinFile correctedDFR)
+              if null typeCheckErrors then do
+                -- Add the source and _id.
+                df <- pure $ DomeinFile correctedDFR
+                  { arc = text
+                  -- Notice that this is the UNVERSIONED id. It will be overwritten with the versioned id when uploading to the repository.
+                  , _id = takeGuid $ unwrap id
+                  }
+                -- Now replace the readable name given by the modeller with a cuid, in FQNs:
+                normalizedDf@(DomeinFile normalizedDfr) <- lift $ normalizeTypes df mapping2
+                let
+                  dfWithDependencies = DomeinFile normalizedDfr
+                    { modelDependencies = Just $ deriveModelDependencies referredModels normalizedDfr.referredModels }
+                stampedDf <- pure $ case mversion of
+                  Nothing -> dfWithDependencies
+                  Just version -> stampDomeinFileTypeVersion version dfWithDependencies
+
+                if saveInCache then void $ lift $ storeDomeinFileInCache (toStableModelUri id) stampedDf else pure unit
+
+                normalizedInvertedQueries <- lift $ normalizeInvertedQueries df mapping2 invertedQueries
+
+                pure $ Right $ Tuple stampedDf (Tuple normalizedInvertedQueries mapping2)
+              else
+                pure $ Left typeCheckErrors
+    else
+      pure $ Left [ (DomeinFileIdIncompatible modelUriReadable sourceIdReadable pos) ]
+
   -- The model under construction itself is not remapped, only its dependencies.
   -- With this function we cover both cases: models in terms of Stable and in terms of Readable.
   toStable :: StableIdMappingForModel -> ModelUri Readable -> MonadPerspectives (ModelUri Stable)
@@ -180,3 +260,11 @@ type CrlSource = String
 
 parseError2PerspectivesError :: ParseError -> PerspectivesError
 parseError2PerspectivesError (ParseError message pos) = ParserError message (position2ArcPosition pos)
+
+-- | Strips all trailing whitespace and replaces it with a single newline, so the parser
+-- | (which requires exactly one trailing newline and no trailing blank lines) always succeeds.
+normalizeTrailingWhitespace :: String -> String
+normalizeTrailingWhitespace s = Regex.replace trailingWhitespaceRegex "" s <> "\n"
+
+trailingWhitespaceRegex :: Regex.Regex
+trailingWhitespaceRegex = unsafeRegex "\\s+$" noFlags

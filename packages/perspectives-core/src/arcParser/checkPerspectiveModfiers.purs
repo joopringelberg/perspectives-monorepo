@@ -28,25 +28,34 @@ import Control.Monad.Error.Class (throwError)
 import Control.Monad.State (gets) as State
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Writer (execWriterT, tell)
-import Data.Array (elemIndex, filter, head, length)
+import Data.Array (elemIndex, filter, head, length, null, nub)
 import Data.Foldable (for_)
-import Data.Maybe (Maybe(..), isJust)
+import Data.Maybe (Maybe(..), isJust, isNothing)
 import Data.Newtype (unwrap)
 import Foreign.Object (values)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.DomeinFile (DomeinFile(..))
+import Perspectives.Error.Pretty (humanizePerspectivesWarning)
+import Perspectives.ErrorLogging (warnModeller)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseThree, withDomeinFile)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
+import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), range, roleInContext2Context)
+import Perspectives.Representation.ADT (allLeavesInADT)
+import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
 import Perspectives.Representation.Class.Identifiable (identifier)
-import Perspectives.Representation.Class.Role (Role(..), identifierOfRole, kindOfRole, perspectivesOfRole, pos, posOfRole, roleIsFunctional)
+import Perspectives.Representation.Class.PersistentType (getCalculatedRole, getContext)
+import Perspectives.Representation.Class.Role (Role(..), identifierOfRole, kindOfRole, perspectivesOfRole, pos, posOfRole, roleIsFunctional, typeOfRole)
+import Perspectives.Representation.Context (Context(..))
 import Perspectives.Representation.EnumeratedProperty (EnumeratedProperty(..))
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.ExplicitSet (ExplicitSet(..))
 import Perspectives.Representation.Perspective (Perspective(..), perspectiveSupportsPropertyWithOneofVerbs)
-import Perspectives.Representation.TypeIdentifiers (PropertyType(..), RoleKind(..), RoleType(..))
+import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(BinaryCombinator, DataTypeGetter, FilterF, RolGetter, WithFrame))
+import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType, PropertyType(..), RoleKind(..), RoleType(..))
 import Perspectives.Representation.Verbs (PropertyVerb(..))
 import Perspectives.Types.ObjectGetters (propertiesInPerspective)
+import Perspectives.Warning (PerspectivesWarning(..))
 
 checkPerspectiveModifiers :: PhaseThree Unit
 checkPerspectiveModifiers = do
@@ -59,6 +68,55 @@ checkPerspectiveModifiers = do
       { enumeratedProperties } <- lift $ State.gets _.dfr
       for_ enumeratedProperties checkAuthorOnly
       for_ enumeratedProperties checkSelfOnly
+      checkIndexedRootPerspectives
+
+checkIndexedRootPerspectives :: PhaseThree Unit
+checkIndexedRootPerspectives = do
+  userRoles <- userRolesInModel
+  for_ userRoles \userRole -> do
+    let
+      userType = case userRole of
+        E role -> typeOfRole role
+        C role -> typeOfRole role
+    localUser <- lift $ lift $ isLocalUser userRole
+    unless localUser $
+      for_ (perspectivesOfRole userRole) \perspective@(Perspective { object }) -> do
+        properties <- lift $ lift $ propertiesInPerspective perspective
+        unless (null properties) case range object of
+          RDOM roles ->
+            for_ (nub $ roleInContext2Context <$> allLeavesInADT roles) \contextType -> do
+              Context { indexedContext, context } <- lift $ lift $ getContext contextType
+              when (isJust indexedContext && isNothing context)
+                $ lift
+                $ lift
+                $
+                  humanizePerspectivesWarning (PeerPerspectiveOnIndexedRootContext userType contextType)
+                    >>= warnModeller
+          _ -> pure unit
+  where
+  isLocalUser (C (CalculatedRole { calculation: Q query })) = calculatesMe query
+  isLocalUser _ = pure false
+
+-- Only exempt calculations whose result is provably the local user, not queries that merely contain `me`.
+calculatesMe :: QueryFunctionDescription -> MonadPerspectives Boolean
+calculatesMe = check []
+  where
+  check :: Array CalculatedRoleType -> QueryFunctionDescription -> MonadPerspectives Boolean
+  check _ (SQD _ (DataTypeGetter MeF) _ _ _) = pure true
+  check visited (SQD _ (RolGetter (CR roleType)) _ _ _)
+    | not (isJust $ elemIndex roleType visited) = do
+        CalculatedRole { calculation } <- getCalculatedRole roleType
+        case calculation of
+          Q query -> check (visited <> [ roleType ]) query
+          _ -> pure false
+  check visited (UQD _ WithFrame query _ _ _) = check visited query
+  check visited (BQD _ (BinaryCombinator SequenceF) _ result _ _ _) = check visited result
+  check visited (BQD _ (BinaryCombinator ComposeF) source (UQD _ FilterF _ _ _ _) _ _ _) = check visited source
+  check visited (BQD _ (BinaryCombinator ComposeF) _ result _ _ _) = check visited result
+  check visited (BQD _ (BinaryCombinator UnionF) left right _ _ _) = do
+    localLeft <- check visited left
+    if localLeft then check visited right else pure false
+  check _ _ = pure false
 
 findRolesWithProperty :: PropertyType -> PhaseThree (Array EnumeratedRole)
 findRolesWithProperty pt = do

@@ -3,9 +3,7 @@
     "module": "ESNext",
     "target": "ES2023",
     "declaration": true,
-    "jsx": "react",
-    "jsxFactory": "React.createElement",
-    "jsxFragmentFactory": "React.Fragment",
+    "jsx": "preserve",
     "declarationDir": "dist/types",
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "outDir": "dist",
@@ -18,12 +16,8 @@
       "../../node_modules/@types",
       "./src/types"
     ],
-    "baseUrl": "./",
-    "moduleResolution": "node",
-    "resolveJsonModule": true,
-    "paths": {
-      "*": ["node_modules/*"]
-    }
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true
   },
   "include": [
     "src/**/*",

@@ -31,6 +31,7 @@ import Data.Maybe (Maybe(..))
 import Data.Traversable (for)
 import Main.RecompileBasicModels (UninterpretedDomeinFile(..), executeInTopologicalOrder)
 import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction)
+import Perspectives.Error.Pretty (renderMultiplePerspectivesErrors)
 import Perspectives.Logging (errorUpgrade, infoUpgrade)
 import Perspectives.Extern.Couchdb (updateModel')
 import Perspectives.External.CoreModules (addAllExternalFunctions)
@@ -66,7 +67,9 @@ updateLocalModels =
       (runExceptT (executeInTopologicalOrder (catMaybes uninterpretedDomeinFiles) updateLocalModel))
     void $ removeMessage "Updating local models..."
     case r of
-      Left errors -> errorUpgrade ("updateLocalModels: " <> show errors) *> pure false
+      Left errors -> do
+        rendered <- renderMultiplePerspectivesErrors errors
+        errorUpgrade ("updateLocalModels: " <> rendered) *> pure false
       Right success -> do
         saveMarkedResources
         pure success

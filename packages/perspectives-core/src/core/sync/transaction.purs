@@ -94,31 +94,34 @@ newtype Transaction = Transaction
       -- A Transaction for the users TheWorld and SocialEnvironment. Included as uninterpreted data to avoid
       -- module cycles. Use read_ to transform to Maybe TransactionForPeer.
       , identityDocument :: Maybe UninterpretedTransactionForPeer
-      -- Maybe an index where to insert deltas.
-      , insertionPoint :: Maybe Int
       , transactionNumber :: Int
       , executedStateKeys :: Set.Set String
-      -- When true, addDelta and insertDelta skip storeDeltaFromSignedDelta because the
+      -- When true, addDelta skips storeDeltaFromSignedDelta because the
       -- deltas being processed were either already stored (executeTransaction path) or
       -- should not be stored at all (executeDeltas for public roles).
       , isExecutingIncomingDeltas :: Boolean
+      , isSharing :: Boolean
       )
   )
 
-data TransactionDestination = PublicDestination RoleInstance | Peer UnschemedResourceIdentifier
+-- | `Peer guid resource`: the unschemed guid identifies the peer (AMQP topic, wrapped-key recipient) and is the
+-- | sole basis for Eq and Ord, so that a peer known both as `pub:` and `def:` resource is a single destination.
+-- | The schemed `resource` is the TheWorld$PerspectivesUsers instance to read peer data (e.g. the transport key)
+-- | from; it may be a public (`pub:`) resource for a peer known only through published resources.
+data TransactionDestination = PublicDestination RoleInstance | Peer UnschemedResourceIdentifier PerspectivesUser
 
 instance Show TransactionDestination where
   show (PublicDestination r) = "(PublicDestination " <> show r <> ")"
-  show (Peer p) = "(Peer " <> show p <> ")"
+  show (Peer p r) = "(Peer " <> show p <> " " <> show r <> ")"
 
 instance Ord TransactionDestination where
-  compare (Peer p1) (Peer p2) = compare p1 p2
+  compare (Peer p1 _) (Peer p2 _) = compare p1 p2
   compare (PublicDestination p1) (PublicDestination p2) = compare p1 p2
-  compare (Peer p1) (PublicDestination p2) = compare p1 (unschemeRoleInstance p2)
-  compare (PublicDestination p1) (Peer p2) = compare (unschemeRoleInstance p1) p2
+  compare (Peer p1 _) (PublicDestination p2) = compare p1 (unschemeRoleInstance p2)
+  compare (PublicDestination p1) (Peer p2 _) = compare (unschemeRoleInstance p1) p2
 
 instance Eq TransactionDestination where
-  eq (Peer p1) (Peer p2) = eq p1 p2
+  eq (Peer p1 _) (Peer p2 _) = eq p1 p2
   eq (PublicDestination p1) (PublicDestination p2) = eq p1 p2
   eq _ _ = false
 
@@ -131,7 +134,8 @@ type TransactionRecord f =
   }
 
 type PublicKeyInfo =
-  { key :: String -- the cryptographic (public) key, serialised as JWK.
+  { key :: String -- the signing (public) key, serialised as JWK.
+  , transportKey :: String -- the RSA-OAEP transport (public) key, serialised as JWK.
   , deltas :: Array SignedDelta
   }
 
@@ -170,10 +174,10 @@ instance ReadForeign Transaction where
       , publicKeys: ENCMAP.empty
       , postponedStateEvaluations: []
       , identityDocument: Nothing
-      , insertionPoint: Nothing
       , transactionNumber: 0
       , executedStateKeys: Set.empty
       , isExecutingIncomingDeltas: false
+      , isSharing: false
       }
 
 derive newtype instance ReadForeign Transaction'
@@ -190,8 +194,8 @@ instance Attachment Transaction where
   setAttachment t _ = t
   getAttachments t = Nothing
 
-createTransaction :: RoleType -> Aff Transaction
-createTransaction authoringRole =
+createTransaction :: RoleType -> Boolean -> Aff Transaction
+createTransaction authoringRole sharing =
   do
     n <- liftEffect $ now
     pure $ Transaction
@@ -212,10 +216,10 @@ createTransaction authoringRole =
       , publicKeys: ENCMAP.empty
       , postponedStateEvaluations: []
       , identityDocument: Nothing
-      , insertionPoint: Nothing
       , transactionNumber: 0
       , executedStateKeys: Set.empty
       , isExecutingIncomingDeltas: false
+      , isSharing: sharing
       }
 
 -- | We consider a Transaction to be 'empty' when it shows no difference to the clone of the original.

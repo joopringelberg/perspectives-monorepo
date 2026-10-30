@@ -46,14 +46,20 @@ import Test.Unit.Main (runTest)
 
 -- Pure parser (no MonadPerspectives at all)
 import Test.Parsing.Arc.Expression (theSuite) as TPAE
+import Test.Parsing.Arc.ActionStages (theSuite) as AS
+import Test.Parsing.Arc.ConditionalTabs (theSuite) as CT
+import Test.ObsoleteRepresentationCleanup (theSuite) as ORC
 
 -- Pure ArrayT combinator tests (no MonadPerspectives)
 import Test.ArrayT (theSuite) as ARRT
-
--- ADT algebra tests — use runP but only exercise pure in-memory computations
-import Test.Perspectives.Representation.ADT.DisjunctiveNormalForm (theSuite) as DNF
-import Test.Perspectives.Representation.ADT2 (theSuite) as ADT2
-import Test.Perspectives.Representation.ADT.SpecialisesADT (theSuite) as SPECADT
+import Test.AMQP.IncomingPost (theSuite) as AIP
+import Test.Error.Pretty (theSuite) as TEP
+import Test.Query.ComparisonOperators (theSuite) as TQCO
+import Test.SidecarUniqueTypeNames (theSuite) as SUTN
+import Test.Persistence.Authentication (theSuite) as PA
+import Test.VariableBindings (theSuite) as VB
+import Test.TransactionQueue (theSuite) as TQ
+import Test.VersionedDeltas (theSuite) as VD
 
 -- Comprehensive unit tests for ExpandedADT, CNF, and ADT (with real assertions)
 import Test.Perspectives.Representation.AbstractDataTypeTests (theSuite) as ADTTESTS
@@ -63,7 +69,9 @@ import Test.Perspectives.Representation.AbstractDataTypeTests (theSuite) as ADTT
 import Test.Parsing.Arc (theSuite) as TPA
 import Test.Parsing.Arc.Syntax (theSuite) as TPAS
 import Test.Parsing.Arc.PhaseTwo (theSuite) as TPA2
-import Test.Parsing.Arc.PhaseThree (theSuite) as TPA3
+import Test.Parsing.Arc.PhaseThree (completeTypeNormalisationSuite, recursiveFillerComparisonSuite) as TPA3
+import Test.Parsing.Arc.Model (theSuite) as TPAM
+import Test.Parsing.Arc.IndexedRootPerspectives (theSuite) as IRP
 
 -- Query description compiler — uses an in-memory DomeinFile cache; no CouchDB
 import Test.Query.DescriptionCompiler (theSuite) as QDC
@@ -71,20 +79,39 @@ import Test.Query.DescriptionCompiler (theSuite) as QDC
 main :: Effect Unit
 main = runTest do
   -- ── Truly pure (no MonadPerspectives / no IO) ──────────────────────────────
-  -- TPAE.theSuite        -- ARC expression parser
-  -- ARRT.theSuite        -- ArrayT combinators
-
-  -- -- ── Pure ADT algebra (runP wraps in-memory computations only) ──────────────
-  -- ADTTESTS.theSuite    -- ExpandedADT / CNF / ADT unit tests (with assertions)
-  -- DNF.theSuite         -- Disjunctive/conjunctive normal form
-  -- ADT2.theSuite        -- ADT2 functor / foldable / traversable
-  -- SPECADT.theSuite     -- equalsOrSpecialises
-
-  -- -- ── ARC parsing phases 1–3 (in-memory; file-system for .arc fixtures) ──────
+  TPAE.theSuite -- ARC expression parser
+  AS.theSuite -- Plain and letA action settlement stages
+  CT.theSuite
+  ARRT.theSuite -- ArrayT combinators
+  AIP.theSuite -- Incoming-post status message formatting
+  TEP.theSuite -- Error pretty-printing helpers
+  TQCO.theSuite -- Typed query comparison operators
+  SUTN.theSuite -- Stable ID mapping regression tests
+  ORC.theSuite -- Serialization regression for obsolete representation members
+  PA.theSuite
+  VB.theSuite -- Variable bindings are private to a fiber
+  TQ.theSuite
+  VD.theSuite
+  IRP.theSuite
   TPAS.theSuite        -- Phase 1 — comprehensive non-expression syntax tests
-  -- TPA.theSuite         -- Phase 1 — tokenise + parse (older, mostly out of date)
-  -- TPA2.theSuite        -- Phase 2 — name resolution / type inference
-  -- TPA3.theSuite        -- Phase 3 — inverted query indexing
 
-  -- -- ── Query description compiler (in-memory DomeinFile cache) ────────────────
-  -- QDC.theSuite
+  -- Read a file from the file-system, but otherwise pure (no MonadPerspectives / no HTTP)
+  TPAM.theSuite -- ARC model parser (parses .arc files from the model/
+
+  -- ── Pure ADT algebra (runP wraps in-memory computations only) ──────────────
+  ADTTESTS.theSuite -- ExpandedADT / CNF / ADT unit tests (with assertions)
+
+-- ── ARC parsing phases 1–3 (in-memory; file-system for .arc fixtures) ──────
+-- NOTE: the broader phase suites are not ready: they contain a large number of failing tests.
+-- TPA.theSuite         -- Phase 1 — tokenise + parse
+-- TPA2.theSuite        -- Phase 2 — name resolution / type inference
+-- TPA3.theSuite        -- Phase 3 — inverted query indexing
+
+-- This small suite fails.
+-- TPA3.completeTypeNormalisationSuite
+
+-- This small suite fails.
+-- TPA3.recursiveFillerComparisonSuite
+
+-- -- ── Query description compiler (in-memory DomeinFile cache) ────────────────
+-- QDC.theSuite

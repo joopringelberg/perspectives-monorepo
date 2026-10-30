@@ -31,6 +31,8 @@ import type {
   UserRoleType,
   RoleTypeReceiver,
   PerspectivesReceiver,
+  ConversationReceiver,
+  ConversationBranchReceiver,
   ScreenReceiver,
   TableFormReceiver,
   PropertyType,
@@ -49,7 +51,10 @@ import type {
   ContextAndNameReceiver,
   InspectableContext,
   InspectableRole,
-  FillerType
+  FillerType,
+  FillMode,
+  ModelContextGraph,
+  WiderContextReceiver
 } from "./perspectivesshape.d.ts";
 
 export type * from "./perspectivesshape.d.ts";
@@ -59,7 +64,7 @@ This module is imported both by the core and by clients and bridges the gap betw
   1 with core and client in the same javascript process;
   2 with core and client in different javascript processes, connected by the Channel Messaging API
     https://developer.mozilla.org/en-US/docs/Web/API/Channel_Messaging_API
-  3 with core and client in different processes, connected by TCP. OBSOLETE!! We have commented the code out. It will serve as an example when we develop the Language Server. See the design text "TCP architecture.txt".
+  3 with core and client in different processes, connected by TCP. That code is commented out and kept only as an example for future Language Server work; see the design text "TCP architecture.txt".
 The core resolves two promises:
   - one called PDRproxy, resolving to an instance of PerspectivesProxy with an InternalChannel, to be used in the first architecture by direct import;
   - one called InternalChannel, resolving to an instance of InternalChannel, to be used in the second architecture, used by the Service Worker by direct import;
@@ -109,7 +114,7 @@ export function configurePDRproxy(channeltype: "internalChannel" | "sharedWorker
       // Force a new instance per app version; keep Vite’s worker URL untouched
       sharedWorker = new SharedWorker( new URL('perspectives-sharedworker', import.meta.url), {
         type: 'module',
-        name: `pdr-${__MYCONTEXTS_VERSION__}-${__BUILD__}`
+        name: `pdr-${__MYCONTEXTS_VERSION__}-${__BUILD_ID__}`
       });
       sharedWorkerChannel = new SharedWorkerChannel(sharedWorker.port, cursor);
       sharedWorkerChannelResolver(sharedWorkerChannel);
@@ -151,7 +156,215 @@ interface RequestRecord {
   reactStateSetter?: (response: any) => void;
   corrId?: number;
   trackingNumber?: number;
+  // Explicitly classify a request as background, regardless of its subscription mode.
+  noWaitCursor?: boolean;
 }
+
+export type RequestTimingCategory = "foreground" | "background" | "status" | "silent";
+
+export type RequestTimingSample = {
+  id: string;
+  trackingNumber?: number;
+  request: string;
+  category: RequestTimingCategory;
+  startedAt: number;
+  visibleAt?: number;
+  visibleDelayMs?: number;
+  completedAt?: number;
+  durationMs?: number;
+  staleAt?: number;
+  status: "pending" | "visible" | "completed" | "failed" | "stale";
+};
+
+export type RequestTimingSummary = {
+  request: string;
+  category: RequestTimingCategory;
+  count: number;
+  completedCount: number;
+  failedCount: number;
+  pendingCount: number;
+  visibleCount: number;
+  staleCount: number;
+  averageMs?: number;
+  p50Ms?: number;
+  p95Ms?: number;
+  maximumMs?: number;
+};
+
+type RequestTimingHandle = {
+  id: string;
+  startedAt: number;
+  completed: boolean;
+};
+
+const DISPLAY_DELAY_MS = 1000;
+const AUTO_CLEAR_MS = 15_000;
+const TIMING_STORAGE_KEY = "perspectives.requestTimings.v1";
+const MAX_TIMING_SAMPLES = 500;
+
+function classifyRequest(req?: Partial<RequestRecord>): RequestTimingCategory {
+  if (!req || !req.request || req.request === "Unsubscribe") {
+    return "silent";
+  }
+
+  // Continuous requests remain active after their first result and must not block the UI.
+  if (req.noWaitCursor || req.onlyOnce === false) {
+    return "background";
+  }
+
+  return "foreground";
+}
+
+class RequestTimingDiagnostics {
+  private fallbackEntries: RequestTimingSample[] = [];
+  private storageDisabled = false;
+
+  start(request: string, category: RequestTimingCategory, trackingNumber?: number): RequestTimingHandle {
+    const startedAt = Date.now();
+    const handle = {
+      id: `${startedAt}-${crypto.randomUUID()}`,
+      startedAt,
+      completed: false
+    };
+    this.append({
+      id: handle.id,
+      trackingNumber,
+      request,
+      category,
+      startedAt,
+      status: "pending"
+    });
+    return handle;
+  }
+
+  markVisible(handle: RequestTimingHandle): void {
+    const visibleAt = Date.now();
+    this.update(handle.id, sample => {
+      if (sample.completedAt == null) {
+        sample.visibleAt = visibleAt;
+        sample.visibleDelayMs = visibleAt - sample.startedAt;
+        sample.status = "visible";
+      }
+    });
+  }
+
+  markStale(handle: RequestTimingHandle): void {
+    const staleAt = Date.now();
+    this.update(handle.id, sample => {
+      if (sample.completedAt == null) {
+        sample.staleAt = staleAt;
+        sample.status = "stale";
+      }
+    });
+  }
+
+  complete(handle: RequestTimingHandle, failed = false): void {
+    if (handle.completed) return;
+    handle.completed = true;
+    const completedAt = Date.now();
+    this.update(handle.id, sample => {
+      sample.completedAt = completedAt;
+      sample.durationMs = completedAt - sample.startedAt;
+      sample.status = failed ? "failed" : "completed";
+    });
+  }
+
+  dump(): RequestTimingSample[] {
+    return this.read().map(sample => ({...sample}));
+  }
+
+  summary(): RequestTimingSummary[] {
+    const groups = new Map<string, RequestTimingSample[]>();
+    for (const sample of this.read()) {
+      const key = `${sample.category}\u0000${sample.request}`;
+      const group = groups.get(key);
+      if (group) group.push(sample);
+      else groups.set(key, [sample]);
+    }
+
+    return Array.from(groups.values()).map(samples => {
+      const durations = samples
+        .flatMap(sample => sample.durationMs == null ? [] : [sample.durationMs])
+        .sort((left, right) => left - right);
+      const percentile = (fraction: number) =>
+        durations.length === 0 ? undefined : durations[Math.ceil(durations.length * fraction) - 1];
+
+      return {
+        request: samples[0].request,
+        category: samples[0].category,
+        count: samples.length,
+        completedCount: durations.length,
+        failedCount: samples.filter(sample => sample.status === "failed").length,
+        pendingCount: samples.filter(sample => sample.completedAt == null).length,
+        visibleCount: samples.filter(sample => sample.visibleAt != null).length,
+        staleCount: samples.filter(sample => sample.staleAt != null).length,
+        averageMs: durations.length === 0
+          ? undefined
+          : Math.round(durations.reduce((sum, duration) => sum + duration, 0) / durations.length),
+        p50Ms: percentile(0.5),
+        p95Ms: percentile(0.95),
+        maximumMs: durations.at(-1)
+      };
+    }).sort((left, right) => (right.p95Ms ?? -1) - (left.p95Ms ?? -1));
+  }
+
+  clear(): void {
+    this.write([]);
+  }
+
+  private append(sample: RequestTimingSample): void {
+    this.write([...this.read(), sample].slice(-MAX_TIMING_SAMPLES));
+  }
+
+  private update(id: string, updater: (sample: RequestTimingSample) => void): void {
+    const entries = this.read();
+    const sample = entries.find(entry => entry.id === id);
+    if (!sample) return;
+    updater(sample);
+    this.write(entries);
+  }
+
+  private read(): RequestTimingSample[] {
+    if (this.storageDisabled || typeof localStorage === "undefined") {
+      return this.fallbackEntries;
+    }
+
+    try {
+      const serialised = localStorage.getItem(TIMING_STORAGE_KEY);
+      if (serialised == null) return this.fallbackEntries;
+      const parsed: unknown = JSON.parse(serialised);
+      if (!Array.isArray(parsed)) {
+        console.warn("[Cursor] Ignoring invalid persisted request timing data");
+        return this.fallbackEntries;
+      }
+      this.fallbackEntries = parsed as RequestTimingSample[];
+    } catch (error) {
+      this.disableStorage("read", error);
+    }
+    return this.fallbackEntries;
+  }
+
+  private write(entries: RequestTimingSample[]): void {
+    this.fallbackEntries = entries.slice(-MAX_TIMING_SAMPLES);
+    if (this.storageDisabled || typeof localStorage === "undefined") return;
+
+    try {
+      localStorage.setItem(TIMING_STORAGE_KEY, JSON.stringify(this.fallbackEntries));
+    } catch (error) {
+      this.disableStorage("write", error);
+    }
+  }
+
+  private disableStorage(operation: "read" | "write", error: unknown): void {
+    this.storageDisabled = true;
+    console.warn(
+      `[Cursor] Cannot ${operation} installation request timings; diagnostics will only last for this page`,
+      error
+    );
+  }
+}
+
+const requestTimingDiagnostics = new RequestTimingDiagnostics();
 
 const defaultRequest =
   {
@@ -350,7 +563,7 @@ class SharedWorkerChannel
       }
       else
       {
-        proxy.cursor.setPDRStatus( e.data as { action: "push" | "remove"; message: string } );
+        proxy.cursor.setPDRStatus( e.data as { action: "push" | "remove"; message: string; target?: "overlay" | "navbar" } );
       }
     }
   }
@@ -631,6 +844,11 @@ export class PerspectivesProxy
     this.channel.close();
   }
 
+  // Subscribe to nonblocking system status, including any message received before mounting.
+  subscribeSystemMessages(receive: (message: string) => void): () => void {
+    return this.cursor.subscribeSystemMessages(receive);
+  }
+
   // Returns a promise for unsuscriber information of the form: {subject: req.subject, corrId: req.corrId}
   // that can be used by the caller to unsubscribe from updates.
   send (req: RequestRecord, receiveValues : valueReceiver, errorHandler? : errorHandler) : Promise<Unsubscriber>
@@ -638,12 +856,15 @@ export class PerspectivesProxy
     const cursor = this.cursor;
     const proxy = this;
     req.trackingNumber = PerspectivesProxy.index++;
+    const requestCategory = classifyRequest(req);
+    const timing = cursor.beginRequest(req, requestCategory);
     // Handle errors here. Use `errorHandler` if provided by the PerspectivesProxy method.
     // Log errors to the console anyway for the developer.
     const handleErrors = function(response : Response) // response = PerspectivesApiTypes.ResponseRecord
     {
       // Log a result has been received.
       // console.log( "Response received for request: " + req.trackingNumber + " of type " + req.request );
+      cursor.completeRequest(timing, response.responseType === "APIerror");
       // Restore cursor shape
       cursor.restore(req);
       if (response.responseType === "APIerror")
@@ -680,22 +901,29 @@ export class PerspectivesProxy
     //   console.warn( "Request misses values: " + JSON.stringify(fullRequest) );
     // }
 
-    // Set cursor shape
-    if ( !(req.request == "Unsubscribe") )
-      {
-        cursor.wait(req);
-      }
-    if (req.request === "Unsubscribe"){
-      // If we had been waiting for a response, we can now restore the cursor shape.
-      cursor.restore(req);
+    // Only foreground calls use the blocking overlay; all categories are timed.
+    if (requestCategory === "foreground") {
+      cursor.wait(req, timing);
     }
-    return this.channel.send( fullRequest );
+    return this.channel.send(fullRequest).catch(error => {
+      cursor.completeRequest(timing, true);
+      cursor.restore(req);
+      throw error;
+    });
   }
 
   // unsubscribe from the channel.
   unsubscribe (req : RequestRecord)
   {
-    this.channel.unsubscribe(req);
+    const unsubscribeRequest = {...req, trackingNumber: PerspectivesProxy.index++};
+    const timing = this.cursor.beginRequest(unsubscribeRequest, "silent");
+    try {
+      this.channel.unsubscribe(req);
+      this.cursor.completeRequest(timing);
+    } catch (error) {
+      this.cursor.completeRequest(timing, true);
+      throw error;
+    }
   }
 
   setUserMessageChannel( channel : UserMessageChannel )
@@ -852,6 +1080,41 @@ export class PerspectivesProxy
     );
   }
 
+  /** Retrieve context or perspective help without exposing model attachments. */
+  getHelpConversation(contextInstance: ContextInstanceT, audienceRoleType: UserRoleType, targetRoleType: RoleType | undefined, perspectiveId: string | undefined, receiveValues: ConversationReceiver, errorHandler?: errorHandler)
+  {
+    return this.send(
+      { request: "GetHelpConversation"
+      , subject: contextInstance
+      , predicate: audienceRoleType
+      , object: targetRoleType ?? ""
+      , contextDescription: { perspectiveId }
+      , onlyOnce: true
+      },
+      function (conversationStrings)
+      {
+        return receiveValues(conversationStrings.map(JSON.parse));
+      },
+      errorHandler
+    );
+  }
+
+  getConversationBranch(contextType: ContextType, perspectiveId: string, receiveValues: ConversationBranchReceiver, errorHandler?: errorHandler)
+  {
+    return this.send(
+      { request: "GetConversationBranch"
+      , subject: contextType
+      , predicate: perspectiveId
+      , onlyOnce: true
+      },
+      function (branchStrings)
+      {
+        return receiveValues(branchStrings.map(JSON.parse));
+      },
+      errorHandler
+    );
+  }
+
   // { request: "GetScreen", subject: UserRoleType, predicate: ContextType, object: ContextInstance }
   getScreen(userRoleType : UserRoleType, contextInstance : ContextInstanceT, contextType : ContextType, receiveValues : ScreenReceiver, fireAndForget : SubscriptionType = false, errorHandler? : errorHandler)
   {
@@ -912,6 +1175,19 @@ export class PerspectivesProxy
     );
   }
 
+  getRoleNameP(rid: RoleInstanceT): Promise<string>
+  {
+    const proxy = this;
+    return new Promise(function (resolver, rejecter)
+      {
+        proxy.send(
+          { request: "GetRoleName", object: rid, onlyOnce: true },
+          values => resolver(values[0]),
+          rejecter
+        );
+      });
+  }
+
   // We haven't made this promisebased because the binding can change, even though its type cannot.
   getBindingType (roleType : RoleType, receiveValues : (fillerTypes: FillerType[]) => void, fireAndForget : SubscriptionType = false, errorHandler? : errorHandler)
   {
@@ -956,16 +1232,15 @@ export class PerspectivesProxy
     /**
    * Retrieves the selected role from the clipboard.
    *
-   * This function sends a request to get the selected role from the clipboard
-   * and returns a promise that resolves with the role instance.
+   * This function subscribes to get the selected role from the clipboard
    *
-   * @returns {Promise<RoleInstanceT>} A promise that resolves with the selected role instance.
+   * @returns {Promise<Unsubscriber>} A promise that resolves with an unsubscriber function.
    */
   subscribeSelectedRoleFromClipboard( receiver: (roleOnClipboard : RoleOnClipboard[]) => void) : Promise<Unsubscriber>
   {
     const proxy = this;
     return proxy.send(
-        { request: "GetSelectedRoleFromClipboard", onlyOnce: false },
+        { request: "SubscribeSelectedRoleFromClipboard", onlyOnce: false, noWaitCursor: true },
         values => receiver( values.map( JSON.parse ) )
       );
   }
@@ -994,18 +1269,18 @@ export class PerspectivesProxy
     );
   }
 
-  getWiderContexts( externalRoleInstance : RoleInstanceT, receiveValues : ContextAndNameReceiver, fireAndForget : SubscriptionType = false, errorHandler? : errorHandler)
+  getWiderContexts( externalRoleInstance : RoleInstanceT, receiveValues : WiderContextReceiver, fireAndForget : SubscriptionType = false, errorHandler? : errorHandler)
   {
     return this.send(
       {request: "GetWiderContexts", subject: externalRoleInstance, onlyOnce: fireAndForget},
-      function (contextAndNameStrings)
+      function (widerContextStrings)
       {
-        return receiveValues(contextAndNameStrings.map( JSON.parse ));
+        return receiveValues(widerContextStrings.map( JSON.parse ));
       },
       errorHandler
     );
   }
-  
+
   ///////////////////////////////////////////////////////////////////////////////////////
   //// PROMISE RETURNING GETTERS.
   //// These getters, by their nature, return a result only once.
@@ -1024,6 +1299,29 @@ export class PerspectivesProxy
           {request: "CheckBinding", predicate: roleName, object: rolInstance, onlyOnce: true}
           , (r => resolver(r[0] === "true"))
           , rejecter
+        );
+      });
+  }
+
+  getMostGeneralAllowedBindingType(roleName: RoleType, rolInstance: RoleInstanceT): Promise<FillerType | undefined>
+  {
+    const proxy = this;
+    return new Promise(function (resolver, rejecter)
+      {
+        proxy.send(
+          { request: "GetMostGeneralAllowedBindingType", predicate: roleName, object: rolInstance, onlyOnce: true },
+          values =>
+          {
+            if (values.length === 0)
+            {
+              resolver(undefined);
+            }
+            else
+            {
+              resolver(JSON.parse(values[0]));
+            }
+          },
+          rejecter
         );
       });
   }
@@ -1385,6 +1683,32 @@ export class PerspectivesProxy
         );
       });
   }
+ 
+  // { request: "GetModelContextGraph", subject: ContextType }
+  // Returns the static type-level context navigation DAG for the model that defines
+  // the given context type. The result is a one-shot response.
+  getModelContextGraph( contextType : ContextType) : Promise<ModelContextGraph>
+  {
+    const proxy = this;
+    return new Promise(function (resolver, rejecter)
+      {
+        return proxy.send(
+          {request: "GetModelContextGraph", subject: contextType, onlyOnce: true},
+          function (graphStrings)
+          {
+            if (graphStrings.length > 0)
+            {
+              resolver(JSON.parse(graphStrings[0]));
+            }
+            else
+            {
+              rejecter({});
+            }
+          },
+        );
+      });
+  }
+
 
 ///////////////////////////////////////////////////////////////////////////////////////
   //// SETTERS.
@@ -1483,6 +1807,24 @@ export class PerspectivesProxy
       });
   }
 
+  saveConversationBranch(branchExternal: RoleInstanceT, contextTypePropertyType: PropertyType, conversationIdentifierPropertyType: PropertyType, conversationTextPropertyType: PropertyType, myRoleType: UserRoleType): Promise<[]>
+  {
+    const proxy = this;
+    return new Promise(function (resolver, rejecter)
+      {
+        return proxy.send(
+          { request: "SaveConversationBranch"
+          , subject: branchExternal
+          , contextDescription: { contextTypePropertyType, conversationIdentifierPropertyType, conversationTextPropertyType }
+          , authoringRole: myRoleType
+          , onlyOnce: true
+          }
+          , resolver
+          , rejecter
+        );
+      });
+  }
+
   addProperty (rolID : RoleInstanceT, propertyName  : PropertyType, value : ValueT, myroletype  : UserRoleType) : Promise<[]>
   {
     const proxy = this;
@@ -1509,7 +1851,10 @@ export class PerspectivesProxy
         {
           return proxy.send(
             {request: "SaveFile", subject: JSON.stringify( perspectivesFile ), contextDescription: buf, authoringRole: myroletype, onlyOnce: true}
-            , fileInArray => resolver(fileInArray[0])
+            , fileInArray => {
+                const parsedFile = JSON.parse(fileInArray[0]) as PerspectivesFile;
+                resolver(parsedFile);
+              }
             , rejecter
             );
         });
@@ -1655,26 +2000,28 @@ export class PerspectivesProxy
    * @param myroletype - The type of the user role.
    * @returns A promise that resolves to the role instance.
    */
-  bind (contextinstance : ContextInstanceT, localRolName : RolName, contextType : ContextType, rolDescription : RolSerialization, myroletype : UserRoleType) : Promise<RoleInstanceT>
+  bind (contextinstance : ContextInstanceT, localRolName : RolName, contextType : ContextType, rolDescription : RolSerialization, myroletype : UserRoleType, fillMode: FillMode = "required") : Promise<RoleInstanceT>
   {
     const proxy = this;
     return new Promise(function (resolver, rejecter)
       {
+        const request = fillMode === "provided" ? "FillWithProvidedType" : "FillWithRequiredType";
         return proxy.send(
-          {request: "Bind", subject: contextinstance, predicate: localRolName, object: contextType, rolDescription: rolDescription, authoringRole: myroletype, onlyOnce: true },
+          {request, subject: contextinstance, predicate: localRolName, object: contextType, rolDescription: rolDescription, authoringRole: myroletype, onlyOnce: true },
           (r => resolver(r[0])),
           rejecter
         );
       });
   }
 
-  bind_ (filledRole : RoleInstanceT, filler : RoleInstanceT, myroletype  : UserRoleType) : Promise<boolean>
+  bind_ (filledRole : RoleInstanceT, filler : RoleInstanceT, myroletype  : UserRoleType, fillMode: FillMode = "required") : Promise<boolean>
   {
     const proxy = this;
     return new Promise(function (resolver, rejecter)
       {
+        const request = fillMode === "provided" ? "FillWithProvidedType" : "FillWithRequiredType";
         return proxy.send(
-          {request: "Bind_", subject: filledRole, object: filler, authoringRole: myroletype, onlyOnce: true},
+          {request, subject: filledRole, object: filler, authoringRole: myroletype, onlyOnce: true},
           values => resolver( values[0] == "true" ),
           rejecter
         );
@@ -1749,6 +2096,7 @@ export class PerspectivesProxy
       });
   }
 
+  // OBSOLETE (NOT USED)
   evaluateRoleState( rolinstance : RoleInstanceT) : Promise<[]>
   {
     const proxy = this;
@@ -1791,6 +2139,33 @@ export class PerspectivesProxy
   }
 
   /**
+   * Return the request timings retained for this installation.
+   * Call from the browser console: console.table(pdr.getRequestTimingDiagnostics())
+   */
+  getRequestTimingDiagnostics(): RequestTimingSample[]
+  {
+    return requestTimingDiagnostics.dump();
+  }
+
+  /**
+   * Summarise retained timings by request and category.
+   * Call from the browser console: console.table(pdr.summarizeRequestTimingDiagnostics())
+   */
+  summarizeRequestTimingDiagnostics(): RequestTimingSummary[]
+  {
+    return requestTimingDiagnostics.summary();
+  }
+
+  /**
+   * Remove all retained request timings for this installation.
+   * Call from the browser console: pdr.clearRequestTimingDiagnostics()
+   */
+  clearRequestTimingDiagnostics(): void
+  {
+    requestTimingDiagnostics.clear();
+  }
+
+  /**
    * Set the log threshold for a specific PDR topic.
    * Messages at this level or above will be emitted; messages below will be suppressed.
    * Call from browser console: pdr.setLogLevelForTopic("SYNC", "DEBUG")
@@ -1821,27 +2196,6 @@ export class PerspectivesProxy
   disableLogging(): void
   {
     this.channel.port.postMessage({ proxyRequest: "disableLogging" });
-  }
-
-  /**
-   * TESTING ONLY. Deletes a resource document from PouchDB by its Perspectives resource identifier.
-   * This performs a proper PouchDB delete (not a raw IndexedDB removal), so PouchDB metadata stays consistent.
-   * Call from browser console: pdr.deleteResource("model://perspect.it/...")
-   *
-   * @param resourceIdentifier - The full Perspectives resource identifier (context or role).
-   * @returns A promise that resolves to true if the document was deleted, false otherwise.
-   */
-  deleteResource(resourceIdentifier : string) : Promise<boolean>
-  {
-    const proxy = this;
-    return new Promise(function (resolver, rejecter)
-      {
-        proxy.send(
-          { request: "DeleteResource", subject: resourceIdentifier, onlyOnce: true },
-          (r => resolver(r[0] === "true")),
-          function(e){ rejecter( e )}
-        );
-      });
   }
 
 }
@@ -1893,6 +2247,15 @@ class Cursor {
   private PDRStatus: string = "Processing...";
   private messages: Message[] = [];
   private queuePromise = Promise.resolve();
+  private statusTiming?: RequestTimingHandle;
+  private systemMessage = "";
+  private systemMessageListeners = new Set<(message: string) => void>();
+
+  subscribeSystemMessages(receive: (message: string) => void): () => void {
+    this.systemMessageListeners.add(receive);
+    receive(this.systemMessage);
+    return () => { this.systemMessageListeners.delete(receive); };
+  }
 
   constructor() {
     // Create the overlay element once
@@ -1985,11 +2348,38 @@ class Cursor {
   }
 
   // PDR status messages become active immediately, use a fixed id so remove matches reliably.
-  setPDRStatus({ action, message }: { action: "push" | "remove"; message: string }) {
+  setPDRStatus({ action, message, target = "overlay" }: { action: "push" | "remove"; message: string; target?: "overlay" | "navbar" }) {
+    if (target === "navbar") {
+      this.systemMessage = action === "push" ? message : "";
+      this.systemMessageListeners.forEach(receive => receive(this.systemMessage));
+      return;
+    }
     const STATUS_ID = Cursor.STATUS_ID;
     if (action === "push") {
-      this.pushMessage(STATUS_ID, message);
+      if (!this.statusTiming) {
+        this.statusTiming = requestTimingDiagnostics.start("PDRStatus", "status");
+        requestTimingDiagnostics.markVisible(this.statusTiming);
+      }
+      this.enqueue(() => {
+        const existingIndex = this.messages.findIndex(msg => msg.identifier === STATUS_ID);
+        if (existingIndex >= 0) {
+          const [statusMessage] = this.messages.splice(existingIndex, 1);
+          if (statusMessage) {
+            statusMessage.text = message;
+            this.messages.unshift(statusMessage);
+          }
+        } else {
+          this.messages.unshift({ identifier: STATUS_ID, text: message, startedAt: Date.now() });
+        }
+        this.setOverlayText(message);
+        this.setOverlayVisibility(true);
+        document.body.style.cursor = "wait";
+      });
     } else if (action === "remove") {
+      if (this.statusTiming) {
+        requestTimingDiagnostics.complete(this.statusTiming);
+        this.statusTiming = undefined;
+      }
       this.removeMessage(STATUS_ID);
     }
   }
@@ -2151,33 +2541,49 @@ class Cursor {
     }
   }
 
-  wait(request: RequestRecord) {
+  beginRequest(request: RequestRecord, category: RequestTimingCategory): RequestTimingHandle {
+    return requestTimingDiagnostics.start(
+      request.request ?? "unknown",
+      category,
+      request.trackingNumber
+    );
+  }
+
+  completeRequest(timing: RequestTimingHandle, failed = false): void {
+    requestTimingDiagnostics.complete(timing, failed);
+  }
+
+  wait(request: RequestRecord, timing: RequestTimingHandle) {
     const component = this;
     const identifier = request.trackingNumber!.toString();
 
     // Add the message (not yet shown) and arm a safety timeout
     this.enqueue(() => {
-      const msg: Message = { identifier, text: "Processing...", startedAt: Date.now(), req: request };
+      const msg: Message = { identifier, text: "Processing...", startedAt: timing.startedAt, req: request };
       this.messages.unshift(msg);
 
-      // Auto-clear after 60s with a warning (tune as needed)
       msg.timeoutId = window.setTimeout(() => {
+        requestTimingDiagnostics.markStale(timing);
+
         console.warn("[Cursor] Auto-clearing stale request", {
           identifier,
           request,
-          startedAt: msg.startedAt
+          startedAt: msg.startedAt,
+          elapsedMs: Date.now() - timing.startedAt
         });
         component.removeMessage(identifier);
-      }, 15_000);
+      }, AUTO_CLEAR_MS);
     });
 
-    // After 400ms, if still pending, display it
+    // After 1000ms, if still pending, display it
     setTimeout(() => {
       component.enqueue(() => {
         const index = component.messages.findIndex(msg => msg.identifier === identifier);
         if (index >= 0) {
           const message = component.messages[index];
           const statusIndex = component.messages.findIndex(m => m.identifier === Cursor.STATUS_ID);
+
+          requestTimingDiagnostics.markVisible(timing);
 
           if (statusIndex >= 0) {
             // Keep status on top; place this message right after it
@@ -2193,7 +2599,7 @@ class Cursor {
           }
         }
       });
-    }, 400);
+    }, DISPLAY_DELAY_MS);
   }
   
   restore(request: RequestRecord) {

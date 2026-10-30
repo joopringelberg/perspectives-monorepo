@@ -1,5 +1,11 @@
 package:
   name: perspectives-core
+  build:
+    censorProjectWarnings: all
+  test:
+    main: Test.Main
+    censorTestWarnings: all
+    dependencies: []
   dependencies:
     - aff
     - aff-coroutines
@@ -68,6 +74,9 @@ package:
     - versions
     - web-encoding
 workspace:
+  buildOpts:
+    censorLibraryWarnings: all
+    statVerbosity: no-stats
   packageSet:
     registry: 60.6.0
   extraPackages:

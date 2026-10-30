@@ -22,31 +22,38 @@
 
 module Perspectives.PerspectivesState where
 
+import Control.Alt (map)
 import Control.Monad.AvarMonadAsk (gets, modify)
-import Control.Monad.Trans.Class (lift)
+import Control.Monad.Error.Class (catchError, throwError)
+import Control.Monad.Reader (ReaderT(..), runReaderT)
 import Data.Array (cons)
 import Data.List (elem)
 import Data.Map (Map, empty, insert, lookup, values) as Map
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), isJust)
 import Data.Nullable (null)
 import Data.String (Pattern(..), stripSuffix)
-import Effect.Aff.AVar (AVar, put, read)
+import Effect (Effect)
+import Effect.Aff.AVar (AVar, put, read, take, tryRead)
+import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
-import Foreign.Object (empty, singleton)
+import Effect.Ref (modify_, read, write) as Ref
+import Foreign (Foreign)
+import Foreign.Object (Object, empty, singleton)
 import Foreign.Object (lookup, insert, delete) as OBJ
 import LRUCache (Cache, clear, defaultCreateOptions, defaultGetOptions, delete, get, newCache, set)
-import Perspectives.AMQP.Stomp (StompClient)
-import Perspectives.CoreTypes (AssumptionRegister, BrokerService, ContextInstances, DeltaCache, DomeinCache, IndexedResource, IntegrityFix, JustInTimeModelLoad, LogConfig, LogLevel(..), LogTopic, MonadPerspectives, PerspectivesState, QueryInstances, RepeatingTransaction, ResourceDeltasCache, ResourceVersionCache, RolInstances, RoleInstanceDeltasCache, RuntimeOptions, TranslationTable, TypeFix, Warning)
+import Perspectives.AMQP.Stomp (StompClient, createStompClient)
+import Perspectives.CoreTypes (AssumptionRegister, BrokerService, ContextInstances, DeltaCache, DomeinCache, IndexedResource, IntegrityFix, JustInTimeModelLoad, LogConfig, LogLevel(..), LogTopic, MonadPerspectives, PerspectivesState, QueryInstances, RepeatingTransaction, ResourceDeltasCache, ResourceVersionCache, RolInstances, RoleInstanceDeltasCache, RuntimeOptions, TranslationTable, TypeFix, Warning, newPendingSettledStack)
 import Perspectives.DomeinFile (DomeinFile)
-import Perspectives.Instances.Environment (Environment, _pushFrame, addVariable, empty, lookup) as ENV
+import Perspectives.Instances.Environment (Environment, _pushFrame, addVariable, lookup) as ENV
 import Perspectives.Logging.DefaultLevels (defaultLogLevels)
 import Perspectives.Persistence.API (PouchdbUser)
 import Perspectives.Persistence.State (getSystemIdentifier)
-import Perspectives.Persistence.Types (Credential(..))
+import Perspectives.Persistence.Types (Credential(..), MonadPouchdb(..), variableBindingsRef)
 import Perspectives.Representation.InstanceIdentifiers (PerspectivesUser(..), RoleInstance)
 import Perspectives.ResourceIdentifiers (createDefaultIdentifier)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri, Readable, Stable)
-import Prelude (Unit, bind, discard, pure, unit, void, ($), (+), (<<<), (>>=), (<>))
+import Perspectives.TransactionQueue (TransactionPriority, newTransactionQueue, withPriority)
+import Prelude (Unit, bind, discard, pure, unit, void, ($), (+), (<<<), (>>=), (<>), (==))
 
 newPerspectivesState
   :: PouchdbUser
@@ -71,7 +78,6 @@ newPerspectivesState uinfo transFlag transactionWithTiming modelToLoad runtimeOp
   , resourceDeltasCache: newCache defaultCreateOptions
   , roleInstanceDeltasCache: newCache defaultCreateOptions
   , queryAssumptionRegister: empty
-  , variableBindings: ENV.empty
   , systemIdentifier: uinfo.systemIdentifier
   , perspectivesUser: PerspectivesUser $ createDefaultIdentifier uinfo.perspectivesUser
   , couchdbUrl: uinfo.couchdbUrl
@@ -86,9 +92,11 @@ newPerspectivesState uinfo transFlag transactionWithTiming modelToLoad runtimeOp
   , transactionLevel: ""
   , brokerService
   , stompClient: Nothing
+  , stompClientFactory: createStompClient
   , databases: empty
   , warnings: []
   , transactionFlag: transFlag
+  , transactionQueue: newTransactionQueue unit
   , transactionWithTiming
   , modelToLoad
   , transactionFibers: Map.empty
@@ -101,11 +109,14 @@ newPerspectivesState uinfo transFlag transactionWithTiming modelToLoad runtimeOp
   , userIntegrityChoice: userIntegrityChoiceAVar
   , currentLanguage
   , translations: empty
-  , setPDRStatus: \_ _ -> unit
+  , conversations: (empty :: Object Foreign)
+  , setPDRStatus: \_ _ _ -> unit
   , typeToBeFixed
   , modelUnderCompilation: Nothing
   , modelUris: Map.empty
   , logConfig: defaultLogLevels
+  , logColor: Nothing
+  , pendingSettledTransactions: newPendingSettledStack unit
   }
 
 defaultRuntimeOptions :: RuntimeOptions
@@ -114,6 +125,8 @@ defaultRuntimeOptions =
   , useSystemVersion: null
   , privateKey: Nothing
   , publicKey: Nothing
+  , transportPrivateKey: Nothing
+  , transportPublicKey: Nothing
   , myContextsVersion: "1.0.0"
   }
 
@@ -171,6 +184,17 @@ transactionNumber = gets _.transactionNumber
 transactionFlag :: MonadPerspectives (AVar Boolean)
 transactionFlag = gets _.transactionFlag
 
+-- | Preserve the caller's variable bindings while admitting outer transaction work.
+withTransactionPriority :: forall a. TransactionPriority -> MonadPerspectives a -> MonadPerspectives a
+withTransactionPriority priority (MonadPouchdb action) = MonadPouchdb $ ReaderT \ctx -> do
+  state <- read ctx.state
+  withPriority state.transactionQueue priority (runReaderT action ctx)
+
+-- Non-blocking check to see if a transaction is currently running. 
+-- The flag is 'down' (the AVar is empty) exactly while a transaction runs.
+noTransactionIsRunning :: MonadPerspectives Boolean
+noTransactionIsRunning = transactionFlag >>= liftAff <<< map isJust <<< tryRead
+
 nextTransactionNumber :: MonadPerspectives Int
 nextTransactionNumber = do
   n <- transactionNumber
@@ -194,18 +218,42 @@ decreaseTransactionLevel = modify \s -> s
   }
 
 getBrokerService :: MonadPerspectives BrokerService
-getBrokerService = gets _.brokerService >>= lift <<< read
+getBrokerService = gets _.brokerService >>= liftAff <<< read
 
 setBrokerService :: Maybe BrokerService -> MonadPerspectives Unit
 setBrokerService bs = case bs of
-  Just bs' -> gets _.brokerService >>= lift <<< put bs'
+  Just bs' -> do
+    broker <- gets _.brokerService
+    mCurrent <- liftAff $ tryRead broker
+    case mCurrent of
+      Nothing -> liftAff $ put bs' broker
+      Just _ -> do
+        _ <- liftAff $ take broker
+        liftAff $ put bs' broker
   Nothing -> pure unit
+
+deleteBrokerService :: String -> MonadPerspectives Unit
+deleteBrokerService queueName = do
+  bs <- gets _.brokerService
+  mCurrent <- liftAff $ tryRead bs
+  case mCurrent of
+    Just { queueId } | queueId == queueName -> void $ liftAff $ take bs
+    _ -> pure unit
 
 stompClient :: MonadPerspectives (Maybe StompClient)
 stompClient = gets _.stompClient
 
 setStompClient :: StompClient -> MonadPerspectives Unit
 setStompClient bs = modify \s -> s { stompClient = Just bs }
+
+-- | Return the factory used to create a Stomp client for a given broker URL.
+getStompClientFactory :: MonadPerspectives (String -> Effect StompClient)
+getStompClientFactory = gets _.stompClientFactory
+
+-- | Replace the Stomp client factory stored in state.
+-- | Call this before `incomingPost` to inject a test stub.
+setStompClientFactory :: (String -> Effect StompClient) -> MonadPerspectives Unit
+setStompClientFactory f = modify \s -> s { stompClientFactory = f }
 
 getWarnings :: MonadPerspectives (Array Warning)
 getWarnings = gets _.warnings
@@ -240,6 +288,15 @@ setTranslationTable domain tt = modify \s -> s { translations = OBJ.insert domai
 removeTranslationTable :: String -> MonadPerspectives Unit
 removeTranslationTable domain = modify \s -> s { translations = OBJ.delete domain s.translations }
 
+conversationCacheLookup :: String -> MonadPerspectives (Maybe Foreign)
+conversationCacheLookup modelUri = gets _.conversations >>= pure <<< OBJ.lookup modelUri
+
+conversationCacheInsert :: String -> Foreign -> MonadPerspectives Unit
+conversationCacheInsert modelUri conversations = modify \s -> s { conversations = OBJ.insert modelUri conversations s.conversations }
+
+conversationCacheDelete :: String -> MonadPerspectives Unit
+conversationCacheDelete modelUri = modify \s -> s { conversations = OBJ.delete modelUri s.conversations }
+
 getCurrentLanguage :: MonadPerspectives String
 getCurrentLanguage = gets _.currentLanguage
 
@@ -249,20 +306,31 @@ setCurrentLanguage lang = modify \s -> s { currentLanguage = lang }
 modelsDatabaseName :: MonadPerspectives String
 modelsDatabaseName = getSystemIdentifier >>= pure <<< (_ <> "_models")
 
-getPDRStatusSetter :: MonadPerspectives (String -> String -> Unit)
+getPDRStatusSetter :: MonadPerspectives (String -> String -> String -> Unit)
 getPDRStatusSetter = gets _.setPDRStatus
 
-type PDRStatusMessage = { action :: String, message :: String }
+type PDRStatusMessage = { action :: String, message :: String, target :: String }
 
 pushMessage :: String -> MonadPerspectives Unit
 pushMessage msg = do
   setPDRStatus <- getPDRStatusSetter
-  pure $ setPDRStatus "push" msg
+  pure $ setPDRStatus "push" msg "overlay"
 
 removeMessage :: String -> MonadPerspectives Unit
 removeMessage msg = do
   setPDRStatus <- getPDRStatusSetter
-  pure $ setPDRStatus "remove" msg
+  pure $ setPDRStatus "remove" msg "overlay"
+
+-- | Show progress without blocking GUI interaction or requiring acknowledgement.
+pushSystemMessage :: String -> MonadPerspectives Unit
+pushSystemMessage msg = do
+  setPDRStatus <- getPDRStatusSetter
+  pure $ setPDRStatus "push" msg "navbar"
+
+removeSystemMessage :: MonadPerspectives Unit
+removeSystemMessage = do
+  setPDRStatus <- getPDRStatusSetter
+  pure $ setPDRStatus "remove" "" "navbar"
 
 getTypeToBeFixed :: MonadPerspectives (AVar TypeFix)
 getTypeToBeFixed = gets _.typeToBeFixed
@@ -273,6 +341,7 @@ getModelUnderCompilation = gets _.modelUnderCompilation
 setModelUnderCompilation :: Maybe (ModelUri Readable) -> MonadPerspectives Unit
 setModelUnderCompilation mu = modify \s -> s { modelUnderCompilation = mu }
 
+-- | Returns the readable-to-stable model URI map loaded from the local models database during startup.
 getModelUris :: MonadPerspectives (Map.Map (ModelUri Readable) (ModelUri Stable))
 getModelUris = gets _.modelUris
 
@@ -332,31 +401,42 @@ addWarning w = modify \s -> s { warnings = cons w s.warnings }
 -----------------------------------------------------------
 -- FUNCTIONS TO HANDLE VARIABLE BINDINGS
 -----------------------------------------------------------
+-- | Variable bindings are private to the fiber (the run of MonadPerspectives) that creates them;
+-- | see `runMonadPouchdbWithState`.
 getVariableBindings :: MonadPerspectives (ENV.Environment (Array String))
-getVariableBindings = gets _.variableBindings
+getVariableBindings = variableBindingsRef >>= liftEffect <<< Ref.read
+
+setVariableBindings :: ENV.Environment (Array String) -> MonadPerspectives Unit
+setVariableBindings env = variableBindingsRef >>= liftEffect <<< Ref.write env
 
 addBinding :: String -> Array String -> MonadPerspectives Unit
-addBinding varName qfd = void $ modify \s@{ variableBindings } -> s { variableBindings = ENV.addVariable varName qfd variableBindings }
+addBinding varName qfd = variableBindingsRef >>= liftEffect <<< Ref.modify_ (ENV.addVariable varName qfd)
 
 lookupVariableBinding :: String -> MonadPerspectives (Maybe (Array String))
 lookupVariableBinding varName = getVariableBindings >>= pure <<< (ENV.lookup varName)
 
 withFrame :: forall a. MonadPerspectives a -> MonadPerspectives a
 withFrame computation = do
-  old <- getVariableBindings
-  void $ modify \s -> s { variableBindings = (ENV._pushFrame old) }
-  r <- computation
-  void $ modify \s -> s { variableBindings = old }
-  pure r
+  old <- pushFrame
+  catchError
+    ( do
+        r <- computation
+        restoreFrame old
+        pure r
+    )
+    ( \e -> do
+        restoreFrame old
+        throwError e
+    )
 
 pushFrame :: MonadPerspectives (ENV.Environment (Array String))
 pushFrame = do
   old <- getVariableBindings
-  void $ modify \s -> s { variableBindings = (ENV._pushFrame old) }
+  setVariableBindings (ENV._pushFrame old)
   pure old
 
 restoreFrame :: ENV.Environment (Array String) -> MonadPerspectives Unit
-restoreFrame frame = void $ modify \s -> s { variableBindings = frame }
+restoreFrame = setVariableBindings
 
 -----------------------------------------------------------
 -- FUNCTIONS TO MODIFY LRUCACHES IN PERSPECTIVESSTATE

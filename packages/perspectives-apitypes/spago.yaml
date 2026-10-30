@@ -1,5 +1,11 @@
 package:
   name: perspectives-apitypes
+  build:
+    censorProjectWarnings: all
+  test:
+    main: Test.Main
+    censorTestWarnings: all
+    dependencies: []
   dependencies:
     - console
     - effect
@@ -17,6 +23,9 @@ package:
     - transformers
     - unsafe-coerce
 workspace:
+  buildOpts:
+    censorLibraryWarnings: all
+    statVerbosity: no-stats
   packageSet:
     registry: 60.6.0
   extraPackages:

@@ -39,6 +39,7 @@ import Prelude
 import Data.Array (concat, filter)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
+import Data.Newtype (wrap)
 import Data.Traversable (for)
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)

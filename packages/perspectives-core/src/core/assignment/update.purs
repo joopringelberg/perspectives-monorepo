@@ -41,12 +41,11 @@ import Control.Monad.AvarMonadAsk (get, gets, modify)
 import Control.Monad.Error.Class (catchError, throwError, try)
 import Control.Monad.State (StateT, evalStateT, put, get) as ST
 import Control.Monad.Trans.Class (lift)
-import Data.Array (concat, cons, difference, elemIndex, filter, filterA, find, foldM, foldMap, nub, null, snoc)
+import Data.Array (concat, difference, elemIndex, filter, filterA, foldMap, nub, null, snoc)
 import Data.Array (head) as ARR
-import Data.Array.NonEmpty (NonEmptyArray, head, toArray)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
-import Data.Maybe (Maybe(..), isJust, maybe)
+import Data.Maybe (Maybe(..), fromMaybe, isJust, maybe)
 import Data.MediaType (MediaType(..))
 import Data.Monoid.Disj (Disj(..))
 import Data.Newtype (ala, over, unwrap)
@@ -58,18 +57,19 @@ import Foreign (Foreign)
 import Foreign.Object (empty, lookup)
 import Partial.Unsafe (unsafePartial)
 import Persistence.Attachment (class Attachment)
-import Perspectives.Authenticate (signDelta)
 import Perspectives.CollectAffectedContexts (aisInPropertyDelta, usersWithPerspectiveOnRoleInstance)
-import Perspectives.ContextAndRole (addRol_property, changeContext_me, changeContext_preferredUserRoleType, context_pspType, context_rolInContext, deleteRol_property, modifyContext_rolInContext, popContext_state, popRol_state, pushContext_state, pushRol_state, removeRol_property, rol_context, rol_isMe, rol_pspType, setRol_property)
-import Perspectives.CoreTypes (class Persistent, InformedAssumption(..), MonadPerspectives, Updater, MonadPerspectivesTransaction, (###=), (##=), (##>), (##>>))
+import Perspectives.ContextAndRole (addRol_property, changeContext_me, changeContext_preferredUserRoleType, context_pspType, context_rolInContext, deleteRol_property, modifyContext_rolInContext, popContext_state, popRol_state, pushContext_state, pushRol_state, removeRol_property, rol_context, rol_pspType, setRol_property)
+import Perspectives.CoreTypes (class Persistent, InformedAssumption(..), LogLevel(..), LogTopic(..), MonadPerspectives, MonadPerspectivesTransaction, Updater, (###=), (##=), (##>), (##>>))
 import Perspectives.Deltas (addCorrelationIdentifiersToTransactie, addDelta)
 import Perspectives.DependencyTracking.Array.Trans (runArrayT)
 import Perspectives.DependencyTracking.Dependency (findContextStateRequests, findMeRequests, findPropertyRequests, findRoleRequests, findRoleStateRequests)
-import Perspectives.Error.Boundaries (handlePerspectContextError, handlePerspectRolError, handlePerspectRolError')
+import Perspectives.Error.Boundaries (handlePerspectContextError, handlePerspectRolError)
+import Perspectives.Error.Pretty (humanizePerspectivesWarning)
 import Perspectives.Identifiers (startsWithSegments, typeUri2LocalName_, typeUri2couchdbFilename)
 import Perspectives.InstanceRepresentation (PerspectContext, PerspectRol(..))
 import Perspectives.Instances.ObjectGetters (binding_, contextType, getProperty, roleType, roleType_)
 import Perspectives.Instances.Values (parsePerspectivesFile, writePerspectivesFile)
+import Perspectives.Logging (debugResource, logWhen, warnResource)
 import Perspectives.Persistence.API (toFile)
 import Perspectives.Persistence.DeltaStore (getDeltasForResourceByDeltaType)
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
@@ -83,13 +83,16 @@ import Perspectives.Representation.Class.Role (allLocallyRepresentedProperties)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance, Value(..))
 import Perspectives.Representation.TypeIdentifiers (PropertyType(..), RoleType, StateIdentifier(..))
 import Perspectives.ResourceIdentifiers (databaseLocation, resourceIdentifier2DocLocator)
+import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.StrippedDelta (stripResourceSchemes)
 import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
 import Perspectives.Sync.SignedDelta (SignedDelta)
+import Perspectives.Sync.VersionedDelta (signVersionedDelta)
 import Perspectives.Sync.Transaction (Transaction(..))
 import Perspectives.Types.ObjectGetters (getRoleAspectSpecialisations, hasPerspectiveOnRole, isUnlinked_, propertyAliases)
-import Perspectives.TypesForDeltas (ContextDelta(..), ContextDeltaType(..), RolePropertyDelta(..), RolePropertyDeltaType(..), UniverseRoleDelta(..), UniverseRoleDeltaType(..))
-import Simple.JSON (class WriteForeign, writeJSON)
+import Perspectives.TypesForDeltas (ContextDelta(..), ContextDeltaType(..), RolePropertyDelta(..), RolePropertyDeltaType(..))
+import Perspectives.Warning (PerspectivesWarning(..))
+import Simple.JSON (class WriteForeign)
 
 -----------------------------------------------------------
 -- UPDATE A CONTEXT (SET THE PREFERRED USER ROLE TYPE)
@@ -135,7 +138,9 @@ addRoleInstanceToContext contextId rolName (Tuple roleId receivedDelta) = do
             -- Do not add a roleinstance a second time.
             -- For linked roles, check if the role is already in the context.
             -- For unlinked roles, always process (idempotent operations).
-            if unlinked then f role pe unlinked
+            if unlinked then do
+              void $ lift $ saveEntiteit_ roleId role
+              f role pe unlinked
             else (lift $ context_rolInContext pe rolName) >>= \(Tuple _ roles) ->
               if isJust $ elemIndex roleId roles then void $ lift $ saveEntiteit_ roleId role
               else f role pe unlinked
@@ -167,8 +172,8 @@ addRoleInstanceToContext contextId rolName (Tuple roleId receivedDelta) = do
       _ -> do
         let rkey = unwrap id
         rversion <- lift $ incrementResourceVersion rkey
-        signDelta
-          ( writeJSON $ stripResourceSchemes $ ContextDelta
+        signVersionedDelta
+          ( stripResourceSchemes $ ContextDelta
               { contextInstance: contextId
               , contextType: context_pspType pe
               , roleType: rolName
@@ -198,65 +203,6 @@ addRoleInstanceToContext contextId rolName (Tuple roleId receivedDelta) = do
     addDelta $ DeltaInTransaction { users, delta }
     -- QUERY UPDATES
     (lift $ findRoleRequests contextId rolName) >>= addCorrelationIdentifiersToTransactie
-
--- OBSOLETE!!
--- | Modifies the context instance by detaching the given role instances.
--- | Notice that this function does neither uncache nor unsave the rolInstances
--- | themselves. Instead, use removeRoleInstance.
--- | Does not touch the binding of any of the role instances.
--- | PERSISTENCE of the context instance.
--- | SYNCHRONISATION by ContextDelta and UniverseRoleDelta.
--- | STATE EVALUATION
--- | QUERY UPDATES
--- | CURRENTUSER for contextId and one of rolInstances.
-removeRoleInstancesFromContext :: ContextInstance -> EnumeratedRoleType -> (Updater (NonEmptyArray RoleInstance))
-removeRoleInstancesFromContext contextId rolName rolInstances = (lift $ try $ getPerspectContext contextId) >>=
-  handlePerspectContextError "removeRoleInstancesFromContext"
-    \(pe :: PerspectContext) -> do
-      -- Guarantees STATE EVALUATION because contexts with a vantage point are added to
-      -- the transaction, too.
-      -- As a side effect, usersWithPerspectiveOnRoleInstance adds Deltas to the transaction for the continuation of the
-      -- path beyond the given role instance.
-      -- The last boolean argument prevents usersWithPerspectiveOnRoleInstance from doing this.
-      users <- usersWithPerspectiveOnRoleInstance rolName (head rolInstances) contextId false
-      subject <- getSubject
-      -- SYNCHRONISATION
-      -- Create one delta per role instance (each delta operates on exactly one resource-key).
-      for_ (toArray rolInstances) \ri -> do
-        let rkey = unwrap ri
-        rversion <- lift $ incrementResourceVersion rkey
-        delta <- signDelta
-          ( writeJSON $ stripResourceSchemes $ UniverseRoleDelta
-              { id: contextId
-              , contextType: context_pspType pe
-              , roleInstance: ri
-              , roleType: rolName
-              , authorizedRole: Nothing
-              , deltaType: RemoveRoleInstance
-              , subject
-              , resourceKey: rkey
-              , resourceVersion: rversion
-              }
-          )
-        addDelta $ DeltaInTransaction { users, delta }
-      -- QUERY UPDATES.
-      (lift $ findRoleRequests contextId rolName) >>= addCorrelationIdentifiersToTransactie
-      -- Modify the context: remove the role instances from those recorded with the role type.
-      (roles :: Array PerspectRol) <- foldM
-        (\roles roleId -> (lift $ try $ getPerspectRol roleId) >>= (handlePerspectRolError' "removeRoleInstancesFromContext" roles (pure <<< (flip cons roles))))
-        []
-        (toArray rolInstances)
-      unlinked <- lift $ isUnlinked_ rolName
-      changedContext <-
-        if unlinked then pure pe
-        else lift (modifyContext_rolInContext pe rolName (flip difference (toArray rolInstances)))
-      -- PERSISTENCE.
-      case find rol_isMe roles of
-        Nothing -> lift $ cacheAndSave contextId changedContext
-        Just _ -> do
-          (lift $ findMeRequests contextId) >>= addCorrelationIdentifiersToTransactie
-          -- CURRENTUSER.
-          lift $ cacheAndSave contextId (changeContext_me changedContext Nothing)
 
 -- | Detach the role instances from their current context and attach them to the new context.
 -- | This is not just a convenience function. The combination of removeRoleInstancesFromContext and addRoleInstanceToContext would add UniverseRoleDeltas, which we don't need here.
@@ -353,7 +299,7 @@ addProperty rids propertyName valuesAndDeltas = case ARR.head rids of
                     , resourceKey: rkey
                     , resourceVersion: rversion
                     }
-                  signDelta (writeJSON $ stripResourceSchemes delta)
+                  signVersionedDelta (stripResourceSchemes delta)
                 Just signedDelta -> pure signedDelta
               pure (Tuple (unwrap value) delta)
             -- Save the property values in the role instance. Do this now because it will affect computing the users.
@@ -379,6 +325,8 @@ addProperty rids propertyName valuesAndDeltas = case ARR.head rids of
             -- Look for requests for the original property AND the replacement property (if any).
             (lift $ findPropertyRequests propertyBearingInstance propertyName) >>= addCorrelationIdentifiersToTransactie
             (lift $ findPropertyRequests propertyBearingInstance replacementProperty) >>= addCorrelationIdentifiersToTransactie
+            readablePropertyName <- lift $ toReadable propertyName
+            lift $ debugResource ("addProperty: add to property " <> unwrap readablePropertyName <> " values " <> show values)
 
 -- | Get the property bearing role individual in the chain.
 -- | If the property is defined on role instance's type (either directly or by Aspect), return it; otherwise
@@ -435,8 +383,8 @@ removeProperty rids propertyName mdelta values = case ARR.head rids of
                 Nothing -> do
                   let rkey = unwrap rid <> "#" <> unwrap replacementProperty
                   rversion <- lift $ incrementResourceVersion rkey
-                  signDelta
-                    ( writeJSON $ stripResourceSchemes
+                  signVersionedDelta
+                    ( stripResourceSchemes
                         ( RolePropertyDelta
                             { id: rid
                             , roleType: rol_pspType pe
@@ -454,6 +402,8 @@ removeProperty rids propertyName mdelta values = case ARR.head rids of
               (lift $ findPropertyRequests rid replacementProperty) >>= addCorrelationIdentifiersToTransactie
               -- Apply changes to the role and save it.
               lift $ cacheAndSave rid (removeRol_property pe replacementProperty values)
+              readablePropertyName <- lift $ toReadable propertyName
+              lift $ debugResource ("removeProperty: remove from property " <> unwrap readablePropertyName <> " values " <> show values)
 
 -- | Delete all property values from the role for the EnumeratedPropertyType.
 -- | If there are no values for the property on the role instance, this is a no-op.
@@ -485,8 +435,8 @@ deleteProperty rids propertyName mdelta = case ARR.head rids of
                 Nothing -> do
                   let rkey = unwrap rid <> "#" <> unwrap replacementProperty
                   rversion <- lift $ incrementResourceVersion rkey
-                  signDelta
-                    ( writeJSON $ stripResourceSchemes
+                  signVersionedDelta
+                    ( stripResourceSchemes
                         ( RolePropertyDelta
                             { id: rid
                             , roleType: pspType
@@ -504,6 +454,8 @@ deleteProperty rids propertyName mdelta = case ARR.head rids of
               (lift $ findPropertyRequests rid replacementProperty) >>= addCorrelationIdentifiersToTransactie
               -- Apply changes to the role and save it.
               lift $ cacheAndSave rid (deleteRol_property pe replacementProperty)
+              readablePropertyName <- lift $ toReadable propertyName
+              lift $ debugResource ("deleteProperty: delete property " <> unwrap readablePropertyName)
 
 -- | Modify the role instance with the new property values.
 -- | When all new values are in fact already in the set of values for the property of the role instance, this is
@@ -514,9 +466,11 @@ deleteProperty rids propertyName mdelta = case ARR.head rids of
 -- | QUERY UPDATES
 -- | CURRENTUSER: there can be no change to the current user.
 setProperty :: Array RoleInstance -> EnumeratedPropertyType -> Maybe SignedDelta -> (Updater (Array Value))
-setProperty rids propertyName mdelta values = do
-  rids' <- filterA hasDifferentValues rids
-  setProperty' rids'
+setProperty rids propertyName mdelta values =
+  if null rids then lift ((show <$> humanizePerspectivesWarning (NoRoleInstanceToSetProperty propertyName values)) >>= warnResource)
+  else do
+    rids' <- filterA hasDifferentValues rids
+    setProperty' rids'
   where
   hasDifferentValues :: RoleInstance -> MonadPerspectivesTransaction Boolean
   hasDifferentValues rid = do
@@ -526,13 +480,18 @@ setProperty rids propertyName mdelta values = do
 
   setProperty' :: Array RoleInstance -> MonadPerspectivesTransaction Unit
   setProperty' rids' = case ARR.head rids' of
-    Nothing -> pure unit
+    Nothing -> case ARR.head rids of
+      Just rid -> lift ((show <$> humanizePerspectivesWarning (RoleInstanceAlreadyHasPropertyValue rid propertyName values)) >>= warnResource)
+      Nothing -> pure unit
     Just _ -> do
       subject <- getSubject
       for_ rids' \rid' -> do
         mrid <- lift $ getPropertyBearingRoleInstance propertyName rid'
         case mrid of
-          Nothing -> pure unit
+          Nothing -> do
+            readablePropertyName <- lift $ toReadable propertyName
+            lift $ warnResource ("setProperty: property " <> unwrap readablePropertyName <> " not found on role instance " <> unwrap rid')
+            pure unit
           Just (RoleProp rid replacementProperty) -> (lift $ try $ getPerspectRol rid) >>=
             handlePerspectRolError
               "setProperty"
@@ -545,8 +504,8 @@ setProperty rids propertyName mdelta values = do
                   Nothing -> do
                     let rkey = unwrap rid <> "#" <> unwrap replacementProperty
                     rversion <- lift $ incrementResourceVersion rkey
-                    signDelta
-                      ( writeJSON $ stripResourceSchemes
+                    signVersionedDelta
+                      ( stripResourceSchemes
                           ( RolePropertyDelta
                               { id: rid
                               , roleType: pspType
@@ -565,14 +524,18 @@ setProperty rids propertyName mdelta values = do
                 addDelta (DeltaInTransaction { users, delta: signedDelta })
                 (lift $ findPropertyRequests rid propertyName) >>= addCorrelationIdentifiersToTransactie
                 (lift $ findPropertyRequests rid replacementProperty) >>= addCorrelationIdentifiersToTransactie
+                readablePropertyName <- lift $ toReadable propertyName
+                lift $ debugResource ("setProperty: set property " <> unwrap readablePropertyName <> " on role instance " <> unwrap rid <> " to values " <> show values)
 
 -----------------------------------------------------------
 -- SAVEFILE
 -----------------------------------------------------------
 -- | From a Foreign value that represents an ArrayBuffer or String, create a File and save it with a role instance document.
+-- | An explicitly supplied filename overrides the name in existing file metadata. Without one, the existing name is retained,
+-- | falling back to the property's local name when no valid metadata exists. The selected name is used in both the metadata and the File.
 -- | Updates the revision of the role instance.
-saveFile :: RoleInstance -> EnumeratedPropertyType -> Foreign -> String -> MonadPerspectivesTransaction String
-saveFile r property arrayBuf mimeType = do
+saveFile :: RoleInstance -> EnumeratedPropertyType -> Foreign -> String -> Maybe String -> MonadPerspectivesTransaction String
+saveFile r property arrayBuf mimeType fileName = do
   -- Look for the contextualised property first: if we find a replacement for the requested property on a role instance,
   -- that is the instance we will work with - and the (replacing) local property we will work with!
   mrid <- lift $ getPropertyBearingRoleInstance property r
@@ -586,9 +549,10 @@ saveFile r property arrayBuf mimeType = do
   dbLoc <- lift $ databaseLocation $ unwrap rid
   { database, documentName } <- lift $ resourceIdentifier2DocLocator (unwrap rid)
   mval <- lift (rid ##> getProperty replacementProperty)
+  let defaultFileName = typeUri2LocalName_ $ unwrap replacementProperty
   usedVal <- case mval of
     Nothing -> pure $ writePerspectivesFile
-      { fileName: (typeUri2LocalName_ $ unwrap replacementProperty) -- As the property value is unavailable, we'll use the local prop name as client side name, too.
+      { fileName: fromMaybe defaultFileName fileName
       , propertyType: replacementProperty
       , mimeType
       , database: dbLoc
@@ -596,17 +560,17 @@ saveFile r property arrayBuf mimeType = do
       }
     Just val -> case parsePerspectivesFile $ unwrap val of
       Left e -> pure $ writePerspectivesFile
-        { fileName: (typeUri2LocalName_ $ unwrap replacementProperty) -- As the property value is unavailable, we'll use the local prop name as client side name, too.
+        { fileName: fromMaybe defaultFileName fileName
         , propertyType: replacementProperty
         , mimeType
         , database: dbLoc
         , roleFileName: documentName
         }
-      Right rec -> pure $ writePerspectivesFile $ rec { database = dbLoc, roleFileName = documentName }
+      Right rec -> pure $ writePerspectivesFile $ rec { fileName = fromMaybe rec.fileName fileName, database = dbLoc, roleFileName = documentName }
   case parsePerspectivesFile usedVal of
     Left e -> throwError $ error ("Could not parse '" <> usedVal <> "' trying to save file:" <> show e)
     Right rec -> do
-      theFile <- liftEffect $ toFile (typeUri2LocalName_ (unwrap replacementProperty)) rec.mimeType arrayBuf
+      theFile <- liftEffect $ toFile rec.fileName rec.mimeType arrayBuf
       success <- lift $ addAttachment r (typeUri2couchdbFilename (unwrap replacementProperty)) theFile (MediaType rec.mimeType)
       if success then do
         -- Add an UploadFile delta.
@@ -623,7 +587,7 @@ saveFile r property arrayBuf mimeType = do
           , resourceKey: rkey
           , resourceVersion: rversion
           }
-        signedDelta <- signDelta (writeJSON $ stripResourceSchemes delta)
+        signedDelta <- signVersionedDelta (stripResourceSchemes delta)
         setProperty [ rid ] replacementProperty Nothing [ Value usedVal ]
         -- Compute the users for this role. As a side effect, contexts are added to the transaction.
         users <- aisInPropertyDelta r rid property replacementProperty (rol_pspType roleInstance)
@@ -787,7 +751,11 @@ roleContextualisations ctxt qualifiedRoleIdentifier = do
   -- Get the user role type that is executing.
   (user :: RoleType) <- gets (_.authoringRole <<< unwrap)
   -- Filter the object role types, keeping only those that the user role type has a perspective on.
-  lift $ concat <$> runArrayT (filterA (unsafePartial hasPerspectiveOnRole user) roleTypesToCreate')
+  result <- lift $ concat <$> runArrayT (filterA (unsafePartial hasPerspectiveOnRole user) roleTypesToCreate')
+  if null result then lift $ logWhen Trace RESOURCE
+    (show <$> (humanizePerspectivesWarning $ NoRoleTypesToCreate qualifiedRoleIdentifier ctxt user))
+  else pure unit
+  pure result
 
 -- | A state condition may be fully determined, or it may not yet be determinable due to 
 -- | resource removal.

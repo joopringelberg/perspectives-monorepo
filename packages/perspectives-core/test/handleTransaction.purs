@@ -121,7 +121,7 @@ theSuite = suiteSkip "Perspectives.Sync.HandleTransaction" do
       -- Handle post in parallel
       -- TODO. Dit proces stopt niet, ondanks killFiber
       log "1"
-      postFiber <- lift $ forkAff (runPerspectivesWithState (incomingPost url) pstate)
+      postFiber <- liftAff $ forkAff (runPerspectivesWithState (incomingPost url) pstate)
       log "2"
       -- Wait a little
       liftAff $ delay (Milliseconds 8000.0)

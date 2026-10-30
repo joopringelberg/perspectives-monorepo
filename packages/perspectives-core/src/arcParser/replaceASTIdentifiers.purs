@@ -4,7 +4,7 @@ import Prelude
 
 import Data.Maybe (Maybe(..))
 import Perspectives.Identifiers (endsWithSegments)
-import Perspectives.Parsing.Arc.AST (ActionE(..), AutomaticEffectE(..), ContextActionE(..), NotificationE(..), AuthorOnly(..), PropertyVerbE(..), RoleE(..), RoleIdentification(..), RolePart(..), RoleVerbE(..), SelfOnly(..), StateE(..), StateQualifiedPart(..), StateSpecification(..), StateTransitionE(..))
+import Perspectives.Parsing.Arc.AST (ActionE(..), AutomaticEffectE(..), ContextActionE(..), NotificationE(..), AuthorOnly(..), PerspectivePosition(..), PropertyVerbE(..), RoleE(..), RoleIdentification(..), RolePart(..), RoleVerbE(..), SelfOnly(..), StateE(..), StateQualifiedPart(..), StateSpecification(..), StateTransitionE(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), EnumeratedRoleType(..), RoleType(..))
 
 type OriginalId = String
@@ -33,6 +33,7 @@ instance ReplaceIdentifiers StateQualifiedPart where
   replaceIdentifier original addendum (CA r) = CA $ replaceIdentifier original addendum r
   replaceIdentifier original addendum (SO r) = SO $ replaceIdentifier original addendum r
   replaceIdentifier original addendum (PO r) = PO $ replaceIdentifier original addendum r
+  replaceIdentifier original addendum (PP r) = PP $ replaceIdentifier original addendum r
   replaceIdentifier original addendum (N r) = N $ replaceIdentifier original addendum r
   replaceIdentifier original addendum (AE r) = AE $ replaceIdentifier original addendum r
   replaceIdentifier original addendum (SUBSTATE r) = SUBSTATE $ replaceIdentifier original addendum r
@@ -96,6 +97,12 @@ instance ReplaceIdentifiers AuthorOnly where
   replaceIdentifier original addendum (AuthorOnly r@{ subject, state }) = AuthorOnly $ r
     { subject = replaceIdentifier original addendum subject
     , state = replaceIdentifier original addendum state
+    }
+
+instance ReplaceIdentifiers PerspectivePosition where
+  replaceIdentifier original addendum (PerspectivePosition r@{ subject, object }) = PerspectivePosition $ r
+    { subject = replaceIdentifier original addendum subject
+    , object = replaceIdentifier original addendum object
     }
 
 instance ReplaceIdentifiers ActionE where

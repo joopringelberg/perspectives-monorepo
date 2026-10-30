@@ -27,9 +27,6 @@ import Test.Utilities as UT
 import Test.DomeinFile.Encoding as DFE
 import Test.RabbitMQ as RB
 import Test.Class.Role as ROLE
-import Test.Perspectives.Representation.ADT.DisjunctiveNormalForm as DNF
-import Test.Perspectives.Representation.ADT2 as ADT2
-import Test.Perspectives.Representation.ADT.SpecialisesADT as SPECADT
 
 
 main :: Effect Unit
@@ -58,6 +55,3 @@ main = runTest do
   -- DFE.theSuite
   -- RB.theSuite
   ROLE.theSuite
-  -- DNF.theSuite
-  -- ADT2.theSuite
-  -- SPECADT.theSuite

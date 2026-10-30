@@ -23,12 +23,13 @@
 -- | From the syntax tree that describes a Statement, we construct a QueryFunctionDescription.
 
 module Perspectives.Query.StatementCompiler
-  ( compileStatement
+  ( compileActionEffect
+  , compileStatement
   ) where
 
 import Control.Monad.State.Class (gets)
 import Control.Monad.Trans.Class (lift)
-import Data.Array (filter, filterA, foldM, head, length, null, uncons)
+import Data.Array (filter, foldM, head, length, uncons)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..), fromJust)
 import Data.Newtype (unwrap)
@@ -36,6 +37,7 @@ import Data.Traversable (for_, traverse)
 import Foreign.Object (Object, keys, values)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.Checking.Authorization (roleHasPerspectiveOnRoleWithVerb)
+import Perspectives.Error.Pretty (humanizePerspectivesError)
 import Perspectives.External.CoreModuleList (isExternalCoreModule)
 import Perspectives.External.HiddenFunctionCache (lookupHiddenFunction, lookupHiddenFunctionCardinality, lookupHiddenFunctionIsEffect, lookupHiddenFunctionNArgs)
 import Perspectives.Identifiers (areLastSegmentsOf, buitenRol, typeUri2ModelUri, endsWithSegments, isExternalRole, isTypeUri)
@@ -50,7 +52,8 @@ import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Query.ExpressionCompiler (compileExpression, makeSequence)
 import Perspectives.Query.QueryTypes (Domain(..), QueryFunctionDescription(..), RoleInContext, adtContext2AdtRoleInContext, domain2contextType, domain2roleType, functional, mandatory, range, roleInContext2Context, roleInContext2Role, roleRange)
 import Perspectives.Query.QueryTypes (RoleInContext(..)) as QT
-import Perspectives.Representation.ADT (ADT(..), allLeavesInADT, equalsOrGeneralises_, equalsOrSpecialises_)
+import Perspectives.Representation.Action (ActionEffect(..), queryFunctionDescriptionOfActionEffect)
+import Perspectives.Representation.ADT (ADT(..), allLeavesInADT, equalsOrSpecialises_)
 import Perspectives.Representation.CNF (CNF, traverseDPROD)
 import Perspectives.Representation.Class.Identifiable (identifier)
 import Perspectives.Representation.Class.PersistentType (getEnumeratedProperty, getEnumeratedRole)
@@ -61,7 +64,7 @@ import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..)) as QF
 import Perspectives.Representation.Range (Range(..))
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..), pessimistic)
-import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedPropertyType, EnumeratedRoleType(..), PropertyType(..), RoleKind(..), RoleType(..))
+import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleKind(..), RoleType(..), roletype2string)
 import Perspectives.Representation.Verbs (PropertyVerb(..), RoleVerb(..)) as Verbs
 import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.Types.ObjectGetters (externalRole, generalisesRoleType_, hasPerspectiveOnPropertyWithVerb, isDatabaseQueryRole, isEnumeratedProperty)
@@ -83,24 +86,31 @@ compileStatement
   -> Statements
   -> PhaseThree QueryFunctionDescription
 compileStatement originDomain currentcontextDomain userRoleTypes statements =
+  queryFunctionDescriptionOfActionEffect <$> compileActionEffect originDomain currentcontextDomain userRoleTypes statements
+
+compileActionEffect
+  :: Domain
+  -> Domain
+  -> Array RoleType
+  -> Statements
+  -> PhaseThree ActionEffect
+compileActionEffect originDomain currentcontextDomain userRoleTypes statements =
   case statements of
-    -- Compile a series of Assignments into a QueryDescription.
-    Statements assignments -> sequenceOfAssignments userRoleTypes assignments
-    -- Compile the LetStep into a QueryDescription.
-    Let letstep -> do
-      let_ <- compileLetStep letstep
-      pure (UQD originDomain QF.WithFrame let_ (range let_) (functional let_) (mandatory let_))
+    Statements assignments -> do
+      stage <- sequenceOfAssignments userRoleTypes assignments
+      pure $ ActionEffect { bindings: [], stages: [ stage ], capturedBindingNames: [] }
+    Let letstep -> compileLetStep letstep
   where
 
-  compileLetStep :: LetStep -> PhaseThree QueryFunctionDescription
-  compileLetStep (LetStep { bindings, assignments }) = withFrame
-    case uncons bindings of
-      -- no bindings at all. Just the body. This will probably never occur as the parser breaks on it.
-      Nothing -> sequenceOfAssignments userRoleTypes assignments
-      (Just { head: bnd, tail }) -> do
-        -- compileVarBinding also adds a variable binding to the compile time environment.
-        head_ <- compileVarBinding bnd
-        makeSequence <$> foldM addVarBindingToSequence head_ tail <*> sequenceOfAssignments userRoleTypes assignments
+  compileLetStep :: LetStep -> PhaseThree ActionEffect
+  compileLetStep (LetStep { bindings, stages }) = withFrame do
+    bindingDescriptions <- traverse compileVarBinding bindings
+    stageDescriptions <- traverse (sequenceOfAssignments userRoleTypes) stages
+    pure $ ActionEffect
+      { bindings: bindingDescriptions
+      , stages: stageDescriptions
+      , capturedBindingNames: bindingName <$> bindings
+      }
     where
     -- Inverts the result as well.
     compileVarBinding :: LetABinding -> PhaseThree QueryFunctionDescription
@@ -114,10 +124,9 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
       addBinding varName assignmentDescription
       pure $ UQD originDomain (QF.BindResultFromCreatingAssignment varName) assignmentDescription (range assignmentDescription) (functional assignmentDescription) (mandatory assignmentDescription)
 
-    -- The range of a sequence equals that of its second term.
-    -- The fold is left associative: ((binding1 *> binding2) *> binding3). The compiler handles that ok.
-    addVarBindingToSequence :: QueryFunctionDescription -> LetABinding -> FD
-    addVarBindingToSequence seq v = makeSequence <$> pure seq <*> (compileVarBinding v)
+    bindingName :: LetABinding -> String
+    bindingName (Expr (VarBinding varName _)) = varName
+    bindingName (Stat varName _) = varName
 
   -- This will return a QueryFunctionDescription that describes either a single assignment, or
   -- a BQD with QueryFunction equal to (BinaryCombinator SequenceF)
@@ -287,13 +296,13 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
     Bind f@{ bindingExpression, roleIdentifier, contextExpression, start, end } -> do
       -- Bind <binding-expression> to <binderType> [in <context-expression>]. Check:
       -- bindingExpression should result in roles
-      (bindings :: QueryFunctionDescription) <- ensureRole subjects bindingExpression
+      (fillersQuery :: QueryFunctionDescription) <- ensureRole subjects bindingExpression
       (cte :: QueryFunctionDescription) <- unsafePartial constructContextGetterDescription contextExpression
       -- binderType should be an EnumeratedRoleType (local name should resolve w.r.t. the contextExpression)
       (qualifiedRoleIdentifier :: EnumeratedRoleType) <- qualifyAsEnumeratedTypeWithRespectTo roleIdentifier cte f.start f.end
-      -- If the roleIdentifier is functional, the bindings should be functional too.
+      -- If the roleIdentifier is functional, the fillersQuery should be functional too.
       (lift $ lift $ ROLE.roleTypeIsFunctional (ENR qualifiedRoleIdentifier)) >>=
-        if _ then case functional bindings of
+        if _ then case functional fillersQuery of
           True -> pure unit
           Unknown -> throwError $ MaybeNotFunctional f.start f.end bindingExpression
           False -> throwError $ NotFunctional f.start f.end bindingExpression
@@ -304,10 +313,11 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
             Left e -> throwError e
             _ -> pure unit
         )
-      -- the possible fillers of binderType (qualifiedRoleIdentifier) should be less specific (=more general) than or equal to the type of the results of binderExpression (fillers).
+      -- The type produced by bindingExpression (fillers) must be equal to or more specific than
+      -- the declared filler restriction of binderType (qualifiedRoleIdentifier).
       qualifies <- do
         (mfillerRestriction :: Maybe (CNF RoleInContext)) <- lift $ lift (getEnumeratedRole qualifiedRoleIdentifier >>= completeDeclaredFillerRestriction >>= traverse toConjunctiveNormalForm_)
-        (fillers :: CNF RoleInContext) <- lift $ lift $ toConjunctiveNormalForm_ (unsafePartial domain2roleType (range bindings))
+        (fillers :: CNF RoleInContext) <- lift $ lift $ toConjunctiveNormalForm_ (unsafePartial domain2roleType (range fillersQuery))
         case mfillerRestriction of
           Nothing -> pure true
           Just fillerRestriction -> do
@@ -315,12 +325,12 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
             lift $ lift do
               readableFillers <- traverseDPROD toReadable fillers
               readableFillerRestriction <- traverseDPROD toReadable fillerRestriction
-              -- fillerRestriction -> fillers
+              -- fillers -> fillerRestriction
               pure (readableFillers `equalsOrSpecialises_` readableFillerRestriction)
       if qualifies
       -- Create a function description that describes the actual role creating and binding.
-      then pure $ BQD originDomain (QF.Bind qualifiedRoleIdentifier) bindings cte originDomain True True
-      else throwError $ RoleDoesNotBind f.start (ENR qualifiedRoleIdentifier) (unsafePartial $ domain2roleType (range bindings))
+      then pure $ BQD originDomain (QF.Bind qualifiedRoleIdentifier) fillersQuery cte originDomain True True
+      else throwError $ RoleDoesNotBind f.start (ENR qualifiedRoleIdentifier) (unsafePartial $ domain2roleType (range fillersQuery))
 
     Bind_ { bindingExpression, binderExpression, start, end } -> do
       -- bindingExpression should result in a functional role
@@ -338,39 +348,50 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
       -- Now create a function description.
       pure $ BQD originDomain QF.Bind_ bindings binders originDomain True True
 
-    Unbind f@{ bindingExpression, roleIdentifier, start, end } -> do
-      (bindings :: QueryFunctionDescription) <- ensureRole subjects bindingExpression
-      -- the type of the binder (indicated by roleIdentifier) should be an EnumeratedRoleType 
-      -- (local name should resolve w.r.t. the binders of the bindings). 
-      -- We try to resolve in the model and then filter candidates on whether they bind the bindings. 
-      -- If they don't, the expression has no meaning.
-      (mqualifiedRoleIdentifier :: Maybe EnumeratedRoleType) <- qualifyBinderType roleIdentifier (unsafePartial $ domain2roleType $ range bindings) f.start f.end
-      -- Check for each of the subjects whether they have a sufficient perspective to remove the filler of the qualifiedRoleIdentifier.
-      case mqualifiedRoleIdentifier of
-        Just qualifiedRoleIdentifier ->
-          for_ subjects
-            ( \subject -> (lift $ lift $ roleHasPerspectiveOnRoleWithVerb subject qualifiedRoleIdentifier [ Verbs.RemoveFiller ] (Just start) (Just end)) >>= case _ of
-                Left e -> throwError e
-                _ -> pure unit
-            )
-        Nothing -> pure unit
-      pure $ UQD originDomain (QF.Unbind mqualifiedRoleIdentifier) bindings originDomain True True
-
-    Unbind_ { bindingExpression, binderExpression, start, end } -> do
-      -- bindingExpression should result in a functional role
-      (bindings :: QueryFunctionDescription) <- ensureRole subjects bindingExpression >>= ensureFunctional bindingExpression
-      -- binderExpression should result in a functional role
-      (binders :: QueryFunctionDescription) <- ensureRole subjects binderExpression >>= ensureFunctional binderExpression
-      -- Check for each of the subjects whether they have a sufficient perspective on the range of the binders expression.
+    RemoveAsFillerOfType f@{ roleIdentifier, fillerExpression, start, end } -> do
+      (fillers :: QueryFunctionDescription) <- ensureRole subjects fillerExpression
+      -- Qualify the role type with respect to the model.
+      (qualifiedRoleIdentifier :: EnumeratedRoleType) <- qualifyAsEnumeratedTypeInDomain roleIdentifier f.start f.end
+      -- Check for each of the subjects whether they have a sufficient perspective to remove the filler.
       for_ subjects
-        ( \subject -> for_ (roleInContext2Role <$> (allLeavesInADT $ unsafePartial roleRange binders))
+        ( \subject -> (lift $ lift $ roleHasPerspectiveOnRoleWithVerb subject qualifiedRoleIdentifier [ Verbs.RemoveFiller ] (Just start) (Just end)) >>= case _ of
+            Left e -> throwError e
+            _ -> pure unit
+        )
+      pure $ UQD originDomain (QF.RemoveAsFillerOfType qualifiedRoleIdentifier) fillers originDomain True True
+
+    RemoveAsFiller { fillerExpression, start, end } -> do
+      (fillers :: QueryFunctionDescription) <- ensureRole subjects fillerExpression
+      -- No type restriction, so no perspective check against a specific role type here.
+      pure $ UQD originDomain QF.RemoveAsFiller fillers originDomain True True
+
+    RemoveFiller { filledExpression, start, end } -> do
+      (filled :: QueryFunctionDescription) <- ensureRole subjects filledExpression
+      -- Check for each of the subjects whether they have a sufficient perspective on the filled role types.
+      for_ subjects
+        ( \subject -> for_ (roleInContext2Role <$> (allLeavesInADT $ unsafePartial roleRange filled))
             ( \object -> (lift $ lift $ roleHasPerspectiveOnRoleWithVerb subject object [ Verbs.RemoveFiller ] (Just start) (Just end)) >>= case _ of
                 Left e -> throwError e
                 _ -> pure unit
             )
         )
-      -- Now create a function description.
-      pure $ BQD originDomain QF.Unbind_ bindings binders originDomain True True
+      pure $ UQD originDomain QF.RemoveFiller filled originDomain True True
+
+    RemoveFillerWith { fillerExpression, filledExpression, start, end } -> do
+      -- fillerExpression should result in roles (the fillers to remove)
+      (fillers :: QueryFunctionDescription) <- ensureRole subjects fillerExpression
+      -- filledExpression should result in roles (the filled roles)
+      (filled :: QueryFunctionDescription) <- ensureRole subjects filledExpression
+      -- Check for each of the subjects whether they have a sufficient perspective on the filled role types.
+      for_ subjects
+        ( \subject -> for_ (roleInContext2Role <$> (allLeavesInADT $ unsafePartial roleRange filled))
+            ( \object -> (lift $ lift $ roleHasPerspectiveOnRoleWithVerb subject object [ Verbs.RemoveFiller ] (Just start) (Just end)) >>= case _ of
+                Left e -> throwError e
+                _ -> pure unit
+            )
+        )
+      -- Now create a function description. The filler expression is arg1, the filled expression is arg2.
+      pure $ BQD originDomain QF.RemoveFiller fillers filled originDomain True True
 
     DeleteRole f@{ roleIdentifier, contextExpression, start, end } -> do
       (cte :: QueryFunctionDescription) <- unsafePartial constructContextGetterDescription contextExpression
@@ -425,7 +446,7 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
           qfd <- compileExpression originDomain e
           case range qfd of
             (RDOM _) -> pure qfd
-            otherwise -> throwError $ NotARoleDomain (range qfd) (startOf e) (endOf e)
+            otherwise -> (lift2 $ humanizePerspectivesError $ NotARoleDomain (range qfd) (startOf e) (endOf e)) >>= throwError
 
       (qualifiedProperty :: EnumeratedPropertyType) <- qualifyPropertyWithRespectTo propertyIdentifier roleQfd f.start f.end
       -- Compile the value expression to a QueryFunctionDescription. Its range must comply with the range of the qualifiedProperty. It is compiled relative to the current context; not relative to the object!
@@ -468,9 +489,29 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
             (RDOM _) ->
               if pessimistic $ functional qfd then pure qfd
               else throwError $ NotFunctional (startOf e) (endOf e) e
-            otherwise -> throwError $ NotARoleDomain (range qfd) (startOf e) (endOf e)
+            otherwise -> (lift2 $ humanizePerspectivesError $ NotARoleDomain (range qfd) (startOf e) (endOf e)) >>= throwError
       (qualifiedProperty :: EnumeratedPropertyType) <- qualifyPropertyWithRespectTo propertyIdentifier roleQfd f.start f.end
       pure $ MQD originDomain (QF.CreateFileF mimeType qualifiedProperty) [ filenameQfd, contentQfd, roleQfd ] originDomain True False
+
+    -- | Compiles to a call of the internally registered "RunContextActionEffect" hidden function.
+    -- | Authorization is enforced at runtime: the action only runs for an instance of the user
+    -- | role that is filled by the local user ("me"); see Perspectives.Extern.RunAction.
+    RunContextAction f@{ actionIdentifier, userRoleIdentifier, contextExpression } -> do
+      (cte :: QueryFunctionDescription) <- ensureContext subjects contextExpression
+      (qualifiedUserRoleType :: RoleType) <- qualifyWithRespectTo userRoleIdentifier cte f.start f.end
+      let actionNameConst = SQD originDomain (QF.Constant PString actionIdentifier) (VDOM PString Nothing) True True
+      let userRoleConst = SQD originDomain (QF.Constant PString (roletype2string qualifiedUserRoleType)) (VDOM PString Nothing) True True
+      pure $ MQD originDomain (QF.ExternalEffectFullFunction "RunContextActionEffect") [ actionNameConst, userRoleConst, cte ] originDomain True False
+
+    -- | Compiles to a call of the internally registered "RunRoleActionEffect" hidden function.
+    -- | Authorization is enforced at runtime: see RunContextAction above.
+    RunRoleAction f@{ actionIdentifier, userRoleIdentifier, objectExpression, contextExpression } -> do
+      (cte :: QueryFunctionDescription) <- ensureContext subjects contextExpression
+      (qualifiedUserRoleType :: RoleType) <- qualifyWithRespectTo userRoleIdentifier cte f.start f.end
+      (obj :: QueryFunctionDescription) <- ensureRole subjects objectExpression
+      let actionNameConst = SQD originDomain (QF.Constant PString actionIdentifier) (VDOM PString Nothing) True True
+      let userRoleConst = SQD originDomain (QF.Constant PString (roletype2string qualifiedUserRoleType)) (VDOM PString Nothing) True True
+      pure $ MQD originDomain (QF.ExternalEffectFullFunction "RunRoleActionEffect") [ actionNameConst, userRoleConst, obj, cte ] originDomain True False
 
     ExternalEffect f@{ start, end, effectName, arguments } -> case lookupHiddenFunction effectName of
       Nothing -> throwError (UnknownExternalFunction start end effectName)
@@ -527,7 +568,7 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
     qualifyWithRespectTo roleIdentifier contextFunctionDescription start end = do
       (ct :: ADT ContextType) <- case range contextFunctionDescription of
         (CDOM ct') -> pure ct'
-        otherwise -> throwError $ NotAContextDomain contextFunctionDescription otherwise start end
+        otherwise -> (lift2 $ humanizePerspectivesError $ NotAContextDomain contextFunctionDescription otherwise start end) >>= throwError
       rtarr <-
         if isTypeUri roleIdentifier then
           if isExternalRole roleIdentifier then pure [ ENR $ EnumeratedRoleType roleIdentifier ]
@@ -540,7 +581,7 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
       case head rtarr of
         Just et@(ENR _) -> pure et
         Just ct'@(CR _) -> pure ct'
-        otherwise -> throwError $ ContextHasNoRole ct roleIdentifier start end
+        otherwise -> (lift $ lift $ humanizePerspectivesError (ContextHasNoRole ct roleIdentifier start end)) >>= throwError
 
     -- Either the identifier is qualified, or we qualify it with respect to the model.
     qualifyContextType :: String -> ArcPosition -> ArcPosition -> PhaseThree ContextType
@@ -557,47 +598,25 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
     qualifyPropertyWithRespectTo propertyIdentifier roleQfd start end = do
       (rt :: ADT EnumeratedRoleType) <- case range roleQfd of
         (RDOM rt') -> pure $ roleInContext2Role <$> rt'
-        otherwise -> throwError $ NotARoleDomain otherwise start end
+        otherwise -> (lift2 $ humanizePerspectivesError $ NotARoleDomain otherwise start end) >>= throwError
       (candidates :: Array PropertyType) <- filter isEnumeratedProperty <$> (lookForUnqualifiedPropertyType propertyIdentifier) rt
       case head candidates of
+        Nothing -> (lift2 $ humanizePerspectivesError (RoleHasNoEnumeratedProperty rt propertyIdentifier start end)) >>= throwError
         Just (ENP et) | length candidates == 1 -> pure et
-        otherwise -> throwError $ RoleHasNoEnumeratedProperty rt propertyIdentifier start end
+        otherwise -> (lift2 $ humanizePerspectivesError (NotUniquelyIdentifyingPropertyType start (ENP $ EnumeratedPropertyType propertyIdentifier) candidates)) >>= throwError
 
-    -- | If the name is unqualified, look for an EnumeratedRole with matching local name in the Domain.
-    -- | Then, we check whether a candidate's binding type equals the second argument, or is less specialised. 
-    -- | In other words: whether the candidate could bind it (the second argument).
-    qualifyBinderType :: Maybe String -> ADT QT.RoleInContext -> ArcPosition -> ArcPosition -> PhaseThree (Maybe EnumeratedRoleType)
-    qualifyBinderType Nothing _ _ _ = pure Nothing
-    qualifyBinderType (Just ident) fillers start end =
-      if isTypeUri ident then pure $ Just $ EnumeratedRoleType ident
+    -- | If the name is already qualified, use it as-is; otherwise look for an EnumeratedRole with matching
+    -- | local name in the Domain.
+    qualifyAsEnumeratedTypeInDomain :: String -> ArcPosition -> ArcPosition -> PhaseThree EnumeratedRoleType
+    qualifyAsEnumeratedTypeInDomain ident start end =
+      if isTypeUri ident then pure $ EnumeratedRoleType ident
       else do
-        -- The expansion of the fillers
-        (expandedFillers :: CNF RoleInContext) <- lift $ lift $ toConjunctiveNormalForm_ fillers
-        -- EnumeratedRoles in the model with (end)matching name.
         (enumeratedRoles :: Object EnumeratedRole) <- getsDF _.enumeratedRoles
         (nameMatches :: Array EnumeratedRole) <- pure (filter (\(EnumeratedRole { id: roleId }) -> (unwrap roleId) `endsWithSegments` ident) (values enumeratedRoles))
-        -- EnumeratedRoles that can be filled with `fillers`.
-        (candidates :: Array EnumeratedRole) <-
-          ( filterA
-              ( \(candidate :: EnumeratedRole) -> do
-                  (mexpandedCandidateRestriction :: Maybe (CNF RoleInContext)) <- lift $ lift (completeDeclaredFillerRestriction candidate >>= traverse toConjunctiveNormalForm_)
-                  case mexpandedCandidateRestriction of
-                    Nothing -> pure true
-                    -- The restriction on filling the candidate must be equal to or more general (less specialised) than the fillers.
-                    Just expandedCandidateRestriction -> lift $ lift do
-                      readableFillers <- traverseDPROD toReadable expandedFillers
-                      readableCandidateRestriction <- traverseDPROD toReadable expandedCandidateRestriction
-                      -- expandedCandidateRestriction -> expandedFillers
-                      pure (readableCandidateRestriction `equalsOrGeneralises_` readableFillers)
-              )
-              nameMatches
-          )
-        case head candidates of
-          Nothing ->
-            if null nameMatches then throwError $ UnknownRole start ident
-            else throwError $ LocalRoleDoesNotBind start end ident fillers
-          (Just (EnumeratedRole { id: candidate })) | length candidates == 1 -> pure $ Just candidate
-          otherwise -> throwError $ NotUniquelyIdentifyingRoleType start (ENR $ EnumeratedRoleType ident) (ENR <<< identifier <$> candidates)
+        case head nameMatches of
+          Nothing -> throwError $ UnknownRole start ident
+          (Just (EnumeratedRole { id: candidate })) | length nameMatches == 1 -> pure candidate
+          otherwise -> throwError $ NotUniquelyIdentifyingRoleType start (ENR $ EnumeratedRoleType ident) (ENR <<< identifier <$> nameMatches)
 
     -- Compiles the Step and inverts it as well.
     -- NOTE: parameter userTypes is not used.
@@ -607,7 +626,7 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
       qfd <- compileExpression originDomain stp
       case range qfd of
         (CDOM _) -> pure qfd
-        otherwise -> throwError $ NotAContextDomain qfd (range qfd) (startOf stp) (endOf stp)
+        otherwise -> (lift2 $ humanizePerspectivesError $ NotAContextDomain qfd (range qfd) (startOf stp) (endOf stp)) >>= throwError
 
     ensureStringValue :: Maybe Step -> PhaseThree (Maybe QueryFunctionDescription)
     ensureStringValue mstp = case mstp of
@@ -615,7 +634,7 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
         qfd <- compileExpression originDomain stp
         case range qfd of
           (VDOM PString _) -> pure $ Just qfd
-          otherwise -> throwError $ NotAStringDomain qfd (startOf stp) (endOf stp)
+          otherwise -> (lift2 $ humanizePerspectivesError $ NotAStringDomain qfd (startOf stp) (endOf stp)) >>= throwError
       Nothing -> pure Nothing
 
     -- Compiles the Step and inverts it as well.
@@ -626,7 +645,7 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
       qfd <- compileExpression originDomain stp
       case range qfd of
         (RDOM _) -> pure qfd
-        otherwise -> throwError $ NotARoleDomain (range qfd) (startOf stp) (endOf stp)
+        otherwise -> (lift2 $ humanizePerspectivesError $ NotARoleDomain (range qfd) (startOf stp) (endOf stp)) >>= throwError
 
     ensureFunctional :: Step -> QueryFunctionDescription -> PhaseThree QueryFunctionDescription
     ensureFunctional stp qfd = case functional qfd of
@@ -647,4 +666,3 @@ compileStatement originDomain currentcontextDomain userRoleTypes statements =
         --   Nothing -> pure (SQD originDomain (QF.DataTypeGetter QF.ContextF) currentcontextDomain True True)
         --   Just embeddingContext -> pure (SQD originDomain (QF.DataTypeGetter QF.ContextF) (CDOM $ ST embeddingContext) True True)
         (Just (stp :: Step)) -> ensureContext subjects stp
-

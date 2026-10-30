@@ -18,7 +18,7 @@
 // Full text of this license can be found in the LICENSE file in the projects root.
 // END LICENSE
 
-import { InputType } from "perspectives-proxy/dist/perspectivesshape";
+import { InputType, Perspective, SerialisedProperty } from "perspectives-proxy/dist/perspectivesshape";
 
 // Use this function to open a page relative to the origin of the application.
 // Don't rely on the website root (/), as we may serve the app from a subdirectory like "/remotetest/"
@@ -85,4 +85,23 @@ export function formatPropertyValue(propertyValues: string[], inputType: InputTy
     {
       return "";
     }
+}
+
+// Returns the properties of a perspective in display order.
+// When the perspective carries an explicit `propertyOrder` (set by a `with props` clause
+// in the screen definition), the listed properties come first in that order, followed by
+// any remaining properties. Otherwise the full property list is returned unchanged.
+export function orderPropertiesByPerspective(perspective: Perspective): SerialisedProperty[]
+{
+  if (perspective.propertyOrder && perspective.propertyOrder.length > 0)
+  {
+    const specifiedIds = new Set(perspective.propertyOrder);
+    return [
+      ...perspective.propertyOrder
+        .map(id => perspective.properties[id])
+        .filter((p): p is SerialisedProperty => p !== undefined),
+      ...Object.values(perspective.properties).filter(p => !specifiedIds.has(p.id))
+    ];
+  }
+  return Object.values(perspective.properties);
 }

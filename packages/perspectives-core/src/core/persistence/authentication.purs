@@ -25,6 +25,7 @@ module Perspectives.Persistence.Authentication where
 import Prelude
 
 import Affjax.RequestBody as RequestBody
+import Affjax.RequestHeader (RequestHeader(..))
 import Affjax.ResponseFormat as ResponseFormat
 import Affjax.StatusCode (StatusCode(..))
 import Affjax.Web as AJ
@@ -32,15 +33,16 @@ import Control.Monad.AvarMonadAsk (gets, modify)
 import Control.Monad.Except (catchJust)
 import Data.Either (Either(..))
 import Data.HTTP.Method (Method(..))
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), maybe)
+import Data.String.Base64 (btoa)
 import Effect.Aff (Error, error, throwError)
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
 import Effect.Class.Console (warn)
-import Foreign.Object (insert, lookup)
+import Foreign.Object (Object, insert, lookup)
 import Perspectives.Couchdb (onAccepted_, toJson)
 import Perspectives.Identifiers (url2Authority)
-import Perspectives.Persistence.Types (Credential(..), MonadPouchdb, Password, Url, UserName)
+import Perspectives.Persistence.Types (Credential(..), MonadPouchdb, Password, PouchdbDatabase, Url, UserName)
 import Perspectives.ResourceIdentifiers (databaseLocation)
 
 -----------------------------------------------------------
@@ -49,6 +51,8 @@ import Perspectives.ResourceIdentifiers (databaseLocation)
 -----------------------------------------------------------
 
 foreign import isUnauthorized :: Error -> Boolean
+
+foreign import runningInNode :: Boolean
 
 -- | In Resource s, s is a string with a Resource Identifiying Scheme as defined in [Perspectives.ResourceIdentifiers](Perspectives.ResourceIdentifiers.html).
 data AuthoritySource = Resource String | Authority String | Url String
@@ -116,6 +120,23 @@ defaultPerspectRequest = pure
   , timeout: Nothing
   }
 
+-- | Browsers use the session cookie; Node needs Basic auth because xhr2 keeps no cookies.
+authenticatedPerspectRequest :: forall f. Authority -> MonadPouchdb f (AJ.Request String)
+authenticatedPerspectRequest authority = do
+  rq <- defaultPerspectRequest
+  mcredential <- getCredentials authority
+  case mcredential of
+    Just (Credential username password) | runningInNode ->
+      -- xhr2 (Node) ignores the credentials passed to open(), so send the header ourselves.
+      case btoa (username <> ":" <> password) of
+        Right encoded -> pure $ rq { headers = [ RequestHeader "Authorization" ("Basic " <> encoded) ] }
+        Left encodingError -> throwError $ error ("authenticatedPerspectRequest: " <> show encodingError)
+    _ -> pure rq
+
+-- | As authenticatedPerspectRequest, deriving the authority from a full url.
+authenticatedUrlRequest :: forall f. Url -> MonadPouchdb f (AJ.Request String)
+authenticatedUrlRequest url = maybe defaultPerspectRequest authenticatedPerspectRequest (url2Authority url)
+
 -- | Looks up the credentials for a given Authority.
 getCredentials :: forall f. Authority -> MonadPouchdb f (Maybe Credential)
 getCredentials authority = do
@@ -123,4 +144,9 @@ getCredentials authority = do
   pure $ lookup authority credentials
 
 addCredentials :: forall f. Url -> UserName -> Password -> MonadPouchdb f Unit
-addCredentials url username password = modify \s@{ couchdbCredentials } -> s { couchdbCredentials = insert url (Credential username password) couchdbCredentials }
+addCredentials url username password = modify \s@{ couchdbCredentials, couchdbUrl, databases } -> s
+  { couchdbCredentials = insert url (Credential username password) couchdbCredentials
+  , databases = invalidateDatabaseConnectors url (maybe "" identity couchdbUrl) databases
+  }
+
+foreign import invalidateDatabaseConnectors :: Url -> Url -> Object PouchdbDatabase -> Object PouchdbDatabase

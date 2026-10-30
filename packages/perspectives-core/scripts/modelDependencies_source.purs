@@ -38,6 +38,9 @@ perspectivesUsersCancelled = "model://perspectives.domains#System$Identifiable$C
 perspectivesUsersPublicKey :: String
 perspectivesUsersPublicKey = "model://perspectives.domains#System$Identifiable$PublicKey"
 
+perspectivesUsersTransportPublicKey :: String
+perspectivesUsersTransportPublicKey = "model://perspectives.domains#System$Identifiable$TransportPublicKey"
+
 modelDataUpgrade :: String
 modelDataUpgrade = "model://perspectives.domains#System$ModelDataUpgrade"
 
@@ -59,9 +62,6 @@ socialEnvironmentSystemUser = "model://perspectives.domains#System$SocialEnviron
 systemModelName :: String
 systemModelName = "model://perspectives.domains#tiodn6tcyc" -- System
 
-addressBookModelName :: String
-addressBookModelName = "model://perspectives.domains#ofhpcy5a0x" -- AddressBook
-
 repositoryRegistryModelName :: String
 repositoryRegistryModelName = "model://perspectives.domains#k1bnh6wqk9" -- RepositoryRegistry
 
@@ -76,6 +76,9 @@ theSystem = "model://perspectives.domains#System$PerspectivesSystem"
 
 sysUser :: String
 sysUser = "model://perspectives.domains#System$PerspectivesSystem$User"
+
+backupAutomatically :: String
+backupAutomatically = "model://perspectives.domains#System$PerspectivesSystem$User$BackupAutomatically"
 
 idProperty :: String
 idProperty = "model://perspectives.domains#System$PerspectivesSystem$User$Id"
@@ -136,6 +139,16 @@ selectedClipboardItem = "model://perspectives.domains#System$PerspectivesSystem$
 
 chatAspect :: String
 chatAspect = "model://perspectives.domains#System$Chat"
+
+-- | The Filter role aspect. Roles that carry this aspect have a FilterValue property
+-- | which can be used to find them via the filterValueView.
+-- | NOTE: these URIs must match the actual URIs generated for the Filter aspect
+-- | and its FilterValue property in the System model ARC source.
+filterAspect :: String
+filterAspect = "model://perspectives.domains#System$RoleWithFilter"
+
+filterValueProperty :: String
+filterValueProperty = "model://perspectives.domains#System$RoleWithFilter$FilterValue"
 
 recentContexts :: String
 recentContexts = "model://perspectives.domains#System$PerspectivesSystem$RecentContexts"
@@ -219,9 +232,6 @@ domeinFileNameOnVersionedModelManifest = "model://perspectives.domains#System$Ve
 domeinFileNameWithVersion :: String
 domeinFileNameWithVersion = "model://perspectives.domains#System$VersionedModelManifest$External$VersionedDomeinFileName"
 
-versionedModelManifestModelCuid :: String
-versionedModelManifestModelCuid = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$ModelCuid"
-
 patch :: String
 patch = "model://perspectives.domains#System$VersionedModelManifest$External$Patch"
 
@@ -233,6 +243,12 @@ installedPatch = "model://perspectives.domains#System$PerspectivesSystem$ModelsI
 
 installedBuild :: String
 installedBuild = "model://perspectives.domains#System$PerspectivesSystem$ModelsInUse$InstalledBuild"
+
+localModelNameProperty :: String
+localModelNameProperty = "model://perspectives.domains#System$ManifestCollection$Manifests$LocalModelName"
+
+modelCuidProperty :: String
+modelCuidProperty = "model://perspectives.domains#System$ModelManifest$External$ModelCuid"
 
 ------------------------------------------------------------------------------------
 -- COUCHDBMANAGEMENT
@@ -249,8 +265,50 @@ modelURI = "model://perspectives.domains#CouchdbManagement$VersionedModelManifes
 versionedModelURI :: String
 versionedModelURI = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$VersionedModelURI"
 
+conversationSources :: String
+conversationSources = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$ConversationSources"
+
+conversationSourceDocumentName :: String
+conversationSourceDocumentName = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$ConversationSources$DocumentName"
+
+conversationSourceDocumentKind :: String
+conversationSourceDocumentKind = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$ConversationSources$DocumentKind"
+
+conversationSourceContextType :: String
+conversationSourceContextType = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$ConversationSources$ContextType"
+
+conversationSourceYaml :: String
+conversationSourceYaml = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$ConversationSources$ConversationYaml"
+
+conversationSourceLastYamlChangeDT :: String
+conversationSourceLastYamlChangeDT = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$ConversationSources$LastYamlChangeDT"
+
 modelURIReadable :: String
 modelURIReadable = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$ModelURIReadable"
+
+versionedModelManifestModelCuid :: String
+versionedModelManifestModelCuid = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$ModelCuid"
+
+versionedModelManifestPublished :: String
+versionedModelManifestPublished = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$External$Published"
+
+modelDependency :: String
+modelDependency = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$ModelDependency"
+
+modelDependencyModelId :: String
+modelDependencyModelId = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$ModelDependency$ModelId"
+
+modelDependencyDeclaredRequirement :: String
+modelDependencyDeclaredRequirement = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$ModelDependency$DeclaredRequirement"
+
+modelDependencyResolvedModel :: String
+modelDependencyResolvedModel = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$ModelDependency$ResolvedModel"
+
+modelDependencyResolvedVersion :: String
+modelDependencyResolvedVersion = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest$ModelDependency$ResolvedVersion"
+
+manifestsRole :: String
+manifestsRole = "model://perspectives.domains#CouchdbManagement$Repository$Manifests"
 
 ------------------------------------------------------------------------------------
 -- INVITATION
@@ -364,3 +422,44 @@ actualSharedFileServer = "model://perspectives.domains#SharedFileServices$Shared
 fileShareCredentials :: String
 fileShareCredentials = "model://perspectives.domains#SharedFileServices$SharedFileService$FileShareCredentials"
 
+------------------------------------------------------------------------------------
+-- USED IN TESTS
+------------------------------------------------------------------------------------
+outgoingInvitationsType :: String
+outgoingInvitationsType = "model://perspectives.domains#System$PerspectivesSystem$OutgoingInvitations"
+
+inviterType :: String
+inviterType = "model://perspectives.domains#System$Invitation$Inviter"
+
+inviteeType :: String
+inviteeType = "model://perspectives.domains#System$Invitation$Invitee"
+
+invitationGuestType :: String
+invitationGuestType = "model://perspectives.domains#System$Invitation$Guest"
+
+invitationMessageProp :: String
+invitationMessageProp = "model://perspectives.domains#System$Invitation$External$Message"
+
+serialisedInvitationProp :: String
+serialisedInvitationProp = "model://perspectives.domains#System$Invitation$External$SerialisedInvitation"
+
+------------------------------------------------------------------------------------
+-- HELPPROJECT
+------------------------------------------------------------------------------------
+helpProject :: String
+helpProject = "model://perspectives.domains#HelpProject$HelpProject"
+
+helpProjectModel :: String
+helpProjectModel = "model://perspectives.domains#HelpProject$HelpProject$Model"
+
+conversationBranches :: String
+conversationBranches = "model://perspectives.domains#HelpProject$HelpProject$ConversationBranches"
+
+conversationText :: String
+conversationText = "model://perspectives.domains#HelpProject$ConversationBranch$External$ConversationText"
+
+conversationBranchecontextType :: String
+conversationBranchecontextType = "model://perspectives.domains#HelpProject$ConversationBranch$External$ContextType"
+
+conversationBranchIdentifier :: String
+conversationBranchIdentifier = "model://perspectives.domains#HelpProject$ConversationBranch$External$ConversationLabel"

@@ -22,11 +22,10 @@
 
 module Perspectives.RunPerspectives where
 
-import Control.Monad.Reader (runReaderT)
 import Data.Maybe (Maybe(..))
 import Effect.Aff (Aff)
 import Effect.Aff.AVar (AVar, empty, new)
-import Perspectives.CoreTypes (MonadPerspectives, PerspectivesState)
+import Perspectives.CoreTypes (MonadPerspectives, PerspectivesState, runMonadPerspectives)
 import Perspectives.ModelTranslation (getCurrentLanguageFromIDB)
 import Perspectives.PerspectivesState (defaultRuntimeOptions, newPerspectivesState)
 import Prelude (bind, show, (<<<), (<>), (>>=))
@@ -70,7 +69,42 @@ runPerspectives userName password perspectivesUser systemId host port mp = do
           userIntegrityChoice
       )
     )
-  runReaderT mp rf
+  runMonadPerspectives mp rf
 
 runPerspectivesWithState :: forall a. MonadPerspectives a -> (AVar PerspectivesState) -> Aff a
-runPerspectivesWithState = runReaderT
+runPerspectivesWithState = runMonadPerspectives
+
+runPerspectivesWithoutCouchdb
+  :: forall a
+   . String
+  -> MonadPerspectives a
+  -> Aff a
+runPerspectivesWithoutCouchdb userName mp = do
+  transactionFlag <- new true
+  brokerService <- empty
+  transactionWithTiming <- empty
+  modelToLoad <- empty
+  indexedResourceToCreate <- empty
+  missingResource <- empty
+  typeToBeFixed <- empty
+  userIntegrityChoice <- empty
+  (rf :: AVar PerspectivesState) <- getCurrentLanguageFromIDB >>= new <<<
+    ( ( newPerspectivesState
+          { systemIdentifier: userName <> "macbook"
+          , perspectivesUser: userName
+          , userName: Nothing
+          , password: Nothing
+          , couchdbUrl: Nothing
+          }
+          transactionFlag
+          transactionWithTiming
+          modelToLoad
+          defaultRuntimeOptions
+          brokerService
+          indexedResourceToCreate
+          missingResource
+          typeToBeFixed
+          userIntegrityChoice
+      )
+    )
+  runMonadPerspectives mp rf

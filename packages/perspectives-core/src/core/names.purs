@@ -24,7 +24,7 @@ module Perspectives.Names where
 
 import Control.Monad.AvarMonadAsk (gets, modify)
 import Control.Monad.Error.Class (throwError)
-import Data.Array (head)
+import Data.Array (head, mapMaybe)
 import Data.Maybe (Maybe(..))
 import Data.Tuple (Tuple(..))
 import Effect.Exception (error)
@@ -56,7 +56,7 @@ expandDefaultNamespaces n = case expandNamespaces defaultNamespaces n of
     names <- defaultIndexedNames
     pure $ expandIndexedNames names expandedName
 
--- | Replace model:System$Me by "def:#<guid>$User".
+-- | Replace model:System$Me by "def:#<guid>.
 expandIndexedNames :: OBJ.Object String -> String -> String
 expandIndexedNames defaults expandedName =
   case OBJ.lookup expandedName defaults of
@@ -89,6 +89,7 @@ defaultNamespaces = OBJ.fromFoldable
   , Tuple "sens" "model://perspectives.domains#s2gyoyohau"
   , Tuple "rabbit" "model://perspectives.domains#m203lt2idk"
   , Tuple "files" "model://perspectives.domains#piln392sut"
+  , Tuple "help" "model://perspectives.domains#yn9g80cct5"
   , Tuple "bs" "model://perspectives.domains#zjuzxbqpgc"
   , Tuple "acc" "model://perspectives.domains#bxxptg50jp"
   , Tuple "sfs" "model://perspectives.domains#xjrfkxrzyt"
@@ -109,6 +110,7 @@ defaultReadableNamespaces = OBJ.fromFoldable
   , Tuple "sens" "model://perspectives.domains#Sensor"
   , Tuple "rabbit" "model://perspectives.domains#RabbitMQ"
   , Tuple "files" "model://perspectives.domains#Files"
+  , Tuple "help" "model://perspectives.domains#HelpLib"
   , Tuple "bs" "model://perspectives.domains#BrokerServices"
   , Tuple "acc" "model://perspectives.domains#BodiesWithAccounts"
   , Tuple "sfs" "model://perspectives.domains#SharedFileServices"
@@ -119,6 +121,22 @@ defaultReadableNamespaces = OBJ.fromFoldable
 
 defaultModelReadableNames :: Array String
 defaultModelReadableNames = values defaultReadableNamespaces
+
+-- | A lookup table mapping each readable model URI to its stable counterpart.
+-- | Built by joining `defaultReadableNamespaces` and `defaultNamespaces` on their
+-- | shared prefix keys, e.g.
+-- |   "model://perspectives.domains#System" → "model://perspectives.domains#tiodn6tcyc"
+readableToStableModelUri :: OBJ.Object String
+readableToStableModelUri = OBJ.fromFoldable $ mapMaybe f (OBJ.keys defaultReadableNamespaces)
+  where
+  f prefix = do
+    readable <- OBJ.lookup prefix defaultReadableNamespaces
+    stable <- OBJ.lookup prefix defaultNamespaces
+    pure (Tuple readable stable)
+
+-- | Map a readable model URI to its stable counterpart, if known.
+lookupStableFromReadable :: String -> Maybe String
+lookupStableFromReadable readable = OBJ.lookup readable readableToStableModelUri
 
 defaultIndexedNames :: MonadPerspectives (OBJ.Object String)
 defaultIndexedNames = do

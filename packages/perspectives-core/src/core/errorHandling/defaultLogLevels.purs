@@ -14,5 +14,7 @@ defaultLogLevels =
       , (Tuple PARSER Warn)
       , (Tuple MODEL Error)
       , (Tuple INSTALL Warn)
+      , (Tuple TEST Info)
+      , (Tuple DELTA Warn)
       ]
   }

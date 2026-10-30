@@ -53,6 +53,7 @@ import Perspectives.Data.EncodableMap (EncodableMap, empty, insert, lookup, keys
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
 import Perspectives.DomeinCache (modifyEnumeratedRoleInDomeinFile, removeDomeinFileFromCache, storeDomeinFileInCache)
 import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, UpstreamAutomaticEffect(..), UpstreamStateNotification(..), addUpstreamAutomaticEffect, addUpstreamNotification)
+import Perspectives.Error.Pretty (humanizePerspectivesError, renderPerspectivesError)
 import Perspectives.HumanReadableType (translateType)
 import Perspectives.Identifiers (Namespace, concatenateSegments, isTypeUri, qualifyWith, startsWithSegments, typeUri2LocalName_, typeUri2ModelUri_, typeUri2typeNameSpace)
 import Perspectives.Instances.ObjectGetters (contextType_, roleType_)
@@ -60,11 +61,11 @@ import Perspectives.InvertedQuery (RelevantProperties(..))
 import Perspectives.InvertedQuery.Storable (StoredQueries)
 import Perspectives.ModelDependencies.Readable as READABLE
 import Perspectives.Names (lookupIndexedContext, lookupIndexedRole)
-import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ContextActionE(..), NotificationE(..), PropertyVerbE(..), RoleVerbE(..), ScreenE, SelfOnly(..), StateQualifiedPart(..), StateSpecification(..), StateTransitionE(..)) as AST
+import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ContextActionE(..), NotificationE(..), PerspectivePosition(..), PropertyVerbE(..), RoleVerbE(..), ScreenE, SelfOnly(..), StateQualifiedPart(..), StateSpecification(..), StateTransitionE(..)) as AST
 import Perspectives.Parsing.Arc.AST (RoleIdentification(..), SegmentedPath, SentenceE(..), SentencePartE(..), StateTransitionE(..), roleIdentification2context, roleIdentification2subject)
 import Perspectives.Parsing.Arc.AspectInference (inferFromAspectRoles)
 import Perspectives.Parsing.Arc.CheckSynchronization (checkSynchronization) as SYNC
-import Perspectives.Parsing.Arc.ContextualVariables (addContextualBindingsToExpression, addContextualBindingsToStatements, makeContextStep, makeIdentityStep, makeTypeTimeOnlyContextStep, makeTypeTimeOnlyRoleStep)
+import Perspectives.Parsing.Arc.ContextualVariables (addContextualBindingsToExpression, addContextualBindingsToStatements, makeContextStep, makeIdentityStep, makeTypeTimeOnlyContextStep, makeTypeTimeOnlyRoleStep, makeTypeTimeOnlyRoleTypeStep)
 import Perspectives.Parsing.Arc.Expression (endOf, startOf)
 import Perspectives.Parsing.Arc.Expression.AST (Step, VarBinding)
 import Perspectives.Parsing.Arc.PhaseThree.CheckPerspectivesModifiers (checkPerspectiveModifiers)
@@ -82,9 +83,9 @@ import Perspectives.Query.ExpressionCompiler (compileAndDistributeStep, compileA
 import Perspectives.Query.Kinked (completeInversions, invert)
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), domain, domain2roleInContext, domain2roleType, mandatory, range, replaceContext, roleInContext2Role, roleRange, sumOfDomains, traverseQfd)
 import Perspectives.Query.QueryTypes (RoleInContext(..)) as QT
-import Perspectives.Query.StatementCompiler (compileStatement)
+import Perspectives.Query.StatementCompiler (compileActionEffect)
 import Perspectives.Representation.ADT (ADT(..), allLeavesInADT, equals_, transform)
-import Perspectives.Representation.Action (AutomaticAction(..), Action(..))
+import Perspectives.Representation.Action (AutomaticAction(..), Action(..), ActionEffect(..))
 import Perspectives.Representation.CNF (toConjunctiveNormalForm, traverseDPROD)
 import Perspectives.Representation.CalculatedProperty (CalculatedProperty(..))
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
@@ -601,6 +602,7 @@ handlePostponedStateQualifiedParts = do
   isPerspectiveContribution (AST.R _) = true
   isPerspectiveContribution (AST.P _) = true
   isPerspectiveContribution (AST.SO _) = true
+  isPerspectiveContribution (AST.PP _) = true
   isPerspectiveContribution _ = false
 
   collectRoleInContexts :: RoleIdentification -> PhaseThree (ADT QT.RoleInContext)
@@ -616,7 +618,18 @@ handlePostponedStateQualifiedParts = do
   collectRoleInContexts (ImplicitRole ctxt s) = compileExpression (CDOM (UET ctxt)) s >>= \qfd ->
     case range qfd of
       RDOM adt -> pure adt
-      otherwise -> throwError $ NotARoleDomain otherwise (startOf s) (endOf s)
+      otherwise -> (lift2 $ humanizePerspectivesError $ NotARoleDomain otherwise (startOf s) (endOf s)) >>= throwError
+
+  makeTypeTimeOnlyRoleBinding :: String -> RoleIdentification -> ADT QT.RoleInContext -> ArcPosition -> PhaseThree VarBinding
+  makeTypeTimeOnlyRoleBinding varName roleIdentification usersInContext pos = case roleIdentification of
+    ExplicitRole ctxt rt rolePos -> do
+      maximallyQualifiedName <-
+        if isTypeUri (roletype2string rt) then pure (roletype2string rt)
+        else pure $ concatenateSegments (unwrap ctxt) (roletype2string rt)
+      qualifiedRole <- qualifyLocalRoleName rolePos maximallyQualifiedName
+      pure $ makeTypeTimeOnlyRoleTypeStep varName qualifiedRole ctxt pos
+    ImplicitRole _ _ ->
+      pure $ unsafePartial makeTypeTimeOnlyRoleStep varName usersInContext pos
 
   -- | Correctly handles incomplete (not qualified) RoleIdentifications.
   -- | Result contains no double entries.
@@ -624,14 +637,17 @@ handlePostponedStateQualifiedParts = do
   collectStates mpath r = collectRoles r >>= \roles -> do
     -- Don't include aspects.
     roles' <- nub <$> lift2 (roles ###= (forceTypeArray >=> f >=> ArrayT <<< pure <<< allLeavesInADT))
+    -- roleADTOfRoleType may return Stable role identifiers for roles from already compiled (imported) models.
+    -- Normalise to Readable so we can safely append a Readable local state path segment below.
+    (readableRoles' :: Array EnumeratedRoleType) <- lift2 $ traverse toReadable roles'
     case mpath of
       -- For a Calculated role, we should now take the range of its calculation.
       -- This is because a Calculated role has no instances that have state.
       -- It calculates Enumerated role instances - and those have state!
-      Nothing -> pure (StateIdentifier <<< unwrap <$> roles')
+      Nothing -> pure (StateIdentifier <<< unwrap <$> readableRoles')
       Just p ->
         if isTypeUri p then pure [ StateIdentifier p ]
-        else pure (StateIdentifier <<< flip append p <<< flip append "$" <<< unwrap <$> roles')
+        else pure (StateIdentifier <<< flip append p <<< flip append "$" <<< unwrap <$> readableRoles')
 
     where
     f :: RoleType ~~~> ADT EnumeratedRoleType
@@ -643,7 +659,7 @@ handlePostponedStateQualifiedParts = do
   statesExist :: ArcPosition -> ArcPosition -> Array StateIdentifier -> PhaseThree (Array StateIdentifier)
   statesExist start end states = do
     for_ states \stateId -> (lift2 $ tryGetPerspectType stateId) >>= case _ of
-      Nothing -> throwError $ (StateDoesNotExist stateId start end)
+      Nothing -> (lift2 $ humanizePerspectivesError $ (StateDoesNotExist stateId start end)) >>= throwError
       Just _ -> pure unit
     pure states
 
@@ -698,7 +714,10 @@ handlePostponedStateQualifiedParts = do
       rolesADT <- collectRoles rident
       -- Expand to enumerated leaves (as collectStates does), but enforce singleton.
       roles' <- nub <$> lift2 (rolesADT ###= (forceTypeArray >=> f >=> ArrayT <<< pure <<< allLeavesInADT))
-      case roles' of
+      -- roleADTOfRoleType may return Stable role identifiers for roles from already compiled (imported) models.
+      -- Normalise to Readable so we can safely append a Readable local state path segment below.
+      (readableRoles' :: Array EnumeratedRoleType) <- lift2 $ traverse toReadable roles'
+      case readableRoles' of
         [] -> throwError (Custom ("No enumerated " <> label <> " role resolves for this state specification; make it explicit."))
         [ one ] -> pure $ StateIdentifier $
           case mpath of
@@ -716,6 +735,16 @@ handlePostponedStateQualifiedParts = do
 
   -- | Modifies the DomeinFile in PhaseTwoState.
   handlePart :: Partial => AST.StateQualifiedPart -> PhaseThree Unit
+
+  -- | Modifies the DomeinFile in PhaseTwoState.
+  handlePart (AST.PP (AST.PerspectivePosition { subject, object, start })) = do
+    qualifiedUsers <- collectRoles subject
+    objectQfd <- roleIdentificationToQueryFunctionDescription object start
+    objectMustBeRole (Just objectQfd) start start
+    for_ qualifiedUsers
+      ( modifyPerspective objectQfd object start start
+          (\(Perspective pr) -> Perspective pr { perspectiveStartPosition = Just start })
+      )
 
   -- Compiles and distributes all expressions in the automatic effect.
   -- | Modifies the DomeinFile in PhaseTwoState.
@@ -741,10 +770,11 @@ handlePostponedStateQualifiedParts = do
     -- its current context. We include a computation of type TypeTimeOnly, which instructs the unsafeCompiler to remove them. The value has to be supplied in runtime.
     -- currentactor -> It's type is the qualifiedUser computed above. Again, just a TypeTimeOnly computation.
     (usersInContext :: ADT QT.RoleInContext) <- collectRoleInContexts subject
+    currentactorBinding <- makeTypeTimeOnlyRoleBinding "currentactor" subject usersInContext start
     effectWithEnvironment <- pure $ addContextualBindingsToStatements
       [ computeOrigin (transition2stateSpec transition) start
       , computeCurrentContext (transition2stateSpec transition) start
-      , unsafePartial makeTypeTimeOnlyRoleStep "currentactor" usersInContext start
+      , currentactorBinding
       ]
       effect
     -- Single base state only (no aspect fan-out)
@@ -752,7 +782,7 @@ handlePostponedStateQualifiedParts = do
     baseState <- resolveSingleState spec
     _ <- statesExist start end [ baseState ]
     let states = [ baseState ]
-    (sideEffect :: QueryFunctionDescription) <- compileStatement
+    (sideEffect :: ActionEffect) <- compileActionEffect
       originDomain
       currentcontextDomain
       qualifiedUsers
@@ -865,7 +895,8 @@ handlePostponedStateQualifiedParts = do
     _ <- statesExist start end [ baseState ]
     let states = [ baseState ]
     (usersInContext :: ADT QT.RoleInContext) <- collectRoleInContexts user
-    compiledMessage <- compileSentence originDomain message usersInContext states spec
+    notifieduserBinding <- makeTypeTimeOnlyRoleBinding "notifieduser" user usersInContext start
+    compiledMessage <- compileSentence originDomain message notifieduserBinding states spec
     currentContextCalculation <- case spec of
       AST.ContextState ct _ -> pure $ SQD (CDOM $ UET ct) (DataTypeGetter IdentityF) (CDOM $ UET ct) True True
       AST.ObjectState roleIdentification _ -> computeCurrentContextFromRoleIdentification roleIdentification start
@@ -876,7 +907,9 @@ handlePostponedStateQualifiedParts = do
     objectMustBeRole objectQfd start end
     hasNotificationAspect <- lift2 ((roleIdentification2context user) ###>> hasContextAspect (ContextType READABLE.contextWithNotification))
     if hasNotificationAspect then pure unit
-    else lift2 $ addWarning $ { message: show $ NoNotificationAspect (roleIdentification2context user) start end, error: "", externalRoleId: "", contextName: "" }
+    else do
+      rendered <- lift2 $ renderPerspectivesError (NoNotificationAspect (roleIdentification2context user) start end)
+      lift2 $ addWarning { message: rendered, error: "", externalRoleId: "", contextName: "" }
     modifyAllStates
       ( case spec of
           AST.ContextState _ _ -> ContextNotification
@@ -950,8 +983,8 @@ handlePostponedStateQualifiedParts = do
           )
           stateId
 
-    compileSentence :: Domain -> SentenceE -> ADT QT.RoleInContext -> Array StateIdentifier -> AST.StateSpecification -> PhaseThree Sentence.Sentence
-    compileSentence currentDomain (SentenceE { parts, sentence }) usersInContext states stateSpec = do
+    compileSentence :: Domain -> SentenceE -> VarBinding -> Array StateIdentifier -> AST.StateSpecification -> PhaseThree Sentence.Sentence
+    compileSentence currentDomain (SentenceE { parts, sentence }) notifieduserBinding states stateSpec = do
       parts' <- traverse compilePart parts
       pure $ Sentence.Sentence { sentence, parts: parts' }
       where
@@ -960,7 +993,7 @@ handlePostponedStateQualifiedParts = do
         expressionWithEnvironment <- pure $ addContextualBindingsToExpression
           [ computeOrigin (transition2stateSpec transition) start
           , computeCurrentContext (transition2stateSpec transition) start
-          , unsafePartial makeTypeTimeOnlyRoleStep "notifieduser" usersInContext start
+          , notifieduserBinding
           ]
           stp
         compileExpression currentDomain expressionWithEnvironment
@@ -984,10 +1017,11 @@ handlePostponedStateQualifiedParts = do
     --  currentactor -> It's type is the qualifiedUser computed above.
     -- The last two VarBindings have a computation of type TypeTimeOnly, which instructs the unsafeCompiler to remove them.
     (usersInContext :: ADT QT.RoleInContext) <- collectRoleInContexts subject
+    currentactorBinding <- makeTypeTimeOnlyRoleBinding "currentactor" subject usersInContext start
     effectWithEnvironment <- pure $ addContextualBindingsToStatements
       [ makeIdentityStep "origin" start
       , computeCurrentContext state start
-      , unsafePartial makeTypeTimeOnlyRoleStep "currentactor" usersInContext start
+      , currentactorBinding
       ]
       effect
     -- `syntacticObject` represents the object of the perspective. It allows
@@ -1009,7 +1043,7 @@ handlePostponedStateQualifiedParts = do
       )
     objectMustBeRole (Just compiledObject) start end
     -- The effect starts with the Perspective object, i.e. the syntacticObject.
-    (theAction :: QueryFunctionDescription) <- compileStatement
+    (theAction :: ActionEffect) <- compileActionEffect
       (range compiledObject)
       currentcontextDomain
       qualifiedUsers
@@ -1227,15 +1261,16 @@ handlePostponedStateQualifiedParts = do
     --  currentactor -> It's type is the qualifiedUser computed above.
     -- The last VarBinding has a computation of type TypeTimeOnly, which instructs the unsafeCompiler to remove it.
     (usersInContext :: ADT QT.RoleInContext) <- collectRoleInContexts subject
+    currentactorBinding <- makeTypeTimeOnlyRoleBinding "currentactor" subject usersInContext start
     effectWithEnvironment <- pure $ addContextualBindingsToStatements
       [ makeIdentityStep "origin" start
       , makeIdentityStep "currentcontext" start
-      , unsafePartial makeTypeTimeOnlyRoleStep "currentactor" usersInContext start
+      , currentactorBinding
       ]
       effect
     states <- stateSpec2States state >>= statesExist start end
     -- The effect starts with the Perspective object, i.e. the syntacticObject.
-    (theAction :: QueryFunctionDescription) <- compileStatement
+    (theAction :: ActionEffect) <- compileActionEffect
       currentcontextDomain
       currentcontextDomain
       qualifiedUsers
@@ -1393,6 +1428,7 @@ handlePostponedStateQualifiedParts = do
                   , authorOnly: false
                   , isSelfPerspective
                   , automaticStates: []
+                  , perspectiveStartPosition: Just start
                   }
               Just i -> pure (unsafePartial $ fromJust $ index perspectives i)
             modifyDF \dfr@{ enumeratedRoles } -> dfr
@@ -1428,6 +1464,7 @@ handlePostponedStateQualifiedParts = do
                   , authorOnly: false
                   , isSelfPerspective
                   , automaticStates: []
+                  , perspectiveStartPosition: Just start
                   }
               Just i -> pure (unsafePartial $ fromJust $ index perspectives i)
             modifyDF \dfr@{ calculatedRoles } -> dfr
@@ -1469,7 +1506,7 @@ handlePostponedStateQualifiedParts = do
                   []
               )
             modifyDF \drf@{ states } -> drf { states = insert (unwrap stateId) state' states }
-          else throwError $ StateDoesNotExist stateId start end
+          else (lift2 $ humanizePerspectivesError $ StateDoesNotExist stateId start end) >>= throwError
       Just (State sr) -> do
         -- modify the state
         state' <- State <$> (modifyState sr)
@@ -1514,7 +1551,7 @@ objectMustBeRole :: Maybe QueryFunctionDescription -> ArcPosition -> ArcPosition
 objectMustBeRole qfd start end = case range <$> qfd of
   Just (RDOM _) -> pure unit
   Nothing -> pure unit
-  (Just r) -> throwError (NotARoleDomain r start end)
+  (Just r) -> (lift2 $ humanizePerspectivesError (NotARoleDomain r start end)) >>= throwError
 
 addUserRoleGraph :: PhaseThree Unit
 addUserRoleGraph = do
@@ -1558,12 +1595,12 @@ invertPerspectiveObjects = do
       else for_ (filter perspectiveMustBeSynchronized perspectives) (addInvertedQueriesForPerspectiveObject (CR id))
 
     addInvertedQueriesForPerspectiveObject :: RoleType -> Perspective -> PhaseThree Unit
-    addInvertedQueriesForPerspectiveObject roleType p@(Perspective { object, propertyVerbs, selfOnly, authorOnly }) = do
+    addInvertedQueriesForPerspectiveObject roleType p@(Perspective { object, propertyVerbs, selfOnly, authorOnly, perspectiveStartPosition }) = do
       -- Sets the inverted queries directly in the EnumeratedRoles and Properties in the
       -- DomeinFile we keep in PhaseTwoState.
       sPerProp <- lift2 $ statesPerProperty p
       runReaderT
-        (setInvertedQueries [ roleType ] sPerProp ((roleStates p) `union` (automaticStates p) `union` (actionStates p) `union` (stateSpec2StateIdentifier <$> (fromFoldable $ EM.keys propertyVerbs))) object selfOnly authorOnly)
+        (setInvertedQueries [ roleType ] sPerProp ((roleStates p) `union` (automaticStates p) `union` (actionStates p) `union` (stateSpec2StateIdentifier <$> (fromFoldable $ EM.keys propertyVerbs))) object selfOnly authorOnly perspectiveStartPosition)
         (unsafePartial createModificationSummary p)
 
     explicitSet2RelevantProperties :: ExplicitSet PropertyType -> RelevantProperties
@@ -1634,17 +1671,20 @@ computeCurrentContextFromRoleIdentification roleIdentification pos = do
     )
     expandedCompiledObject
   (contextCalculations :: (Array QueryFunctionDescription)) <- completeInversions reducedObject
-  case joinQfds contextCalculations of
+  joinedQfds <- joinQfds contextCalculations
+  case joinedQfds of
     Nothing -> throwError (Custom $ "It is not possible to compute the current context in position " <> show pos <> " (is `origin` an indexed role or context?). Change current state at this position, for example by using `in object|subject|context state`." <> " Information for programmers: function computeCurrentContextFromRoleIdentification with compiledObject = " <> prettyPrint compiledObject)
     Just result -> pure result
   where
-  joinQfds :: Array QueryFunctionDescription -> Maybe QueryFunctionDescription
+  joinQfds :: Array QueryFunctionDescription -> PhaseThree (Maybe QueryFunctionDescription)
   joinQfds contextCalculations = case uncons contextCalculations of
-    Just { head, tail } -> Just (foldl makeUnion head tail)
-    Nothing -> Nothing
+    Just { head, tail } -> Just <$> foldM makeUnion head tail
+    Nothing -> pure Nothing
 
-  makeUnion :: QueryFunctionDescription -> QueryFunctionDescription -> QueryFunctionDescription
-  makeUnion f1 f2 = BQD (domain f1) (BinaryCombinator UnionF) f1 f2 (unsafePartial $ fromJust $ sumOfDomains (range f1) (range f2)) False (and (mandatory f1) (mandatory f2))
+  makeUnion :: QueryFunctionDescription -> QueryFunctionDescription -> PhaseThree QueryFunctionDescription
+  makeUnion f1 f2 = case sumOfDomains (range f1) (range f2) of
+    Just combinedRange -> pure $ BQD (domain f1) (BinaryCombinator UnionF) f1 f2 combinedRange False (and (mandatory f1) (mandatory f2))
+    Nothing -> throwError (IncompatibleDomainsForJunction (range f1) (range f2))
 
 computeOrigin :: AST.StateSpecification -> ArcPosition -> VarBinding
 computeOrigin sp pos = case sp of

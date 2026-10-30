@@ -157,9 +157,9 @@ export default class StandardScreen extends PerspectivesComponent<StandardScreen
   handleKeyDown (event : React.KeyboardEvent, perspective : Perspective)
   {
     const component = this;
-      switch(event.code){
+      switch(event.key){
         case "Enter": // Return
-        case "Space": // Space
+        case " ": // Space
           component.createRoleInstance( perspective );
           event.preventDefault();
           event.stopPropagation();

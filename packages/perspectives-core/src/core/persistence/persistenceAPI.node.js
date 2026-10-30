@@ -19,9 +19,61 @@
 import PouchDB from "pouchdb-core";
 import PouchDBMemoryAdapter from "pouchdb-adapter-memory";
 import PouchDBHttpAdapter from "pouchdb-adapter-http";
+import PouchDBMapReduce from "pouchdb-mapreduce";
+import { createRequire } from "module";
+import { dirname } from "path";
 
 PouchDB.plugin(PouchDBMemoryAdapter);
 PouchDB.plugin(PouchDBHttpAdapter);
+PouchDB.plugin(PouchDBMapReduce);
+
+const require = createRequire(import.meta.url);
+const pouchdbAdapterHttpDir = dirname(require.resolve("pouchdb-adapter-http"));
+const { fetch: pouchdbFetch } = require(require.resolve("pouchdb-fetch", { paths: [pouchdbAdapterHttpDir] }));
+
+const RETRYABLE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+const RETRYABLE_ERROR_CODES = new Set([
+  "ETIMEDOUT",
+  "ECONNRESET",
+  "EAI_AGAIN",
+  "ENETUNREACH",
+  "EHOSTUNREACH"
+]);
+
+function retryDelayMillis(attempt) {
+  return 200 * Math.pow(2, attempt - 1);
+}
+
+function isRetryableFetchError(error) {
+  return Boolean(
+    error &&
+    (RETRYABLE_ERROR_CODES.has(error.code) ||
+      error.type === "request-timeout" ||
+      error.type === "system")
+  );
+}
+
+async function retryingFetch(url, options) {
+  const method = ((options && options.method) || "GET").toUpperCase();
+  const maxAttempts = RETRYABLE_METHODS.has(method) ? 3 : 1;
+  let lastError;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await pouchdbFetch(url, options);
+    } catch (error) {
+      lastError = error;
+      if (attempt === maxAttempts || !isRetryableFetchError(error)) {
+        throw error;
+      }
+      await new Promise(function(resolve) {
+        setTimeout(resolve, retryDelayMillis(attempt));
+      });
+    }
+  }
+
+  throw lastError;
+}
 
 function convertPouchError( originalE )
 {
@@ -46,21 +98,50 @@ function convertPouchError( originalE )
     return new Error( JSON.stringify(
       { status: originalE.status
       , name: originalE.constructor.name
-      , message: originalE.message
-      , error: originalE.error}));
+      , message: originalE.message || originalE.reason || originalE.statusText || "Unknown PouchDB error"
+      , error: originalE.error || originalE.statusText}));
   }
+}
+
+export function basicAuthenticationHeader(username)
+{
+  return function(password)
+  {
+    return "Basic " + Buffer.from(username + ":" + password, "utf8").toString("base64");
+  };
 }
 
 // In the Node.js context there are no CORS restrictions, so we do not override
 // the fetch implementation.  PouchDB's default fetch (node-fetch) is used as-is.
-export function createDatabaseImpl( databaseName )
+//
+// When databaseName is a URL (http:// or https://) we create a remote PouchDB
+// instance backed by pouchdb-adapter-http.  This happens e.g. when the PDR opens
+// a read-only view on a public repository such as
+// "https://perspectives.domains/cw_perspectives_domains".
+// For all other names (plain identifiers) we use the in-memory adapter, which is
+// appropriate for unit/integration tests that should not touch the filesystem.
+export function createDatabaseImpl( databaseName, username, password )
 {
+  if (databaseName.startsWith('http://') || databaseName.startsWith('https://'))
+  {
+    var options = { fetch: retryingFetch, skip_setup: true };
+    if (username != null && password != null)
+    {
+      options.auth = { username: username, password: password };
+    }
+    return new PouchDB( databaseName, options );
+  }
   return new PouchDB( databaseName, { adapter: 'memory' } );
 }
 
-export function createRemoteDatabaseImpl( databaseName, couchdbUrl )
+export function createRemoteDatabaseImpl( databaseName, couchdbUrl, username, password )
 {
-  var P = PouchDB.defaults({ prefix: couchdbUrl });
+  var options = { prefix: couchdbUrl, fetch: retryingFetch, skip_setup: true };
+  if (username != null && password != null)
+  {
+    options.auth = { username: username, password: password };
+  }
+  var P = PouchDB.defaults(options);
   return new P(databaseName);
 }
 
@@ -104,26 +185,6 @@ export function documentsInDatabaseImpl( database, options ) {
   };
 };
 
-export function databaseInfoImpl ( database ) {
-  return function (onError, onSuccess) {
-    database.info( function(err, response)
-      {
-        if (err != null)
-        {
-          onError( convertPouchError(err) );
-        }
-        else
-        {
-          onSuccess(response);
-        }
-      });
-
-    return function (cancelError, cancelerError, cancelerSuccess) {
-      cancelerSuccess();
-    };
-  };
-};
-
 export function compactDatabaseImpl(db) {
   return function(onError, onSuccess) {
     db.compact()
@@ -140,28 +201,33 @@ export function compactDatabaseImpl(db) {
   };
 }
 
+function copyableDoc(doc)
+{
+  const { _rev, _revisions, _conflicts, _deleted_conflicts, _local_seq, ...rest } = doc;
+  return rest;
+}
+
 export function cleanupDeletedDocsImpl (dbName) {
-  const origDb = new PouchDB(dbName);
-  const tempDb = new PouchDB(`${dbName}_temp`);
+  const origDb = createDatabaseImpl(dbName);
   let docsToKeep = [];
   
-  return origDb.allDocs({include_docs: true})
+  return origDb.allDocs({ include_docs: true, attachments: true })
     .then(result => {
       docsToKeep = result.rows
-        .filter(row => !row.doc._deleted)
-        .map(row => row.doc);
-      if (docsToKeep.length) {
-        return tempDb.bulkDocs(docsToKeep);
-      } else {
-        return Promise.resolve();
-      }
+        .map(row => row.doc)
+        .filter(doc => doc && !doc._deleted)
+        .map(copyableDoc);
     })
     .then(() => origDb.destroy())
-    .then(() => tempDb.replicate.to(new PouchDB(dbName)))
-    .then(() => tempDb.destroy())
     .then(() => {
-      console.log(`Cleanup complete. Kept ${docsToKeep.length} non-deleted documents.`);
-      return {};
+      const rebuiltDb = createDatabaseImpl(dbName);
+      if (!docsToKeep.length) {
+        return Promise.resolve(0);
+      }
+      return rebuiltDb.bulkDocs(docsToKeep);
+    })
+    .then(() => {
+      return docsToKeep.length;
     })
     .catch(err => {
       console.error(`Error during cleanup:`, convertPouchError(err));
@@ -198,6 +264,26 @@ export function replicateOnce (origin, recovery, last_seq) {
         onError(convertPouchError(err));
       });
       
+    return function(cancelError, cancelerError, cancelerSuccess) {
+      cancelerSuccess();
+    };
+  };
+}
+
+export function replicateDatabaseImpl (sourceDbName, targetDbName) {
+  return function(onError, onSuccess) {
+    const sourceDb = createDatabaseImpl(sourceDbName);
+    const targetDb = createDatabaseImpl(targetDbName);
+    targetDb.replicate.from(sourceDb, { live: false })
+      .on('complete', function() {
+        console.log(`replicateDatabase: replicated ${sourceDbName} to ${targetDbName}.`);
+        onSuccess(undefined);
+      })
+      .on('error', function(err) {
+        console.error(`replicateDatabase: error replicating ${sourceDbName} to ${targetDbName}:`, err);
+        onError(convertPouchError(err));
+      });
+
     return function(cancelError, cancelerError, cancelerSuccess) {
       cancelerSuccess();
     };

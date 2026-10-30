@@ -22,12 +22,18 @@
 
 module Perspectives.Authenticate
   ( deserializeJWK
+  , deserializeTransportJWK
   , getMyPublicKey
+  , getMyTransportPublicKey
   , tryGetPublicKey
+  , tryGetTransportPublicKey
   , getPrivateKey
+  , getTransportPrivateKey
   , signDelta
   , verifyDelta
   , verifyDelta'
+  , encryptForRecipients
+  , decryptForRecipient
   ) where
 
 import Prelude
@@ -61,17 +67,18 @@ import Effect (Effect)
 import Effect.Aff (Aff, error, throwError)
 import Effect.Aff.Class (liftAff)
 import Effect.Class (class MonadEffect, liftEffect)
-import Effect.Uncurried (EffectFn1, runEffectFn1)
+import Effect.Uncurried (EffectFn1, EffectFn2, EffectFn4, runEffectFn1, runEffectFn2, runEffectFn4)
 import IDBKeyVal (idbGet)
 import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction, (##>))
 import Perspectives.Instances.ObjectGetters (deltaAuthor2ResourceIdentifier, getProperty)
-import Perspectives.ModelDependencies (perspectivesUsersPublicKey)
+import Perspectives.ModelDependencies (perspectivesUsersPublicKey, perspectivesUsersTransportPublicKey)
 import Perspectives.Persistence.Types (Password)
 import Perspectives.Persistent (entityExists)
 import Perspectives.PerspectivesState (getPerspectivesUser)
 import Perspectives.Representation.InstanceIdentifiers (PerspectivesUser(..), Value(..), perspectivesUser2RoleInstance)
 import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..))
 import Perspectives.ResourceIdentifiers (stripNonPublicIdentifiers, takeGuid)
+import Perspectives.Sync.CanonicalJson (canonicalizeJsonString)
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
 import Simple.JSON (parseJSON, unsafeStringify)
 import Unsafe.Coerce (unsafeCoerce)
@@ -84,22 +91,23 @@ import Web.Encoding.TextEncoder (encode, new) as Encoder
 -- | the users private key and signing the message.
 signDelta :: String -> MonadPerspectivesTransaction SignedDelta
 signDelta encryptedDelta = do
+  canonicalDelta <- liftEffect $ canonicalizeJsonString encryptedDelta
   author <- lift getPerspectivesUser
-  deltaBuff :: ArrayBuffer <- liftEffect $ string2buff encryptedDelta
+  deltaBuff :: ArrayBuffer <- liftEffect $ string2buff canonicalDelta
   mcryptoKey <- lift $ gets (_.privateKey <<< _.runtimeOptions)
   case mcryptoKey of
     Nothing -> pure $ SignedDelta
       { author: over PerspectivesUser stripNonPublicIdentifiers author
-      , encryptedDelta
+      , encryptedDelta: canonicalDelta
       , signature: Nothing
       }
     Just cryptoKey -> do
-      signatureBuff <- lift $ lift $ sign (ecdsa sha384) (unsafeCoerce cryptoKey) deltaBuff
+      signatureBuff <- lift $ liftAff $ sign (ecdsa sha384) (unsafeCoerce cryptoKey) deltaBuff
       (int8array :: Uint8Array) <- liftEffect $ whole signatureBuff
       (signature :: String) <- liftAff $ bytesToBase64DataUrl int8array
       sd <- pure $ SignedDelta
         { author: over PerspectivesUser stripNonPublicIdentifiers author
-        , encryptedDelta
+        , encryptedDelta: canonicalDelta
         , signature: Just signature
         }
       pure sd
@@ -127,11 +135,23 @@ getPublicKey author = do
   mrawKey <- (perspectivesUser2RoleInstance $ deltaAuthor2ResourceIdentifier author) ##> getProperty (EnumeratedPropertyType perspectivesUsersPublicKey)
   case mrawKey of
     Nothing -> pure Nothing
-    Just (Value rawKey) -> lift (Just <$> deserializeJWK rawKey)
+    Just (Value rawKey) -> liftAff (Just <$> deserializeJWK rawKey)
 
 tryGetPublicKey :: PerspectivesUser -> MonadPerspectives (Maybe CryptoTypes.CryptoKey)
 tryGetPublicKey author = entityExists (perspectivesUser2RoleInstance $ deltaAuthor2ResourceIdentifier author) >>=
   if _ then getPublicKey author
+  else pure Nothing
+
+getTransportPublicKey :: PerspectivesUser -> MonadPerspectives (Maybe CryptoTypes.CryptoKey)
+getTransportPublicKey author = do
+  mrawKey <- (perspectivesUser2RoleInstance $ deltaAuthor2ResourceIdentifier author) ##> getProperty (EnumeratedPropertyType perspectivesUsersTransportPublicKey)
+  case mrawKey of
+    Nothing -> pure Nothing
+    Just (Value rawKey) -> liftAff (Just <$> deserializeTransportJWK rawKey)
+
+tryGetTransportPublicKey :: PerspectivesUser -> MonadPerspectives (Maybe CryptoTypes.CryptoKey)
+tryGetTransportPublicKey author = entityExists (perspectivesUser2RoleInstance $ deltaAuthor2ResourceIdentifier author) >>=
+  if _ then getTransportPublicKey author
   else pure Nothing
 
 deserializeJWK :: String -> Aff CryptoTypes.CryptoKey
@@ -142,13 +162,25 @@ deserializeJWK rawKey = do
     Left e -> throwError (error $ "Cannot parse JWK json: " <> show e)
     Right jwk -> importKey CryptoTypes.jwk (unsafeCoerce jwk) (ec ECConstants.ecdsa ECConstants.p384) true [ CryptoTypes.verify ]
 
+deserializeTransportJWK :: String -> Aff CryptoTypes.CryptoKey
+deserializeTransportJWK rawKey = do
+  case runExcept (parseJSON rawKey) of
+    Left e -> throwError (error $ "Cannot parse RSA JWK json: " <> show e)
+    Right jwk -> importKey CryptoTypes.jwk (unsafeCoerce jwk) (unsafeCoerce { name: "RSA-OAEP", hash: "SHA-256" }) true [ CryptoTypes.encrypt ]
+
 -- | Get my private key (to sign a delta).
 -- | This is used on system startup. It takes the private key from IndexedDB 
 -- | in order to put it in Perspectives State.
 getPrivateKey :: MonadPerspectives (Maybe CryptoTypes.CryptoKey)
 getPrivateKey = do
   PerspectivesUser id <- getPerspectivesUser
-  privateKey <- lift $ getCryptoKey $ (takeGuid id) <> privateKeyString
+  privateKey <- liftAff $ getCryptoKey $ (takeGuid id) <> privateKeyString
+  pure privateKey
+
+getTransportPrivateKey :: MonadPerspectives (Maybe CryptoTypes.CryptoKey)
+getTransportPrivateKey = do
+  PerspectivesUser id <- getPerspectivesUser
+  privateKey <- liftAff $ getCryptoKey $ (takeGuid id) <> transportPrivateKeyString
   pure privateKey
 
 -- | Get my public key. This will only be used on setting up an installation.
@@ -156,14 +188,49 @@ getPrivateKey = do
 getMyPublicKey :: MonadPerspectives (Maybe String)
 getMyPublicKey = do
   PerspectivesUser id <- getPerspectivesUser
-  publicKey <- lift $ getCryptoKey $ (takeGuid id) <> publicKeyString
+  publicKey <- liftAff $ getCryptoKey $ (takeGuid id) <> publicKeyString
   for publicKey
-    \key -> lift $ do
+    \key -> liftAff $ do
       jwk <- CryptoTypes.exportKey CryptoTypes.jwk key
       -- NOTE. The Purescript library Crypto.Subtle contains an error here. `exportKey` always returns an ArrayBuffer,
       -- but https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/exportKey#return_value clearly states that in case
       -- export format JWK a JSON object is returned. This is what we observe. We therefore use unsafeStringify rather then writeJSON
       pure $ unsafeStringify jwk
+
+getMyTransportPublicKey :: MonadPerspectives (Maybe String)
+getMyTransportPublicKey = do
+  PerspectivesUser id <- getPerspectivesUser
+  publicKey <- liftAff $ getCryptoKey $ (takeGuid id) <> transportPublicKeyString
+  for publicKey
+    \key -> liftAff $ do
+      jwk <- CryptoTypes.exportKey CryptoTypes.jwk key
+      pure $ unsafeStringify jwk
+
+type RecipientTransportKey =
+  { recipient :: String
+  , transportKey :: String
+  }
+
+type WrappedContentKey =
+  { recipient :: String
+  , wrappedKey :: String
+  }
+
+type EncryptedPayload =
+  { ciphertext :: String
+  , iv :: String
+  , wrappedKeys :: Array WrappedContentKey
+  }
+
+foreign import encryptForRecipientsImpl :: EffectFn2 String (Array RecipientTransportKey) (Promise EncryptedPayload)
+
+encryptForRecipients :: String -> Array RecipientTransportKey -> Aff EncryptedPayload
+encryptForRecipients payload recipients = toAffE $ runEffectFn2 encryptForRecipientsImpl payload recipients
+
+foreign import decryptForRecipientImpl :: EffectFn4 String String String CryptoTypes.CryptoKey (Promise String)
+
+decryptForRecipient :: String -> String -> String -> CryptoTypes.CryptoKey -> Aff String
+decryptForRecipient ciphertext iv wrappedKey privateKey = toAffE $ runEffectFn4 decryptForRecipientImpl ciphertext iv wrappedKey privateKey
 
 getCryptoKey :: String -> Aff (Maybe CryptoKey)
 getCryptoKey = unsafeCoerce idbGet
@@ -173,6 +240,12 @@ publicKeyString = "_publicKey"
 
 privateKeyString :: String
 privateKeyString = "_privateKey"
+
+transportPublicKeyString :: String
+transportPublicKeyString = "_transportPublicKey"
+
+transportPrivateKeyString :: String
+transportPrivateKeyString = "_transportPrivateKey"
 
 string2buff :: String -> Effect ArrayBuffer
 string2buff s = do

@@ -26,28 +26,30 @@ import Control.Monad.Trans.Class (lift)
 import Data.Either (Either(..))
 import Effect.Class (class MonadEffect)
 import Effect.Exception (Error)
-import Perspectives.CoreTypes (MonadPerspectivesQuery, MonadPerspectivesTransaction)
+import Perspectives.CoreTypes (class MonadPerspectivesWithState, MonadPerspectivesQuery, MonadPerspectivesTransaction, PerspectivesExtraState)
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
 import Perspectives.Error.Pretty (warnModellerWithErrorPretty)
 import Perspectives.ErrorLogging (logPerspectivesError)
+import Perspectives.Logging (errorResource)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Warning (PerspectivesWarning(..))
 import Prelude (Unit, show, ($), pure, unit, bind, (*>))
 
-handlePerspectRolError :: forall a m r. MonadEffect m => String -> (r -> m a) -> Either Error r -> m Unit
+handlePerspectRolError :: forall a m r. MonadPerspectivesWithState PerspectivesExtraState m => String -> (r -> m a) -> Either Error r -> m Unit
 handlePerspectRolError boundaryName f erole = case erole of
-  Left err -> logPerspectivesError $ RolErrorBoundary boundaryName (show err)
+  Left err -> errorResource $ show $ RolErrorBoundary boundaryName (show err)
   Right role -> do
     _ <- f role
     pure unit
 
 -- | Error boundary with a default value. The default is returned instead of the result that the 
 -- | failed computation should have returned.
-handlePerspectRolError' :: forall a m r. MonadEffect m => String -> a -> (r -> m a) -> Either Error r -> m a
+handlePerspectRolError' :: forall a m r. MonadPerspectivesWithState PerspectivesExtraState m => String -> a -> (r -> m a) -> Either Error r -> m a
 handlePerspectRolError' boundaryName default f erole = case erole of
-  Left err -> (logPerspectivesError $ RolErrorBoundary boundaryName (show err)) *> pure default
+  Left err -> (errorResource $ show $ RolErrorBoundary boundaryName (show err)) *> pure default
   Right role -> f role
 
+-- We loosened the MonadPerspecivesClass constraint to MonadEffect because we use it in module Perspectives.Checking.PerspectivesTypeChecker.
 handlePerspectContextError :: forall a m r. MonadEffect m => String -> (r -> m a) -> Either Error r -> m Unit
 handlePerspectContextError boundaryName f econtext = case econtext of
   Left err -> logPerspectivesError $ ContextErrorBoundary boundaryName (show err)
@@ -57,23 +59,23 @@ handlePerspectContextError boundaryName f econtext = case econtext of
 
 -- | Error boundary with a default value. The default is returned instead of the result that the 
 -- | failed computation should have returned.
-handlePerspectContextError' :: forall a m r. MonadEffect m => String -> a -> (r -> m a) -> Either Error r -> m a
+handlePerspectContextError' :: forall a m r. MonadPerspectivesWithState PerspectivesExtraState m => String -> a -> (r -> m a) -> Either Error r -> m a
 handlePerspectContextError' boundaryName default f econtext = case econtext of
-  Left err -> (logPerspectivesError $ ContextErrorBoundary boundaryName (show err)) *> pure default
+  Left err -> (errorResource $ show $ ContextErrorBoundary boundaryName (show err)) *> pure default
   Right ctxt -> f ctxt
 
-handleDomeinFileError :: forall a m r. MonadEffect m => String -> (r -> m a) -> Either Error r -> m Unit
+handleDomeinFileError :: forall a m r. MonadPerspectivesWithState PerspectivesExtraState m => String -> (r -> m a) -> Either Error r -> m Unit
 handleDomeinFileError boundaryName f dfile = case dfile of
-  Left err -> logPerspectivesError $ DomeinFileErrorBoundary boundaryName (show err)
+  Left err -> errorResource $ show $ DomeinFileErrorBoundary boundaryName (show err)
   Right ctxt -> do
     _ <- f ctxt
     pure unit
 
 -- | Error boundary with a default value. The default is returned instead of the result that the 
 -- | failed computation should have returned.
-handleDomeinFileError' :: forall a m r. MonadEffect m => String -> a -> (r -> m a) -> Either Error r -> m a
+handleDomeinFileError' :: forall a m r. MonadPerspectivesWithState PerspectivesExtraState m => String -> a -> (r -> m a) -> Either Error r -> m a
 handleDomeinFileError' boundaryName default f dfile = case dfile of
-  Left err -> (logPerspectivesError $ DomeinFileErrorBoundary boundaryName (show err)) *> pure default
+  Left err -> (errorResource $ show $ DomeinFileErrorBoundary boundaryName (show err)) *> pure default
   Right ctxt -> f ctxt
 
 handleExternalFunctionError :: forall a. String -> Either Error a -> MonadPerspectivesQuery a

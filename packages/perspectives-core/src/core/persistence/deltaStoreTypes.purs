@@ -34,7 +34,7 @@ import Perspectives.Sync.SignedDelta (SignedDelta)
 import Simple.JSON (class ReadForeign, class WriteForeign)
 
 -- | A record stored in the delta-store PouchDB database.
--- | Document ID: <resourceKey>_<resourceVersion>_<author>
+-- | Document ID: <resourceKey>_<resourceVersion>_<author>|<shortDeltaId>
 -- | The `contextKey` field is set (non-Nothing) only for ContextDelta records
 -- | (deltaType ∈ {AddRoleInstancesToContext, AddExternalRole,
 -- | MoveRoleInstancesToAnotherContext}).  It holds the safe-key form of the
@@ -49,9 +49,11 @@ newtype DeltaStoreRecord = DeltaStoreRecord
   , resourceKey :: String
   , resourceVersion :: Int
   , author :: PerspectivesUser
+  , deltaId :: Maybe String
   , signedDelta :: SignedDelta
   , deltaType :: String
   , applied :: Boolean
+  , disposition :: Maybe String
   , contextKey :: Maybe String
   }
 

@@ -24,16 +24,17 @@ module Perspectives.Query.ExpandPrefix where
 
 import Control.Monad.Reader (ReaderT, ask, lift, runReaderT)
 import Data.Maybe (Maybe(..))
+import Data.Newtype (unwrap)
 import Data.Traversable (traverse)
 import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.DomeinCache (retrieveDomeinFile)
 import Perspectives.Identifiers (isTypeUri, typeUri2typeNameSpace)
-import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ChatE(..), ColumnE(..), ContextActionE(..), FormE(..), FreeFormScreenE(..), MarkDownE(..), NotificationE(..), PropertyVerbE(..), PropsOrView(..), RoleIdentification(..), RoleVerbE(..), RowE(..), ScreenE(..), ScreenElement(..), SelfOnly(..), SentenceE(..), SentencePartE(..), StateE(..), StateQualifiedPart(..), StateSpecification(..), StateTransitionE(..), TabE(..), TableE(..), TableFormE(..), TableFormOrWhenE(..), TableFormSectionE(..), WhatE(..), WhenE(..), WhenTableFormE(..), WhoWhatWhereScreenE(..), WidgetCommonFields)
-import Perspectives.Parsing.Arc.Expression.AST (BinaryStep(..), ComputationStep(..), ComputedType(..), PureLetStep(..), SimpleStep(..), Step(..), UnaryStep(..), VarBinding(..))
-import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseTwo, expandNamespace)
+import Perspectives.Parsing.Arc.AST (ActionE(..), AuthorOnly(..), AutomaticEffectE(..), ChatE(..), ColumnE(..), ContextActionE(..), FormE(..), FreeFormScreenE(..), MarkDownE(..), NotificationE(..), PerspectivePosition(..), PropertyVerbE(..), PropsOrView(..), RoleIdentification(..), RoleVerbE(..), RowE(..), ScreenE(..), ScreenElement(..), SelfOnly(..), SentenceE(..), SentencePartE(..), StateE(..), StateQualifiedPart(..), StateSpecification(..), StateTransitionE(..), TabE(..), TableE(..), TableFormE(..), TableFormOrWhenE(..), TableFormSectionE(..), TypeAheadFillerE(..), TypeAheadFormE(..), WhatE(..), WhenE(..), WhenTableFormE(..), WhoWhatWhereScreenE(..), WidgetCommonFields)
+import Perspectives.Parsing.Arc.Expression.AST (BinaryStep(..), ComputationStep(..), ComputedType(..), FilledByAttribute(..), PureLetStep(..), SimpleStep(..), Step(..), TypeCombination(..), UnaryStep(..), VarBinding(..))
+import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseTwo', expandNamespace)
 import Perspectives.Parsing.Arc.Statement.AST (Assignment(..), LetABinding(..), LetStep(..), Statements(..))
 import Perspectives.Query.QueryTypes (Calculation(..))
-import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), EnumeratedRoleType(..), RoleType(..))
+import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedRoleType(..), RoleType(..))
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Prelude (class Monad, bind, discard, flip, pure, unit, void, ($), (<$>), (<*>), (<<<), (>>=))
 
@@ -45,7 +46,7 @@ f s = do
   lift (g s)
 
 -- | Just apply expandNamespace to all identifiers.
-expandPrefix :: forall s. ScanSymbols s => s -> PhaseTwo s
+expandPrefix :: forall s m. Monad m => ScanSymbols s => s -> PhaseTwo' m s
 expandPrefix s = runReaderT (scan s) expandNamespace
 
 -- | On detecting a namespace for which no model is yet available, load that model.
@@ -77,7 +78,7 @@ instance containsPrefixesSimpleStep :: ScanSymbols SimpleStep where
   scan (Filled pos s mcontext) = Filled pos <$> f s <*> (traverse f mcontext)
   scan (SpecialisesRoleType pos s) = SpecialisesRoleType pos <$> f s
   scan (IsInState pos s) = IsInState pos <$> f s
-  scan (PublicRole pos s) = PublicRole pos <$> f s
+  scan (PublicRole pos s mtype) = PublicRole pos <$> f s <*> traverse f mtype
   scan (PublicContext pos s) = PublicContext pos <$> f s
   scan (TypeTimeOnlyContext pos s) = TypeTimeOnlyContext pos <$> f s
   scan (TypeTimeOnlyEnumeratedRole pos s1 s2) = TypeTimeOnlyEnumeratedRole pos <$> f s1 <*> f s2
@@ -103,12 +104,21 @@ instance containsPrefixesUnaryStep :: ScanSymbols UnaryStep where
   scan (DurationOperator pos op s) = DurationOperator pos op <$> scan s
   scan (ContextIndividual pos tp s) = ContextIndividual pos <$> f tp <*> scan s
   scan (RoleIndividual pos tp s) = RoleIndividual pos <$> f tp <*> scan s
+  scan (TypeFilterStep pos pos2 s tc) = TypeFilterStep pos pos2 <$> scan s <*> scan tc
+
+instance ScanSymbols TypeCombination where
+  scan (Alternatives as) = Alternatives <$> traverse scan as
+  scan (Combination as) = Combination <$> traverse scan as
+  scan (DisjunctionOfConjunctions as) = DisjunctionOfConjunctions <$> traverse (traverse scan) as
+
+instance ScanSymbols FilledByAttribute where
+  scan (FilledByAttribute s ct) = FilledByAttribute <$> f s <*> (ContextType <$> f (unwrap ct))
 
 instance containsPrefixesLetStep :: ScanSymbols LetStep where
-  scan (LetStep r@{ bindings, assignments }) = do
+  scan (LetStep r@{ bindings, stages }) = do
     ebindings <- traverse scan bindings
-    eassignments <- traverse scan assignments
-    pure $ LetStep r { bindings = ebindings, assignments = eassignments }
+    estages <- traverse (traverse scan) stages
+    pure $ LetStep r { bindings = ebindings, stages = estages }
 
 instance containsPrefixesLetABinding :: ScanSymbols LetABinding where
   scan (Expr varbinding) = Expr <$> scan varbinding
@@ -166,14 +176,20 @@ instance containsPrefixesAssignment :: ScanSymbols Assignment where
     ebindingExpression <- scan bindingExpression
     ebinderExpression <- scan binderExpression
     pure $ Bind_ r { binderExpression = ebinderExpression, bindingExpression = ebindingExpression }
-  scan (Unbind r@{ bindingExpression, roleIdentifier }) = do
-    eroleIdentifier <- traverse f roleIdentifier
-    ebindingExpression <- scan bindingExpression
-    pure $ Unbind r { bindingExpression = ebindingExpression, roleIdentifier = eroleIdentifier }
-  scan (Unbind_ r@{ bindingExpression, binderExpression }) = do
-    ebindingExpression <- scan bindingExpression
-    ebinderExpression <- scan binderExpression
-    pure $ Unbind_ r { bindingExpression = ebindingExpression, binderExpression = ebinderExpression }
+  scan (RemoveAsFillerOfType r@{ roleIdentifier, fillerExpression }) = do
+    eroleIdentifier <- f roleIdentifier
+    efillerExpression <- scan fillerExpression
+    pure $ RemoveAsFillerOfType r { roleIdentifier = eroleIdentifier, fillerExpression = efillerExpression }
+  scan (RemoveAsFiller r@{ fillerExpression }) = do
+    efillerExpression <- scan fillerExpression
+    pure $ RemoveAsFiller r { fillerExpression = efillerExpression }
+  scan (RemoveFiller r@{ filledExpression }) = do
+    efilledExpression <- scan filledExpression
+    pure $ RemoveFiller r { filledExpression = efilledExpression }
+  scan (RemoveFillerWith r@{ fillerExpression, filledExpression }) = do
+    efillerExpression <- scan fillerExpression
+    efilledExpression <- scan filledExpression
+    pure $ RemoveFillerWith r { fillerExpression = efillerExpression, filledExpression = efilledExpression }
   scan (DeleteRole r@{ contextExpression, roleIdentifier }) = do
     eroleIdentifier <- f roleIdentifier
     econtextExpression <- traverse scan contextExpression
@@ -205,6 +221,17 @@ instance containsPrefixesAssignment :: ScanSymbols Assignment where
     eeffectName <- f effectName
     earguments <- traverse scan arguments
     pure $ ExternalEffect r { effectName = eeffectName, arguments = earguments }
+  scan (RunContextAction r@{ actionIdentifier, userRoleIdentifier, contextExpression }) = do
+    eactionIdentifier <- f actionIdentifier
+    euserRoleIdentifier <- f userRoleIdentifier
+    econtextExpression <- scan contextExpression
+    pure $ RunContextAction r { actionIdentifier = eactionIdentifier, userRoleIdentifier = euserRoleIdentifier, contextExpression = econtextExpression }
+  scan (RunRoleAction r@{ actionIdentifier, userRoleIdentifier, objectExpression, contextExpression }) = do
+    eactionIdentifier <- f actionIdentifier
+    euserRoleIdentifier <- f userRoleIdentifier
+    eobjectExpression <- scan objectExpression
+    econtextExpression <- scan contextExpression
+    pure $ RunRoleAction r { actionIdentifier = eactionIdentifier, userRoleIdentifier = euserRoleIdentifier, objectExpression = eobjectExpression, contextExpression = econtextExpression }
 
 instance containsPrefixesStateQualifiedPart :: ScanSymbols StateQualifiedPart where
   scan (R r) = R <$> (scan r)
@@ -230,6 +257,10 @@ instance containsPrefixesStateQualifiedPart :: ScanSymbols StateQualifiedPart wh
     object' <- scan object
     state' <- scan state
     pure (PO (AuthorOnly r { subject = subject', object = object', state = state' }))
+  scan (PP (PerspectivePosition r@{ subject, object })) = do
+    subject' <- scan subject
+    object' <- scan object
+    pure (PP (PerspectivePosition r { subject = subject', object = object' }))
   scan (N (NotificationE r@{ user, transition, message, object })) = do
     user' <- scan user
     transition' <- scan transition
@@ -270,6 +301,7 @@ instance expandPrefixPropertyE :: ScanSymbols PropertyVerbE where
 
 instance containsPrefixesPropsOrView :: ScanSymbols PropsOrView where
   scan (View s) = View <$> (f s)
+  scan (Properties s) = Properties <$> (traverse f s)
   scan x = pure x
 
 instance containsPrefixesRoleIdentification :: ScanSymbols RoleIdentification where
@@ -384,10 +416,15 @@ instance ScanSymbols MarkDownE where
     pure $ MarkDownPerspective { widgetFields: widgetFields', condition: condition', start, end }
 
 expandPrefixWidgetCommonFields :: forall m. Monad m => WidgetCommonFields -> ReaderT (SymbolHandler m) m WidgetCommonFields
-expandPrefixWidgetCommonFields cf@{ perspective, fillFrom } = do
+expandPrefixWidgetCommonFields cf@{ perspective, fillFrom, fillPropertyValues } = do
   perspective' <- scan perspective
   fillFrom' <- traverse scan fillFrom
-  pure cf { perspective = perspective', fillFrom = fillFrom' }
+  fillPropertyValues' <- traverse scanFillPropertyValue fillPropertyValues
+  pure cf { perspective = perspective', fillFrom = fillFrom', fillPropertyValues = fillPropertyValues' }
+  where
+  scanFillPropertyValue fpv = do
+    valuesQuery' <- scan fpv.valuesQuery
+    pure fpv { valuesQuery = valuesQuery' }
 
 instance containsPrefixesRowE :: ScanSymbols RowE where
   scan (RowE scrEls) = RowE <$> (traverse scan scrEls)
@@ -414,7 +451,15 @@ instance containsPrefixesScreenElement :: ScanSymbols ScreenElement where
   scan (FormElement r) = FormElement <$> scan r
   scan (MarkDownElement r) = MarkDownElement <$> scan r
   scan (ChatElement r) = ChatElement <$> scan r
+  scan (TypeAheadFillerElement r) = TypeAheadFillerElement <$> scan r
+  scan (TypeAheadFormElement r) = TypeAheadFormElement <$> scan r
   scan (WhenElement r) = WhenElement <$> scan r
+
+instance ScanSymbols TypeAheadFillerE where
+  scan (TypeAheadFillerE wcf) = TypeAheadFillerE <$> expandPrefixWidgetCommonFields wcf
+
+instance ScanSymbols TypeAheadFormE where
+  scan (TypeAheadFormE wcf) = TypeAheadFormE <$> expandPrefixWidgetCommonFields wcf
 
 instance ScanSymbols WhenE where
   scan (WhenE condition context elements) = do

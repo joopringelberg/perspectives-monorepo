@@ -32,7 +32,7 @@ module Perspective.InvertedQuery.Indices where
 
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Writer (WriterT, execWriterT, tell)
-import Data.Array (cons, elemIndex, singleton)
+import Data.Array (cons, elemIndex)
 import Data.Maybe (Maybe(..), isJust, maybe)
 import Data.Newtype (unwrap)
 import Data.Traversable (for, traverse)
@@ -46,7 +46,7 @@ import Perspectives.Instances.ObjectGetters (context', contextType_)
 import Perspectives.InvertedQueryKey (RunTimeInvertedQueryKey(..))
 import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseThree)
 import Perspectives.Query.QueryTypes (QueryFunctionDescription, RoleInContext(..), domain, domain2roleInContext, domain2roleType, queryFunction, range, roleDomain, roleInContext2Role, roleRange)
-import Perspectives.Representation.ADT (ADT(..), allLeavesInExpandedADT, computeCollection)
+import Perspectives.Representation.ADT (ADT(..), allLeavesInADT, allLeavesInExpandedADT)
 import Perspectives.Representation.Class.PersistentType (getEnumeratedRole, getPerspectType)
 import Perspectives.Representation.Class.Role (allLocallyRepresentedProperties, bindingOfADT, completeExpandedFillerRestriction, contextOfRepresentation)
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
@@ -200,17 +200,17 @@ runtimeIndexForPropertyQueries typeOfInstanceOnPath typeOfPropertyBearingInstanc
 -- | Compute the keys for the filled step.
 -- | Is exactly like typeLevelKeyForFillerQueries, but with role and domain reversed.
 -- | In compile time, we just describe a single step in type space. However, as these types may be compound (ADTs are composed types),
--- | we compute all individual RoleInContext combinations that with certainty describe the origin and those that describe the destination
+-- | we compute all individual RoleInContext combinations that may describe the origin and those that may describe the destination
 -- | of the step and then make all combinations.
 typeLevelKeyForFilledQueries :: Partial => QueryFunctionDescription -> MonadPerspectives (ArrayUnions RunTimeInvertedQueryKey)
 typeLevelKeyForFilledQueries qfd | isFilledF (queryFunction qfd) =
   do
     -- domain of the qfd represents the filler roles;
     -- All RoleInContext items in the domain of the query.
-    (fillerRoleInContexts :: Array RoleInContext) <- pure $ computeCollection singleton (domain2roleInContext $ domain qfd)
+    (fillerRoleInContexts :: Array RoleInContext) <- pure $ allLeavesInADT (domain2roleInContext $ domain qfd)
     -- range represents the filled roles.
     -- all RoleInContext items in the range of the query.
-    (filledRoleInContexts :: Array RoleInContext) <- pure $ computeCollection singleton (domain2roleInContext $ range qfd)
+    (filledRoleInContexts :: Array RoleInContext) <- pure $ allLeavesInADT (domain2roleInContext $ range qfd)
     pure $ ArrayUnions do
       RoleInContext { role: filledRole_destination, context: filledContext_destination } <- filledRoleInContexts
       RoleInContext { role: fillerRole_origin, context: fillerContext_origin } <- fillerRoleInContexts
@@ -229,10 +229,10 @@ typeLevelKeyForFillerQueries qfd | isFiller (queryFunction qfd) =
   do
     -- domain of the qfd represents the filled roles (FillerF takes a filled role as input).
     -- All RoleInContext items in the domain of the query.
-    (filledRoleInContexts :: Array RoleInContext) <- pure $ computeCollection singleton (domain2roleInContext $ domain qfd)
+    (filledRoleInContexts :: Array RoleInContext) <- pure $ allLeavesInADT (domain2roleInContext $ domain qfd)
     -- range represents the filler roles (FillerF returns the filler).
     -- all RoleInContext items in the range of the query.
-    (fillerRoleInContexts :: Array RoleInContext) <- pure $ computeCollection singleton (domain2roleInContext $ range qfd)
+    (fillerRoleInContexts :: Array RoleInContext) <- pure $ allLeavesInADT (domain2roleInContext $ range qfd)
     pure $ ArrayUnions do
       RoleInContext { role: filledRole_origin, context: filledContext_origin } <- filledRoleInContexts
       RoleInContext { role: fillerRole_destination, context: fillerContext_destination } <- fillerRoleInContexts
@@ -281,9 +281,9 @@ getPropertyTypeBearingRoleInstances prop adt = ArrayUnions <$> execWriterT (desc
   descendInFiller :: ADT RoleInContext -> WriterT (Array PropertyBearer) MonadPerspectives Unit
   descendInFiller adt' = do
     -- Using the Traversable instance, we replace all terminal RoleInContext values with one or zero PropertyBearers. 
-    -- We then collect them using foldMapADT (computeCollection) and tell them in the WriterT monad.
+    -- We then collect them from all leaves (union over both SUM and PROD) and tell them in the WriterT monad.
     propBearers <- lift $ for adt' ((getEnumeratedRole <<< roleInContext2Role) >=> getPropertyBearers)
-    tell $ computeCollection identity propBearers
+    tell $ join $ allLeavesInADT propBearers
     mfiller <- lift $ (bindingOfADT adt')
     case mfiller of
       Nothing -> pure unit
@@ -324,7 +324,7 @@ typeLevelKeyForPropertyQueries p qfd = do
 typeLevelKeyForRoleQueries :: QueryFunctionDescription -> PhaseThree (ArrayUnions RunTimeInvertedQueryKey)
 typeLevelKeyForRoleQueries qfd =
   for
-    (computeCollection singleton (unsafePartial roleRange qfd))
+    (allLeavesInADT (unsafePartial roleRange qfd))
     (\(RoleInContext { context, role }) -> readableRoleContextCombinations role context)
     >>= pure <<< (map \(Tuple role_destination context_origin) -> RTRoleKey { context_origin, role_destination }) <<< join <<< ArrayUnions
 
@@ -334,7 +334,7 @@ typeLevelKeyForContextQueries qfd =
   -- Notice that we first collect all leaves and then traverse them with roleContextCombinations. This is because we do not have a Traversable instance of
   -- ADT and this is semantically equivalent.
   for
-    (computeCollection singleton (unsafePartial roleDomain qfd))
+    (allLeavesInADT (unsafePartial roleDomain qfd))
     (\(RoleInContext { context, role }) -> readableRoleContextCombinations role context)
     >>= pure <<< (map \(Tuple role_origin context_destination) -> RTContextKey { role_origin, context_destination }) <<< join <<< ArrayUnions
 

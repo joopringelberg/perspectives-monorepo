@@ -41,26 +41,28 @@ import Control.Monad.Error.Class (try)
 import Control.Monad.Writer (execWriterT, lift, tell)
 import Data.Array (concat, delete, head)
 import Data.Either (Either(..))
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), isJust)
 import Data.Newtype (unwrap)
-import Data.String (drop, length) as Str
 import Data.Traversable (for, for_)
-import Effect.Class.Console (log)
 import Foreign.Object (mapWithKey)
 import Perspectives.Assignment.Update (cacheAndSave)
 import Perspectives.ContextAndRole (changeContext_me, context_buitenRol, context_displayName, context_me, removeRol_gevuldeRollen, rol_binding, rol_gevuldeRollen, setRol_gevuldeRollen)
 import Perspectives.ContextStateCompiler (evaluateContextState)
 import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction, ResourceToBeStored(..))
 import Perspectives.Error.Boundaries (handlePerspectContextError, handlePerspectRolError')
-import Perspectives.Identifiers (buitenRol)
+import Perspectives.Identifiers (buitenRol, url2Authority)
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol)
 import Perspectives.Instances.Clipboard (findItemOnClipboardWithRole)
 import Perspectives.Instances.ObjectGetters (Filler_(..), context2roleFromDatabase_, contextType_, filled2fillerFromDatabase_, filler2filledFromDatabase_, role2contextFromDatabase_, roleType_)
+import Perspectives.Logging (warnResource)
 import Perspectives.ModelDependencies (sysUser)
+import Perspectives.Persistence.Authentication (getCredentials)
 import Perspectives.Persistent (getPerspectContext, getPerspectRol, removeEntiteit, saveMarkedResources)
 import Perspectives.PerspectivesState (addWarning, transactionLevel)
+import Perspectives.Representation.Class.Cacheable (tryReadEntiteitFromCache)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..))
 import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedRoleType(..), RoleType(..))
+import Perspectives.ResourceIdentifiers (databaseLocation, isInPublicScheme)
 import Perspectives.RestoreResource (restoreResource)
 import Perspectives.RoleAssignment (filledNoLongerPointsTo) as RA
 import Perspectives.RoleStateCompiler (evaluateRoleState)
@@ -88,18 +90,24 @@ fixReferences resource@(Rle roleId) = do
       pure $ case mCtxt of
         Left _ -> { displayName: "", extRole: buitenRol (unwrap contextId) }
         Right ctxt -> { displayName: context_displayName ctxt, extRole: unwrap (context_buitenRol ctxt) }
-  -- Notify the user that the resource has been restored, via the piggybacked warning mechanism.
-  -- The message field serves as a stable identifier; the frontend uses i18n keys for the
-  -- user-facing text when externalRoleId is non-empty (see www.tsx restorationPanel_message).
-  addWarning
-    { message: "RestoredMissingResource"
-    , error: ""
-    , externalRoleId: extRole
-    , contextName: displayName
-    }
-  -- Persist the restored resource.
-  saveMarkedResources
-  pure true
+  -- Now check whether the restored role is still missing (e.g. because the restoration failed or because the reference was to a role that has been deleted). If so, we should remove the dangling reference.
+  mRestoredRole <- tryReadEntiteitFromCache roleId
+  case mRestoredRole of
+    Nothing -> fixRoleReferences roleId *> pure false
+    Just _ -> do
+      -- Notify the user that the resource has been restored, via the piggybacked warning mechanism.
+      -- The message field serves as a stable identifier; the frontend uses i18n keys for the
+      -- user-facing text when externalRoleId is non-empty (see www.tsx restorationPanel_message).
+      addWarning
+        { message: "RestoredMissingResource"
+        , error: ""
+        , externalRoleId: extRole
+        , contextName: displayName
+        }
+      -- Persist the restored role, but only if we're actually able to save it: a public resource
+      -- can generally not be written to, as this installation typically has no credentials for it.
+      canSaveResource (unwrap roleId) >>= flip when saveMarkedResources
+      pure true
 fixReferences resource@(Ctxt contextId) = do
   -- Restore the resource so that it is available in the database.
   restoreResource resource
@@ -109,22 +117,38 @@ fixReferences resource@(Ctxt contextId) = do
     { displayName, extRole } = case mCtxt of
       Left _ -> { displayName: "", extRole: buitenRol (unwrap contextId) }
       Right ctxt -> { displayName: context_displayName ctxt, extRole: unwrap (context_buitenRol ctxt) }
-  -- Notify the user that the context has been restored, via the piggybacked warning mechanism.
-  -- The message field serves as a stable identifier; the frontend uses i18n keys for the
-  -- user-facing text when externalRoleId is non-empty (see www.tsx restorationPanel_message).
-  addWarning
-    { message: "RestoredMissingResource"
-    , error: ""
-    , externalRoleId: extRole
-    , contextName: displayName
-    }
-  -- Persist the restored context.
-  saveMarkedResources
-  pure true
+  -- Now check whether the restored context is still missing (e.g. because the restoration failed or because the reference was to a context that has been deleted). If so, we should remove the dangling reference.
+  mRestoredContext <- tryReadEntiteitFromCache contextId
+  case mRestoredContext of
+    Nothing -> fixContextReferences contextId *> pure false
+    Just _ -> do
+      -- Notify the user that the context has been restored, via the piggybacked warning mechanism.
+      -- The message field serves as a stable identifier; the frontend uses i18n keys for the
+      -- user-facing text when externalRoleId is non-empty (see www.tsx restorationPanel_message).
+      addWarning
+        { message: "RestoredMissingResource"
+        , error: ""
+        , externalRoleId: extRole
+        , contextName: displayName
+        }
+      -- Persist the restored context, but only if we're actually able to save it: a public resource
+      -- can generally not be written to, as this installation typically has no credentials for it.
+      canSaveResource (unwrap contextId) >>= flip when saveMarkedResources
+      pure true
 fixReferences (Dfile _) = pure false
 
-----------------------------------------------------------------------------
----- I've kept this mechanism. We might want to use it later.
+-- | A public resource is generally hosted by someone else, so this installation usually has no
+-- | credentials to write to it. Only attempt to save such a resource if credentials are available;
+-- | local and remote (non-public) resources can always be saved.
+canSaveResource :: String -> MonadPerspectives Boolean
+canSaveResource resId
+  | not (isInPublicScheme resId) = pure true
+  | otherwise = do
+      murl <- databaseLocation resId
+      case murl >>= url2Authority of
+        Nothing -> pure false
+        Just authority -> isJust <$> getCredentials authority
+
 ----------------------------------------------------------------------------
 -- | Apply this function when a reference to a context has been found that cannot be retrieved.
 -- | We want all references to this context to be removed.
@@ -134,7 +158,7 @@ fixReferences (Dfile _) = pure false
 fixContextReferences :: ContextInstance -> MonadPerspectives Unit
 fixContextReferences cid@(ContextInstance c) = do
   padding <- transactionLevel
-  log (padding <> "fixContextReferences: " <> show cid)
+  warnResource (padding <> "fixContextReferences: " <> show cid)
   -- As we look for dangling references in the database only, we should be sure that
   -- there is no difference between cache and database.
   saveMarkedResources
@@ -176,7 +200,7 @@ reEvaluateContextStates cid = (lift $ contextType_ cid) >>= evaluateContextState
 fixRoleReferences :: RoleInstance -> MonadPerspectives Unit
 fixRoleReferences roleId@(RoleInstance r) = do
   padding <- transactionLevel
-  log (padding <> "fixRoleReferences: " <> show roleId)
+  warnResource (padding <> "fixRoleReferences: " <> show roleId)
 
   -- As we look for dangling references in the database only, we should be sure that
   -- there is no difference between cache and database.

@@ -28,10 +28,10 @@ module Perspectives.CompileRoleAssignment where
 import Prelude
 
 import Control.Monad.AvarMonadAsk (gets, modify)
-import Control.Monad.Error.Class (throwError, try)
+import Control.Monad.Error.Class (catchError, throwError, try)
 import Control.Monad.Except (runExceptT)
 import Control.Monad.Trans.Class (lift)
-import Data.Array (catMaybes, concat, filter, filterA, head, index, length, nub, singleton, union, unsafeIndex)
+import Data.Array (catMaybes, concat, elem, filter, filterA, head, index, length, nub, singleton, union, unsafeIndex)
 import Data.Either (Either(..), hush)
 import Data.Foldable (for_)
 import Data.Maybe (Maybe(..), fromJust, maybe)
@@ -53,14 +53,14 @@ import Perspectives.HiddenFunction (HiddenFunction)
 import Perspectives.Identifiers (buitenRol)
 import Perspectives.InstanceRepresentation (PerspectRol(..))
 import Perspectives.Instances.Builders (constructContext, createAndAddRoleInstance)
-import Perspectives.Instances.Environment (_pushFrame)
 import Perspectives.Instances.ObjectGetters (allRoleBinders, getFilledRoles) as OG
 import Perspectives.Instances.ObjectGetters (binding, context, roleType_)
 import Perspectives.Instances.Values (writePerspectivesFile)
 import Perspectives.Logging (errorCompiler)
 import Perspectives.ModelDependencies (sysUser)
 import Perspectives.Persistent (getPerspectRol)
-import Perspectives.PerspectivesState (addBinding, getVariableBindings)
+import Perspectives.Parsing.Messages (PerspectivesError(..))
+import Perspectives.PerspectivesState (addBinding, pushFrame, restoreFrame)
 import Perspectives.Query.QueryTypes (QueryFunctionDescription(..))
 import Perspectives.Query.UnsafeCompiler (compileFunction, getRoleInstances, role2context, role2propertyValue, role2role, role2string, typeTimeOnly)
 import Perspectives.Representation.ADT (allLeavesInADT)
@@ -71,8 +71,8 @@ import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), Rol
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
 import Perspectives.Representation.QueryFunction (QueryFunction(..)) as QF
 import Perspectives.Representation.ThreeValuedLogic (pessimistic)
-import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), ResourceType(..), RoleType(..))
-import Perspectives.ResourceIdentifiers (createResourceIdentifier, databaseLocation, resourceIdentifier2DocLocator)
+import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), RoleType(..))
+import Perspectives.ResourceIdentifiers (databaseLocation, resourceIdentifier2DocLocator)
 import Perspectives.SaveUserData (removeBinding, scheduleContextRemoval, scheduleRoleRemoval, setBinding, setFirstBinding, synchronise)
 import Perspectives.ScheduledAssignment (ScheduledAssignment(..))
 import Perspectives.Sync.Transaction (Transaction(..))
@@ -207,33 +207,43 @@ compileAssignmentFromRole (BQD _ QF.Bind_ binding binder _ _ _) = do
       Just binding'', Just binder'' -> setBinding binder'' binding'' Nothing
       _, _ -> pure []
 
-compileAssignmentFromRole (UQD _ (QF.Unbind mroleType) bindings _ _ _) = do
-  (bindingsGetter :: (RoleInstance ~~> RoleInstance)) <- role2role bindings
-  case mroleType of
-    Nothing -> pure
-      \roleId -> do
-        binders <- lift (roleId ##= bindingsGetter >=> OG.allRoleBinders)
-        for_ binders removeBinding
-    Just roleType -> do
-      EnumeratedRole role <- getEnumeratedRole roleType
-      pure \roleId -> do
-        -- We have no information about the ContextType in which these binders of type `roleType` are a member.
-        -- Therefore we currently just remove them from the lexical context of roleType.
-        -- When we implement the `remove filler` syntax, the modeller can specify the ContextType as well.
-        binders <- lift (roleId ##= bindingsGetter >=> OG.getFilledRoles role.context roleType)
-        for_ binders removeBinding
-
-compileAssignmentFromRole (BQD _ QF.Unbind_ bindings binders _ _ _) = do
-  (bindingsGetter :: (RoleInstance ~~> RoleInstance)) <- role2role bindings
-  (bindersGetter :: (RoleInstance ~~> RoleInstance)) <- role2role binders
+compileAssignmentFromRole (UQD _ (QF.RemoveAsFillerOfType roleType) fillerQfd _ _ _) = do
+  (fillerGetter :: (RoleInstance ~~> RoleInstance)) <- role2role fillerQfd
+  EnumeratedRole role <- getEnumeratedRole roleType
   pure \roleId -> do
-    (binding :: Maybe RoleInstance) <- lift (roleId ##> bindingsGetter)
-    (binder :: Maybe RoleInstance) <- lift (roleId ##> bindersGetter)
-    -- TODO. As soon as we introduce multiple values for a binding, we have to adapt this so the binding argument
-    -- is taken into account, too.
-    void $ case binder of
-      Nothing -> pure []
-      Just binder' -> removeBinding binder'
+    fillers <- lift (roleId ##= fillerGetter)
+    for_ fillers \filler -> do
+      filledRoles <- lift (filler ##= OG.getFilledRoles role.context roleType)
+      for_ filledRoles removeBinding
+
+compileAssignmentFromRole (UQD _ QF.RemoveAsFiller fillerQfd _ _ _) = do
+  (fillerGetter :: (RoleInstance ~~> RoleInstance)) <- role2role fillerQfd
+  pure \roleId -> do
+    fillers <- lift (roleId ##= fillerGetter)
+    for_ fillers \filler -> do
+      filledRoles <- lift (filler ##= OG.allRoleBinders)
+      for_ filledRoles removeBinding
+
+compileAssignmentFromRole (UQD _ QF.RemoveFiller filledQfd _ _ _) = do
+  (filledGetter :: (RoleInstance ~~> RoleInstance)) <- role2role filledQfd
+  pure \roleId -> do
+    filledRoles <- lift (roleId ##= filledGetter)
+    for_ filledRoles removeBinding
+
+compileAssignmentFromRole (BQD _ QF.RemoveFiller fillerQfd filledQfd _ _ _) = do
+  (fillerGetter :: (RoleInstance ~~> RoleInstance)) <- role2role fillerQfd
+  (filledGetter :: (RoleInstance ~~> RoleInstance)) <- role2role filledQfd
+  pure \roleId -> do
+    fillers <- lift (roleId ##= fillerGetter)
+    filledRoles <- lift (roleId ##= filledGetter)
+    for_ filledRoles \filledRole -> do
+      mCurrentFiller <- lift (filledRole ##> binding)
+      case mCurrentFiller of
+        Nothing -> pure unit
+        Just currentFiller ->
+          when (currentFiller `elem` fillers)
+            $ void
+            $ removeBinding filledRole
 
 compileAssignmentFromRole (UQD _ (QF.DeleteProperty qualifiedProperty) roleQfd _ _ _) = do
   (roleGetter :: (RoleInstance ~~> RoleInstance)) <- role2role roleQfd
@@ -281,12 +291,12 @@ compileAssignmentFromRole (MQD _ (QF.CreateFileF mimeType qualifiedProperty) arg
         dbLoc <- lift $ databaseLocation $ unwrap roleInstance
         { documentName } <- lift $ resourceIdentifier2DocLocator (unwrap roleInstance)
         setProperty roles qualifiedProperty Nothing [ Value $ writePerspectivesFile { fileName, mimeType, propertyType: qualifiedProperty, database: dbLoc, roleFileName: documentName } ]
-        void $ saveFile roleInstance qualifiedProperty (unsafeToForeign content) mimeType
+        void $ saveFile roleInstance qualifiedProperty (unsafeToForeign content) mimeType Nothing
       Just roleInstance, Nothing, Just (Value fileName) -> do
         dbLoc <- lift $ databaseLocation $ unwrap roleInstance
         { documentName } <- lift $ resourceIdentifier2DocLocator (unwrap roleInstance)
         setProperty roles qualifiedProperty Nothing [ Value $ writePerspectivesFile { fileName, mimeType, propertyType: qualifiedProperty, database: dbLoc, roleFileName: documentName } ]
-        void $ saveFile roleInstance qualifiedProperty (unsafeToForeign "") mimeType
+        void $ saveFile roleInstance qualifiedProperty (unsafeToForeign "") mimeType Nothing
       Nothing, _, Just (Value fileName) -> throwError (error $ "No role instance found to attach the file '" <> fileName <> "' to.")
       _, _, _ -> throwError (error $ "some of the arguments to create file are missing.")
 
@@ -310,10 +320,9 @@ compileAssignmentFromRole (BQD _ (BinaryCombinator SequenceF) f1 f2 _ _ _) = do
 compileAssignmentFromRole (UQD _ WithFrame f1 _ _ _) = do
   f1' <- compileAssignmentFromRole f1
   pure \c -> do
-    old <- lift $ getVariableBindings
-    void $ lift $ modify \s@{ variableBindings } -> s { variableBindings = (_pushFrame old) }
-    r <- f1' c
-    void $ lift $ modify \s@{ variableBindings } -> s { variableBindings = old }
+    old <- lift pushFrame
+    _ <- f1' c
+    lift $ restoreFrame old
     pure unit
 
 compileAssignmentFromRole (UQD _ (BindVariable varName) f1 _ _ _) = do
@@ -334,50 +343,53 @@ compileAssignmentFromRole (MQD dom (ExternalEffectFullFunction functionName) arg
   (f :: HiddenFunction) <- pure $ unsafePartial $ fromJust $ lookupHiddenFunction functionName
   (argFunctions :: Array (RoleInstance ~~> String)) <- traverse (unsafeCoerce compileFunction) args
   pure
-    ( \c -> do
-        (values :: Array (Array String)) <- lift $ traverse (\g -> c ##= g) argFunctions
-        (nrOfParameters :: Int) <- pure $ unsafePartial (fromJust $ lookupHiddenFunctionNArgs functionName)
-        -- Notice that the number of parameters given ignores the default argument (context or role) that the function is applied to anyway.
-        -- If we do have an extra argument value, supply it as the last argument instead of r.
-        (lastArgument :: RoleInstance) <- case index values nrOfParameters of
-          Nothing -> pure c
-          Just v -> pure $ RoleInstance (unsafePartial (unsafeIndex v 0))
-        case unsafePartial $ fromJust $ lookupHiddenFunctionNArgs functionName of
-          0 -> (unsafeCoerce f :: RoleInstance -> MPT Unit) lastArgument
-          1 -> (unsafeCoerce f :: (Array String -> RoleInstance -> MPT Unit))
-            (unsafePartial (unsafeIndex values 0))
-            lastArgument
-          2 -> (unsafeCoerce f :: (Array String -> Array String -> RoleInstance -> MPT Unit))
-            (unsafePartial (unsafeIndex values 0))
-            (unsafePartial (unsafeIndex values 1))
-            lastArgument
-          3 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> RoleInstance -> MPT Unit))
-            (unsafePartial (unsafeIndex values 0))
-            (unsafePartial (unsafeIndex values 1))
-            (unsafePartial (unsafeIndex values 2))
-            lastArgument
-          4 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> Array String -> RoleInstance -> MPT Unit))
-            (unsafePartial (unsafeIndex values 0))
-            (unsafePartial (unsafeIndex values 1))
-            (unsafePartial (unsafeIndex values 2))
-            (unsafePartial (unsafeIndex values 3))
-            lastArgument
-          5 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> Array String -> Array String -> RoleInstance -> MPT Unit))
-            (unsafePartial (unsafeIndex values 0))
-            (unsafePartial (unsafeIndex values 1))
-            (unsafePartial (unsafeIndex values 2))
-            (unsafePartial (unsafeIndex values 3))
-            (unsafePartial (unsafeIndex values 4))
-            lastArgument
-          6 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> Array String -> Array String -> Array String -> RoleInstance -> MPT Unit))
-            (unsafePartial (unsafeIndex values 0))
-            (unsafePartial (unsafeIndex values 1))
-            (unsafePartial (unsafeIndex values 2))
-            (unsafePartial (unsafeIndex values 3))
-            (unsafePartial (unsafeIndex values 4))
-            (unsafePartial (unsafeIndex values 5))
-            c
-          _ -> throwError (error "Too many arguments for external core module: maximum is 6")
+    ( \c -> catchError
+        ( do
+            (values :: Array (Array String)) <- lift $ traverse (\g -> c ##= g) argFunctions
+            (nrOfParameters :: Int) <- pure $ unsafePartial (fromJust $ lookupHiddenFunctionNArgs functionName)
+            -- Notice that the number of parameters given ignores the default argument (context or role) that the function is applied to anyway.
+            -- If we do have an extra argument value, supply it as the last argument instead of r.
+            (lastArgument :: RoleInstance) <- case index values nrOfParameters of
+              Nothing -> pure c
+              Just v -> pure $ RoleInstance (unsafePartial (unsafeIndex v 0))
+            case unsafePartial $ fromJust $ lookupHiddenFunctionNArgs functionName of
+              0 -> (unsafeCoerce f :: RoleInstance -> MPT Unit) lastArgument
+              1 -> (unsafeCoerce f :: (Array String -> RoleInstance -> MPT Unit))
+                (unsafePartial (unsafeIndex values 0))
+                lastArgument
+              2 -> (unsafeCoerce f :: (Array String -> Array String -> RoleInstance -> MPT Unit))
+                (unsafePartial (unsafeIndex values 0))
+                (unsafePartial (unsafeIndex values 1))
+                lastArgument
+              3 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> RoleInstance -> MPT Unit))
+                (unsafePartial (unsafeIndex values 0))
+                (unsafePartial (unsafeIndex values 1))
+                (unsafePartial (unsafeIndex values 2))
+                lastArgument
+              4 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> Array String -> RoleInstance -> MPT Unit))
+                (unsafePartial (unsafeIndex values 0))
+                (unsafePartial (unsafeIndex values 1))
+                (unsafePartial (unsafeIndex values 2))
+                (unsafePartial (unsafeIndex values 3))
+                lastArgument
+              5 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> Array String -> Array String -> RoleInstance -> MPT Unit))
+                (unsafePartial (unsafeIndex values 0))
+                (unsafePartial (unsafeIndex values 1))
+                (unsafePartial (unsafeIndex values 2))
+                (unsafePartial (unsafeIndex values 3))
+                (unsafePartial (unsafeIndex values 4))
+                lastArgument
+              6 -> (unsafeCoerce f :: (Array String -> Array String -> Array String -> Array String -> Array String -> Array String -> RoleInstance -> MPT Unit))
+                (unsafePartial (unsafeIndex values 0))
+                (unsafePartial (unsafeIndex values 1))
+                (unsafePartial (unsafeIndex values 2))
+                (unsafePartial (unsafeIndex values 3))
+                (unsafePartial (unsafeIndex values 4))
+                (unsafePartial (unsafeIndex values 5))
+                c
+              _ -> throwError (error "Too many arguments for external core module: maximum is 6")
+        )
+        (\e -> errorCompiler $ "Error for ExternalEffectFullFunction (role instance): " <> show e)
     )
 
 compileAssignmentFromRole (MQD dom (ExternalDestructiveFunction functionName) args _ _ _) = do
@@ -408,9 +420,8 @@ compileRoleAssignment (UQD _ (QF.CreateRole qualifiedRoleIdentifier) contextGett
     for_ ctxts \ctxt -> do
       roleTypesToCreate <- roleContextualisations ctxt qualifiedRoleIdentifier
       -- If the role type is indexed, adds the created instance to the indexed roles in PerspectivesState.
-      for_ roleTypesToCreate \qualifiedRoleIdentifier' -> unwrap <<< unsafePartial fromJust <$>
-        createAndAddRoleInstance qualifiedRoleIdentifier' (unwrap ctxt)
-          (RolSerialization { id: localName, properties: PropertySerialization empty, binding: Nothing })
+      for_ roleTypesToCreate \qualifiedRoleIdentifier' -> createAndAddRoleInstance qualifiedRoleIdentifier' (unwrap ctxt)
+        (RolSerialization { id: localName, properties: PropertySerialization empty, binding: Nothing })
 
 compileContextAssignmentFromRole :: Partial => QueryFunctionDescription -> Maybe QueryFunctionDescription -> MP (Updater RoleInstance)
 compileContextAssignmentFromRole (UQD _ (QF.CreateContext qualifiedContextTypeIdentifier qualifiedRoleIdentifier) contextGetterDescription _ _ _) mnameGetterDescription = do
@@ -432,6 +443,7 @@ compileContextAssignmentFromRole (UQD _ (QF.CreateContext qualifiedContextTypeId
           contextCreationResult <- runExceptT $ constructContext (Just qualifiedRoleIdentifier)
             ( ContextSerialization defaultContextSerializationRecord
                 { ctype = unwrap qualifiedContextTypeIdentifier
+                , id = localName
                 }
             )
           case contextCreationResult of
@@ -459,23 +471,22 @@ compileContextAssignmentFromRole (UQD _ (QF.CreateContext qualifiedContextTypeId
               if length contextTypesToCreate > 1 then pure $ filter ((notEq) qualifiedContextTypeIdentifier) contextTypesToCreate
               else pure contextTypesToCreate
             for contextTypesToCreate' \contextTypeToCreate -> void do
-              contextIdentifier <- createResourceIdentifier (CType contextTypeToCreate)
               r <- runExceptT $ constructContext (Just $ ENR roleTypeToCreate)
                 ( ContextSerialization defaultContextSerializationRecord
-                    { id = Just contextIdentifier
-                    , ctype = unwrap contextTypeToCreate
+                    { ctype = unwrap contextTypeToCreate
+                    , id = localName
                     }
                 )
               case r of
                 Left e -> do
                   lift (renderPerspectivesError e >>= errorCompiler)
                   pure $ Left e
-                Right (ContextInstance newContext) -> do
+                Right (ContextInstance contextIdentifier) -> do
                   void $ createAndAddRoleInstance roleTypeToCreate (unwrap ctxt)
                     ( RolSerialization
                         { id: Nothing
                         , properties: PropertySerialization empty
-                        , binding: Just $ buitenRol newContext
+                        , binding: Just $ buitenRol contextIdentifier
                         }
                     )
                   pure $ Right contextIdentifier
@@ -590,14 +601,13 @@ compileRoleCreatingAssignments (UQD _ (QF.CreateRole qualifiedRoleIdentifier) co
       localName <- case mNameGetter of
         Just nameGetter -> lift $ Just <$> (roleId ##>> nameGetter)
         Nothing -> pure Nothing
-      for roleTypesToCreate
+      catMaybes <$> for roleTypesToCreate
         \roleTypeToCreate -> do
-          roleIdentifier <- unsafePartial $ fromJust <$> createAndAddRoleInstance
+          mroleIdentifier <- createAndAddRoleInstance
             roleTypeToCreate
             (unwrap ctxt)
             (RolSerialization { id: localName, properties: PropertySerialization empty, binding: Nothing })
-          -- No need to handle retrieval errors as we've just created the role.
-          pure (unwrap roleIdentifier)
+          pure (unwrap <$> mroleIdentifier)
 
 compileContextCreatingAssignments :: Partial => QueryFunctionDescription -> Maybe QueryFunctionDescription -> MP (RoleInstance -> MonadPerspectivesTransaction (Array String))
 compileContextCreatingAssignments (UQD _ (QF.CreateContext qualifiedContextTypeIdentifier qualifiedRoleIdentifier) contextGetterDescription _ _ _) mnameGetterDescription = do
@@ -649,21 +659,26 @@ compileContextCreatingAssignments (UQD _ (QF.CreateContext qualifiedContextTypeI
               r <- runExceptT $ constructContext (Just $ ENR roleTypeToCreate)
                 ( ContextSerialization defaultContextSerializationRecord
                     { ctype = unwrap contextTypeToCreate
+                    , id = localName
                     }
                 )
               case r of
                 Left e -> do
                   lift (renderPerspectivesError e >>= errorCompiler)
                   pure $ Left e
-                Right (ContextInstance contextIdentifier) -> (Right <<< unwrap <<< unsafePartial fromJust) <$> createAndAddRoleInstance
-                  roleTypeToCreate
-                  (unwrap ctxt)
-                  ( RolSerialization
-                      { id: Nothing
-                      , properties: PropertySerialization empty
-                      , binding: Just $ buitenRol contextIdentifier
-                      }
-                  )
+                Right (ContextInstance contextIdentifier) -> do
+                  mroleIdentifier <- createAndAddRoleInstance
+                    roleTypeToCreate
+                    (unwrap ctxt)
+                    ( RolSerialization
+                        { id: Nothing
+                        , properties: PropertySerialization empty
+                        , binding: Just $ buitenRol contextIdentifier
+                        }
+                    )
+                  case mroleIdentifier of
+                    Nothing -> pure $ Left $ Custom ("Could not create role instance of type " <> show roleTypeToCreate <> " in context " <> unwrap ctxt <> " because this functional role already has an instance")
+                    Just roleIdentifier -> pure $ Right $ unwrap roleIdentifier
     pure $ catMaybes (hush <$> results)
 
 compileContextCreatingAssignments (UQD _ (QF.CreateRootContext qualifiedContextTypeIdentifier) contextGetterDescription _ _ _) mnameGetterDescription = do

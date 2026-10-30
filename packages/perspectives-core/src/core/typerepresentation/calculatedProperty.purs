@@ -44,6 +44,7 @@ newtype CalculatedProperty = CalculatedProperty CalculatedPropertyRecord
 type CalculatedPropertyRecord =
   { id :: CalculatedPropertyType
   , _rev :: Revision_
+  , typeVersion :: Maybe String
   , displayName :: String
   , readableName :: CalculatedPropertyType
 
@@ -60,6 +61,7 @@ defaultCalculatedProperty :: String -> String -> String -> ArcPosition -> Calcul
 defaultCalculatedProperty id dn role pos = CalculatedProperty
   { id: CalculatedPropertyType id
   , _rev: Nothing
+  , typeVersion: Nothing
   , displayName: dn
   , readableName: CalculatedPropertyType id
   , calculation: S (Simple $ Identity $ ArcPosition { column: 0, line: 0 }) false

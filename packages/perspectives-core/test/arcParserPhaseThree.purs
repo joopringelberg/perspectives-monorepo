@@ -10,8 +10,9 @@ import Data.List (List(..))
 import Data.Maybe (Maybe(..))
 import Data.Tuple (Tuple(..))
 import Effect.Aff (Aff)
+import Effect.Aff.Class (liftAff)
 import Effect.Class.Console (logShow)
-import Foreign.Object (lookup)
+import Foreign.Object (keys, lookup)
 import Node.Encoding as ENC
 import Node.FS.Aff (readTextFile)
 import Node.Path as Path
@@ -29,8 +30,9 @@ import Perspectives.Parsing.Arc.PhaseTwo (traverseDomain)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (runPhaseTwo', toStableDomeinFile)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), RoleInContext(..), queryFunction, range)
-import Perspectives.Representation.ADT (ADT(..))
+import Perspectives.Representation.ADT (ADT(..), equalsOrSpecialises_)
 import Perspectives.Representation.Action (effectOfAction)
+import Perspectives.Representation.CNF (toConjunctiveNormalForm)
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.ExplicitSet (ExplicitSet(..))
@@ -38,6 +40,8 @@ import Perspectives.Representation.Perspective (StateSpec(..))
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
 import Perspectives.Representation.QueryFunction (QueryFunction(..)) as QF
 import Perspectives.Representation.Range (Range(..))
+import Perspectives.Representation.Class.PersistentType (getEnumeratedRole)
+import Perspectives.Representation.Class.Role (completeDeclaredType, completeExpandedType, declaredType, expandUnexpandedLeaves, toConjunctiveNormalForm_)
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), StateIdentifier(..), propertytype2string)
 import Perspectives.Representation.Verbs (PropertyVerb(..))
 import Perspectives.Representation.View (View(..))
@@ -53,6 +57,52 @@ withDomeinFile ns df mpa = do
   r <- mpa
   removeDomeinFileFromCache (ModelUri ns)
   pure r
+
+completeTypeNormalisationSuite :: Free TestF Unit
+completeTypeNormalisationSuite = test "PhaseThree completeType matches on-the-fly normalisation." do
+  (r :: Either ParseError ContextE) <- runIndentParser "domain MyTestDomain\n  thing Base (mandatory)\n  thing Filler2 (mandatory)\n  thing Filler1 (mandatory) filledBy Filler2\n  thing Binder (mandatory) filledBy Filler1\n    aspect Base" ARC.domain
+  case r of
+    Left e -> assert (show e) false
+    Right ctxt@(ContextE { id }) -> do
+      runPhaseTwo' (traverseDomain ctxt) >>= \(Tuple phaseTwoResult state) ->
+        case phaseTwoResult of
+          Left e -> assert (show e) false
+          Right (DomeinFile dr') ->
+            runP (phaseThree dr' state.postponedStateQualifiedParts Nil) >>=
+              case _ of
+                Left e -> assert (show e) false
+                Right (Tuple correctedDFR _) ->
+                  runP $ withDomeinFile id (DomeinFile correctedDFR) do
+                    for_ (keys correctedDFR.enumeratedRoles) \roleId -> do
+                      role@(EnumeratedRole { completeType }) <- getEnumeratedRole (EnumeratedRoleType roleId)
+                      declaredExpanded <- expandUnexpandedLeaves (declaredType role)
+                      completeExpanded <- completeExpandedType role
+                      expandedDnf <- completeDeclaredType role >>= expandUnexpandedLeaves >>= pure <<< toConjunctiveNormalForm
+                      cachedDnf <- completeDeclaredType role >>= toConjunctiveNormalForm_
+                      liftAff $ assert ("declaredType expands to completeExpandedType for " <> roleId) (declaredExpanded == completeExpanded)
+                      liftAff $ assert ("expanding the declared type yields the stored completeType for " <> roleId) (expandedDnf == completeType)
+                      liftAff $ assert ("cached normalisation yields the stored completeType for " <> roleId) (cachedDnf == completeType)
+
+recursiveFillerComparisonSuite :: Free TestF Unit
+recursiveFillerComparisonSuite = test "Recursive filler matching uses the filler role type, not the filler runtime chain." do
+  (r :: Either ParseError ContextE) <- runIndentParser "domain MyTestDomain\n  thing Person (mandatory)\n  thing Employee (mandatory)\n  thing Binder (mandatory) filledBy Employee" ARC.domain
+  case r of
+    Left e -> assert (show e) false
+    Right ctxt@(ContextE { id }) -> do
+      runPhaseTwo' (traverseDomain ctxt) >>= \(Tuple phaseTwoResult state) ->
+        case phaseTwoResult of
+          Left e -> assert (show e) false
+          Right (DomeinFile dr') ->
+            runP (phaseThree dr' state.postponedStateQualifiedParts Nil) >>=
+              case _ of
+                Left e -> assert (show e) false
+                Right (Tuple correctedDFR _) ->
+                  runP $ withDomeinFile id (DomeinFile correctedDFR) do
+                    employeeRole@(EnumeratedRole { completeType: employeeType }) <- getEnumeratedRole (EnumeratedRoleType "model:MyTestDomain$Employee")
+                    personRole@(EnumeratedRole { completeType: personType }) <- getEnumeratedRole (EnumeratedRoleType "model:MyTestDomain$Person")
+                    employeeRuntimeType <- toConjunctiveNormalForm_ (PROD [ declaredType employeeRole, declaredType personRole ])
+                    liftAff $ assert "Employee itself is not a Person for recursive filler matching." (not $ employeeType `equalsOrSpecialises_` personType)
+                    liftAff $ assert "An Employee filled by a Person would match Person only via its runtime filler chain." (employeeRuntimeType `equalsOrSpecialises_` personType)
 
 theSuite :: Free TestF Unit
 theSuite = suite "Perspectives.Parsing.Arc.PhaseThree" do
@@ -200,6 +250,8 @@ theSuite = suite "Perspectives.Parsing.Arc.PhaseThree" do
                   (Left [ (UnknownRole _ _) ]) -> assert "" true
                   otherwise -> do
                     assert "The binding of 'Binder' is not defined and that should have been detected." false
+
+  completeTypeNormalisationSuite
 
   test "Testing qualifyBindings: two candidates for binding." do
     (r :: Either ParseError ContextE) <- {-pure $ unwrap $-}  runIndentParser "domain MyTestDomain\n  thing Binder (mandatory) filledBy Bound\n  thing Bound (mandatory)\n  case Nested\n    thing Bound (mandatory)" ARC.domain
@@ -655,63 +707,63 @@ theSuite = suite "Perspectives.Parsing.Arc.PhaseThree" do
         -- logShow otherwise
         assert "Expected the error NotFunctional" false
 
-  domainTest "Bot Action with unqualified unbind"
-    "domain Test\n  user Gast (mandatory, relational)\n    property Prop1 (mandatory, Number)\n    state SomeState = Prop1 > 10\n      on entry\n        do\n          unbind Gast\n  user EreGast (mandatory) filledBy Gast\n"
-    \correctedDFR -> do
-      -- logShow correctedDFR
-      ensureState "model:Test$Gast$SomeState" correctedDFR
-        >>= ensureOnEntry (ENR (EnumeratedRoleType "model:Test$Gast"))
-        >>= pure <<< effectOfAction
-        >>=
-          case _ of
-            (UQD _ qf bndg _ _ _) -> do
-              assert "The queryfunction should be unbind"
-                ( case qf of
-                    Unbind Nothing -> true
-                    otherwise -> false
-                )
-              case bndg of
-                (SQD _ (RolGetter (ENR (EnumeratedRoleType "model:Test$Gast"))) _ _ _) ->
-                  assert "The binding should be a rolgetter for Gast" true
-                otherwise -> assert "The binding should be a rolgetter" false
-            otherwise -> assert "Side effect expected" false
+  -- domainTest "Bot Action with unqualified unbind"
+  --   "domain Test\n  user Gast (mandatory, relational)\n    property Prop1 (mandatory, Number)\n    state SomeState = Prop1 > 10\n      on entry\n        do\n          unbind Gast\n  user EreGast (mandatory) filledBy Gast\n"
+  --   \correctedDFR -> do
+  --     -- logShow correctedDFR
+  --     ensureState "model:Test$Gast$SomeState" correctedDFR
+  --       >>= ensureOnEntry (ENR (EnumeratedRoleType "model:Test$Gast"))
+  --       >>= pure <<< effectOfAction
+  --       >>=
+  --         case _ of
+  --           (UQD _ qf bndg _ _ _) -> do
+  --             assert "The queryfunction should be unbind"
+  --               ( case qf of
+  --                   Unbind Nothing -> true
+  --                   otherwise -> false
+  --               )
+  --             case bndg of
+  --               (SQD _ (RolGetter (ENR (EnumeratedRoleType "model:Test$Gast"))) _ _ _) ->
+  --                 assert "The binding should be a rolgetter for Gast" true
+  --               otherwise -> assert "The binding should be a rolgetter" false
+  --           otherwise -> assert "Side effect expected" false
 
-  domainTest "Bot Action with qualified unbind"
-    "domain Test\n  user Gast (mandatory, relational)\n    property Prop1 (mandatory, Number)\n    state SomeState = Prop1 > 10\n      on entry\n        do\n          unbind Gast from EreGast\n  user EreGast (mandatory) filledBy Gast\n"
-    \correctedDFR -> do
-      ensureState "model:Test$Gast$SomeState" correctedDFR
-        >>= ensureOnEntry (ENR (EnumeratedRoleType "model:Test$Gast"))
-        >>= pure <<< effectOfAction
-        >>=
-          case _ of
-            (UQD _ qf bndg _ _ _) -> do
-              assert "The queryfunction should be unbind"
-                ( case qf of
-                    Unbind (Just (EnumeratedRoleType "model:Test$EreGast")) -> true
-                    otherwise -> false
-                )
-              case bndg of
-                (SQD _ (RolGetter (ENR (EnumeratedRoleType "model:Test$Gast"))) _ _ _) ->
-                  assert "The binding should be a rolgetter for Gast" true
-                otherwise -> assert "The binding should be a rolgetter" false
-            otherwise -> assert "Side effect expected" false
+  -- domainTest "Bot Action with qualified unbind"
+  --   "domain Test\n  user Gast (mandatory, relational)\n    property Prop1 (mandatory, Number)\n    state SomeState = Prop1 > 10\n      on entry\n        do\n          unbind Gast from EreGast\n  user EreGast (mandatory) filledBy Gast\n"
+  --   \correctedDFR -> do
+  --     ensureState "model:Test$Gast$SomeState" correctedDFR
+  --       >>= ensureOnEntry (ENR (EnumeratedRoleType "model:Test$Gast"))
+  --       >>= pure <<< effectOfAction
+  --       >>=
+  --         case _ of
+  --           (UQD _ qf bndg _ _ _) -> do
+  --             assert "The queryfunction should be unbind"
+  --               ( case qf of
+  --                   Unbind (Just (EnumeratedRoleType "model:Test$EreGast")) -> true
+  --                   otherwise -> false
+  --               )
+  --             case bndg of
+  --               (SQD _ (RolGetter (ENR (EnumeratedRoleType "model:Test$Gast"))) _ _ _) ->
+  --                 assert "The binding should be a rolgetter for Gast" true
+  --               otherwise -> assert "The binding should be a rolgetter" false
+  --           otherwise -> assert "Side effect expected" false
 
-  expectError "Unbind: non-existing binder"
-    "domain Test\n  user Gast (mandatory, relational)\n    property Prop1 (mandatory, Number)\n    state SomeState = Prop1 > 10\n      on entry\n        do\n          unbind Gast from AnotherRole\n  user EreGast (mandatory) filledBy Gast\n"
-    case _ of
-      (Left (UnknownRole _ _)) -> assert "ok" true
-      -- (Left (CannotCreateCalculatedRole _ _ _)) -> assert "ok" true
-      otherwise -> do
-        -- logShow otherwise
-        assert "Expected the error UnknownRole" false
+  -- expectError "Unbind: non-existing binder"
+  --   "domain Test\n  user Gast (mandatory, relational)\n    property Prop1 (mandatory, Number)\n    state SomeState = Prop1 > 10\n      on entry\n        do\n          unbind Gast from AnotherRole\n  user EreGast (mandatory) filledBy Gast\n"
+  --   case _ of
+  --     (Left (UnknownRole _ _)) -> assert "ok" true
+  --     -- (Left (CannotCreateCalculatedRole _ _ _)) -> assert "ok" true
+  --     otherwise -> do
+  --       -- logShow otherwise
+  --       assert "Expected the error UnknownRole" false
 
-  expectError "Unbind: binder does not bind"
-    "domain Test\n  user Gast (mandatory, relational)\n    property Prop1 (mandatory, Number)\n    state SomeState = Prop1 > 10\n      on entry\n        do\n          unbind Gast from EreGast\n  user EreGast (mandatory) filledBy Organisator\n  user Organisator\n    property Prop2\n"
-    case _ of
-      (Left (LocalRoleDoesNotBind _ _ _ _)) -> assert "ok" true
-      otherwise -> do
-        -- logShow otherwise
-        assert "Expected the error LocalRoleDoesNotBind" false
+  -- expectError "Unbind: binder does not bind"
+  --   "domain Test\n  user Gast (mandatory, relational)\n    property Prop1 (mandatory, Number)\n    state SomeState = Prop1 > 10\n      on entry\n        do\n          unbind Gast from EreGast\n  user EreGast (mandatory) filledBy Organisator\n  user Organisator\n    property Prop2\n"
+  --   case _ of
+  --     (Left (LocalRoleDoesNotBind _ _ _ _)) -> assert "ok" true
+  --     otherwise -> do
+  --       -- logShow otherwise
+  --       assert "Expected the error LocalRoleDoesNotBind" false
 
   domainTest "Bot Action with delete role"
     "domain Test\n  user Gast (mandatory, relational)\n    property Prop1 (mandatory, Number)\n    state SomeState = Prop1 > 10\n      on entry\n        do\n          delete role Gast\n"

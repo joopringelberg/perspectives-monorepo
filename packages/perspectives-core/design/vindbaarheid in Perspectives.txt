@@ -1,0 +1,27 @@
+TL;DR; Perspectives contexten kunnen **vindbaar** gemaakt worden, waardoor webwinkels en dating sites binnen de mogelijkheden van het platform vallen. Deze vindbaarheid kan niet worden gemonopoliseerd en leent zich voor bundeling met andere resource typen zoals message exchange en (backup & sharing) memory. LLM's spelen een belangrijke faciliterende rol bij vindbaarheid.
+
+HET GROTE IDEE
+Perspectives maakt vooral informatie-uitwisseling mogelijk tussen mensen die elkaar al kennen. Alhoewel deelnemers bekenden tot elkaar kunnen introduceren, vinden de interacties vooral plaats in bestaande sociale netwerken. Veel internet applicaties daarentegen ontlenen een groot deel van hun nut aan **discovery** buiten de eigen sociale kring. Discovery is gebaseerd op een effectief en efficiënt geïndexeerd register van veel items. Zo'n index geeft zijn eigenaar vaak een de facto monopoliepositie dankzij het netwerk effect - de duvel schijt nu eenmaal op de grootste hoop.
+
+Een Perspectives modelleur kan een context een **publieke rol** geven. Elke gebruiker kan die rol zelf op zich nemen (vergelijk dat met de bezoeker van een webpagina). Technisch gesproken wordt zo'n context **gepubliceerd** op een vaste URL. Dat maakt zo'n pagina **beschikbaar**, maar nog niet **vindbaar**.
+
+Laten we er eens vanuit gaan dat vindbaarheid een ingebouwde Perspectives faciliteit was. Een gebruiker zou een wens of vraag kunnen intikken: 'ik zoek een tweedehands keukenstoel'. Het effect daarvan zou een lijst van keukenstoelen zijn, bijvoorbeeld geordend naar geografische nabijheid. Omgekeerd, de eigenaar van een keukenstoel die daar vanaf wil, zou kunnen intikken: ik heb een keukenstoel die ik wil verkopen (of wil weggeven).
+
+De keukenstoel zou het onderwerp zijn van een context en die context zou vindbaar zijn.
+
+Vindbaarheid als 'primitief' maakt opeens een scala aan applicaties een peulenschilletje: een burenhulp-pagina bijvoorbeeld, of een lokale weggeefhoek. Maar ook een webwinkel. 
+
+Na ruim twintig jaar Marktplaats heeft elk van ons het idee geïnternaliseerd dat 'je ergens heen gaat' om iets te verkopen of kopen. Maar als een context vindbaar gemaakt kan worden, verdampt die hele notie. Nieuwe concepten kunnen ontstaan, zoals een werkplan voor een klus, compleet met kant-en-klare zoekvragen voor benodigde onderdelen. Dat is weliswaar niet volledig nieuw - denk aan een recept op Allerhande dat AH heel handig heeft voorzien van een boodschappenlijst - maar de Perspectives versie is dan wel ontkoppeld van een leverancier.
+
+Goed nieuws: vindbaarheid is goed realiseerbaar in Perspectives. Bovendien blijkt vindbaarheid te vertalen naar een nieuw type resource, naast compute, memory, connectivity/bandwidth en message exchange. Ik noem het "indexing". Bij Perspectives neemt de eindgebruiker compute en bandwidth zelf mee en koopt hij de andere drie in. Dat spant een markt op voor bedrijven die package deals van deze drie resources in abonnementsvorm aanbieden.
+
+Nog meer goed nieuws: Indexing Perspectives style is federatief, zoals message exchange dat ook is. Het leent zich uit de aard der zaak niet voor monopolies. Dat vormt een uitdaging van de bestaande machtsbalans, die is ontstaan doordat indexing in hoge mate is gemonopoliseerd ten koste van eindgebruikers. 
+
+ARCHITECTUUR SAMENVATTING
+Hieronder volgt de samenvatting op architectuurniveau van een ontwerp dat ik met GPT 3.5 Codex ontwikkel.
+
+The architecture is best understood as a federated discovery fabric with one shared hub implementation and multiple retrieval/placement policies. Each item is represented as a Perspectives context instance: a stable CUID, an ARC-derived type, structured and human-readable projections, public URL binding, and provenance rooted in role occupancy and user attribution. Policy dimensions such as language, rights, jurisdiction, and trust are modeled as first-class roles and properties, so the authoritative item definition remains inside Perspectives rather than in an external index.
+
+For discovery, hubs should be autonomous and deterministic: they store signed discovery envelopes, maintain local event logs plus materialized views and specialized indexes, and exchange lifecycle events with peers. The search side is a structured plan, not free-form prompting. A user’s client-side LLM turns intent into a validated search plan that references local, versioned control-plane memory; the hub never has to host or gateway the LLM. In other words, the authoritative external memory can be local, synchronized through Perspectives semantics, while hubs expose only schema lookup, plan validation, search execution, and provenance proofs.
+
+This becomes especially important when distinguishing physical from informational items. Physical goods are geo-sensitive: ingestion should prefer nearby hubs, queries should start local and expand outward, and load balancing should be constrained by geography, capacity, and freshness. Informational products are geo-agnostic: they benefit from global federation, stronger canonicalization, and broad fan-out across trusted hubs. So one hub software family can serve both categories, but it needs item-class-aware placement, indexing, and ranking templates.

@@ -34,12 +34,14 @@ import Perspectives.InstanceRepresentation (PerspectContext, PerspectRol)
 import Perspectives.ModelDependencies (userWithCredentials)
 import Perspectives.Persistence.API (MonadPouchdb, addViewToDatabase, createDatabase, databaseInfo)
 import Perspectives.Persistence.CouchdbFunctions (setSecurityDocument)
+import Perspectives.Persistence.DeltaStore (deltaStoreDatabaseName)
+import Perspectives.Persistence.ResourceVersionStore (resourceVersionDatabaseName)
 import Perspectives.Persistence.State (withCouchdbUrl)
 import Perspectives.Representation.Class.Cacheable (ContextType(..), EnumeratedRoleType(..))
 import Perspectives.Representation.Class.Identifiable (identifier)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance)
 import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedRoleType)
-import Prelude (Unit, discard, void, ($), (&&), (<>), (==))
+import Prelude (Unit, discard, void, ($), (&&), (<>), (==), (>>=), (=<<))
 
 -----------------------------------------------------------
 -- CREATESYSTEMDATABASES
@@ -67,6 +69,11 @@ createUserDatabases user = do
   void $ databaseInfo $ user <> "_models"
   createDatabase $ user <> "_invertedqueries"
   void $ databaseInfo $ user <> "_invertedqueries"
+  deltaStoreDatabaseName >>= createDatabase
+  void $ databaseInfo =<< deltaStoreDatabaseName
+  let rv = resourceVersionDatabaseName
+  resourceVersionDatabaseName >>= createDatabase
+  void $ databaseInfo =<< resourceVersionDatabaseName
   -- Now set the security document such that there is no role restriction for members.
   void $ withCouchdbUrl \url -> setSecurityDocument url (user <> "_models")
     (SecurityDocument { admins: { names: Just [], roles: [ "_admin" ] }, members: { names: Just [], roles: [] } })
@@ -109,21 +116,6 @@ setRoleFromContextView dbname = void $ addViewToDatabase dbname "defaultViews" "
 
 -- | Import the view definition as a String.
 foreign import roleFromContextView :: String
-
-roleFromContextFilter :: EnumeratedRoleType -> ContextInstance -> PerspectRol -> Boolean
-roleFromContextFilter eRoleType cinstance role = rol_context role == cinstance && isJust (elemIndex eRoleType (rol_allTypes role))
-
--- OBSOLETE. Remove if testing shows the current definitioin of pendingInvitations works.
------------------------------------------------------------
--- THE VIEW 'PENDINGINVITATIONS'
--- This view collects instances model:System$Invitation$External.
------------------------------------------------------------
--- | Add a view to the couchdb installation in the 'repository' db.
-setPendingInvitationView :: forall f. String -> MonadPouchdb f Unit
-setPendingInvitationView dbname = void $ addViewToDatabase dbname "defaultViews" "pendingInvitations" ({ map: pendingInvitations, reduce: Nothing })
-
--- | Import the view definition as a String.
-foreign import pendingInvitations :: String
 
 -----------------------------------------------------------
 -- THE VIEW 'CONTEXTVIEW'
@@ -272,6 +264,21 @@ foreign import role2contextView :: String
 
 role2ContextFilter :: ContextInstance -> PerspectRol -> Boolean
 role2ContextFilter cid prol = cid == rol_context prol
+
+-----------------------------------------------------------
+-- THE VIEW 'filterValueView'
+-- This view is a table [{roleType, contextGuid}; {filterValue, roleId}].
+-- Use it by querying with key [roleType, takeGuid contextId] to obtain
+-- all roles of that type in that context that have a FilterValue property set.
+-----------------------------------------------------------
+setFilterValueView :: forall f. String -> MonadPouchdb f Unit
+setFilterValueView dbname = void $ addViewToDatabase dbname "defaultViews" "filterValueView"
+  ({ map: filterValueView, reduce: Nothing })
+
+foreign import filterValueView :: String
+
+filterValueViewFilter :: EnumeratedRoleType -> ContextInstance -> PerspectRol -> Boolean
+filterValueViewFilter eRoleType cinstance role = rol_context role == cinstance && isJust (elemIndex eRoleType (rol_allTypes role))
 
 -----------------------------------------------------------
 -- THE VIEW 'modelView'

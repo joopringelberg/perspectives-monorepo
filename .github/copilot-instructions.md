@@ -67,6 +67,8 @@ ARC is a domain-specific language for modelling structured co-operation. An ARC 
 - **Actions** triggered by state conditions
 - **Screens** – declarative UI definitions
 
+For any task that requires understanding, constructing, reviewing, or debugging an ARC model, use the detailed language and semantics reference in [`.github/instructions/arc-language.instructions.md`](instructions/arc-language.instructions.md). It is automatically applied to `.arc` files; consult it even when the model issue is raised from parser/runtime code rather than an ARC file.
+
 ### The PDR Architecture
 The PDR runs in a browser **SharedWorker** (or a page worker on Safari). The GUI communicates with it via the `perspectives-proxy` layer:
 

@@ -1,0 +1,720 @@
+-- Copyright Joop Ringelberg and Cor Baars, 2020, 2021 -15
+-- A model to maintain AMQP Broker Services.
+-- Version 7.0 is a simplification of the previous version 6.0. It has done away with the automatic termination of contracts. 
+-- Contracts will run indefinitely, but can be terminated by both the AccountHolder and the Administrator. 
+--
+-- TERMINATION
+-- RabbitMQ is the transport that synchronises the contract between its two parties. Deleting the account and the queue at RabbitMQ
+-- cuts that transport. Hence, we must make sure that every party has seen the termination before the account is deleted. 
+-- Neither a timer nor a destructive effect in the same transaction as a change that must be sent will do: effects are executed
+-- before the transaction is distributed. Instead, we use a handshake:
+--   1. Either party sets ContractTerminated on the external role. This is synchronised to the other party.
+--   2. The AccountHolder acknowledges (TerminationAcknowledged), also when he himself terminated. Once the 
+--      acknowledgement has been sent (`once settled`), he removes the contract from his installation.
+--   3. Only when the Administrator has seen the acknowledgement, she deletes the account and the queue from RabbitMQ 
+--      and removes the contract (and the Accounts role it fills) only after confirmed account and queue deletion.
+--      Failed deletion leaves the Administrator's Accounts role and contract available for inspection.
+-- As a result, the contract is gone on both sides. If the AccountHolder has not yet accepted the contract (so there is nobody to
+-- acknowledge), step 3 follows immediately upon termination.
+domain model://perspectives.domains#BrokerServices@7.0
+  use sys for model://perspectives.domains#System
+  use bs for model://perspectives.domains#BrokerServices
+  use util for model://perspectives.domains#Utilities
+  use rabbit for model://perspectives.domains#RabbitMQ
+  use sensor for model://perspectives.domains#Sensor
+
+  -------------------------------------------------------------------------------
+  ---- SETTING UP
+  -------------------------------------------------------------------------------
+  state ReadyToInstall = exists sys:PerspectivesSystem$Installer
+    on entry
+      do for sys:PerspectivesSystem$Installer
+        letA
+          -- We must first create the context and then later bind it.
+          -- If we try to create and bind it in a single statement, 
+          -- we find that the Installer can just create RootContexts
+          -- as they are the allowed binding of StartContexts.
+          -- As a consequence, no context is created.
+          app <- create context BrokerServices
+          start <- create role StartContexts in sys:MySystem
+        in
+          -- Being a RootContext, too, Installer can fill a new instance
+          -- of StartContexts with it.
+          bind_ app >> extern to start
+          Name = "Broker Services App" for start
+          IsSystemModel = true for start
+  
+  on exit
+    do for sys:PerspectivesSystem$Installer
+      letA
+        indexedcontext <- filter sys:MySystem >> IndexedContexts with filledBy (bs:MyBrokers >> extern)
+        startcontext <- filter sys:MySystem >> StartContexts with filledBy (bs:MyBrokers >> extern)
+      in
+        remove context indexedcontext
+        remove role startcontext
+
+  aspect user sys:PerspectivesSystem$Installer
+
+  -------------------------------------------------------------------------------
+  ---- BROKER SERVICES
+  -------------------------------------------------------------------------------
+
+  context Broker (relational) filledBy BrokerService
+
+  -- The entry point (the `application`), available as bs:MyBrokers.
+  case BrokerServices
+    -- PDRDEPENDENCY
+    indexed bs:MyBrokers
+    aspect sys:RootContext
+    external
+    -- The BrokerServices I manage.
+    context ManagedBrokers (relational) filledBy BrokerService
+      property StorageLocation (String)
+        pattern = "^https://.*" "A url with the https scheme"
+      property GivenIdentifier (String) 
+        pattern = "^[a-zA-Z0-9_-]+$" "An identifier consisting of alphanumeric characters, underscores, or hyphens"
+      property ActualIdentifier = GivenIdentifier orElse callExternal util:GenSym() returns String
+      state HasStorageLocation = exists StorageLocation
+        on entry
+          do for Manager
+            create_ context BrokerService named ActualIdentifier bound to origin
+    
+    context PublicBrokers (relational) filledBy BrokerService
+      state NoContract = not exists (filter binding >> context >> Accounts with binding >> context >> AccountHolder >> binding == me)
+    
+    -- A contract for the BrokerService I use.
+    context Contracts = me >> binder AccountHolder >> context >> extern
+
+    context TcpContracts = me >> binder TCPManager >> context >> extern
+
+    -- PDRDEPENDENCY
+    -- Arbitrarily take the first registered (=active) contract to be the one that is in use.
+    context ContractInUse (functional) = filter Contracts with Registered >>= first
+
+    user Manager = sys:Me
+      perspective on ManagedBrokers
+        only (Create, Fill, CreateAndFill, RemoveContext)
+        props (Name) verbs (Consult)
+        props (StorageLocation, GivenIdentifier) verbs (Consult, SetPropertyValue)
+      action AddNewBroker
+        create role ManagedBrokers
+      perspective on Contracts
+        props (Name, Registered) verbs (Consult)
+        props (Registered) verbs (SetPropertyValue)
+      perspective on ContractInUse
+        props (Name) verbs (Consult)
+      perspective on TcpContracts
+        props (Name) verbs (Consult)
+      perspective on PublicBrokers
+        only (Create, Fill, Remove)
+        props (Name) verbs (Consult)
+        in object state NoContract
+          perspective on PublicBrokers >> binding >> context >> Accounts
+            only (CreateAndFill, Remove, RemoveContext)
+          perspective on PublicBrokers >> binding >> context >> Accounts >> binding >> context >> AccountHolder
+            only (Create, Fill)
+          perspective on PublicBrokers >> binding >> context >> Accounts >> binding >> context >> Administrator
+            only (Create, Fill)
+          action SignUp
+            letA
+              accountsinstance <- create context BrokerContract bound to Accounts in origin >> binding >> context
+            in
+              bind me to AccountHolder in accountsinstance >> binding >> context
+              bind accountsinstance >> context >> Administrator to Administrator in accountsinstance >> binding >> context
+
+      screen
+        who
+        what
+          row
+            markdown <## Get connected
+                      MyContexts is most useful when you connect to other people. 
+                      This installation has not yet a means to connect to others. 
+                      Move to the [[link:pub:https://perspectives.domains/cw_bigbangsdatabase/BigBangsBrokerService$External|Perspectives Broker Service]] 
+                      page to get online. You will read further instructions there.
+                     >
+              when not (exists bs:MyBrokers >> PublicBrokers)
+            markdown <## Sign up to a service
+                      You cannot yet connect to peers, but a service to do so is available below.
+                      Select a row with a service (there is probably just one) by clicking it.
+                      Then, in the toolbar below, click the bolt icon. A menu will drop down.
+                      Click the "SignUp" item. 
+                      
+                      ***NOTE*** that by signing up, you will share your first- and last name 
+                      with the manager of the service. He or she will be able to contact you 
+                      through MyContexts.
+
+                      A little later, an icon will appear in the top left part of your screen, 
+                      indicating you can now connect with peers.
+                      >
+              when (exists bs:MyBrokers >> PublicBrokers) and (not exists bs:MyBrokers >> Contracts)
+            markdown <## You can connect to peers
+                      This installation is subscribed to a Broker Service and is able to exchange information 
+                      automatically with peers you are in contact with (including the manager of this service).
+                      To stop using this service, open the Contract and execute action "Terminate contract" in the toolbar (the bolt icon).
+                      The contract will then be removed from your installation.
+                     >
+              when exists bs:MyBrokers >> Contracts
+          row
+            form ContractInUse
+        where
+          PublicBrokers
+            master
+              markdown <### Public broker service(s)
+                        These are the public broker services that you can sign up to. 
+                        You can only sign up to a single service.
+                      >
+            detail
+          Contracts
+            master
+              markdown <### Your broker service contracts
+                        These are the broker services you have signed up to. 
+                        You can only have a single active contract.
+                      >
+              without props (Name, Registered)
+            detail
+          TcpContracts
+            master
+              markdown <### Your TCP contracts
+                        These are contracts meant for a Transaction Collection Point (TCP). 
+                      >
+              with props (Name)
+            detail
+          ManagedBrokers
+            master
+              markdown <### Managed broker services
+                        These are the broker services you manage. You can add new ones, remove existing ones, 
+                        or change their storage location. Add an empty role instance, then specify its storage location
+                        (identifying a Bespoke Database). Upon saving, the broker service context will be created.
+                        **NOTE**: Most people will **not** manage broker services, but use the ones that are available.
+                      >
+              with props (Name, StorageLocation)
+            detail
+          
+  -- A Managed service.
+  -- PDRDEPENDENCY
+  case BrokerService
+    state NoAdministrator = not exists Administrator
+      on entry
+        do for BrokerService$Guest
+          bind me to Administrator
+          PublicUrl = extern >> binder ManagedBrokers >> StorageLocation for extern
+    state InitializeUpgrading = sys:MySystem >> extern >> OnStartup and not exists SystemDataUpgrade
+      on entry
+        do for Upgrader
+          create role SystemDataUpgrade
+
+    external
+      property Name (mandatory, String)
+        readableName
+      -- PDRDEPENDENCY
+      property Url (mandatory, String)
+        pattern = "^wss://[^\\/]+:[0-9]+\\/ws$" "A url with the wss scheme, ending on a port followed by '/ws'"
+      -- PDRDEPENDENCY
+      property Exchange (mandatory, String)
+      -- For mycontexts this is "https://mycontexts.com/rbmq/".
+      property ManagementEndpoint (mandatory, String)
+        pattern = "^https://[^\\/]+\\/rbmq\\/$" "A url with the https scheme, ending on '/rbmq/'"
+      -- For mycontexts this is "https://mycontexts.com/rbsr/".
+      property SelfRegisterEndpoint (mandatory, String)
+        pattern = "^https://[^\\/]+\\/rbsr\\/$" "A url with the https scheme, ending on '/rbsr/'"
+      property PublicUrl (String)
+      property ServiceDescription (MarkDown)
+        minLength = 100  
+      
+    -----------------
+    ---- DATA UPGRADE
+    user Upgrader = me
+      perspective on SystemDataUpgrade
+        only (Create, Fill)
+        props (LastHandledUpgrade) verbs (SetPropertyValue, Consult)
+    thing SystemDataUpgrade
+      aspect sys:SystemDataUpgrade
+      -- One-time initialisation to version 3.0.69
+      on entry
+        do for Upgrader
+          LastHandledUpgrade = "3.0.68"
+      -- Next upgrade to version 3.0.73
+      state Upgrade3_0_73 = callExternal util:IsUpgradeTo( "3.0.73", LastHandledUpgrade ) returns Boolean
+        on entry
+          do for Upgrader
+            LastHandledUpgrade = "3.0.73"
+          do for Administrator
+            bind_ me to context >> Administrator
+    -----------------
+
+    user Administrator filledBy (sys:TheWorld$PerspectivesUsers + sys:SocialEnvironment$Persons)
+      -- The credentials of Administrator for the remote RabbitMQ server.
+      property AdminUserName (String)
+      property AdminPassword (String)
+
+      state WithCredentials = (exists AdminUserName) and (exists AdminPassword)
+        perspective on Accounts
+          only (CreateAndFill, Remove, RemoveContext)
+          props(LastNameOfAccountHolder) verbs (Consult)
+          props (AccountDeleted) verbs (Consult)
+      perspective on Administrator
+        only (Fill, RemoveFiller)
+        props (FirstName, LastName) verbs (Consult)
+        props (AdminUserName, AdminPassword, SharedFileServerKey) verbs (SetPropertyValue)
+      perspective on extern
+        props (Name, Url, ManagementEndpoint, SelfRegisterEndpoint, Exchange, ServiceDescription) verbs (Consult, SetPropertyValue)
+        props (PublicUrl) verbs (Consult)
+      
+      screen
+        who
+          Administrator
+            master
+              markdown <### Administrator
+                        As you are the manager of this BrokerService, it is important that you have a key for the shared file storage service (if any).
+                        This key allows you to hand out keys to people who connect to you to get an account on your Broker Service.
+                        It also allows you to upload files to the shared file storage that your connected peers can download.
+                        This key should be manually added to the state file of the shared file storage relay service.
+                        See [perspectives-sharedfilestorage](https://github.com/joopringelberg/perspectives-sharedfilestorage) for more information.
+                      >
+              with props (LastName)
+            detail
+              without props (HasKey)
+        what
+          row 
+            markdown <### Broker service
+                      Perspectives needs a broker service to exchange information with peers.
+                      Currently, we rely on [RabbitMQ](https://www.rabbitmq.com/), a popular open source message broker.
+                      If you are the administrator of such a service, you can fill in the details below.
+                      Notice the **Public URL**: this is the URL that other people can use to connect to your service. It is, 
+                      in fact, the location of this context as seen by its Visitor role.
+                      The **Self Register Endpoint** is used as a proxy for the RabbitMQ server, to enable self-signup.
+                      This service can be set up using the [perspectives-rabbitmq-service](https://github.com/joopringelberg/perspectives-rabbitmq-service)
+                      open source project.
+                      The **Management Endpoint** is a location on the server that runs RabbitMQ. It should be configured
+                      (e.g. in Apache) as a reverse proxy for RabbitMQ, that is used by the BrokerServices App to register 
+                      and service accounts on RabbitMQ. Only the Administrator user uses that endpoint.
+                      The **Description of the service**, finally is what is seen by Visitors and other non-Administrator roles.
+                    >
+          row
+            form "Broker Service" External
+        where
+          Accounts
+            master
+              markdown <### Accounts
+                        These are the accounts at the Broker Service. 
+                        You can create new accounts, or remove existing ones.
+                      >
+            detail
+
+    user Guest = me
+      perspective on Administrator
+        only (Fill, Create)
+      perspective on extern
+        props (PublicUrl, ServiceDescription) verbs (SetPropertyValue)
+
+    public Visitor at (extern >> PublicUrl) = sys:Me
+      perspective on extern
+        props (Name, SelfRegisterEndpoint, PublicUrl, Url, Exchange, ServiceDescription) verbs (Consult)
+      perspective on Administrator
+        props (FirstName, LastName, HasKey) verbs (Consult)
+      perspective on Accounts
+        only (Create, Fill, CreateAndFill)
+      perspective on MyPublicBrokers
+        only (CreateAndFill, Fill)
+      action AddThisServer
+        bind extern to PublicBrokers in bs:MyBrokers
+
+      screen
+        who
+          Administrator
+            master
+              markdown <### Administrator
+                        This is the administrator of the Broker Service. 
+                        You can contact him or her if you have questions about the service.
+                       >
+              with props (LastName)
+            detail
+              with props (FirstName, LastName)
+        what
+          row
+            markdown <### Broker service
+                      This is a 'broker service'. It is a program running on 
+                      a webserver that programs use to exchange messages. MyContexts
+                      installations use it to synchronize information.
+                    >
+          row
+            markdown External
+              props (ServiceDescription) verbs (Consult)
+          row
+            markdown <### Do you want to add this service?
+                      This service is not yet available in your installation.
+                      You might want to add it so you can sign up to it afterwards in order
+                      to connect to other people on MyContexts.
+                      [[action: AddThisServer|Add the service]]
+                    >
+              when not (exists bs:MyBrokers >> PublicBrokers)
+            markdown <### Service available, sign up!
+                      This service is available in your installation. However, you have not signed up to it.
+                      Move to the [[link:model://perspectives.domains#BrokerServices$MyBrokers|Broker Services Management]] 
+                      page to read how to sign up.
+                    >
+              when (exists bs:MyBrokers >> PublicBrokers) and (not exists bs:MyBrokers >> Contracts)
+          row
+            form "This service" External
+              with props (Name)
+        where
+          MyPublicBrokers
+            master
+              markdown <### Public broker services
+                        These are the public broker services that you are signed up to (or can sign up to). 
+                        You can only sign up to a single service.
+                      >
+            detail
+
+    -- PDRDEPENDENCY
+    context Accounts (relational, unlinked) filledBy BrokerContract
+      property AccountDeleted (Boolean)
+      state ReadyToRemove = AccountDeleted and ((binding >> context >> Queues >>= count) == ((filter binding >> context >> Queues with QueueDeleted) >>= count))
+        on entry
+          do for Administrator
+            remove context origin
+
+    context MyPublicBrokers = bs:MyBrokers >> PublicBrokers  >> binding
+
+  -- The contract between an end user and a BrokerService.
+  -- PDRDEPENDENCY
+  case BrokerContract
+    aspect sys:Invitation
+    aspect sys:ContextWithNotification
+    state NoAdministrator = not exists Administrator
+      on entry
+        do for sys:Invitation$Guest
+          -- Guest has a sufficient perspective on Inviter and Administrator is Inviter.
+          bind extern >> binder model://perspectives.domains#BrokerServices$BrokerService$Accounts >> context >> Administrator >>= first to Administrator
+    state NoAccountHolder = (exists Administrator) and (not exists AccountHolder)
+      on entry
+        do for BrokerContract$Administrator
+          -- This is the role that the Invitee/AccountHolder will fill with himself if she accepts the BrokerContract.
+          create role AccountHolder
+    state CanRegister = (not exists Queues) and (exists AccountHolder) and (exists Administrator) and (exists extern >> SelfRegisterEndpoint) and not (extern >> ContractTerminated)
+      on entry
+        do for AccountHolder
+          letA 
+            queue <- create role Queues
+            queueid <- callExternal util:GenSym() returns String
+          in
+            AccountName = callExternal util:GenSym() returns String for AccountHolder
+            AccountPassword = callExternal util:GenSym() returns String for AccountHolder
+            QueueName = queueid for queue
+            Registered = callExternal rabbit:SelfRegisterWithRabbitMQ(
+              extern >> SelfRegisterEndpoint,
+              AccountHolder >> AccountName,
+              AccountHolder >> AccountPassword,
+              queueid) returns Boolean for External
+            bind_ (sys:MySystem >> extern) to EmptyQueue
+            callEffect rabbit:StartListening()
+            ConnectedToAMQPBroker = true for sys:MySystem >> extern
+
+    -- Either party has terminated the contract. See the header of this model for the termination protocol.
+    -- The AccountHolder acknowledges the termination. After the acknowledgement (and the other changes) have been sent to 
+    -- the Administrator, he removes the contract. Removing the Queues role makes him stop reading post (see Queues).
+    -- We cannot notify the AccountHolder: the notification would be removed with the contract.
+    state Terminated = extern >> ContractTerminated
+      on entry
+        do for BrokerContract$AccountHolder
+          Registered = false for extern
+          TerminationAcknowledged = true for extern
+
+          once settled
+            remove context extern >> binder Accounts
+
+    -- The AccountHolder has acknowledged termination (or there is no AccountHolder to acknowledge it). 
+    -- Neither party depends on RabbitMQ any longer, so the Administrator can delete the account and the contract.
+    -- Successful account deletion triggers queue deletion (see Queues); only confirmed deletion permits removal.
+    state ReadyToDeregister = (extern >> ContractTerminated) and ((extern >> TerminationAcknowledged) or (not exists AccountHolder >> binding))
+      on entry
+        do for BrokerContract$Administrator
+          AccountDeleted = callExternal rabbit:DeleteAMQPaccount(
+            extern >> ManagementEndpoint,
+            Administrator >> AdminUserName,
+            Administrator >> AdminPassword,
+            AccountHolder >> AccountName) returns Boolean for extern >> binder Accounts
+
+    state Active = extern >> Registered
+      on entry
+        notify AccountHolder
+          "You now have an account at the BrokerService { extern >> Name }"
+
+    -- Initialise Upgrading
+    state InitializeUpgrading = sys:MySystem >> extern >> OnStartup and not exists SystemDataUpgrade
+      on entry
+        do for Upgrader
+          create role SystemDataUpgrade
+
+    -- On exiting, both the queue and the account are deleted. See the exit states of AccountHolder and Queue respectively.
+    
+    external
+      -- PDRDEPENDENCY
+      property Url = binder Accounts >> context >> extern >> Url
+      property ManagementEndpoint = binder Accounts >> context >> extern >> ManagementEndpoint
+      property SelfRegisterEndpoint = binder Accounts >> context >> extern >> SelfRegisterEndpoint
+      -- PDRDEPENDENCY
+      property Exchange = binder Accounts >> context >> extern >> Exchange
+      property Name = binder Accounts >> context >> extern >> Name
+      property FirstNameOfAccountHolder = context >> AccountHolder >> FirstName
+      property LastNameOfAccountHolder = context >> AccountHolder >> LastName
+        readableName
+      -- We use this on system startup.
+      -- PDRDEPENDENCY
+      property CurrentQueueName = sys:MySystem >> extern >> binder Queues >> QueueName
+      property Registered (Boolean)
+
+      -- Set by either party to terminate the contract.
+      property ContractTerminated (Boolean)
+      -- Set by the AccountHolder to tell the Administrator that he has seen the termination and no longer needs the account. 
+      property TerminationAcknowledged (Boolean)
+
+      view Account (FirstNameOfAccountHolder, LastNameOfAccountHolder)
+
+              
+    -----------------
+    ---- DATA UPGRADE
+    user Upgrader = me
+      perspective on SystemDataUpgrade
+        only (Create, Fill)
+        props (LastHandledUpgrade) verbs (SetPropertyValue, Consult)
+    thing SystemDataUpgrade
+      aspect sys:SystemDataUpgrade
+      aspect sys:ModelDataUpgrade
+      -- One-time initialisation to version 3.0.68
+      -- on entry
+      --   do for Upgrader
+      --     LastHandledUpgrade = "3.0.68"
+      -- -- Next upgrade to version 3.0.73
+      -- state Upgrade3_0_73 = callExternal util:IsUpgradeTo( "3.0.73", LastHandledUpgrade ) returns Boolean and not (context >> AccountHolder == me)
+      --   on entry
+      --     do for Upgrader
+      --       LastHandledUpgrade = "3.0.73"
+      --     do for AccountHolder
+      --       bind_ me to context >> AccountHolder
+    -----------------
+
+    user TCPManager filledBy (sys:TheWorld$PerspectivesUsers + sys:SocialEnvironment$Persons)
+      perspective on AccountHolder
+        props (FirstName, LastName, AccountName, AccountPassword) verbs (Consult)
+      perspective on Queues
+        props (QueueName) verbs (Consult)
+      perspective on extern
+        props (Name, Url, Exchange) verbs (Consult)
+      perspective on Administrator
+        props (FirstName, LastName) verbs (Consult)
+      perspective on TCPManager
+        props (FirstName, LastName) verbs (Consult)
+      screen
+        who
+          AccountHolder
+            master
+              with props (LastName)
+            detail
+          Administrator
+            master
+              with props (LastName)
+            detail
+        what
+          row
+            markdown <### TCP Manager
+                      This is a Broker Contract for a Transaction Collection Point (TCP).
+                      A TCP is a point where you can send information to, that will be collected and forwarded to other peers in batches. 
+                      It is meant for collecting Business Information, usually for reporting purposes.
+                      Read the AccountHolder details and use them to set up a TCP that connects to the RabbitMQ server of the Broker Service. 
+                      Read the Queue name, the Url of the RabbitMQ server and the Exchange name below.
+                    >
+          row
+            table "Queues" Queues
+          row 
+            form External
+        where
+
+
+    user AccountHolder filledBy ((sys:TheWorld$PerspectivesUsers + sys:SocialEnvironment$Persons), sys:TheWorld$Onlookers)
+      aspect sys:Invitation$Invitee
+      aspect sys:ContextWithNotification$NotifiedUser
+      -- PDRDEPENDENCY
+      property AccountName (mandatory, String)
+      -- PDRDEPENDENCY
+      property AccountPassword (mandatory, String)
+      -- PDRDEPENDENCY
+      -- property QueueName (mandatory, String)
+
+      -- Create an account on the RabbitMQ server. It is ready for the AccountHolder to listen to,
+      -- but no other users can reach him yet.
+      -- We'll know the BrokerContract has arrived at the Administrator after a peer executed Signup,
+      -- when a Queue already exists.
+      state PrepareAccount = (not exists binding) and not exists context >> Queues
+        on entry
+          do for BrokerContract$Administrator
+            letA 
+              queue <- create role Queues
+              queueid <- callExternal util:GenSym() returns String
+            in
+              AccountName = callExternal util:GenSym() returns String
+              AccountPassword = callExternal util:GenSym() returns String
+              QueueName = queueid for queue
+              callEffect rabbit:PrepareAMQPaccount(
+                context >> extern >> ManagementEndpoint,
+                context >> Administrator >> AdminUserName,
+                context >> Administrator >> AdminPassword,
+                AccountName,
+                AccountPassword,
+                queueid)
+              callEffect rabbit:SetBindingKey(
+                context >> extern >> ManagementEndpoint,
+                context >> Administrator >> AdminUserName,
+                context >> Administrator >> AdminPassword,
+                queueid,
+                context >> extern >> Exchange)
+      
+      -- state StartService = (exists binding) and context >> extern >> Registered
+      --   on entry
+      --     do for AccountHolder
+      --       bind_ (sys:MySystem >> extern) to (context >> EmptyQueue)
+      --       callEffect rabbit:StartListening()
+
+      perspective on extern
+        props (Url, Exchange, CurrentQueueName) verbs (Consult)
+        props (Registered, ContractTerminated, TerminationAcknowledged) verbs (SetPropertyValue)
+
+      -- Needed to remove the contract (and the Accounts role it fills) once it is terminated.
+      perspective on extern >> binder Accounts
+        only (RemoveContext)
+
+      in context state Active
+        action TerminateContract
+          ContractTerminated = true for extern
+
+      perspective on AccountHolder
+        all roleverbs
+        props (AccountName, AccountPassword) verbs (Consult, SetPropertyValue)
+      
+      perspective on Queues
+        only (Create, Fill, Remove)
+        props (QueueName) verbs (SetPropertyValue, Consult)
+
+      perspective on sys:MySystem >> extern
+        props (ConnectedToAMQPBroker) verbs (SetPropertyValue, Consult)
+
+      screen
+        who
+          Administrator
+            master
+              markdown <### Administrator
+                        This is the administrator of the Broker Service. 
+                        You can contact him or her if you have questions about the service.
+                       >
+              with props (LastName)
+            detail
+              without props (HasKey)
+          AccountHolder
+            master
+              without props (AccountName, AccountPassword)
+            detail
+        what
+          row
+            markdown <### Terminated contract
+                      This contract is terminated. It will be removed from your installation shortly.
+                      An account holder that has terminated the contract can no longer receive information from peers through this Broker Service. 
+                    >
+              when extern >> ContractTerminated
+            markdown <### Account holder
+                      This is your account at the Broker Service. 
+                      To cancel it, click the bolt icon in the toolbar below and execute "Terminate contract".
+                    >
+              when not (extern >> ContractTerminated)
+          row
+            form "Broker Service" External
+              props (Name) verbs (Consult)
+          row
+            table "Queues" Queues
+              props (QueueName) verbs (Consult)
+        where
+
+    thing EmptyQueue (functional) = filter Queues with not exists binding
+
+    user Administrator filledBy bs:BrokerService$Administrator
+      aspect sys:Invitation$Inviter
+
+      perspective on Administrator
+        props (AdminUserName, AdminPassword) verbs (Consult)
+
+      perspective on AccountHolder
+        all roleverbs
+        props (AccountName, AccountPassword) verbs (Consult, SetPropertyValue)
+        props (Cancelled) verbs (Consult)
+      
+      perspective on Queues
+        only (Create, Fill, DeleteContext, Delete)
+        props (QueueName, QueueDeleted) verbs (Consult, SetPropertyValue)
+      
+      -- If this contract is due to self-signup, Administrator needs this perspective to know that this contract
+      -- fills an Accounts role in the service
+      perspective on extern
+        props (Name, ManagementEndpoint, Registered, TerminationAcknowledged) verbs (Consult)
+        props (ContractTerminated) verbs (Consult, SetPropertyValue)
+        action TerminateContract
+          ContractTerminated = true
+
+      -- Needed to remove the contract (and the Accounts role it fills) once it is terminated.
+      perspective on extern >> binder Accounts
+        only (RemoveContext)
+        props (AccountDeleted) verbs (Consult, SetPropertyValue)
+      
+      perspective on TCPManager
+        only (Create, Fill, Remove)
+        props (FirstName, LastName) verbs (Consult)
+
+      screen
+        who
+          AccountHolder
+            master
+              with props (LastName)
+            detail
+              without props (HasKey)
+          TCPManager
+            master
+              markdown <### TCP Manager
+                        This is an optional TCP Manager. Fill it with a peer who needs to set up a Transaction Collection Point (TCP).
+                        >
+              with props (LastName)
+            detail
+        what
+          row
+            markdown <### Terminated contract
+                      This contract is terminated, either by you or by the AccountHolder. 
+                      As soon as the AccountHolder has acknowledged this, the account and the queue are deleted from the Broker Service 
+                      and the contract is removed. 
+                    >
+              when extern >> ContractTerminated
+          row
+            form "Broker Service" External
+              with props (Registered)
+          row
+            table Queues
+        where
+
+    aspect user sys:Invitation$Guest
+    aspect thing sys:ContextWithNotification$Notifications
+
+    context Queues (relational) filledBy sys:PerspectivesSystem
+      property QueueName (String)
+        readableName
+      property QueueDeleted (Boolean)
+      state ReadyToDelete = context >> extern >> binder Accounts >> AccountDeleted
+        on entry
+          do for BrokerContract$Administrator
+            QueueDeleted = callExternal rabbit:DeleteQueue(
+              context >> extern >> ManagementEndpoint,
+              context >> Administrator >> AdminUserName,
+              context >> Administrator >> AdminPassword,
+              QueueName) returns Boolean
+      on exit
+        do for BrokerContract$AccountHolder
+          callEffect rabbit:StopReadingPost(QueueName)
+
+    context Service (functional) = extern >> binder Accounts >> context >> extern
+  
+    aspect context sys:ContextWithNotification$Notifications

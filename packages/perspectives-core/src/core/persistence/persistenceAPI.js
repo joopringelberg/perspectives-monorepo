@@ -76,6 +76,14 @@ function captureFetch(url, opts)
   return fetch(url, opts);
 }
 
+export function basicAuthenticationHeader(username)
+{
+  return function(_password)
+  {
+    return null;
+  };
+}
+
 export function createDatabaseImpl( databaseName )
 {
   return new PouchDB( 
@@ -83,7 +91,7 @@ export function createDatabaseImpl( databaseName )
     // NOTE. We have to decide in coding time whether to include the browser or the Node version.
     // Node doesn't know fetch.
     // Outcomment when running Node!
-    , {fetch: captureFetch} 
+    , {fetch: captureFetch, skip_setup: true}
     );
 }
 
@@ -94,7 +102,8 @@ export function createRemoteDatabaseImpl( databaseName, couchdbUrl )
     // NOTE. We have to decide in coding time whether to include the browser or the Node version.
     // Node doesn't know fetch.
     // Outcomment when running Node!
-    , fetch: captureFetch 
+    , fetch: captureFetch
+    , skip_setup: true
     });
   return new P(databaseName);
 }
@@ -143,28 +152,6 @@ export function documentsInDatabaseImpl( database, options ) {
   };
 };
 
-export function databaseInfoImpl ( database ) {
-  return function (onError, onSuccess) {
-    database.info( function(err, response)
-      {
-        if (err != null)
-        {
-          onError( convertPouchError(err) ); // invoke the error callback in case of an error
-        }
-        else
-        {
-          onSuccess(response); // invoke the success callback with the reponse
-        }
-      });
-
-    // Return a canceler, which is just another Aff effect.
-    return function (cancelError, cancelerError, cancelerSuccess) {
-      // No way to cancel the request.
-      cancelerSuccess(); // invoke the success callback for the canceler
-    };
-  };
-};
-
 export function compactDatabaseImpl(db) {
   return function(onError, onSuccess) {
     db.compact()
@@ -181,33 +168,34 @@ export function compactDatabaseImpl(db) {
   };
 }
 
-// Create a utility function that:
-// 1. Creates a new temporary database
-// 2. Copies only non-deleted documents to it
-// 3. Destroys the original and renames the new one
+function copyableDoc(doc)
+{
+  const { _rev, _revisions, _conflicts, _deleted_conflicts, _local_seq, ...rest } = doc;
+  return rest;
+}
+
+// Rebuild the database with only live documents, avoiding the replication API.
 export function cleanupDeletedDocsImpl (dbName) {
-  const origDb = new PouchDB(dbName);
-  const tempDb = new PouchDB(`${dbName}_temp`);
+  const origDb = createDatabaseImpl(dbName);
   let docsToKeep = [];
   
-  return origDb.allDocs({include_docs: true})
+  return origDb.allDocs({ include_docs: true, attachments: true })
     .then(result => {
-      // Filter out deleted documents
       docsToKeep = result.rows
-        .filter(row => !row.doc._deleted)
-        .map(row => row.doc);
-      if (docsToKeep.length) {
-        return tempDb.bulkDocs(docsToKeep);
-      } else {
-        return Promise.resolve();
-      }
+        .map(row => row.doc)
+        .filter(doc => doc && !doc._deleted)
+        .map(copyableDoc);
     })
     .then(() => origDb.destroy())
-    .then(() => tempDb.replicate.to(new PouchDB(dbName)))
-    .then(() => tempDb.destroy())
     .then(() => {
-      console.log(`Cleanup complete. Kept ${docsToKeep.length} non-deleted documents.`);
-      return {};
+      const rebuiltDb = createDatabaseImpl(dbName);
+      if (!docsToKeep.length) {
+        return Promise.resolve(0);
+      }
+      return rebuiltDb.bulkDocs(docsToKeep);
+    })
+    .then(() => {
+      return docsToKeep.length;
     })
     .catch(err => {
       console.error(`Error during cleanup:`, convertPouchError(err));
@@ -244,6 +232,29 @@ export function replicateOnce (origin, recovery, last_seq) {
         onError(convertPouchError(err));
       });
       
+    return function(cancelError, cancelerError, cancelerSuccess) {
+      cancelerSuccess();
+    };
+  };
+}
+
+// | Replicates a database identified by sourceDbName to a database identified by targetDbName.
+// | Both names may be local PouchDB names or full http(s) URLs (for CouchDB).
+// | Credentials may be embedded in the URL as ******host:port/dbname.
+export function replicateDatabaseImpl (sourceDbName, targetDbName) {
+  return function(onError, onSuccess) {
+    const sourceDb = new PouchDB(sourceDbName, { fetch: captureFetch });
+    const targetDb = new PouchDB(targetDbName, { fetch: captureFetch });
+    targetDb.replicate.from(sourceDb, { live: false })
+      .on('complete', function(info) {
+        console.log(`replicateDatabase: replicated ${sourceDbName} to ${targetDbName}.`);
+        onSuccess(undefined);
+      })
+      .on('error', function(err) {
+        console.error(`replicateDatabase: error replicating ${sourceDbName} to ${targetDbName}:`, err);
+        onError(convertPouchError(err));
+      });
+
     return function(cancelError, cancelerError, cancelerSuccess) {
       cancelerSuccess();
     };

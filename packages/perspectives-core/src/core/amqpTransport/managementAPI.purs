@@ -31,6 +31,7 @@ import Affjax.RequestHeader (RequestHeader(..))
 import Affjax.ResponseFormat as ResponseFormat
 import Affjax.StatusCode (StatusCode(..))
 import Affjax.Web (Request, Response, printError, request)
+import Control.Monad.Cont (lift)
 import Control.Monad.Error.Class (throwError)
 import Control.Monad.State (StateT, evalStateT, gets)
 import Data.Argonaut (Json)
@@ -47,6 +48,7 @@ import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.Couchdb (Password, onAccepted_, toJson)
 import Perspectives.ErrorLogging (logPerspectivesError)
+import Perspectives.Logging (traceBroker)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.Types (UserName)
 import Perspectives.Representation.InstanceIdentifiers (RoleInstance(..))
@@ -164,7 +166,8 @@ getUser userName = do
           throwError $ error ("getUser: error in decoding result: " <> show e)
         (Right user) -> pure $ Just user
 
-deleteUser :: UserName -> WithRabbitState Unit
+-- | True only when RabbitMQ confirms deletion with HTTP 204.
+deleteUser :: UserName -> WithRabbitState Boolean
 deleteUser userName = do
   (rq :: (Request String)) <- defaultRabbitRequest
   res <- liftAff $ request
@@ -174,10 +177,16 @@ deleteUser userName = do
         }
     )
   case res of
-    Left e -> throwError $ error ("Perspectives.AMQP.RabbitMQManagement.deleteUser: error in call: " <> printError e)
+    Left e -> do
+      logPerspectivesError $ Custom ("Perspectives.AMQP.RabbitMQManagement.deleteUser: error in call: " <> printError e)
+      pure false
     Right (response :: Response String) ->
-      if response.status == StatusCode 204 then pure unit
-      else throwError $ error ("Perspectives.AMQP.RabbitMQManagement.deleteUser: unexpected statuscode " <> show response.status)
+      if response.status == StatusCode 204 then do
+        lift $ traceBroker ("deleteUser: deleted user " <> userName)
+        pure true
+      else do
+        logPerspectivesError $ Custom ("Perspectives.AMQP.RabbitMQManagement.deleteUser: unexpected statuscode " <> show response.status)
+        pure false
 
 createQueue :: QueueName -> WithRabbitState Unit
 createQueue queueName = do
@@ -203,7 +212,8 @@ createQueue queueName = do
 
 type Queue = { auto_delete :: Boolean, durable :: Boolean, arguments :: Object String, node :: String }
 
-deleteQueue :: QueueName -> WithRabbitState Unit
+-- | True only when RabbitMQ confirms deletion with HTTP 204.
+deleteQueue :: QueueName -> WithRabbitState Boolean
 deleteQueue queueName = do
   vhost <- gets _.virtualHost
   queueEndpoint <- pure $ "api/queues/" <> vhost <> "/"
@@ -215,10 +225,16 @@ deleteQueue queueName = do
         }
     )
   case res of
-    Left e -> throwError $ error ("Perspectives.AMQP.RabbitMQManagement.deleteQueue: error in call: " <> printError e)
+    Left e -> do
+      logPerspectivesError $ Custom ("Perspectives.AMQP.RabbitMQManagement.deleteQueue: error in call: " <> printError e)
+      pure false
     Right (response :: Response String) ->
-      if response.status == StatusCode 204 then pure unit
-      else throwError $ error ("Perspectives.AMQP.RabbitMQManagement.deleteQueue: unexpected statuscode " <> show response.status <> ", status text is: " <> response.statusText)
+      if response.status == StatusCode 204 then do
+        lift $ traceBroker ("deleteQueue: deleted queue " <> queueName)
+        pure true
+      else do
+        logPerspectivesError $ Custom ("Perspectives.AMQP.RabbitMQManagement.deleteQueue: unexpected statuscode " <> show response.status <> ", status text is: " <> response.statusText)
+        pure false
 
 -- { "configure": "^$"                         // No configuring rights for an ordinary Perspectives user.
 -- , "write": "amq.topic"                      // Just write to the default exchange.

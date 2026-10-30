@@ -26,7 +26,7 @@
 
 module Perspectives.Parsing.Arc.ContextualVariables where
 
-import Data.Array (catMaybes, filter, foldMap, head, last, null)
+import Data.Array (catMaybes, concat, filter, foldMap, head, last, null)
 import Data.Maybe (Maybe(..), fromJust, maybe)
 import Data.Monoid.Disj (Disj(..))
 import Data.Newtype (ala, unwrap)
@@ -37,7 +37,7 @@ import Perspectives.Parsing.Arc.Position (ArcPosition)
 import Perspectives.Parsing.Arc.Statement.AST (Assignment(..), LetABinding(..), LetStep(..), Statements(..), endOfAssignment, startOfAssignment)
 import Perspectives.Query.QueryTypes (RoleInContext(..))
 import Perspectives.Representation.ADT (ADT(..))
-import Perspectives.Representation.TypeIdentifiers (ContextType)
+import Perspectives.Representation.TypeIdentifiers (ContextType, RoleType(..), roletype2string)
 import Prelude (($), (<$>), (<>), (==), (||))
 
 --------------------------------------------------------------------------
@@ -71,8 +71,8 @@ stepContainsVariableReference _ _ = false
 --------------------------------------------------------------------------
 -- | True only if the Statement contains a reference to the named variable.
 statementContainsVariableReference :: String -> Statements -> Boolean
-statementContainsVariableReference varName (Let (LetStep { bindings, assignments })) =
-  ala Disj foldMap (assignmentContainsReference varName <$> assignments)
+statementContainsVariableReference varName (Let (LetStep { bindings, stages })) =
+  ala Disj foldMap (assignmentContainsReference varName <$> concat stages)
     ||
       ala Disj foldMap
         (catMaybes $ recur <$> bindings)
@@ -112,13 +112,19 @@ assignmentContainsReference varName (Bind_ { bindingExpression, binderExpression
     ||
       stepContainsVariableReference varName binderExpression
 
-assignmentContainsReference varName (Unbind { bindingExpression }) =
-  stepContainsVariableReference varName bindingExpression
+assignmentContainsReference varName (RemoveAsFillerOfType { fillerExpression }) =
+  stepContainsVariableReference varName fillerExpression
 
-assignmentContainsReference varName (Unbind_ { bindingExpression, binderExpression }) =
-  stepContainsVariableReference varName bindingExpression
+assignmentContainsReference varName (RemoveAsFiller { fillerExpression }) =
+  stepContainsVariableReference varName fillerExpression
+
+assignmentContainsReference varName (RemoveFiller { filledExpression }) =
+  stepContainsVariableReference varName filledExpression
+
+assignmentContainsReference varName (RemoveFillerWith { fillerExpression, filledExpression }) =
+  stepContainsVariableReference varName fillerExpression
     ||
-      stepContainsVariableReference varName binderExpression
+      stepContainsVariableReference varName filledExpression
 
 assignmentContainsReference varName (DeleteRole { contextExpression }) = maybe false (stepContainsVariableReference varName) contextExpression
 
@@ -145,6 +151,14 @@ assignmentContainsReference varName (ExternalEffect { arguments }) =
 assignmentContainsReference varName (ExternalDestructiveEffect { arguments }) =
   ala Disj foldMap $ stepContainsVariableReference varName <$> arguments
 
+assignmentContainsReference varName (RunContextAction { contextExpression }) =
+  stepContainsVariableReference varName contextExpression
+
+assignmentContainsReference varName (RunRoleAction { objectExpression, contextExpression }) =
+  stepContainsVariableReference varName objectExpression
+    ||
+      stepContainsVariableReference varName contextExpression
+
 --------------------------------------------------------------------------
 --- CONSTRUCTING AND ADDING BINDINGS
 --------------------------------------------------------------------------
@@ -167,6 +181,11 @@ makeTypeTimeOnlyRoleStep varName (SUM alternatives) pos = case head alternatives
   Just r -> makeTypeTimeOnlyRoleStep varName r pos
 makeTypeTimeOnlyRoleStep varName (PROD alternatives) pos = case head alternatives of
   Just r -> makeTypeTimeOnlyRoleStep varName r pos
+
+makeTypeTimeOnlyRoleTypeStep :: VarName -> RoleType -> ContextType -> ArcPosition -> VarBinding
+makeTypeTimeOnlyRoleTypeStep varName roleType ctxt pos = case roleType of
+  ENR rt -> VarBinding varName (Simple $ TypeTimeOnlyEnumeratedRole pos (unwrap ctxt) (roletype2string roleType))
+  CR rt -> VarBinding varName (Simple $ TypeTimeOnlyCalculatedRole pos (roletype2string roleType))
 
 -- | Produces a step that takes the context of its origin.
 makeContextStep :: VarName -> ArcPosition -> VarBinding
@@ -195,7 +214,7 @@ addContextualBindingsToExpression extraBindings step =
 -- | removes them).
 addContextualBindingsToStatements :: Array VarBinding -> Statements -> Statements
 addContextualBindingsToStatements extraBindings stmts = case stmts of
-  Let (LetStep r@{ bindings, assignments }) -> do
+  Let (LetStep r@{ bindings }) -> do
     Let (LetStep r { bindings = (Expr <$> extraBindings) <> bindings })
   Statements stmtArray -> do
     Let
@@ -203,7 +222,7 @@ addContextualBindingsToStatements extraBindings stmts = case stmts of
           { start: unsafePartial $ startOfStatements stmts
           , end: unsafePartial $ endOfStatements stmts
           , bindings: Expr <$> extraBindings
-          , assignments: stmtArray
+          , stages: [ stmtArray ]
           }
       )
   where

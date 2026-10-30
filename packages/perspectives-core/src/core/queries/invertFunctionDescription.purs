@@ -35,7 +35,7 @@ import Perspectives.Representation.ADT (ADT(..))
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..), isFunctionalFunction, isMandatoryFunction)
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
 import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType, PropertyType, RoleType(..))
-import Perspectives.Types.ObjectGetters (isRelational_)
+import Perspectives.Types.ObjectGetters (isUnlinked_)
 import Prelude (class Monoid, class Semigroup, bind, pure, ($), (<$>), (<>))
 
 -- | For each type of function that appears as a single step in a query, we compute the inverse step.
@@ -47,9 +47,9 @@ invertFunction dom qf ran = case qf of
       if isExternalRole dom then pure $ Just $ DataTypeGetter ExternalRoleF
       else do
         et <- unsafePartial $ domain2RoleType dom
-        -- If the role is relational, produce another getter!
-        relationalP <- lift $ lift $ isRelational_ et
-        if relationalP then pure $ Just $ DataTypeGetterWithParameter GetRoleInstancesForContextFromDatabaseF (unwrap et)
+        -- If the role is unlinked, produce another getter!
+        unlinkedP <- lift $ lift $ isUnlinked_ et
+        if unlinkedP then pure $ Just $ DataTypeGetterWithParameter GetRoleInstancesForContextFromDatabaseF (unwrap et)
         else pure $ Just $ RolGetter $ ENR et
     -- FillerF is the `filledBy` step. So we have filled `filledBy` filler.
     -- Its inversion is filler `fills` filled, or: filler FilledF filled.

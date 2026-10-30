@@ -8,6 +8,7 @@ import { nodeResolve } from '@rollup/plugin-node-resolve';
 
 import { default as thepackage } from './package.json'
 import { default as corepackage } from '../perspectives-core/package.json'
+import { ensureBuildMeta } from './src/buildMeta.js'
 
 // Get path to monorepo root
 const monorepoRoot = resolve(__dirname, '../..');
@@ -15,10 +16,10 @@ const monorepoRoot = resolve(__dirname, '../..');
 const pageDispatcherVersion = "1";
 
 // https://vite.dev/config/
-export default defineConfig(({ mode }) => {
+export default defineConfig(async ({ mode }) => {
   const isDev = mode === 'development'
   const devBase = '/'
-  const { build, buildPath: jsonBuildPath } = JSON.parse(fs.readFileSync("./build.json", { encoding: "utf-8" }))
+  const { buildId, buildPath: jsonBuildPath } = await ensureBuildMeta()
   const buildPath = process.env.BUILD_PATH || jsonBuildPath
 
   // module-scope guards
@@ -45,7 +46,7 @@ export default defineConfig(({ mode }) => {
         swContent = swContent.replace(/(const cacheName = .*)/, `$1\n\nconst appFiles = [\n  ${fileListStr}\n];`)
       }
       swContent = swContent.replace(/__MYCONTEXTS_VERSION__/g, JSON.stringify(thepackage.version))
-      swContent = swContent.replace(/__BUILD__/g, JSON.stringify(build))
+      swContent = swContent.replace(/__BUILD_ID__/g, JSON.stringify(buildId))
       swContent = swContent.replace(/__IS_DEV__/g, 'true')
       fs.writeFileSync('./public/perspectives-serviceworker.js', swContent)
       console.log('Development service worker generated at ./public/perspectives-serviceworker.js')
@@ -65,7 +66,7 @@ export default defineConfig(({ mode }) => {
         swContent = swContent.replace(/(const cacheName = .*)/, `$1\n\nconst appFiles = [\n  ${fileListStr}\n];`)
       }
       swContent = swContent.replace(/__MYCONTEXTS_VERSION__/g, JSON.stringify(thepackage.version))
-      swContent = swContent.replace(/__BUILD__/g, JSON.stringify(build))
+      swContent = swContent.replace(/__BUILD_ID__/g, JSON.stringify(buildId))
       swContent = swContent.replace(/__IS_DEV__/g, 'false')
       fs.writeFileSync('./dist/perspectives-serviceworker.js', swContent)
       console.log('Service worker generated with', files.length, 'files in cache list')
@@ -80,6 +81,22 @@ export default defineConfig(({ mode }) => {
       if (!id.includes('node_modules/react-bootstrap/esm/')) return null
       const out = code.replace(/^\s*['"]use client['"];?\s*/,'')
       return out === code ? null : { code: out, map: null }
+    }
+  }
+
+  // Rollup ignores sourceMappingURL comments of input files; load the map so it is chained to the original sources.
+  const loadInputSourcemaps = {
+    name: 'load-input-sourcemaps',
+    enforce: 'pre' as const,
+    apply: 'build' as const,
+    load(id: string) {
+      if (!/perspectives-react\/dist\/[^/]+\.js$/.test(id)) return null
+      const mapFile = `${id}.map`
+      if (!fs.existsSync(mapFile)) return null
+      return {
+        code: fs.readFileSync(id, 'utf8'),
+        map: JSON.parse(fs.readFileSync(mapFile, 'utf8')),
+      }
     }
   }
 
@@ -119,6 +136,7 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [
       silenceUseClient,               // fallback (keeps tree clean if logOverride isn’t honored)
+      loadInputSourcemaps,
       generateServiceWorkerDev,
       generateServiceWorkerBuild,
     ],
@@ -181,10 +199,10 @@ export default defineConfig(({ mode }) => {
     define: {
       __MYCONTEXTS_VERSION__: JSON.stringify(thepackage.version),
       __PDR_VERSION__: JSON.stringify(corepackage.version),
-      __STARTPAGE__: JSON.stringify("pub:https://perspectives.domains/cw_ro6a1vrf9y/#wxl4tmx54i$External"),
+      __STARTPAGE__: JSON.stringify("pub:https://perspectives.domains/cw_bigbangsdatabase/#StartPage$External"),
       __MyContextsContainer__: JSON.stringify("root"),
       __PAGEDISPATCHER_VERSION__: pageDispatcherVersion,
-      __BUILD__: JSON.stringify(build),
+      __BUILD_ID__: JSON.stringify(buildId),
     },
   }
 })

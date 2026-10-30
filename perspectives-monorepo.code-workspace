@@ -54,8 +54,11 @@
 			"perspectives language",
 			"purescript-lru-cache",
 			"dataupgrade",
-			"perspectives-tcp"
+			"perspectives-tcp",
+			"rabbitmq-service",
+			"sharedfilestorage"
 		],
+		"purescript.sourcePath": ".",
 		"purescript.buildCommand": "pnpm exec spago build --json-errors",
 		"git.openRepositoryInParentFolders": "always",
 		"chat.tools.terminal.autoApprove": {
