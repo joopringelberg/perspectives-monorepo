@@ -43,3 +43,20 @@ This project is available as open source under the terms of the GPL-3.0-or-later
 
 - Stable ID mapping sidecar: see `docs/stable-id-mapping.md` for how aliases and snapshots are applied between Phase Two and Phase Three.
 
+## Layer 1 tests
+
+Run `pnpm run test:layer1` from this package. These tests require no CouchDB or
+RabbitMQ service.
+
+The parser and compiler suites exercise different stages:
+
+- `Test.Parsing.Arc.Syntax` covers the non-expression grammar;
+  `Test.Parsing.Arc` retains supplementary regressions, including screen
+  `fillproperty` clauses and independent property permissions. Duplicate legacy
+  grammar tests have been removed from the latter.
+- `Test.Parsing.Arc.PhaseTwo` checks declaration validation, name qualification,
+  and construction of the model's type representation.
+- `Test.Parsing.Arc.PhaseThree` checks compiled perspectives, actions, views, and
+  role-type normalisation.
+- `Test.Query.DescriptionCompiler` checks query functions and their inferred
+  domains and ranges, rather than only whether their source parses.

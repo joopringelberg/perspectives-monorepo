@@ -255,7 +255,7 @@ contextE = withPos do
       <|> reserved "context" *> pure ContextRole
 
   contextAspectE :: IP ContextPart
-  contextAspectE = do
+  contextAspectE = try do
     void $ reserved "aspect"
     pos <- getPosition
     aspect <- qualifiedName <|> prefixedName
@@ -421,8 +421,11 @@ thingRoleE = do
 isCalculated :: IP Boolean
 isCalculated = do
   hasIs <- option false (lookAhead (reserved "=") *> pure true)
-  hasAttrs <- option false (lookAhead (token.parens (reserved "functional" <|> reserved "default")) *> pure true)
+  hasAttrs <- option false (lookAhead (calcAttributes *> (reserved "=") *> pure true))
   pure (hasIs || hasAttrs)
+  where
+  calcAttributes :: IP (List Unit)
+  calcAttributes = token.parens ((reserved "functional" <|> reserved "default") `sepBy` token.symbol ",")
 
 contextRoleE :: IP ContextPart
 contextRoleE = do
