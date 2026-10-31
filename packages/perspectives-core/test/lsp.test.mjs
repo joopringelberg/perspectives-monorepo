@@ -84,6 +84,16 @@ test("resolve: qualified names match exactly or are external", () => {
   assert.ok(R.resolve(defs)(Obj.empty)(Maybe.Nothing.value)("Nope") instanceof R.Unresolved);
 });
 
+test("resolve: the keyword `external` denotes the enclosing context's External role", () => {
+  const extDefs = defs.concat([
+    { name: "model://x#M$A$External", kind: "enumeratedRole", line: 5, column: 5 },
+    { name: "model://x#M$B$External", kind: "enumeratedRole", line: 9, column: 5 },
+  ]);
+  const r = R.resolve(extDefs)(Obj.empty)(Maybe.Just.create("model://x#M$B$External"))("external");
+  assert.ok(r instanceof R.Local);
+  assert.deepEqual(r.value0.map((d) => d.name), ["model://x#M$B$External"]);
+});
+
 test("selectionRange covers the local name on the declaration line", () => {
   assert.deepEqual(R.selectionRange(lines)(defs[2]), { start: { line: 3, character: 10 }, end: { line: 3, character: 15 } });
 });

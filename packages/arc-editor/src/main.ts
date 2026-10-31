@@ -4,6 +4,8 @@ import "monaco-editor/esm/vs/editor/contrib/hover/browser/hoverContribution";
 import "monaco-editor/esm/vs/editor/contrib/gotoSymbol/browser/goToCommands";
 import "monaco-editor/esm/vs/editor/contrib/gotoSymbol/browser/link/goToDefinitionAtPosition";
 import "monaco-editor/esm/vs/editor/contrib/contextmenu/browser/contextmenu";
+// Registers the controller that renders the references peek widget (only edcore.main imports it).
+import "monaco-editor/esm/vs/editor/standalone/browser/referenceSearch/standaloneReferenceSearch";
 import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import { configurePDRproxy, PDRproxy, SharedWorkerChannelPromise } from "perspectives-proxy";
 import { ARC_LANGUAGE_ID, ARC_TAB_SIZE, arcLanguageConfiguration, arcMonarchLanguage } from "./arcLanguage.ts";
@@ -174,10 +176,15 @@ monaco.languages.registerDefinitionProvider(ARC_LANGUAGE_ID, {
 // References are searched in all documents open on the server: the edited model and the installed models visited so far.
 monaco.languages.registerReferenceProvider(ARC_LANGUAGE_ID, {
   async provideReferences(model, position) {
-    const params = await lspPosition(model, position);
-    if (!params) return null;
-    const result = await lsp!.request<LspLocation[] | null>("textDocument/references", { ...params, context: { includeDeclaration: true } });
-    return toMonacoLocations(result ?? []);
+    try {
+      const params = await lspPosition(model, position);
+      if (!params) return null;
+      const result = await lsp!.request<LspLocation[] | null>("textDocument/references", { ...params, context: { includeDeclaration: true } });
+      return await toMonacoLocations(result ?? []);
+    } catch (e) {
+      notice(`Finding references failed: ${e instanceof Error ? e.message : String(e)}`);
+      throw e;
+    }
   },
 });
 

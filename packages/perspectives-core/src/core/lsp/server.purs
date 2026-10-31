@@ -37,10 +37,10 @@ module Perspectives.Lsp.Server
 import Prelude
 
 import Control.Monad.Error.Class (catchError)
-import Data.Array (any, catMaybes, concat, delete, elem, filter, head, last, null, snoc, uncons, (!!))
+import Data.Array (all, any, catMaybes, concat, delete, elem, filter, foldl, head, last, null, snoc, uncons, (!!))
 import Data.Either (Either(..), hush)
 import Data.Foldable (for_)
-import Data.Traversable (for)
+import Data.Traversable (for, traverse)
 import Data.List (List(..))
 import Data.Map (lookup) as Map
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
@@ -74,6 +74,7 @@ import Perspectives.Parsing.Arc.PhaseTwoDefs (runPhaseTwo_', toStableModelUri)
 import Perspectives.Parsing.Arc.Position (ArcPosition(..))
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Query.QueryTypes (RoleInContext(..))
+import Perspectives.Representation.ADT (ADT(..))
 import Perspectives.Representation.CalculatedRole (CalculatedRole)
 import Perspectives.Representation.Class.PersistentType (getCalculatedProperty, getCalculatedRole, getContext, getEnumeratedProperty, getEnumeratedRole)
 import Perspectives.Representation.Context (Context(..))
@@ -323,10 +324,12 @@ type Member = { name :: String, kind :: String, origin :: String, location :: N.
 -- | `kind` is either "properties" (of an enumerated role) or "roles" (of a context).
 type Members = { owner :: String, kind :: String, members :: Array Member }
 
--- | The members of a type, as readable names, and the (readable) aspects whose members it also has.
-type TypeView = { members :: Array { name :: String, kind :: String }, aspects :: Array String }
+-- | The members of a type, as readable names, the (readable) aspects whose members it also has,
+-- | and (for roles) the restriction on its fillers, whose properties it has too.
+type TypeView = { members :: Array { name :: String, kind :: String }, aspects :: Array String, filler :: Maybe (ADT String) }
 
--- | All properties of the role, or all roles of the context, under the cursor, including those from aspects (recursively).
+-- | All properties of the role, or all roles of the context, under the cursor, including those from aspects (recursively)
+-- | and, for roles, from the filler restriction.
 members :: String -> Position -> MonadPerspectives (Maybe Members)
 members uri position = do
   docs <- liftEffect $ Ref.read documents
@@ -341,7 +344,7 @@ members uri position = do
   forName a text name = do
     mrole <- roleView a name
     case mrole of
-      Just _ -> Just <<< { owner: name, kind: "properties", members: _ } <$> (collect (roleView a) name >>= traverseLocate a text)
+      Just _ -> Just <<< { owner: name, kind: "properties", members: _ } <$> (roleProperties (roleView a) [] name >>= traverseLocate a text)
       Nothing -> do
         mctxt <- contextView a name
         case mctxt of
@@ -372,6 +375,39 @@ collect view root = go [ root ] [] []
         Just v -> go (tail <> v.aspects) (snoc visited t)
           (acc <> ((\m -> { name: m.name, kind: m.kind, origin: t }) <$> filter (\m -> not (any (\x -> x.name == m.name) acc)) v.members))
 
+type Origined = { name :: String, kind :: String, origin :: String }
+
+-- | The properties of a role: its own, then those of its aspects, then those of its filler restriction (all recursively).
+-- | Like `Perspectives.Representation.Class.Role.allProperties`, a PROD of fillers contributes the union
+-- | and a SUM the intersection of their properties. The first declaration of a name wins.
+roleProperties :: (String -> MonadPerspectives (Maybe TypeView)) -> Array String -> String -> MonadPerspectives (Array Origined)
+roleProperties view visited role
+  | elem role visited = pure []
+  | otherwise =
+      do
+        mv <- catchError (view role) (\_ -> pure Nothing)
+        case mv of
+          Nothing -> pure []
+          Just v -> do
+            let visited' = snoc visited role
+            fromAspects <- for v.aspects (roleProperties view visited')
+            fromFiller <- maybe (pure []) (fillerProperties visited') v.filler
+            pure $ dedupe (((\m -> { name: m.name, kind: m.kind, origin: role }) <$> v.members) <> concat fromAspects <> fromFiller)
+      where
+      fillerProperties :: Array String -> ADT String -> MonadPerspectives (Array Origined)
+      fillerProperties vis adt = case adt of
+        ST r -> roleProperties view vis r
+        UET r -> roleProperties view vis r
+        PROD as -> dedupe <<< concat <$> for as (fillerProperties vis)
+        SUM as -> do
+          alternatives <- for as (fillerProperties vis)
+          pure case uncons alternatives of
+            Nothing -> []
+            Just { head: first, tail: rest } -> filter (\m -> all (any (\x -> x.name == m.name)) rest) first
+
+      dedupe :: Array Origined -> Array Origined
+      dedupe = foldl (\acc m -> if any (\x -> x.name == m.name) acc then acc else snoc acc m) []
+
 propertyKind :: PropertyType -> String
 propertyKind (ENP _) = "enumeratedProperty"
 propertyKind (CP _) = "calculatedProperty"
@@ -386,13 +422,15 @@ roleView a name = case OBJ.lookup name a.enumeratedRoles of
   Just (EnumeratedRole r) -> pure $ Just
     { members: (\p -> { name: propertytype2string p, kind: propertyKind p }) <$> r.properties
     , aspects: (\(RoleInContext { role }) -> unwrap role) <$> r.roleAspects
+    , filler: map (\(RoleInContext { role }) -> unwrap role) <$> r.binding
     }
   Nothing -> installedType name \(DomeinFile df) -> case OBJ.lookup (stableName name df.toStableEnumeratedRoleType EnumeratedRoleType unwrap) df.enumeratedRoles of
     Nothing -> pure Nothing
     Just (EnumeratedRole r) -> do
       ms <- for r.properties \p -> { name: _, kind: propertyKind p } <$> readablePropertyName p
       aspects <- for r.roleAspects \(RoleInContext { role }) -> readableRoleName (ENR role)
-      pure $ Just { members: ms, aspects }
+      filler <- for r.binding (traverse \(RoleInContext { role }) -> readableRoleName (ENR role))
+      pure $ Just { members: ms, aspects, filler }
 
 -- | A context by readable name, from the analysed model or else from the installed model that defines it.
 contextView :: Analysis -> String -> MonadPerspectives (Maybe TypeView)
@@ -400,13 +438,14 @@ contextView a name = case OBJ.lookup name a.contexts of
   Just (Context c) -> pure $ Just
     { members: (\rt -> { name: roletype2string rt, kind: roleKind rt }) <$> (c.contextRol <> c.gebruikerRol <> c.rolInContext)
     , aspects: unwrap <$> c.contextAspects
+    , filler: Nothing
     }
   Nothing -> installedType name \(DomeinFile df) -> case OBJ.lookup (stableName name df.toStableContextType ContextType unwrap) df.contexts of
     Nothing -> pure Nothing
     Just (Context c) -> do
       ms <- for (c.contextRol <> c.gebruikerRol <> c.rolInContext) \rt -> { name: _, kind: roleKind rt } <$> readableRoleName rt
       aspects <- for c.contextAspects \ct -> catchError ((\(Context c') -> unwrap c'.readableName) <$> getContext ct) (\_ -> pure (unwrap ct))
-      pure $ Just { members: ms, aspects }
+      pure $ Just { members: ms, aspects, filler: Nothing }
 
 installedType :: String -> (DomeinFile Stable -> MonadPerspectives (Maybe TypeView)) -> MonadPerspectives (Maybe TypeView)
 installedType name f = case typeUri2ModelUri name of

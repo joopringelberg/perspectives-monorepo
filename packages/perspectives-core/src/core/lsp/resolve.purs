@@ -115,10 +115,12 @@ indentation s = Str.length (SCU.takeWhile (_ == ' ') s)
 -- | The qualified name of the definition that lexically encloses the 1-based `cursorLine`:
 -- | the last definition that starts on that line, or that starts before it and is less indented than the cursor line.
 enclosingScope :: Array Definition -> Array String -> Int -> Maybe String
-enclosingScope defs lines cursorLine =
+enclosingScope defs = enclosingScopeInSorted (Arr.sortWith (\d -> Tuple d.line d.column) defs)
+
+enclosingScopeInSorted :: Array Definition -> Array String -> Int -> Maybe String
+enclosingScopeInSorted sorted lines cursorLine =
   let
     ind = indentation (fromMaybe "" (lines !! (cursorLine - 1)))
-    sorted = Arr.sortWith (\d -> Tuple d.line d.column) defs
     candidates = filter (\d -> d.line == cursorLine || (d.line < cursorLine && d.column - 1 < ind)) sorted
   in
     _.name <$> Arr.last candidates
@@ -141,8 +143,10 @@ endsWith :: String -> String -> Boolean
 endsWith suffix s = Str.length s >= Str.length suffix && Str.drop (Str.length s - Str.length suffix) s == suffix
 
 resolve :: Array Definition -> Object String -> Maybe String -> String -> Resolution
-resolve defs namespaces mscope name =
+resolve defs namespaces mscope name' =
   let
+    -- The keyword `external` declares the role whose local name is `External`.
+    name = if name' == "external" then "External" else name'
     expanded = if contains (Pattern ":") name && not (contains (Pattern "#") name) then fromMaybe name (expandNamespaces namespaces name) else name
   in
     if contains (Pattern "#") expanded then case filter (\d -> d.name == expanded) defs of
@@ -197,16 +201,27 @@ namesInLine lineText = go 0 []
 references :: Array Definition -> Object String -> Array String -> Array String -> Array LspRange
 references defs namespaces lines targets = concat (mapWithIndex refsOnLine lines)
   where
-  refsOnLine i lineText =
-    let
-      scope = enclosingScope defs lines (i + 1)
-    in
-      mapMaybe
-        ( \{ start, name } ->
-            if hits (resolve defs namespaces scope name) then Just { start: { line: i, character: start }, end: { line: i, character: start + SCU.length name } }
-            else Nothing
-        )
-        (namesInLine lineText)
+  sorted = Arr.sortWith (\d -> Tuple d.line d.column) defs
+  targetLocals = localName <$> targets
+  -- A name can only resolve to a target if their local names agree; this avoids resolving every name.
+  mayHit name = Arr.elem (localName (unprefixed (if name == "external" then "External" else name))) targetLocals
+  unprefixed s =
+    if contains (Pattern "#") s then s
+    else case lastIndexOf (Pattern ":") s of
+      Just i -> Str.drop (i + 1) s
+      Nothing -> s
+  refsOnLine i lineText = case filter (\{ name } -> mayHit name) (namesInLine lineText) of
+    [] -> []
+    names ->
+      let
+        scope = enclosingScopeInSorted sorted lines (i + 1)
+      in
+        mapMaybe
+          ( \{ start, name } ->
+              if hits (resolve defs namespaces scope name) then Just { start: { line: i, character: start }, end: { line: i, character: start + SCU.length name } }
+              else Nothing
+          )
+          names
   hits (Local ds) = Arr.any (\d -> Arr.elem d.name targets) ds
   hits (External q) = Arr.elem q targets
   hits Unresolved = false
