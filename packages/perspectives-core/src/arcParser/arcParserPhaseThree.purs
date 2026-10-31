@@ -273,7 +273,7 @@ checkAspectRoleReferences = do
         else do
           stableCrt <- lift $ lift $ toStable (CalculatedRoleType id)
           if stableCrt /= (CalculatedRoleType id) then pure $ CR stableCrt
-          else throwError $ UnknownRole arcParserStartPosition id
+          else throwError $ UnknownRole arcParserStartPosition arcParserStartPosition id
     -- Calculated roles are ok by construction, here.
     check rt@(CR _) = pure rt
 
@@ -313,7 +313,7 @@ qualifyBindings = (lift $ State.gets _.dfr) >>= qualifyBindings'
         q <- try $ ST <$> qualifyLocalEnumeratedRoleName pos (unwrap role) (keys eroles)
         unsafePartial case q of
           Left (errs :: Array PerspectivesError) -> case unsafePartial fromJust $ head errs of
-            (UnknownRole _ _) -> do
+            (UnknownRole _ _ _) -> do
               -- Otherwise, try to qualify as a CalculatedRole in the current domain.
               -- We continue an intentional semantic error introduced while parsing here by attempting to qualify the binding, that we know not
               -- to be an EnumeratedRole, as an EnumeratedRole. However, with requalifyBindingsToCalculatedRoles we will
@@ -323,7 +323,7 @@ qualifyBindings = (lift $ State.gets _.dfr) >>= qualifyBindings'
               -- By construction we have a Simple ADT or an error.
               unsafePartial case q' of
                 Left (errs' :: Array PerspectivesError) -> case unsafePartial fromJust $ head errs' of
-                  (UnknownRole _ _) -> do
+                  (UnknownRole _ _ _) -> do
                     -- If we cannot find the identifier in the Calculated roles, it may be in another namespace.
                     -- But then the name must be fully qualified; we're not going to try just any model.
                     if isTypeUri (unwrap role) then do
@@ -338,15 +338,15 @@ qualifyBindings = (lift $ State.gets _.dfr) >>= qualifyBindings'
                             -- A name was specified, fully qualified. Check whether it exists, but not as a local name.
                             ContextType contextName -> catchError
                               (lift2 $ getContext context *> pure context)
-                              (\e -> throwError $ UnknownContext pos context)
+                              (\e -> throwError $ UnknownContext pos pos context)
                           lift2 ((flip replaceContext qualifiedContext) <$> roleADT r)
                         C r -> case context of
                           ContextType empty | empty == "" -> lift2 $ roleADT r
                           ContextType contextName ->
                             try (lift2 $ getContext context) >>= case _ of
-                              Left e -> throwError $ UnknownContext pos context
+                              Left e -> throwError $ UnknownContext pos pos context
                               Right _ -> (flip replaceContext context) <$> (lift2 $ roleADT r)
-                    else throwError $ NotWellFormedName pos (unwrap role)
+                    else throwError $ NotWellFormedName pos pos (unwrap role)
                   e -> throwError e
                 -- qualifiedRoleType is a CalculatedRole defined in the current domain.
                 -- A CalculatedRole cannot be used as an Aspect. Context must be empty.
@@ -354,7 +354,7 @@ qualifyBindings = (lift $ State.gets _.dfr) >>= qualifyBindings'
                   ContextType empty | empty == "" -> pure $ UET $ QT.RoleInContext { context, role: qualifiedRoleType }
                   -- Note that this is not yet correct, as the role in the RoleInContext should be
                   -- an EnumeratedRole. But we've not yet compiled the CalculatedRoles so we leave it for now.
-                  ContextType contextName -> throwError $ NoCalculatedAspect pos qualifiedRoleType
+                  ContextType contextName -> throwError $ NoCalculatedAspect pos pos qualifiedRoleType
             e -> throwError e
           -- Here we can be sure that the role is defined in the current domain.
           Right (ST qualifiedRoleType) -> case context of
@@ -454,9 +454,9 @@ qualifyPropertyReferences = do
       else do
         (candidates :: Array PropertyType) <- lookForUnqualifiedPropertyType_ (propertytype2string propType) rtype
         case head candidates of
-          Nothing -> throwError $ UnknownProperty pos propType (ST rtype)
+          Nothing -> throwError $ UnknownProperty pos pos propType (ST rtype)
           (Just t) | length candidates == 1 -> pure t
-          otherwise -> throwError $ NotUniquelyIdentifyingPropertyType pos propType candidates
+          otherwise -> throwError $ NotUniquelyIdentifyingPropertyType pos pos propType candidates
 
 -- | For each EnumeratedRole R in the model, add InvertedQueries to make deltas
 -- | available to User Roles in the context of R that have a Perspective on R.

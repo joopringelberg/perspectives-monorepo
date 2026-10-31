@@ -332,9 +332,9 @@ interpretComposeSequenceF (BQD _ (BinaryCombinator ComposeSequenceF) f1 f2 ran _
                         }
                       ]
 
-              _ -> throwError (error $ show $ ArgumentMustBeSequenceFunction arcParserStartPosition)
-          _ -> throwError $ (error $ show $ ArgumentMustBeSequenceFunction arcParserStartPosition)
-    _ -> throwError $ (error $ show $ ArgumentMustBeSequenceFunction arcParserStartPosition)
+              _ -> throwError (error $ show $ ArgumentMustBeSequenceFunction arcParserStartPosition arcParserStartPosition)
+          _ -> throwError $ (error $ show $ ArgumentMustBeSequenceFunction arcParserStartPosition arcParserStartPosition)
+    _ -> throwError $ (error $ show $ ArgumentMustBeSequenceFunction arcParserStartPosition arcParserStartPosition)
   where
   addNumbers :: FunctionName -> Array DependencyPath -> AssumptionTracking (Array DependencyPath)
   addNumbers fname result = do

@@ -174,7 +174,7 @@ checkSelfOnly (EnumeratedProperty { id: prop, selfonly }) =
       (\{ perspective } -> perspectiveSupportsPropertyWithOneofVerbs perspective (ENP prop) (PSet [ SetPropertyValue, AddPropertyValue, RemovePropertyValue ]))
       perspectivesAndRoles
     if ((length perspectivesAndRoles) == 1) then unsafePartial case head perspectivesAndRoles of
-      (Just { userRole, objectRole, perspective }) -> throwError [ SelfOnlyNeedsTwoRoles (identifierOfRole userRole) (posOfRole userRole) prop ]
+      (Just { userRole, objectRole, perspective }) -> throwError [ SelfOnlyNeedsTwoRoles (identifierOfRole userRole) (posOfRole userRole) (posOfRole userRole) prop ]
     else void $ for_ perspectivesAndRoles
       ( \{ userRole, objectRole, perspective } ->
           if (unwrap perspective).isSelfPerspective then do
@@ -183,7 +183,7 @@ checkSelfOnly (EnumeratedProperty { id: prop, selfonly }) =
             anotherPerspectiveWrites <-
               if isWritingPerspective then pure $ length perspectivesThatWrite > 1
               else pure $ length perspectivesThatWrite > 0
-            if isFunctional || not anotherPerspectiveWrites then throwError $ [ SelfOnlyShouldBeAuthorOnly (identifierOfRole userRole) (posOfRole userRole) prop ]
+            if isFunctional || not anotherPerspectiveWrites then throwError $ [ SelfOnlyShouldBeAuthorOnly (identifierOfRole userRole) (posOfRole userRole) (posOfRole userRole) prop ]
             else pure unit
           else pure unit
       )

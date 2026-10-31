@@ -94,7 +94,7 @@ theSuite = suite "Perspectives.Parsing.Arc.PhaseTwo" do
       Right ctxt ->
         evalPhaseTwo (traverseDomain ctxt) >>=
           case _ of
-            Left (DuplicateContextDeclaration _ (ContextType contextId)) ->
+            Left (DuplicateContextDeclaration _ _ (ContextType contextId)) ->
               assert "The duplicate context error should identify the repeated context."
                 (contextId == "model://perspectives.domains#MyTestDomain$MyCase")
             otherwise ->
@@ -107,7 +107,7 @@ theSuite = suite "Perspectives.Parsing.Arc.PhaseTwo" do
       Right ctxt ->
         evalPhaseTwo (traverseDomain ctxt) >>=
           case _ of
-            Left (DuplicateRoleDeclaration _ (ENR (EnumeratedRoleType roleId))) ->
+            Left (DuplicateRoleDeclaration _ _ (ENR (EnumeratedRoleType roleId))) ->
               assert "The duplicate role error should identify the repeated role."
                 (roleId == "model://perspectives.domains#MyTestDomain$MyRole")
             otherwise ->
