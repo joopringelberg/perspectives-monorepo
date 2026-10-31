@@ -4,12 +4,15 @@ import "monaco-editor/esm/vs/editor/contrib/hover/browser/hoverContribution";
 import "monaco-editor/esm/vs/editor/contrib/gotoSymbol/browser/goToCommands";
 import "monaco-editor/esm/vs/editor/contrib/gotoSymbol/browser/link/goToDefinitionAtPosition";
 import "monaco-editor/esm/vs/editor/contrib/contextmenu/browser/contextmenu";
+import "monaco-editor/esm/vs/editor/contrib/folding/browser/folding";
+import "monaco-editor/esm/vs/editor/contrib/find/browser/findController";
 import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import { configurePDRproxy, PDRproxy, SharedWorkerChannelPromise } from "perspectives-proxy";
 import { ARC_LANGUAGE_ID, ARC_TAB_SIZE, arcLanguageConfiguration, arcMonarchLanguage } from "./arcLanguage.ts";
 import { parseLaunchParams } from "./launchParams.ts";
 import { diagnosticToMarker, DocumentSync, localTypeName, LspClient, lspRangeToRange, modelUriOfSourceUri, type LspDiagnostic, type LspLocation, type LspMembers } from "./lspClient.ts";
 import { NavigationHistory } from "./navigation.ts";
+import { enclosingContextOfRole } from "./structure.ts";
 import { classifyFeedback, ManifestSession, type ProxyLike, type WatchedProperty } from "./manifestSession.ts";
 
 (self as any).MonacoEnvironment = { getWorker: () => new EditorWorker() };
@@ -46,6 +49,11 @@ const editor = monaco.editor.create($("editor"), {
   renderWhitespace: "boundary",
   guides: { indentation: true },
   minimap: { enabled: false },
+  // ARC blocks are delimited by indentation, so indentation folding covers every declaration and section.
+  folding: true,
+  foldingStrategy: "indentation",
+  showFoldingControls: "mouseover",
+  find: { addExtraSpaceOnTop: false, seedSearchStringFromSelection: "selection" },
 });
 mainModel.updateOptions({ tabSize: ARC_TAB_SIZE, insertSpaces: true });
 
@@ -232,6 +240,20 @@ async function showMembers(expected: LspMembers["kind"]) {
 
 editor.addAction({ id: "arc.showProperties", label: "Show All Properties of Role", contextMenuGroupId: "navigation", contextMenuOrder: 10, run: () => showMembers("properties") });
 editor.addAction({ id: "arc.showRoles", label: "Show All Roles of Context", contextMenuGroupId: "navigation", contextMenuOrder: 11, run: () => showMembers("roles") });
+
+function jumpToContext() {
+  const model = editor.getModel();
+  const position = editor.getPosition();
+  if (!model || !position) return;
+  const line = enclosingContextOfRole(model.getLinesContent(), position.lineNumber - 1);
+  if (line === undefined) { notice("Place the cursor inside a role declaration to jump to its context.", "info"); return; }
+  notice(undefined);
+  const lineNumber = line + 1;
+  const column = model.getLineFirstNonWhitespaceColumn(lineNumber);
+  showModel(model, { startLineNumber: lineNumber, startColumn: column, endLineNumber: lineNumber, endColumn: column });
+}
+
+editor.addAction({ id: "arc.jumpToContext", label: "Jump to Context of Role", contextMenuGroupId: "navigation", contextMenuOrder: 12, run: jumpToContext });
 
 // The standalone editor cannot open other models by itself; switch models in place. Every jump (definition,
 // reference) passes through here, so it is recorded in the navigation history.

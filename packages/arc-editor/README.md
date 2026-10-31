@@ -74,6 +74,12 @@ Every jump (to a definition, a reference or a member) is recorded in a navigatio
 - Name resolution of unqualified names is lexical: it ranks candidates by the enclosing scope. It does not use the compiler's own resolution.
 - Warnings are collected from global PDR state. Concurrent analyses (e.g. a manifest compiling at the same time) may mix warnings.
 
+## Editor features
+
+- **Folding** is indentation based: every indented block (type, perspective and state declarations, `on entry`/`on exit`, `screen`, `who`/`what`/`where` and their roles, `markdown`, `tab`/`table`/`form`, `master`/`detail`) can be folded.
+- **Find** (Ctrl/Cmd+F) searches the exact text, with *Match Case* and *Match Whole Word* options.
+- **Jump to Context of Role** (context menu) moves to the context that lexically encloses the role under the cursor; for an aspect role, that is the context the aspect is added to.
+
 ## Limitations
 
 - **SharedWorker required.** In page-hosted mode (Safari/iOS/Android) MyContexts has no SharedWorker. In that case the launch parameters are missing or unusable, and the editor shows an error.
