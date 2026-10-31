@@ -1726,6 +1726,26 @@ export class PerspectivesProxy
       });
   }
 
+  // { request: "Lsp", subject: <JSON-RPC message string> }
+  // The PDR doubles as a Language Server for ARC. Sends a single LSP message and
+  // resolves with the (possibly empty) list of messages the server emits in reaction
+  // (a response and/or notifications such as textDocument/publishDiagnostics).
+  lsp( message : object ) : Promise<object[]>
+  {
+    const proxy = this;
+    return new Promise(function (resolver, rejecter)
+      {
+        return proxy.send(
+          {request: "Lsp", subject: JSON.stringify(message), onlyOnce: true},
+          function (messages : string[])
+          {
+            resolver(messages.map( m => JSON.parse(m) ));
+          },
+          rejecter
+        );
+      });
+  }
+
 
 ///////////////////////////////////////////////////////////////////////////////////////
   //// SETTERS.

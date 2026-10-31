@@ -29,6 +29,7 @@ module Perspectives.Parsing.Messages where
 
 import Control.Monad.Except (ExceptT, throwError) as Except
 import Data.Array (intercalate, singleton)
+import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
 import Perspectives.CoreTypes (MonadPerspectives)
@@ -173,6 +174,7 @@ data PerspectivesError
   | DeltaExecutionError String
 
 derive instance eqPerspectivesError :: Eq PerspectivesError
+derive instance genericPerspectivesError :: Generic PerspectivesError _
 
 instance showPerspectivesError :: Show PerspectivesError where
   show (DefaultPrototype expected given) = "Invalid type for DefaultPrototype. Expected: '" <> unwrap expected <> "' but found '" <> unwrap given <> "'."
