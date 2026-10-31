@@ -33,9 +33,10 @@ monaco.languages.register({ id: ARC_LANGUAGE_ID, extensions: [".arc"] });
 monaco.languages.setLanguageConfiguration(ARC_LANGUAGE_ID, arcLanguageConfiguration as any);
 monaco.languages.setMonarchTokensProvider(ARC_LANGUAGE_ID, arcMonarchLanguage as any);
 
+// Created explicitly: a model the editor creates itself (via `value`) is disposed on setModel.
+const mainModel = monaco.editor.createModel("", ARC_LANGUAGE_ID);
 const editor = monaco.editor.create($("editor"), {
-  value: "",
-  language: ARC_LANGUAGE_ID,
+  model: mainModel,
   automaticLayout: true,
   readOnly: true,
   tabSize: ARC_TAB_SIZE,
@@ -45,7 +46,6 @@ const editor = monaco.editor.create($("editor"), {
   guides: { indentation: true },
   minimap: { enabled: false },
 });
-const mainModel = editor.getModel()!;
 mainModel.updateOptions({ tabSize: ARC_TAB_SIZE, insertSpaces: true });
 
 let savedSource: string | undefined;   // The source as last loaded from / saved to the PDR.
@@ -64,6 +64,7 @@ function refreshControls() {
 }
 
 editor.onDidChangeModelContent(refreshControls);
+editor.onDidChangeModel(refreshControls);
 
 // ---------- Language Server (runs inside the PDR, see README) ----------
 let lsp: LspClient | undefined;
@@ -112,8 +113,7 @@ function showModel(model: monaco.editor.ITextModel, selection?: monaco.IRange) {
 }
 
 $("back").addEventListener("click", () => {
-  const prev = backStack.pop();
-  if (!prev) return;
+  const prev = backStack.pop() ?? { model: mainModel, position: null };
   editor.setModel(prev.model);
   if (prev.position) { editor.setPosition(prev.position); editor.revealPositionInCenter(prev.position); }
   refreshControls();
