@@ -38,6 +38,38 @@ pnpm -F arc-editor build:into-mycontexts # copy into ../mycontexts/dist/arcedito
 4. Edit the source and save.
 5. Watch `ArcFeedback` change in both the editor and MyContexts.
 
+## Language Server
+
+The PDR in the SharedWorker doubles as an LSP server for ARC (`Perspectives.Lsp.Server` in perspectives-core).
+
+**Why the PDR is the server.** The PDR already contains the only ARC parser and compiler. It also holds all installed models, which are needed to type-check against dependencies and to jump into them. A separate server would duplicate both, or would have to talk to the PDR anyway. The costs are these:
+- analysis runs on the same thread as the user's PDR;
+- the protocol has to be tunnelled.
+
+The mitigations:
+- the client debounces edits (600 ms);
+- each request is handled in a forked fiber;
+- analyses are side-effect free: the model is not normalised, cached or stored;
+- stale results are dropped by document version.
+
+**Transport.** `proxy.lsp(message)` sends one JSON-RPC message as API request `Lsp`. It resolves with the response plus any notifications (e.g. `publishDiagnostics`) emitted while handling it. There is no server push beyond that.
+
+**Supported methods.**
+- `initialize`, `initialized` and `shutdown`.
+- `textDocument/didOpen`, `didChange` and `didClose`: full sync only.
+- `textDocument/publishDiagnostics`:
+  - The diagnostic `code` is the `PerspectivesError` data constructor name.
+  - The range comes from the constructor's `ArcPosition` arguments, not from the printed message.
+  - Compiler warnings appear at line 1 with severity Warning.
+- `textDocument/definition`: for contexts, roles, properties and views. It works both in the edited model and in installed dependencies.
+- `perspectives/modelSource {uri}`: returns the ARC source of an installed model for `perspectives-model:<model uri>` locations. The editor shows that source read-only, with a Back button.
+
+**Limitations.**
+- The whole file is re-parsed and re-compiled on every (debounced) change.
+- States have no source position in the compiled model, so you cannot jump to them.
+- Name resolution of unqualified names is lexical: it ranks candidates by the enclosing scope. It does not use the compiler's own resolution.
+- Warnings are collected from global PDR state. Concurrent analyses (e.g. a manifest compiling at the same time) may mix warnings.
+
 ## Limitations
 
 - **SharedWorker required.** In page-hosted mode (Safari/iOS/Android) MyContexts has no SharedWorker. In that case the launch parameters are missing or unusable, and the editor shows an error.
