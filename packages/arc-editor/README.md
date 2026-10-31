@@ -63,6 +63,8 @@ The mitigations:
   - Compiler warnings appear at line 1 with severity Warning.
 - `textDocument/definition`: for contexts, roles, properties and views. It works both in the edited model and in installed dependencies.
 - `textDocument/references`: all places where the type under the cursor is declared or referred to, in every document open on the server (the edited model plus the installed models visited so far).
+  For a role or a property, the declarations of the user roles that have a perspective on it are included as well (a perspective on a role, or a perspective whose `props`/`view` cover the property; `props` without a list covers all properties of the object).
+- `textDocument/completion`: inside the property list of `props (...)` in a perspective, all properties of the object of the perspective (`perspective on X`, or the enclosing role for `perspective of U`), including those from aspects and the filler restriction. Because a request makes the PDR recompile pending edits, suggestions are not shown while typing: invoke them with Ctrl+Space, or type `(` or `,` in the list.
 - `perspectives/members {textDocument, position}`: all properties of the enumerated role, or all roles of the context, under the cursor. Members mixed in from aspects are included, recursively; each member reports the type that declares it (`origin`) and its location. The editor exposes this as the context menu actions *Show All Properties of Role* and *Show All Roles of Context*; clicking a member jumps to its definition.
 - `perspectives/modelSource {uri}`: returns the ARC source of an installed model for `perspectives-model:<model uri>` locations. The editor shows that source read-only.
 

@@ -113,3 +113,24 @@ test("references finds declarations and uses that resolve to the target", () => 
   ]);
   assert.deepEqual(R.references(defs)(Obj.empty)(lines)(["model://x#M$A$Thing"]).map((r) => r.start.line), [3]);
 });
+
+test("propertyListObjectAt finds the object of the perspective whose property list holds the cursor", () => {
+  const src = [
+    "  case A",
+    "    user U",
+    "      perspective on Thing",
+    "        props (Name, ",
+    "        in state S",
+    "          props (",
+    "        props (Name) verbs (Consult)",
+    "    thing Other",
+    "      perspective of U",
+    "        props (",
+  ];
+  const at = (line, character) => fromMaybe(R.propertyListObjectAt(src)(line)(character));
+  assert.deepEqual(at(3, src[3].length), { name: "Thing", line: 3 });
+  assert.deepEqual(at(5, src[5].length), { name: "Thing", line: 3 });
+  assert.equal(at(6, src[6].length), null);
+  assert.equal(at(2, src[2].length), null);
+  assert.deepEqual(at(9, src[9].length), { name: "Other", line: 8 });
+});

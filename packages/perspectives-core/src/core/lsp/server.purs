@@ -42,6 +42,7 @@ import Data.Either (Either(..), hush)
 import Data.Foldable (for_)
 import Data.Traversable (for, traverse)
 import Data.List (List(..))
+import Data.Array (fromFoldable)
 import Data.Map (lookup) as Map
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.Newtype (over, unwrap)
@@ -59,12 +60,12 @@ import Foreign.Object (delete, lookup) as OBJ
 import Perspectives.Checking.PerspectivesTypeChecker (checkDomeinFile)
 import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.Data.EncodableMap (EncodableMap)
-import Perspectives.Data.EncodableMap (lookup) as EM
+import Perspectives.Data.EncodableMap (lookup, values) as EM
 import Perspectives.DomeinCache (retrieveDomeinFile)
 import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, defaultDomeinFileRecord)
 import Perspectives.Identifiers (modelUriVersion, typeUri2ModelUri, unversionedModelUri)
 import Perspectives.Lsp.Diagnostics (Diagnostic, LspRange, error2Diagnostic, warning2Diagnostic)
-import Perspectives.Lsp.Resolve (Definition, Resolution(..), enclosingScope, nameAt, references, resolve, selectionRange)
+import Perspectives.Lsp.Resolve (Definition, Resolution(..), enclosingScope, localName, nameAt, propertyListObjectAt, references, resolve, selectionRange)
 import Perspectives.Parsing.Arc (domain)
 import Perspectives.Parsing.Arc.AST (ContextE(..))
 import Perspectives.Parsing.Arc.IndentParser (runIndentParser)
@@ -73,9 +74,11 @@ import Perspectives.Parsing.Arc.PhaseTwo (traverseDomain)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (runPhaseTwo_', toStableModelUri)
 import Perspectives.Parsing.Arc.Position (ArcPosition(..))
 import Perspectives.Parsing.Messages (PerspectivesError(..))
-import Perspectives.Query.QueryTypes (RoleInContext(..))
+import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), RoleInContext(..), range)
+import Perspectives.Representation.ExplicitSet (ExplicitSet(..))
+import Perspectives.Representation.Perspective (Perspective(..), PropertyVerbs(..))
+import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
 import Perspectives.Representation.ADT (ADT(..))
-import Perspectives.Representation.CalculatedRole (CalculatedRole)
 import Perspectives.Representation.Class.PersistentType (getCalculatedProperty, getCalculatedRole, getContext, getEnumeratedProperty, getEnumeratedRole)
 import Perspectives.Representation.Context (Context(..))
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
@@ -136,7 +139,7 @@ handleLspMessage message = case readJSON_ message :: Maybe Incoming of
   Just { method, id: mid, params } -> case method, mid of
     Just "initialize", Just id -> pure
       [ respond id
-          { capabilities: { textDocumentSync: 1, definitionProvider: true, referencesProvider: true }
+          { capabilities: { textDocumentSync: 1, definitionProvider: true, referencesProvider: true, completionProvider: { triggerCharacters: [ "(", "," ] } }
           , serverInfo: { name: "perspectives-pdr" }
           }
       ]
@@ -165,6 +168,11 @@ handleLspMessage message = case readJSON_ message :: Maybe Incoming of
       Just ({ textDocument: { uri }, position } :: { textDocument :: { uri :: String }, position :: Position }) -> do
         locations <- catchError (referencesAt uri position) (\_ -> pure [])
         pure [ respond id locations ]
+      Nothing -> pure [ respondError id (-32602) "Invalid params" ]
+    Just "textDocument/completion", Just id -> case params' params of
+      Just ({ textDocument: { uri }, position } :: { textDocument :: { uri :: String }, position :: Position }) -> do
+        items <- catchError (completion uri position) (\_ -> pure [])
+        pure [ respond id { isIncomplete: false, items } ]
       Nothing -> pure [ respondError id (-32602) "Invalid params" ]
     Just "perspectives/members", Just id -> case params' params of
       Just ({ textDocument: { uri }, position } :: { textDocument :: { uri :: String }, position :: Position }) -> do
@@ -311,9 +319,81 @@ referencesAt uri position = do
       External q -> [ q ]
       Unresolved -> []
   if null targets then pure []
-  else pure $ concat $ (toUnfoldable docs :: Array (Tuple String Document)) <#> \(Tuple u doc) -> case doc.analysis of
-    Just a -> { uri: u, range: _ } <$> references a.definitions a.namespaces (split (Pattern "\n") doc.text) targets
-    Nothing -> []
+  else concat <$> for (toUnfoldable docs :: Array (Tuple String Document)) \(Tuple u doc) -> case doc.analysis of
+    Just a -> do
+      let lines = split (Pattern "\n") doc.text
+      users <- usersWithPerspectiveOn a targets
+      pure $ ({ uri: u, range: _ } <$> references a.definitions a.namespaces lines targets)
+        <> ((\d -> { uri: u, range: selectionRange lines d }) <$> filter (\d -> elem d.name users) a.definitions)
+    Nothing -> pure []
+
+-- | The (readable) user roles in the analysis that have a perspective on one of the targets: either a role
+-- | that is (one of) the object(s) of the perspective, or a property in its `props` or `view`.
+-- | A perspective on all properties (`props`) covers the properties of its object roles.
+usersWithPerspectiveOn :: Analysis -> Array String -> MonadPerspectives (Array String)
+usersWithPerspectiveOn a targets = map catMaybes $ for userRoles \(Tuple user perspectives) -> do
+  hit <- anyM (onTarget) perspectives
+  pure if hit then Just user else Nothing
+  where
+  userRoles :: Array (Tuple String (Array Perspective))
+  userRoles = ((\(Tuple n (EnumeratedRole r)) -> Tuple n r.perspectives) <$> toUnfoldable a.enumeratedRoles)
+    <> ((\(Tuple n (CalculatedRole r)) -> Tuple n r.perspectives) <$> toUnfoldable a.calculatedRoles)
+
+  onTarget :: Perspective -> MonadPerspectives Boolean
+  onTarget (Perspective p) =
+    let
+      objects = roletype2string <$> p.roleTypes
+      propertySets = concat (fromFoldable (EM.values p.propertyVerbs)) <#> \(PropertyVerbs pset _) -> pset
+    in
+      if any (\o -> elem o targets) objects then pure true
+      else if any (explicitHit) propertySets then pure true
+      else if any isUniversal propertySets then do
+        props <- concat <$> for objects (\o -> roleProperties (roleView a) [] o)
+        pure $ any (\m -> elem m.name targets) props
+      else pure false
+
+  explicitHit (PSet ps) = any (\pt -> elem (propertytype2string pt) targets) ps
+  explicitHit _ = false
+
+  isUniversal Universal = true
+  isUniversal _ = false
+
+  anyM f xs = case uncons xs of
+    Nothing -> pure false
+    Just { head: x, tail } -> f x >>= if _ then pure true else anyM f tail
+
+-----------------------------------------------------------
+-- COMPLETION
+-----------------------------------------------------------
+type CompletionItem = { label :: String, kind :: Int, detail :: String, sortText :: String }
+
+-- | Inside the property list of `props (...)` in a perspective: all properties of the object of the perspective
+-- | (its own, from aspects and from its filler restriction). For a calculated role, the properties of its range.
+completion :: String -> Position -> MonadPerspectives (Array CompletionItem)
+completion uri position = do
+  docs <- liftEffect $ Ref.read documents
+  case OBJ.lookup uri docs of
+    Just { text, analysis: Just a } -> do
+      let lines = split (Pattern "\n") text
+      case propertyListObjectAt lines position.line position.character of
+        Nothing -> pure []
+        Just { name, line } -> do
+          let
+            object = case resolve a.definitions a.namespaces (enclosingScope a.definitions lines line) name of
+              Local ds -> _.name <$> head ds
+              External q -> Just q
+              Unresolved -> Nothing
+          case object of
+            Nothing -> pure []
+            Just o -> do
+              props <- case OBJ.lookup o a.calculatedRoles of
+                Just (CalculatedRole { calculation: Q qfd }) -> case range qfd of
+                  RDOM adt -> adtProperties (roleView a) [] ((\(RoleInContext { role }) -> unwrap role) <$> adt)
+                  _ -> pure []
+                Just _ -> pure []
+                Nothing -> roleProperties (roleView a) [] o
+              pure $ props <#> \m -> { label: localName m.name, kind: 10, detail: m.name, sortText: localName m.name }
+    _ -> pure []
 
 -----------------------------------------------------------
 -- MEMBERS
@@ -391,22 +471,23 @@ roleProperties view visited role
           Just v -> do
             let visited' = snoc visited role
             fromAspects <- for v.aspects (roleProperties view visited')
-            fromFiller <- maybe (pure []) (fillerProperties visited') v.filler
+            fromFiller <- maybe (pure []) (adtProperties view visited') v.filler
             pure $ dedupe (((\m -> { name: m.name, kind: m.kind, origin: role }) <$> v.members) <> concat fromAspects <> fromFiller)
-      where
-      fillerProperties :: Array String -> ADT String -> MonadPerspectives (Array Origined)
-      fillerProperties vis adt = case adt of
-        ST r -> roleProperties view vis r
-        UET r -> roleProperties view vis r
-        PROD as -> dedupe <<< concat <$> for as (fillerProperties vis)
-        SUM as -> do
-          alternatives <- for as (fillerProperties vis)
-          pure case uncons alternatives of
-            Nothing -> []
-            Just { head: first, tail: rest } -> filter (\m -> all (any (\x -> x.name == m.name)) rest) first
 
-      dedupe :: Array Origined -> Array Origined
-      dedupe = foldl (\acc m -> if any (\x -> x.name == m.name) acc then acc else snoc acc m) []
+-- | The properties of an ADT of roles: a PROD contributes the union and a SUM the intersection of the properties of its terms.
+adtProperties :: (String -> MonadPerspectives (Maybe TypeView)) -> Array String -> ADT String -> MonadPerspectives (Array Origined)
+adtProperties view vis adt = case adt of
+  ST r -> roleProperties view vis r
+  UET r -> roleProperties view vis r
+  PROD as -> dedupe <<< concat <$> for as (adtProperties view vis)
+  SUM as -> do
+    alternatives <- for as (adtProperties view vis)
+    pure case uncons alternatives of
+      Nothing -> []
+      Just { head: first, tail: rest } -> filter (\m -> all (any (\x -> x.name == m.name)) rest) first
+
+dedupe :: Array Origined -> Array Origined
+dedupe = foldl (\acc m -> if any (\x -> x.name == m.name) acc then acc else snoc acc m) []
 
 propertyKind :: PropertyType -> String
 propertyKind (ENP _) = "enumeratedProperty"

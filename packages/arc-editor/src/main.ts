@@ -8,11 +8,12 @@ import "monaco-editor/esm/vs/editor/contrib/contextmenu/browser/contextmenu";
 import "monaco-editor/esm/vs/editor/standalone/browser/referenceSearch/standaloneReferenceSearch";
 import "monaco-editor/esm/vs/editor/contrib/folding/browser/folding";
 import "monaco-editor/esm/vs/editor/contrib/find/browser/findController";
+import "monaco-editor/esm/vs/editor/contrib/suggest/browser/suggestController";
 import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import { configurePDRproxy, PDRproxy, SharedWorkerChannelPromise } from "perspectives-proxy";
 import { ARC_LANGUAGE_ID, ARC_TAB_SIZE, arcLanguageConfiguration, arcMonarchLanguage } from "./arcLanguage.ts";
 import { parseLaunchParams } from "./launchParams.ts";
-import { diagnosticToMarker, DocumentSync, localTypeName, LspClient, lspRangeToRange, modelUriOfSourceUri, type LspDiagnostic, type LspLocation, type LspMembers } from "./lspClient.ts";
+import { diagnosticToMarker, DocumentSync, localTypeName, LspClient, lspRangeToRange, modelUriOfSourceUri, type LspCompletionList, type LspDiagnostic, type LspLocation, type LspMembers } from "./lspClient.ts";
 import { NavigationHistory } from "./navigation.ts";
 import { enclosingContextOfRole } from "./structure.ts";
 import { classifyFeedback, ManifestSession, type ProxyLike, type WatchedProperty } from "./manifestSession.ts";
@@ -56,6 +57,10 @@ const editor = monaco.editor.create($("editor"), {
   foldingStrategy: "indentation",
   showFoldingControls: "mouseover",
   find: { addExtraSpaceOnTop: false, seedSearchStringFromSelection: "selection" },
+  // Every completion request makes the PDR recompile the changed source, so suggestions are not offered while typing:
+  // invoke them explicitly (Ctrl+Space) or by typing `(` or `,` in a property list.
+  quickSuggestions: false,
+  wordBasedSuggestions: "off",
 });
 mainModel.updateOptions({ tabSize: ARC_TAB_SIZE, insertSpaces: true });
 
@@ -168,7 +173,7 @@ async function toMonacoLocations(locations: LspLocation[]): Promise<monaco.langu
 async function lspPosition(model: monaco.editor.ITextModel, position: monaco.IPosition) {
   const uri = monacoToLsp.get(model.uri.toString());
   if (!lsp || !uri) return undefined;
-  if (model === mainModel) await mainSync?.flush();
+  if (model === mainModel) await mainSync?.flushPending();
   return { textDocument: { uri }, position: { line: position.lineNumber - 1, character: position.column - 1 } };
 }
 
@@ -193,6 +198,23 @@ monaco.languages.registerReferenceProvider(ARC_LANGUAGE_ID, {
       notice(`Finding references failed: ${e instanceof Error ? e.message : String(e)}`);
       throw e;
     }
+  },
+});
+
+// Properties of the object of a perspective, inside `props (...)`. Monaco's convention: Ctrl+Space, or a trigger character.
+monaco.languages.registerCompletionItemProvider(ARC_LANGUAGE_ID, {
+  triggerCharacters: ["(", ","],
+  async provideCompletionItems(model, position) {
+    const params = await lspPosition(model, position);
+    if (!params) return { suggestions: [] };
+    const result = await lsp!.request<LspCompletionList | null>("textDocument/completion", params);
+    const word = model.getWordUntilPosition(position);
+    const range = { startLineNumber: position.lineNumber, startColumn: word.startColumn, endLineNumber: position.lineNumber, endColumn: word.endColumn };
+    return {
+      suggestions: (result?.items ?? []).map(i => ({
+        label: i.label, kind: monaco.languages.CompletionItemKind.Property, detail: i.detail, sortText: i.sortText, insertText: i.label, range,
+      })),
+    };
   },
 });
 

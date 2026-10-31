@@ -17,6 +17,10 @@ export type LspDiagnostic = {
 export type LspMember = { name: string; kind: string; origin: string; location: LspLocation | null };
 export type LspMembers = { owner: string; kind: "properties" | "roles"; members: LspMember[] };
 
+/** Answer to `textDocument/completion` (kind 10 = Property). */
+export type LspCompletionItem = { label: string; kind: number; detail?: string; sortText?: string };
+export type LspCompletionList = { isIncomplete: boolean; items: LspCompletionItem[] };
+
 type JsonRpcMessage = { jsonrpc: "2.0"; id?: number | string; method?: string; params?: any; result?: any; error?: { code: number; message: string } };
 
 /** Sends one JSON-RPC message and resolves with the messages the server emitted in reaction (proxy.lsp). */
@@ -57,7 +61,7 @@ export class LspClient {
     this.dispatch(await this.transport({ jsonrpc: "2.0", method, params }));
   }
 
-  initialize(): Promise<{ capabilities: { textDocumentSync: number; definitionProvider: boolean; referencesProvider?: boolean } }> {
+  initialize(): Promise<{ capabilities: { textDocumentSync: number; definitionProvider: boolean; referencesProvider?: boolean; completionProvider?: { triggerCharacters?: string[] } } }> {
     return this.request("initialize", { processId: null, rootUri: null, capabilities: {} })
       .then(async r => { await this.notify("initialized", {}); return r; });
   }
@@ -94,6 +98,14 @@ export class DocumentSync {
     if (!this.opened) return;
     if (this.timer) clearTimeout(this.timer);
     this.timer = setTimeout(() => { this.timer = undefined; void this.flush(); }, this.delayMs);
+  }
+
+  /** Send the latest text only if there are changes the server has not seen yet. */
+  flushPending(): Promise<void> {
+    if (!this.timer) return Promise.resolve();
+    clearTimeout(this.timer);
+    this.timer = undefined;
+    return this.flush();
   }
 
   flush(): Promise<void> {

@@ -38,6 +38,7 @@ module Perspectives.Lsp.Resolve
   , localName
   , namesInLine
   , references
+  , propertyListObjectAt
   ) where
 
 import Prelude
@@ -225,3 +226,47 @@ references defs namespaces lines targets = concat (mapWithIndex refsOnLine lines
   hits (Local ds) = Arr.any (\d -> Arr.elem d.name targets) ds
   hits (External q) = Arr.elem q targets
   hits Unresolved = false
+
+-- | When the 0-based `character` on the 0-based `line` is inside the (unclosed) parenthesised list of `props (...)`,
+-- | the name of the object of the perspective and the 1-based line on which it is given:
+-- |   * `perspective on X` (less indented than the `props` line) gives `X`;
+-- |   * `perspective of U` gives the role whose declaration (`thing`, `user`, `context`, `external`) encloses it.
+propertyListObjectAt :: Array String -> Int -> Int -> Maybe { name :: String, line :: Int }
+propertyListObjectAt lines line character =
+  let
+    lineText = fromMaybe "" (lines !! line)
+    before = SCU.take character (codeOf lineText)
+  in
+    case lastIndexOf (Pattern "props") before of
+      Nothing -> Nothing
+      Just i ->
+        let
+          rest = Str.drop (i + 5) before
+          isWordStart = i == 0 || not (maybe' false isNameChar (charAt (i - 1) before))
+          afterProps = Str.trim rest
+        in
+          if isWordStart && Str.take 1 afterProps == "(" && not (contains (Pattern ")") afterProps) then up (indentation lineText) false (line - 1)
+          else Nothing
+  where
+  codeOf t = case indexOf (Pattern "--") t of
+    Just i -> SCU.take i t
+    Nothing -> t
+  maybe' d f m = case m of
+    Just x -> f x
+    Nothing -> d
+  words t = filter (_ /= "") (split (Pattern " ") (Str.trim (codeOf t)))
+  -- Walk upwards through ever less indented lines.
+  up ind ofSeen i
+    | i < 0 || ind == 0 = Nothing
+    | otherwise =
+        let
+          t = fromMaybe "" (lines !! i)
+          ws = words t
+        in
+          if Arr.null ws || indentation t >= ind then up ind ofSeen (i - 1)
+          else case ws of
+            _ | not ofSeen, Arr.take 2 ws == [ "perspective", "on" ] -> (\name -> { name, line: i + 1 }) <$> ws !! 2
+            _ | Arr.take 2 ws == [ "perspective", "of" ] -> up (indentation t) true (i - 1)
+            _ | ofSeen, Arr.head ws == Just "external" -> Just { name: "External", line: i + 1 }
+            _ | ofSeen, Arr.elem (fromMaybe "" (Arr.head ws)) [ "thing", "user", "context" ] -> (\name -> { name, line: i + 1 }) <$> ws !! 1
+            _ -> up (indentation t) ofSeen (i - 1)

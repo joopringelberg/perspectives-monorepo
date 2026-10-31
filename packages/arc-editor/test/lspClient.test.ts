@@ -58,3 +58,20 @@ test("modelUriOfSourceUri", () => {
   assert.equal(modelUriOfSourceUri("perspectives-model:model://perspectives.domains#System"), "model://perspectives.domains#System");
   assert.equal(modelUriOfSourceUri("inmemory://model/1"), undefined);
 });
+
+test("flushPending only sends a change the server has not seen yet", async () => {
+  const { sent, transport } = fakeTransport(() => []);
+  const c = new LspClient(transport, () => {});
+  let text = "a";
+  const sync = new DocumentSync(c, "u", () => text, 10_000);
+  await sync.open();
+  await sync.flushPending();
+  assert.equal(sent.length, 1);
+  text = "b";
+  sync.changed();
+  await sync.flushPending();
+  assert.equal(sent.length, 2);
+  assert.equal(sent[1].params.contentChanges[0].text, "b");
+  await sync.flushPending();
+  assert.equal(sent.length, 2);
+});
