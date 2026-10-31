@@ -13,6 +13,10 @@ export type LspDiagnostic = {
   data?: { positions: { line: number; column: number }[] };
 };
 
+/** Answer to the `perspectives/members` request: all properties of a role or all roles of a context, aspects included. */
+export type LspMember = { name: string; kind: string; origin: string; location: LspLocation | null };
+export type LspMembers = { owner: string; kind: "properties" | "roles"; members: LspMember[] };
+
 type JsonRpcMessage = { jsonrpc: "2.0"; id?: number | string; method?: string; params?: any; result?: any; error?: { code: number; message: string } };
 
 /** Sends one JSON-RPC message and resolves with the messages the server emitted in reaction (proxy.lsp). */
@@ -53,7 +57,7 @@ export class LspClient {
     this.dispatch(await this.transport({ jsonrpc: "2.0", method, params }));
   }
 
-  initialize(): Promise<{ capabilities: { textDocumentSync: number; definitionProvider: boolean } }> {
+  initialize(): Promise<{ capabilities: { textDocumentSync: number; definitionProvider: boolean; referencesProvider?: boolean } }> {
     return this.request("initialize", { processId: null, rootUri: null, capabilities: {} })
       .then(async r => { await this.notify("initialized", {}); return r; });
   }
@@ -146,6 +150,17 @@ export function diagnosticToMarker(
     code: d.code,
     source: d.source,
   };
+}
+
+/** An LSP range (0-based) as a Monaco range (1-based). */
+export function lspRangeToRange(r: LspRange) {
+  return { startLineNumber: r.start.line + 1, startColumn: r.start.character + 1, endLineNumber: r.end.line + 1, endColumn: r.end.character + 1 };
+}
+
+/** The local part of a qualified type name (after the last `$` or `#`). */
+export function localTypeName(name: string): string {
+  const i = Math.max(name.lastIndexOf("$"), name.lastIndexOf("#"));
+  return i < 0 ? name : name.slice(i + 1);
 }
 
 /** The readable model URI in a `perspectives-model:` location, or undefined for other uris. */

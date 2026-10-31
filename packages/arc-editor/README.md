@@ -62,7 +62,11 @@ The mitigations:
   - The range comes from the constructor's `ArcPosition` arguments, not from the printed message.
   - Compiler warnings appear at line 1 with severity Warning.
 - `textDocument/definition`: for contexts, roles, properties and views. It works both in the edited model and in installed dependencies.
-- `perspectives/modelSource {uri}`: returns the ARC source of an installed model for `perspectives-model:<model uri>` locations. The editor shows that source read-only, with a Back button.
+- `textDocument/references`: all places where the type under the cursor is declared or referred to, in every document open on the server (the edited model plus the installed models visited so far).
+- `perspectives/members {textDocument, position}`: all properties of the enumerated role, or all roles of the context, under the cursor. Members mixed in from aspects are included, recursively; each member reports the type that declares it (`origin`) and its location. The editor exposes this as the context menu actions *Show All Properties of Role* and *Show All Roles of Context*; clicking a member jumps to its definition.
+- `perspectives/modelSource {uri}`: returns the ARC source of an installed model for `perspectives-model:<model uri>` locations. The editor shows that source read-only.
+
+Every jump (to a definition, a reference or a member) is recorded in a navigation history. Use the Back/Forward buttons or Alt+Left/Alt+Right to move through it.
 
 **Limitations.**
 - The whole file is re-parsed and re-compiled on every (debounced) change.

@@ -11,7 +11,16 @@ body { display: flex; flex-direction: column; }
 .error { background: #ffc9c9; }
 #notice { padding: .5em .8em; background: #ffe0e0; border-bottom: 1px solid #e99; white-space: pre-wrap; }
 #notice.info { background: #eef4ff; border-color: #9bd; }
-#editor { flex: 1; min-height: 0; }
+#workspace { flex: 1; min-height: 0; display: flex; }
+#editor { flex: 1; min-width: 0; }
+#membersPanel { width: 18em; overflow: auto; border-left: 1px solid #ccc; padding: 0 .6em; font-size: 13px; }
+#membersPanel[hidden] { display: none; }
+#membersPanel h2 { font-size: 14px; margin: .4em 0; display: flex; justify-content: space-between; }
+#membersList { list-style: none; margin: 0; padding: 0; }
+#membersList li { padding: .1em 0; }
+#membersList button { background: none; border: none; padding: 0; color: #0645ad; cursor: pointer; font: inherit; }
+#membersList button:disabled { color: #777; cursor: default; }
+#membersList .origin { color: #777; font-size: 12px; }
 #feedbackPanel { height: 22%; overflow: auto; border-top: 1px solid #ccc; padding: 0 .8em; }
 #feedbackPanel h2 { font-size: 14px; margin: .4em 0; }
 #feedback { margin: 0; white-space: pre-wrap; font-size: 12px; }

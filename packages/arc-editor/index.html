@@ -12,11 +12,18 @@
       <div id="settings" title="Manifest settings (read-only here; change them on the manifest screen in MyContexts)"></div>
       <span id="dirty" class="badge"></span>
       <span id="saveStatus" class="badge"></span>
-      <button id="back" type="button" hidden title="Back to the model you are editing">← Back</button>
+      <button id="back" type="button" disabled title="Back (Alt+Left)">← Back</button>
+      <button id="forward" type="button" disabled title="Forward (Alt+Right)">Forward →</button>
       <button id="save" type="button" disabled title="Save (Ctrl/Cmd+S)">Save</button>
     </header>
     <div id="notice" role="alert" hidden></div>
-    <main id="editor"></main>
+    <div id="workspace">
+      <main id="editor"></main>
+      <aside id="membersPanel" hidden aria-label="Members">
+        <h2><span id="membersTitle"></span> <button id="membersClose" type="button" title="Close">×</button></h2>
+        <ul id="membersList"></ul>
+      </aside>
+    </div>
     <section id="feedbackPanel" aria-label="ArcFeedback">
       <h2>ArcFeedback <span id="feedbackKind" class="badge"></span></h2>
       <pre id="feedback">No feedback yet.</pre>

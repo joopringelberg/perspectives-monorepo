@@ -87,3 +87,19 @@ test("resolve: qualified names match exactly or are external", () => {
 test("selectionRange covers the local name on the declaration line", () => {
   assert.deepEqual(R.selectionRange(lines)(defs[2]), { start: { line: 3, character: 10 }, end: { line: 3, character: 15 } });
 });
+
+test("namesInLine lists names with their start column and skips comments", () => {
+  assert.deepEqual(R.namesInLine("    filledBy sys:Foo$Bar -- Thing"), [
+    { start: 4, name: "filledBy" },
+    { start: 13, name: "sys:Foo$Bar" },
+  ]);
+});
+
+test("references finds declarations and uses that resolve to the target", () => {
+  const ranges = R.references(defs)(Obj.empty)(lines)(["model://x#M$B$Thing"]);
+  assert.deepEqual(ranges, [
+    { start: { line: 7, character: 10 }, end: { line: 7, character: 15 } },
+    { start: { line: 8, character: 15 }, end: { line: 8, character: 20 } },
+  ]);
+  assert.deepEqual(R.references(defs)(Obj.empty)(lines)(["model://x#M$A$Thing"]).map((r) => r.start.line), [3]);
+});

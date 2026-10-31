@@ -8,7 +8,8 @@ import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import { configurePDRproxy, PDRproxy, SharedWorkerChannelPromise } from "perspectives-proxy";
 import { ARC_LANGUAGE_ID, ARC_TAB_SIZE, arcLanguageConfiguration, arcMonarchLanguage } from "./arcLanguage.ts";
 import { parseLaunchParams } from "./launchParams.ts";
-import { diagnosticToMarker, DocumentSync, LspClient, modelUriOfSourceUri, type LspDiagnostic, type LspLocation } from "./lspClient.ts";
+import { diagnosticToMarker, DocumentSync, localTypeName, LspClient, lspRangeToRange, modelUriOfSourceUri, type LspDiagnostic, type LspLocation, type LspMembers } from "./lspClient.ts";
+import { NavigationHistory } from "./navigation.ts";
 import { classifyFeedback, ManifestSession, type ProxyLike, type WatchedProperty } from "./manifestSession.ts";
 
 (self as any).MonacoEnvironment = { getWorker: () => new EditorWorker() };
@@ -60,7 +61,8 @@ function refreshControls() {
   saveButton.disabled = !session || !!reason || saving || !isDirty();
   const showingMain = editor.getModel() === mainModel;
   editor.updateOptions({ readOnly: !session || !!reason || !showingMain });
-  $("back").hidden = showingMain;
+  ($("back") as HTMLButtonElement).disabled = !history.canGoBack() && showingMain;
+  ($("forward") as HTMLButtonElement).disabled = !history.canGoForward();
 }
 
 editor.onDidChangeModelContent(refreshControls);
@@ -71,7 +73,8 @@ let lsp: LspClient | undefined;
 let mainSync: DocumentSync | undefined;
 const lspToMonaco = new Map<string, monaco.editor.ITextModel>();   // LSP uri -> Monaco model
 const monacoToLsp = new Map<string, string>();                      // Monaco uri -> LSP uri
-const backStack: { model: monaco.editor.ITextModel; position: monaco.IPosition | null }[] = [];
+type NavLocation = { model: monaco.editor.ITextModel; position: monaco.IPosition | null };
+const history = new NavigationHistory<NavLocation>();
 
 function registerModel(lspUri: string, model: monaco.editor.ITextModel) {
   lspToMonaco.set(lspUri, model);
@@ -103,44 +106,135 @@ async function modelForLspUri(uri: string): Promise<monaco.editor.ITextModel | u
   return model;
 }
 
+const here = (): NavLocation => ({ model: editor.getModel()!, position: editor.getPosition() });
+
+/** Jump to a model and selection, recording where we came from in the navigation history. */
 function showModel(model: monaco.editor.ITextModel, selection?: monaco.IRange) {
-  if (editor.getModel() !== model) {
-    backStack.push({ model: editor.getModel()!, position: editor.getPosition() });
-    editor.setModel(model);
-  }
+  const from = here();
+  const samePlace = from.model === model && (!selection || (from.position?.lineNumber === selection.startLineNumber && from.position?.column === selection.startColumn));
+  if (!samePlace) history.record(from);
+  if (editor.getModel() !== model) editor.setModel(model);
   if (selection) { editor.setSelection(selection); editor.revealRangeInCenter(selection); }
+  editor.focus();
   refreshControls();
 }
 
-$("back").addEventListener("click", () => {
-  const prev = backStack.pop() ?? { model: mainModel, position: null };
-  editor.setModel(prev.model);
-  if (prev.position) { editor.setPosition(prev.position); editor.revealPositionInCenter(prev.position); }
+function goTo(loc: NavLocation) {
+  if (editor.getModel() !== loc.model) editor.setModel(loc.model);
+  if (loc.position) { editor.setPosition(loc.position); editor.revealPositionInCenter(loc.position); }
+  editor.focus();
   refreshControls();
-});
+}
+
+function goBack() {
+  history.prune(l => !l.model.isDisposed());
+  const prev = history.back(here());
+  if (prev) goTo(prev);
+  else if (editor.getModel() !== mainModel) goTo({ model: mainModel, position: null });
+}
+
+function goForward() {
+  history.prune(l => !l.model.isDisposed());
+  const next = history.forward(here());
+  if (next) goTo(next);
+}
+
+$("back").addEventListener("click", goBack);
+$("forward").addEventListener("click", goForward);
+editor.addCommand(monaco.KeyMod.Alt | monaco.KeyCode.LeftArrow, goBack);
+editor.addCommand(monaco.KeyMod.Alt | monaco.KeyCode.RightArrow, goForward);
+
+/** LSP locations as Monaco locations; sources of installed models are loaded on demand. */
+async function toMonacoLocations(locations: LspLocation[]): Promise<monaco.languages.Location[]> {
+  const out: monaco.languages.Location[] = [];
+  for (const l of locations) {
+    const target = await modelForLspUri(l.uri);
+    if (target) out.push({ uri: target.uri, range: lspRangeToRange(l.range) });
+  }
+  return out;
+}
+
+/** The LSP uri and position for a request about `position` in `model`, after flushing pending edits. */
+async function lspPosition(model: monaco.editor.ITextModel, position: monaco.IPosition) {
+  const uri = monacoToLsp.get(model.uri.toString());
+  if (!lsp || !uri) return undefined;
+  if (model === mainModel) await mainSync?.flush();
+  return { textDocument: { uri }, position: { line: position.lineNumber - 1, character: position.column - 1 } };
+}
 
 monaco.languages.registerDefinitionProvider(ARC_LANGUAGE_ID, {
   async provideDefinition(model, position) {
-    const uri = monacoToLsp.get(model.uri.toString());
-    if (!lsp || !uri) return null;
-    if (model === mainModel) await mainSync?.flush();
-    const result = await lsp.request<LspLocation | LspLocation[] | null>("textDocument/definition", {
-      textDocument: { uri }, position: { line: position.lineNumber - 1, character: position.column - 1 },
-    });
-    const locations = !result ? [] : Array.isArray(result) ? result : [result];
-    const out: monaco.languages.Location[] = [];
-    for (const l of locations) {
-      const target = await modelForLspUri(l.uri);
-      if (!target) continue;
-      out.push({ uri: target.uri, range: {
-        startLineNumber: l.range.start.line + 1, startColumn: l.range.start.character + 1,
-        endLineNumber: l.range.end.line + 1, endColumn: l.range.end.character + 1 } });
-    }
-    return out;
+    const params = await lspPosition(model, position);
+    if (!params) return null;
+    const result = await lsp!.request<LspLocation | LspLocation[] | null>("textDocument/definition", params);
+    return toMonacoLocations(!result ? [] : Array.isArray(result) ? result : [result]);
   },
 });
 
-// The standalone editor cannot open other models by itself; switch models in place (with a back button).
+// References are searched in all documents open on the server: the edited model and the installed models visited so far.
+monaco.languages.registerReferenceProvider(ARC_LANGUAGE_ID, {
+  async provideReferences(model, position) {
+    const params = await lspPosition(model, position);
+    if (!params) return null;
+    const result = await lsp!.request<LspLocation[] | null>("textDocument/references", { ...params, context: { includeDeclaration: true } });
+    return toMonacoLocations(result ?? []);
+  },
+});
+
+// ---------- Members (all properties of a role / all roles of a context, aspects included) ----------
+function closeMembers() { $("membersPanel").hidden = true; }
+$("membersClose").addEventListener("click", closeMembers);
+
+async function showMembers(expected: LspMembers["kind"]) {
+  const model = editor.getModel();
+  const position = editor.getPosition();
+  if (!model || !position) return;
+  const params = await lspPosition(model, position);
+  if (!params) { notice("The language server is unavailable.", "info"); return; }
+  const result = await lsp!.request<LspMembers | null>("perspectives/members", params);
+  const what = expected === "properties" ? "a role (enumerated)" : "a context";
+  if (!result || result.kind !== expected) { notice(`Place the cursor on the name of ${what} to list its ${expected}.`, "info"); return; }
+  notice(undefined);
+  $("membersTitle").textContent = `${expected === "properties" ? "Properties" : "Roles"} of ${localTypeName(result.owner)}`;
+  $("membersTitle").title = result.owner;
+  const list = $("membersList");
+  list.replaceChildren();
+  if (result.members.length === 0) {
+    const li = document.createElement("li");
+    li.textContent = `No ${expected}.`;
+    list.append(li);
+  }
+  for (const m of result.members) {
+    const li = document.createElement("li");
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = localTypeName(m.name);
+    button.title = `${m.name} (${m.kind})`;
+    button.disabled = !m.location;
+    button.addEventListener("click", async () => {
+      const [target] = await toMonacoLocations(m.location ? [m.location] : []);
+      const targetModel = target && monaco.editor.getModel(target.uri);
+      if (targetModel) showModel(targetModel, target.range);
+      else notice(`No source available for ${m.name}.`, "info");
+    });
+    li.append(button);
+    if (m.origin !== result.owner) {
+      const origin = document.createElement("span");
+      origin.className = "origin";
+      origin.textContent = ` from ${localTypeName(m.origin)}`;
+      origin.title = m.origin;
+      li.append(origin);
+    }
+    list.append(li);
+  }
+  $("membersPanel").hidden = false;
+}
+
+editor.addAction({ id: "arc.showProperties", label: "Show All Properties of Role", contextMenuGroupId: "navigation", contextMenuOrder: 10, run: () => showMembers("properties") });
+editor.addAction({ id: "arc.showRoles", label: "Show All Roles of Context", contextMenuGroupId: "navigation", contextMenuOrder: 11, run: () => showMembers("roles") });
+
+// The standalone editor cannot open other models by itself; switch models in place. Every jump (definition,
+// reference) passes through here, so it is recorded in the navigation history.
 monaco.editor.registerEditorOpener({
   openCodeEditor(_source, resource, selectionOrPosition) {
     const model = monaco.editor.getModel(resource);
@@ -166,7 +260,7 @@ async function startLsp(proxy: { lsp(message: object): Promise<object[]> }) {
     await mainSync.open();
   } catch (e) {
     lsp = undefined;
-    notice(`The language server is unavailable (no live diagnostics or go-to-definition): ${e instanceof Error ? e.message : String(e)}`, "info");
+    notice(`The language server is unavailable (no live diagnostics, go-to-definition or references): ${e instanceof Error ? e.message : String(e)}`, "info");
   }
 }
 

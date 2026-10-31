@@ -36,15 +36,17 @@ module Perspectives.Lsp.Resolve
   , resolve
   , selectionRange
   , localName
+  , namesInLine
+  , references
   ) where
 
 import Prelude
 
-import Data.Array (filter, index, length, null, takeWhile, zip, (!!))
+import Data.Array (concat, filter, index, length, mapMaybe, mapWithIndex, null, snoc, takeWhile, zip, (!!))
 import Data.Array as Arr
 import Data.Foldable (maximum)
 import Data.Maybe (Maybe(..), fromMaybe)
-import Data.String (Pattern(..), contains, indexOf', lastIndexOf, split)
+import Data.String (Pattern(..), contains, indexOf, indexOf', lastIndexOf, split)
 import Data.String as Str
 import Data.String.CodeUnits (charAt, slice)
 import Data.String.CodeUnits as SCU
@@ -172,3 +174,39 @@ selectionRange lines { name, line, column } =
     case indexOf' (Pattern ln) (max 0 (column - 1)) lineText of
       Just i | ln /= "" -> { start: { line: line - 1, character: i }, end: { line: line - 1, character: i + Str.length ln } }
       _ -> { start, end: start }
+
+-- | All names on a line with their 0-based start column. Text after `--` (a comment) is ignored.
+namesInLine :: String -> Array { start :: Int, name :: String }
+namesInLine lineText = go 0 []
+  where
+  code = case indexOf (Pattern "--") lineText of
+    Just i -> SCU.take i lineText
+    Nothing -> lineText
+  n = SCU.length code
+  isAt i = case charAt i code of
+    Just c -> isNameChar c
+    Nothing -> false
+  go i acc =
+    if i >= n then acc
+    else if isAt i && not (isAt (i - 1)) then case nameAt code i of
+      Just name -> go (i + 1) (snoc acc { start: i, name })
+      Nothing -> go (i + 1) acc
+    else go (i + 1) acc
+
+-- | The ranges (0-based) of all names in `lines` that resolve to one of the qualified names in `targets`.
+references :: Array Definition -> Object String -> Array String -> Array String -> Array LspRange
+references defs namespaces lines targets = concat (mapWithIndex refsOnLine lines)
+  where
+  refsOnLine i lineText =
+    let
+      scope = enclosingScope defs lines (i + 1)
+    in
+      mapMaybe
+        ( \{ start, name } ->
+            if hits (resolve defs namespaces scope name) then Just { start: { line: i, character: start }, end: { line: i, character: start + SCU.length name } }
+            else Nothing
+        )
+        (namesInLine lineText)
+  hits (Local ds) = Arr.any (\d -> Arr.elem d.name targets) ds
+  hits (External q) = Arr.elem q targets
+  hits Unresolved = false
