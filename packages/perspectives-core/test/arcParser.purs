@@ -10,11 +10,11 @@ import Data.Maybe (Maybe(..))
 import Effect.Aff (Aff)
 import Parsing (ParseError(..), Position(..), fail)
 import Parsing.Combinators (try)
-import Parsing.String (char)
+import Parsing.String (char, eof)
 import Perspectives.Parsing.Arc (contextRoleE, domain, thingRoleE, userRoleE)
 import Perspectives.Parsing.Arc.AST (ContextE, ContextPart(..), FormE(..), FreeFormScreenE(..), RoleE(..), RoleIdentification(..), RolePart(..), RowE(..), ScreenE(..), ScreenElement(..), TabE(..), TableE(..), TableFormE(..), TableFormOrWhenE(..), TableFormSectionE(..), WhoWhatWhereScreenE(..), PropsOrView(..), StateSpecification(..))
 import Perspectives.Parsing.Arc.Expression.AST (BinaryStep(..), FilledByAttribute(..), Operator(..), SimpleStep(..), Step(..), TypeCombination(..))
-import Perspectives.Parsing.Arc.IndentParser (getArcParserState, getCurrentContext, getCurrentState, inSubContext, protectObject, runIndentParser, setObject, withArcParserState)
+import Perspectives.Parsing.Arc.IndentParser (getArcParserState, getCurrentContext, getCurrentState, inSubContext, protectObject, runIndentParser, setObject, withArcParserState, withEntireBlock)
 import Perspectives.Parsing.Arc.Position (ArcPosition(..))
 import Perspectives.Representation.ExplicitSet (ExplicitSet(..))
 import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedRoleType(..), RoleType(..))
@@ -33,6 +33,14 @@ theSuite = suite "Perspectives.Parsing.Arc regressions" do
     case result of
       Right context ->
         assert "Expected the outer context after backtracking" (context == ContextType "")
+      Left err -> failure (show err)
+
+  test "a successful nested context restores parser state after leaving its scope" do
+    result <- runIndentParser "x" $
+      inSubContext "Nested" (getCurrentContext <* char 'x') *> getCurrentContext
+    case result of
+      Right context ->
+        assert "Expected the outer context after the nested parser succeeds" (context == ContextType "")
       Left err -> failure (show err)
 
   test "a failed state scope restores parser state after backtracking" do
@@ -123,6 +131,48 @@ theSuite = suite "Perspectives.Parsing.Arc regressions" do
             ) == 1
       Left e -> failure (show e)
       _ -> failure "Expected a calculated role"
+
+  test "Block parsing preserves blank-line, CRLF, outdent, and EOF behavior" do
+    let
+      blankLines = "domain model://perspectives.domains#Test\n\n  thing Item\n    property Name (String)\n  thing Other"
+      crlf = "domain model://perspectives.domains#Test\r\n  thing Item\r\n    property Name (String)\r\n"
+      eofSource = "domain model://perspectives.domains#Test"
+    sameLineResult <- runIndentParser "Headerchild" $
+      withEntireBlock
+        (\_ children -> children)
+        (char 'H' *> char 'e' *> char 'a' *> char 'd' *> char 'e' *> char 'r' *> pure unit)
+        (char 'c' *> pure "child")
+    blankResult <- runIndentParser blankLines (domain <* eof)
+    crlfResult <- runIndentParser crlf (domain <* eof)
+    eofResult <- runIndentParser eofSource (domain <* eof)
+
+    assert "A same-line parser is not treated as an indented block" case sameLineResult of
+      Right Nil -> true
+      _ -> false
+
+    assert "A blank line does not terminate nested declarations and an outdented sibling is accepted" case blankResult of
+      Right _ -> true
+      Left _ -> false
+
+    assert "CRLF line endings preserve nested declarations" case crlfResult of
+      Right _ -> true
+      Left _ -> false
+
+    assert "A domain may end at EOF without a trailing newline" case eofResult of
+      Right _ -> true
+      Left _ -> false
+
+  test "Block parsing rejects tabs and malformed indented children" do
+    tabResult <- runIndentParser "domain model://perspectives.domains#Test\n\tthing Item\n" (domain <* eof)
+    childResult <- runIndentParser "domain model://perspectives.domains#Test\n  thing Item\n    property\n" (domain <* eof)
+
+    assert "Tabs remain rejected before indentation is interpreted" case tabResult of
+      Left _ -> true
+      Right _ -> false
+
+    assert "A malformed child at a deeper indentation remains an error" case childResult of
+      Left _ -> true
+      Right _ -> false
 
   test "A view without explicit verbs grants universal property verbs" do
     role <- parseUser "user Viewer\n  perspective on Item\n    view Details\n"

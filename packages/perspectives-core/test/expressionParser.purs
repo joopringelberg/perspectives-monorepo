@@ -6,7 +6,7 @@ import Control.Monad.Free (Free)
 import Data.Array (length)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..), isJust, isNothing)
-import Parsing (ParseError(..))
+import Parsing (ParseError(..), Position(..))
 import Partial.Unsafe (unsafePartial)
 import Perspectives.Parsing.Arc.Expression (computationStep, operator, simpleStep, step, unaryStep)
 import Perspectives.Parsing.Arc.Expression.AST (BinaryStep(..), ComputationStep(..), ComputedType(..), Operator(..), PureLetStep(..), SimpleStep(..), Step(..), UnaryStep(..))
@@ -117,6 +117,26 @@ theSuite = suite "Perspectives.Parsing.Arc.Expression" do
       Left (ParseError message _) ->
         assert "Nested letA should be rejected with a query-specific error" (message == "letA is not allowed in query expressions. Use letE instead. ")
       Right _ -> assert "Nested letA should not be parsed as a query expression" false
+
+  test "Malformed competing assignment keywords report the selected production" do
+    (r :: Either ParseError Assignment) <- runIndentParser "remove widget MyRole" assignment
+    case r of
+      Left (ParseError message (Position position)) -> do
+        assert "The consumed remove discriminator should own the error" (message == "Expected 'role', 'context', 'filler', or 'as' after 'remove'. ")
+        assert "The malformed assignment should report its error after the unique keyword" (position.line == 1 && position.column == 8)
+      Right _ -> assert "An unsupported remove form should fail" false
+
+  test "Assignment classification distinguishes delete-role and delete-property forms" do
+    deleteRole <- runIndentParser "delete role MyRole" assignment
+    deleteProperty <- runIndentParser "delete property Name" assignment
+
+    assert "delete role is routed to the role-assignment production" case deleteRole of
+      Right (DeleteRole _) -> true
+      _ -> false
+
+    assert "delete property is routed to the property-assignment production" case deleteProperty of
+      Right (DeleteProperty _) -> true
+      _ -> false
 
   test "CompoundStep on filter with parens" do
     (r :: Either ParseError Step) <- runIndentParser "(filter MyRole with ItsBooleanProp)" step
@@ -331,6 +351,75 @@ theSuite = suite "Perspectives.Parsing.Arc.Expression" do
               )
           ) -> true
           _ -> false
+
+  test "Operator precedence preserves the existing mixed-operator grouping" do
+    divisionThenMultiplication <- runIndentParser "A / B * C" step
+    multiplicationThenDivision <- runIndentParser "A * B / C" step
+    equalPrecedenceArithmetic <- runIndentParser "A + B - C" step
+    equalPrecedenceLogic <- runIndentParser "A and B or C" step
+    equalPrecedenceComparison <- runIndentParser "A == B < C" step
+
+    assert "Division remains above a following multiplication in the current table" case divisionThenMultiplication of
+      Right (Binary (BinaryStep { operator: Divide _, right: Binary (BinaryStep { operator: Multiply _ }) })) -> true
+      _ -> false
+
+    assert "A multiplication followed by division groups the multiplication on the left" case multiplicationThenDivision of
+      Right (Binary (BinaryStep { operator: Divide _, left: Binary (BinaryStep { operator: Multiply _ }) })) -> true
+      _ -> false
+
+    assert "Equal-precedence arithmetic remains right nested" case equalPrecedenceArithmetic of
+      Right (Binary (BinaryStep { operator: Add _, right: Binary (BinaryStep { operator: Subtract _ }) })) -> true
+      _ -> false
+
+    assert "And and or retain their shared precedence and right nesting" case equalPrecedenceLogic of
+      Right (Binary (BinaryStep { operator: LogicalAnd _, right: Binary (BinaryStep { operator: LogicalOr _ }) })) -> true
+      _ -> false
+
+    assert "Comparisons retain their shared precedence and right nesting" case equalPrecedenceComparison of
+      Right (Binary (BinaryStep { operator: Equals _, right: Binary (BinaryStep { operator: LessThan _ }) })) -> true
+      _ -> false
+
+  test "Parentheses and filter boundaries retain their AST markers and grouping" do
+    parenthesised <- runIndentParser "A * (B + C)" step
+    filtered <- runIndentParser "filter A with B and C" step
+
+    assert "The parenthesised right operand must remain marked" case parenthesised of
+      Right (Binary (BinaryStep { operator: Multiply _, right: Binary (BinaryStep { operator: Add _, parenthesised: true }) })) -> true
+      _ -> false
+
+    assert "Filter remains the outer operator with its predicate grouped to the right" case filtered of
+      Right (Binary (BinaryStep { operator: Filter _, right: Binary (BinaryStep { operator: LogicalAnd _ }) })) -> true
+      _ -> false
+
+  test "Precedence parsing retains operator source positions" do
+    parsed <- runIndentParser "A + B * C" step
+    assert "Each operator retains its original source position" case parsed of
+      Right
+        ( Binary
+            ( BinaryStep
+                { operator: Add (ArcPosition { line: 1, column: 3 })
+                , right:
+                    Binary
+                      ( BinaryStep
+                          { operator: Multiply (ArcPosition { line: 1, column: 7 })
+                          }
+                      )
+                }
+            )
+        ) -> true
+      _ -> false
+
+  test "Reassociated and explicitly parenthesised expressions retain their source spans" do
+    reassociated <- runIndentParser "A * B + C" step
+    parenthesised <- runIndentParser "(A * B) / C" step
+
+    assert "A node moved to the left by precedence retains the legacy end position" case reassociated of
+      Right (Binary (BinaryStep { operator: Add _, left: Binary (BinaryStep { operator: Multiply _, end: ArcPosition { line: 1, column: 2 } }) })) -> true
+      _ -> false
+
+    assert "An explicitly parenthesised left operand retains its complete span and marker" case parenthesised of
+      Right (Binary (BinaryStep { operator: Divide _, left: Binary (BinaryStep { operator: Multiply _, end: ArcPosition { line: 1, column: 7 }, parenthesised: true }) })) -> true
+      _ -> false
 
   test "number in equation" do
     (r :: Either ParseError Step) <- runIndentParser "MyProp > 10" step

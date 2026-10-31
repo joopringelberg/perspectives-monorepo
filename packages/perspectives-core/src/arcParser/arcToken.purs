@@ -31,8 +31,9 @@ import Data.CodePoint.Unicode as Data.CodePoint.Unicode
 import Data.Maybe (Maybe(..))
 import Data.String (CodePoint, toLower)
 import Data.String.CodeUnits as SCU
+import Data.Tuple (Tuple(..))
 import Parsing (ParserT, fail, Position)
-import Parsing.Combinators (try, (<?>))
+import Parsing.Combinators (lookAhead, option, try, (<?>))
 import Parsing.String.Basic (oneOf, takeWhile1)
 import Parsing.Token (GenLanguageDef(..), GenTokenParser, alphaNum, makeTokenParser, upper)
 import Perspectives.Parsing.Arc.IndentParser (ArcParser)
@@ -292,6 +293,9 @@ reservedIdentifier = token.lexeme $ try go
     go' (LanguageDef languageDef) = do
       cs <- Array.many languageDef.identLetter
       pure $ SCU.fromCharArray cs
+
+twoReservedWords :: ParserT String (StateT Position ArcParser) (Tuple String String)
+twoReservedWords = option (Tuple "" "") $ lookAhead (Tuple <$> reservedIdentifier <*> option "" reservedIdentifier)
 
 -----------------------------------------------------------
 -- Identifiers & Reserved words
