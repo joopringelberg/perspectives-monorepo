@@ -1,6 +1,6 @@
 # ARC editor (proof of concept)
 
-A standalone Monaco editor for the ARC source of a `VersionedModelManifest`. It runs in its own browser tab and talks to the **same SharedWorker (and therefore the same PDR)** that MyContexts already runs. It never starts or reinitialises a PDR itself.
+A standalone Monaco editor for the ARC source of a `VersionedModelManifest`. It runs in its own browser tab and talks to the **same SharedWorker (and therefore the same PDR)** that MyContexts already runs. It never starts or reinitialises a PDR itself. 
 
 ## How it works
 

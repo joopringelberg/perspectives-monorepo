@@ -1,4 +1,9 @@
 import * as monaco from "monaco-editor/esm/vs/editor/editor.api";
+// editor.api contains no editor contributions; hover (incl. marker messages) must be loaded explicitly.
+import "monaco-editor/esm/vs/editor/contrib/hover/browser/hoverContribution";
+import "monaco-editor/esm/vs/editor/contrib/gotoSymbol/browser/goToCommands";
+import "monaco-editor/esm/vs/editor/contrib/gotoSymbol/browser/link/goToDefinitionAtPosition";
+import "monaco-editor/esm/vs/editor/contrib/contextmenu/browser/contextmenu";
 import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import { configurePDRproxy, PDRproxy, SharedWorkerChannelPromise } from "perspectives-proxy";
 import { ARC_LANGUAGE_ID, ARC_TAB_SIZE, arcLanguageConfiguration, arcMonarchLanguage } from "./arcLanguage.ts";
