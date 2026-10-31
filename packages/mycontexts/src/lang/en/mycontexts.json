@@ -109,6 +109,7 @@
   , "www_what": "What"
   , "www_where": "Where"
   , "www_pincontext": "Pin this context"
+  , "www_editArcSource": "Edit ARC source"
   , "www_copycontext": "Copy this context"
   , "www_contextActions": "Context actions"
   , "www_pincontext_title": "Pinned this context"

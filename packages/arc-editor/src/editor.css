@@ -1,0 +1,17 @@
+html, body { height: 100%; margin: 0; font-family: system-ui, sans-serif; font-size: 14px; }
+body { display: flex; flex-direction: column; }
+#toolbar { display: flex; align-items: center; gap: 1em; padding: .4em .8em; border-bottom: 1px solid #ccc; background: #f6f6f6; }
+#identity { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#filename, #settings { color: #555; }
+.badge { padding: .1em .5em; border-radius: .6em; font-size: 12px; }
+.badge:empty { display: none; }
+.dirty { background: #ffe8a3; }
+.ok { background: #c9f2c9; }
+.busy { background: #cfe3ff; }
+.error { background: #ffc9c9; }
+#notice { padding: .5em .8em; background: #ffe0e0; border-bottom: 1px solid #e99; white-space: pre-wrap; }
+#notice.info { background: #eef4ff; border-color: #9bd; }
+#editor { flex: 1; min-height: 0; }
+#feedbackPanel { height: 22%; overflow: auto; border-top: 1px solid #ccc; padding: 0 .8em; }
+#feedbackPanel h2 { font-size: 14px; margin: .4em 0; }
+#feedback { margin: 0; white-space: pre-wrap; font-size: 12px; }
