@@ -69,6 +69,22 @@ importers:
         specifier: ^6.3.5
         version: 6.3.5(@types/node@24.0.3)(jiti@2.4.2)(yaml@2.8.0)
 
+  packages/arc-editor:
+    dependencies:
+      monaco-editor:
+        specifier: 0.52.2
+        version: 0.52.2
+      perspectives-proxy:
+        specifier: workspace:*
+        version: link:../perspectives-proxy
+    devDependencies:
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+      vite:
+        specifier: 6.3.5
+        version: 6.3.5(@types/node@24.0.3)(jiti@2.4.2)(yaml@2.8.0)
+
   packages/language-perspectives-arcII:
     devDependencies:
       js-yaml:
@@ -5434,6 +5450,9 @@ packages:
   modify-values@1.0.1:
     resolution: {integrity: sha512-xV2bxeN6F7oYjZWTe/YPAy6MN2M+sL4u/Rlm2AHCIVGfo2p1yGmBHQ6vHehl4bRTZBdHu3TSkWdYgkwpYzAGSw==}
     engines: {node: '>=0.10.0'}
+
+  monaco-editor@0.52.2:
+    resolution: {integrity: sha512-GEQWEZmfkOGLdd3XK8ryrfWz3AIP8YymVXiPHEdewrUq7mh0qrKrfHLNCXcbB6sTnMLnOZ3ztSiKcciFUkIJwQ==}
 
   move-concurrently@1.0.1:
     resolution: {integrity: sha512-hdrFxZOycD/g6A6SoI2bB5NA/5NEqD0569+S47WZhPvm46sD50ZHdYaFmnua5lndde9rCHGjmfK7Z8BuCt/PcQ==}
@@ -13195,6 +13214,8 @@ snapshots:
       yargs-unparser: 2.0.0
 
   modify-values@1.0.1: {}
+
+  monaco-editor@0.52.2: {}
 
   move-concurrently@1.0.1:
     dependencies:

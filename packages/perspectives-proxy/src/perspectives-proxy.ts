@@ -103,7 +103,21 @@ export const PDRproxy: Promise<PerspectivesProxy> = new Promise(
 // type Port = Int
 // type Host = String
 
-type Options = { pageHostingPDRPort?: (pdr: any) => MessagePort };
+// sharedWorkerUrl and sharedWorkerName allow a separately built page (such as the standalone ARC editor) to connect
+// to the very same SharedWorker as MyContexts. A SharedWorker is identified by its script URL, its name and the origin.
+type Options = { pageHostingPDRPort?: (pdr: any) => MessagePort; sharedWorkerUrl?: string | URL; sharedWorkerName?: string };
+
+// The name MyContexts uses for its SharedWorker. Changes with every MyContexts build.
+export const PDR_SHARED_WORKER_NAME = `pdr-${__MYCONTEXTS_VERSION__}-${__BUILD_ID__}`;
+
+export type SharedWorkerConnection = { url: string; name: string };
+let sharedWorkerConnection: SharedWorkerConnection | undefined;
+
+// The script URL and name of the SharedWorker this page is connected to (undefined when the PDR runs in the host page).
+// Pages that should join the same PDR pass these to configurePDRproxy.
+export function getSharedWorkerConnection(): SharedWorkerConnection | undefined {
+  return sharedWorkerConnection;
+}
 
 export function configurePDRproxy(channeltype: "internalChannel" | "sharedWorkerChannel" | "hostPageChannel", options: Options): void 
 {
@@ -112,10 +126,13 @@ export function configurePDRproxy(channeltype: "internalChannel" | "sharedWorker
   switch (channeltype) {
     case "sharedWorkerChannel": {
       // Force a new instance per app version; keep Vite’s worker URL untouched
-      sharedWorker = new SharedWorker( new URL('perspectives-sharedworker', import.meta.url), {
+      const workerUrl = new URL(options.sharedWorkerUrl || new URL('perspectives-sharedworker', import.meta.url));
+      const workerName = options.sharedWorkerName || PDR_SHARED_WORKER_NAME;
+      sharedWorker = new SharedWorker( workerUrl, {
         type: 'module',
-        name: `pdr-${__MYCONTEXTS_VERSION__}-${__BUILD_ID__}`
+        name: workerName
       });
+      sharedWorkerConnection = { url: workerUrl.href, name: workerName };
       sharedWorkerChannel = new SharedWorkerChannel(sharedWorker.port, cursor);
       sharedWorkerChannelResolver(sharedWorkerChannel);
       const instance = new PerspectivesProxy(sharedWorkerChannel, cursor);
@@ -1705,6 +1722,26 @@ export class PerspectivesProxy
               rejecter({});
             }
           },
+        );
+      });
+  }
+
+  // { request: "Lsp", subject: <JSON-RPC message string> }
+  // The PDR doubles as a Language Server for ARC. Sends a single LSP message and
+  // resolves with the (possibly empty) list of messages the server emits in reaction
+  // (a response and/or notifications such as textDocument/publishDiagnostics).
+  lsp( message : object ) : Promise<object[]>
+  {
+    const proxy = this;
+    return new Promise(function (resolver, rejecter)
+      {
+        return proxy.send(
+          {request: "Lsp", subject: JSON.stringify(message), onlyOnce: true},
+          function (messages : string[])
+          {
+            resolver(messages.map( m => JSON.parse(m) ));
+          },
+          rejecter
         );
       });
   }
