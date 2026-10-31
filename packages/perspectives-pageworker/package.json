@@ -8,7 +8,7 @@
   "types": "dist/perspectives-pageworker.d.ts",
   "typings": "dist/perspectives-pageworker.d.ts",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node --test",
     "build": "rollup -c",
     "watch": "rollup -c -w"
   },
