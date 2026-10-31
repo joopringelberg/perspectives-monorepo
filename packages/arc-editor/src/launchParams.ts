@@ -11,6 +11,18 @@ export type LaunchParams = {
 
 export type LaunchResult = { ok: true; params: LaunchParams } | { ok: false; error: string };
 
+const EXTERNAL_PROPERTY_CUIDS = {
+  ArcSource: "wkwyf9rg2q",
+  ArcFeedback: "sp2animp5c",
+  ArcFile: "yy61b8s5rf",
+  VersionedModelURI: "hp8fq71nqg",
+  Published: "gt6c8qghah",
+  AutoUpload: "gzb2a572ti",
+  Store: "sisjgd3asy",
+  ApplyInSession: "l07ho4edfv",
+  LastUpload: "xswkl4m5un",
+} as const;
+
 export function parseLaunchParams(search: string, pageOrigin: string): LaunchResult {
   const q = new URLSearchParams(search);
   const manifest = q.get("manifest");
@@ -41,10 +53,13 @@ export function parseLaunchParams(search: string, pageOrigin: string): LaunchRes
 }
 
 // Fully qualified property type of a property on the manifest's external role.
-export function externalProperty(params: LaunchParams, localName: string): string {
-  return `${params.externalRoleType}$${localName}`;
+export function externalProperty(params: LaunchParams, localName: keyof typeof EXTERNAL_PROPERTY_CUIDS | "DomeinFileName"): string {
+  if (localName === "DomeinFileName") {
+    return "model://perspectives.domains#tiodn6tcyc$mo66to1n9c$External$kpz5vhpz0n";
+  }
+  return `${params.externalRoleType}$${EXTERNAL_PROPERTY_CUIDS[localName]}`;
 }
 
 export function isAuthor(params: LaunchParams): boolean {
-  return /\$Author$/.test(params.userRoleType);
+  return params.userRoleType === `${params.contextType}$wwijictoy2`;
 }

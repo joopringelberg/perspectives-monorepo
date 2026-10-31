@@ -56,7 +56,8 @@
 			"dataupgrade",
 			"perspectives-tcp",
 			"rabbitmq-service",
-			"sharedfilestorage"
+			"sharedfilestorage",
+			"arc-editor"
 		],
 		"purescript.sourcePath": ".",
 		"purescript.buildCommand": "pnpm exec spago build --json-errors",

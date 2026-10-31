@@ -2,7 +2,7 @@
 // The editor is served at `<MyContexts base>arceditor/` and connects to the same SharedWorker (and hence PDR) as MyContexts.
 // Only identity is handed over in the URL; the editor reads source, feedback and settings from the PDR itself.
 
-const VERSIONED_MODEL_MANIFEST = /#CouchdbManagement(@[0-9.]+)?\$VersionedModelManifest$/;
+const VERSIONED_MODEL_MANIFEST = /#xyfxpg3lzq(@[0-9.]+)?\$j4md0196ew$/;
 
 export function isVersionedModelManifest(contextType?: string): boolean {
   return !!contextType && VERSIONED_MODEL_MANIFEST.test(contextType);

@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { parseLaunchParams } from "../src/launchParams.ts";
+import { externalProperty, parseLaunchParams } from "../src/launchParams.ts";
 import { classifyFeedback, ManifestSession, WATCHED_PROPERTIES, type ProxyLike } from "../src/manifestSession.ts";
 
-const type = "model://perspectives.domains#CouchdbManagement$VersionedModelManifest";
-function params(role = "$Author") {
+const type = "model://perspectives.domains#xyfxpg3lzq$j4md0196ew";
+function params(role = "$wwijictoy2") {
   const q = new URLSearchParams({ manifest: "def:#m1$External", type, role: type + role, workerUrl: "https://h/www/assets/perspectives-sharedworker", workerName: "pdr-x" });
   const r = parseLaunchParams("?" + q, "https://h");
   if (!r.ok) throw new Error(r.error);
@@ -20,7 +20,10 @@ function fakeProxy(values: Record<string, string[]>) {
       assert.equal(rol, "def:#m1$External");
       assert.equal(roleType, type + "$External");
       receivers[prop] = receive;
-      receive(values[prop.split("$").pop()!] || []);
+      assert.match(prop, /^model:\/\/perspectives\.domains#[a-z0-9]{10}\$[a-z0-9]{10}\$External\$[a-z0-9]{10}$/);
+      const name = WATCHED_PROPERTIES.find(name => externalProperty(params(), name) === prop);
+      assert.ok(name);
+      receive(values[name] || []);
       return Promise.resolve({ request: "Unsubscribe", subject: prop, corrId: 1 });
     },
     async saveFile(pf, file, role) {
@@ -39,22 +42,22 @@ test("subscribes to all watched properties and tracks continuous updates", async
   await s.subscribe(p => changes.push(p), () => {});
   assert.equal(changes.length, WATCHED_PROPERTIES.length);
   assert.equal(s.state.ArcSource, "domain model://x#Y");
-  f.receivers[type + "$External$ArcFeedback"](["Parsing and compiling the Arc source file for x..."]);
+  f.receivers[type + "$External$sp2animp5c"](["Parsing and compiling the Arc source file for x..."]);
   assert.equal(classifyFeedback(s.state.ArcFeedback), "busy");
   s.close();
   assert.equal(f.unsubscribed.length, WATCHED_PROPERTIES.length);
 });
 
 test("save replaces the ArcFile attachment exactly like the file control, keeping database and file name", async () => {
-  const arcFile = JSON.stringify({ fileName: "mymodel.arc", propertyType: type + "$External$ArcFile", mimeType: "text/arc", database: "cw_models", roleFileName: "def:#m1$External" });
+  const arcFile = JSON.stringify({ fileName: "mymodel.arc", propertyType: type + "$External$yy61b8s5rf", mimeType: "text/arc", database: "cw_models", roleFileName: "def:#m1$External" });
   const f = fakeProxy({ ArcFile: [arcFile], Published: ["false"], AutoUpload: ["true"], Store: ["Repository"], ApplyInSession: ["false"] });
   const s = new ManifestSession(f.proxy, params());
   await s.subscribe(() => {}, () => {});
   await s.save("domain model://x#Y\n  case A\n");
   assert.equal(f.saved.length, 1);
-  assert.deepEqual(f.saved[0].pf, { fileName: "mymodel.arc", propertyType: type + "$External$ArcFile", mimeType: "text/arc", database: "cw_models", roleFileName: "def:#m1$External" });
+  assert.deepEqual(f.saved[0].pf, { fileName: "mymodel.arc", propertyType: type + "$External$yy61b8s5rf", mimeType: "text/arc", database: "cw_models", roleFileName: "def:#m1$External" });
   assert.equal(f.saved[0].text, "domain model://x#Y\n  case A\n");
-  assert.equal(f.saved[0].role, type + "$Author");
+  assert.equal(f.saved[0].role, type + "$wwijictoy2");
 });
 
 test("save without an existing ArcFile derives the file name from DomeinFileName", async () => {
