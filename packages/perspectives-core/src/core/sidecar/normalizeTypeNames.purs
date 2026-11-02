@@ -720,6 +720,18 @@ instance normalizeQfdInst :: Normalize QueryFunctionDescription where
         Right (adt :: ADT ContextType) -> do
           adt' <- traverse fqn2tid adt
           pure $ ContextTypeFilter $ writeJSON adt'
+    normalizeQueryFunction (PublicContext ctxt (Just serialisedADT)) = do
+      case readJSON serialisedADT of
+        Left e -> pure $ PublicContext ctxt (Just serialisedADT) -- if we cannot parse the ADT, leave it as is
+        Right (adt :: ADT ContextType) -> do
+          adt' <- traverse fqn2tid adt
+          pure $ PublicContext ctxt (Just $ writeJSON adt')
+    normalizeQueryFunction (PublicRole role (Just serialisedADT)) = do
+      case readJSON serialisedADT of
+        Left e -> pure $ PublicRole role (Just serialisedADT) -- if we cannot parse the ADT, leave it as is
+        Right (adt :: ADT RoleInContext) -> do
+          adt' <- traverse normalize adt
+          pure $ PublicRole role (Just $ writeJSON adt')
     normalizeQueryFunction f = pure f
 
 instance normalizeNotificationInst :: Normalize Notification where

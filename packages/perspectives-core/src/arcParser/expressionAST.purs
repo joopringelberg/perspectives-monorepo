@@ -67,7 +67,7 @@ data SimpleStep
   | RegEx ArcPosition RegExP
 
   | PublicRole ArcPosition String (Maybe String)
-  | PublicContext ArcPosition String
+  | PublicContext ArcPosition String (Maybe String)
 
   -- These step types are used in Perspectives.Parsing.Arc.PhaseThree for the standard variables.
   | TypeTimeOnlyContext ArcPosition String
@@ -208,7 +208,7 @@ instance prettyPrintSimpleStep :: PrettyPrint SimpleStep where
   prettyPrint' t (TypeTimeOnlyCalculatedRole _ s) = "TypeTimeOnlyCalculatedRole " <> s
   prettyPrint' t (RegEx _ r) = show r
   prettyPrint' t (PublicRole _ u mtype) = "PublicRole " <> u <> maybe "" (\typeName -> " (" <> typeName <> ")") mtype
-  prettyPrint' t (PublicContext _ u) = "PublicContext " <> u
+  prettyPrint' t (PublicContext _ u mtype) = "PublicContext " <> u <> maybe "" (\typeName -> " (" <> typeName <> ")") mtype
 
 derive instance Generic TypeCombination _
 instance Show TypeCombination where

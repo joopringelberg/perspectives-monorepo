@@ -179,7 +179,7 @@ simpleStep' =
       <|>
         Simple <$> (PublicRole <$> getPosition <*> (reserved "publicrole" *> pubParser) <*> optionMaybe (try $ token.symbol "(" *> arcIdentifier <* token.symbol ")"))
       <|>
-        Simple <$> (PublicContext <$> getPosition <*> (reserved "publiccontext" *> pubParser))
+        Simple <$> (PublicContext <$> getPosition <*> (reserved "publiccontext" *> pubParser) <*> optionMaybe (try $ token.symbol "(" *> arcIdentifier <* token.symbol ")"))
       <|>
         Simple <$> (SequenceFunction <$> getPosition <*> sequenceFunction)
       <|>
@@ -444,7 +444,7 @@ startOf stp = case stp of
   startOfSimple (ContextTypeIndividual p _) = p
   startOfSimple (Value p _ _) = p
   startOfSimple (PublicRole p _ _) = p
-  startOfSimple (PublicContext p _) = p
+  startOfSimple (PublicContext p _ _) = p
   startOfSimple (Filler p _) = p
   startOfSimple (Filled p _ _) = p
   startOfSimple (Context p) = p
@@ -492,7 +492,7 @@ endOf stp = case stp of
   endOfSimple (ContextTypeIndividual (ArcPosition { line, column }) id) = ArcPosition { line, column: column + 14 + length id }
   endOfSimple (Value (ArcPosition { line, column }) _ v) = ArcPosition ({ line, column: column + length v + 1 })
   endOfSimple (PublicRole (ArcPosition { line, column }) url _) = ArcPosition ({ line, column: column + length url + 1 })
-  endOfSimple (PublicContext (ArcPosition { line, column }) url) = ArcPosition ({ line, column: column + length url + 1 })
+  endOfSimple (PublicContext (ArcPosition { line, column }) url _) = ArcPosition ({ line, column: column + length url + 1 })
   endOfSimple (Filler (ArcPosition { line, column }) _) = ArcPosition { line, column: column + 7 }
   endOfSimple (Filled (ArcPosition { line, column }) _ _) = ArcPosition { line, column: column + 6 }
   endOfSimple (Context (ArcPosition { line, column })) = ArcPosition { line, column: column + 7 }

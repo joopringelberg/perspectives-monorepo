@@ -23,9 +23,10 @@
 module Perspectives.RunMonadPerspectivesTransaction where
 
 import Control.Monad.AvarMonadAsk (get, gets, modify) as AA
-import Control.Monad.Error.Class (catchError, throwError)
+import Control.Monad.Error.Class (catchError, throwError, try)
 import Control.Monad.Reader (lift, runReaderT)
 import Data.Array (difference, filter, filterA, index, intercalate, length, null, sort, unsafeIndex, cons, reverse)
+import Data.Either (either)
 import Data.Foldable (foldl, for_)
 import Data.Map as MAP
 import Data.Maybe (Maybe(..), fromJust, isNothing)
@@ -44,7 +45,7 @@ import Partial.Unsafe (unsafePartial)
 import Perspectives.CollectAffectedContexts (reEvaluatePublicFillerChanges)
 import Perspectives.ContextStateCompiler (enteringState, evaluateContextState, exitingState)
 import Perspectives.CoreTypes (MPT, MonadPerspectives, MonadPerspectivesTransaction, PendingSettledStack, RepeatingTransaction(..), liftToInstanceLevel, popPendingSettledFrame, pushPendingSettledFrame, (##=), (##>), (##>>))
-import Perspectives.Deltas (TransactionPerUser, distributeTransaction)
+import Perspectives.Deltas (TransactionPerUser, distributeTransaction, publicRoleTransactions, sendPeerTransactions)
 import Perspectives.DependencyTracking.Dependency (lookupActiveSupportedEffect)
 import Perspectives.Error.Pretty (humanizePerspectivesWarning)
 import Perspectives.External.HiddenFunctionCache (lookupHiddenFunction, lookupHiddenFunctionNArgs)
@@ -55,7 +56,7 @@ import Perspectives.Instances.Me (getMyType)
 import Perspectives.Instances.ObjectGetters (Filler_(..), context, contextType, filler2filledFromDatabase_, getActiveRoleStates, getActiveStates, roleType, roleType_)
 import Perspectives.Logging (debugState, errorCompiler, traceState, warnState)
 import Perspectives.ModelDependencies (sysUser)
-import Perspectives.Persistent (entityExists, tryRemoveEntiteit)
+import Perspectives.Persistent (entityExists, saveMarkedPublicResources, tryRemoveEntiteit)
 import Perspectives.PerspectivesState (addBinding, addWarning, clearPublicRolesJustLoaded, decreaseTransactionLevel, getPublicRolesJustLoaded, increaseTransactionLevel, nextTransactionNumber, pushFrame, restoreFrame, transactionFlag, transactionLevel)
 import Perspectives.Query.QueryTypes (Calculation(..))
 import Perspectives.Query.UnsafeCompiler (context2propertyValue, getCalculatedRoleInstances)
@@ -71,7 +72,7 @@ import Perspectives.Sync.InvertedQueryResult (InvertedQueryResult(..))
 import Perspectives.Sync.Transaction (Transaction(..), TransactionDestination(..), createTransaction)
 import Perspectives.Types.ObjectGetters (contextRootStates, publicUrl_, roleRootStates)
 import Perspectives.Warning (PerspectivesWarning(..))
-import Prelude (Unit, bind, discard, flip, join, not, pure, show, unit, void, ($), (&&), (*>), (<$>), (<<<), (<>), (>), (>=>), (>>=), (||), (/=))
+import Prelude (Unit, bind, discard, flip, join, not, pure, show, unit, unless, void, ($), (&&), (*>), (<$>), (<<<), (<>), (>), (>=>), (>>=), (||), (/=))
 import Unsafe.Coerce (unsafeCoerce)
 
 -----------------------------------------------------------
@@ -328,34 +329,40 @@ phase2 share authoringRole r = do
     -- there have been no new items added during state evaluation.
     -- Notice that there may be ContextRemoval and RoleRemoval items, though!
     ft <- AA.get
-    (publicRoleTransactions :: TransactionPerUser) <-
+    (transactionPerUser :: TransactionPerUser) <-
       if share then lift $ distributeTransaction ft
       else pure MAP.empty
+    -- Publish to public roles before sending to peers, so that peers can retrieve the public resources they learn about.
     -- Collect all deltas in order, add the public resource schemes and remove doubles. Then execute.
-    void $ forWithIndex publicRoleTransactions
-      \destination publicRoleTransaction -> case destination of
-        (PublicDestination userId) -> do
-          lift $ debugState $ padding <> "Processing public role transaction for user " <> show userId <> " in transaction " <> show transactionNumber
-          userType <- lift $ roleType_ userId
-          mUrl <- lift $ publicUrl_ userType
-          case mUrl of
-            Nothing -> throwError (error $ "A user role type that is neither the system User nor a public role: " <> show userType <> " ('" <> show userId <> "')")
-            Just (Q qfd) -> do
-              ctxt <- lift $ (userId ##>> context)
-              urlComputer <- lift $ context2propertyValue qfd
-              murl <- lift (ctxt ##> urlComputer)
-              case murl of
-                Just (Value url) | url /= "/" -> do
-                  deltas <- expandDeltas publicRoleTransaction url
-                  -- These deltas for a public role aren't sent anywhere but executed
-                  -- right here. Notice that no changes to local state will result from executing such a transaction.
-                  -- (except that public instances will be cached)
-                  -- Run embedded, do not share.
-                  lift $ runEmbeddedIfNecessary false authoringRole (executeDeltas deltas)
-                -- If the URL is not computed, we log this and do nothing. In this installation, there probably should not be a proxy for the public role anyway; but we don't have a way of knowing that on constructing the context.
-                _ -> lift $ toReadable userType >>= \readableUserType -> debugState (padding <> "Cannot compute a URL to publish to for this user role type and instance: " <> show readableUserType <> " ('" <> show userId <> "')")
-            Just (S _ _) -> throwError (error ("Attempt to acces QueryFunctionDescription of the url of a public role before the expression has been compiled. This counts as a system programming error. User type = " <> (show userType)))
-        Peer _ _ -> pure unit
+    published <- try do
+      void $ forWithIndex (publicRoleTransactions transactionPerUser)
+        \destination publicRoleTransaction -> case destination of
+          (PublicDestination userId) -> do
+            lift $ debugState $ padding <> "Processing public role transaction for user " <> show userId <> " in transaction " <> show transactionNumber
+            userType <- lift $ roleType_ userId
+            mUrl <- lift $ publicUrl_ userType
+            case mUrl of
+              Nothing -> throwError (error $ "A user role type that is neither the system User nor a public role: " <> show userType <> " ('" <> show userId <> "')")
+              Just (Q qfd) -> do
+                ctxt <- lift $ (userId ##>> context)
+                urlComputer <- lift $ context2propertyValue qfd
+                murl <- lift (ctxt ##> urlComputer)
+                case murl of
+                  Just (Value url) | url /= "/" -> do
+                    deltas <- expandDeltas publicRoleTransaction url
+                    -- These deltas for a public role aren't sent anywhere but executed
+                    -- right here. Notice that no changes to local state will result from executing such a transaction.
+                    -- (except that public instances will be cached)
+                    -- Run embedded, do not share.
+                    lift $ runEmbeddedIfNecessary false authoringRole (executeDeltas deltas)
+                  -- If the URL is not computed, we log this and do nothing. In this installation, there probably should not be a proxy for the public role anyway; but we don't have a way of knowing that on constructing the context.
+                  _ -> lift $ toReadable userType >>= \readableUserType -> debugState (padding <> "Cannot compute a URL to publish to for this user role type and instance: " <> show readableUserType <> " ('" <> show userId <> "')")
+              Just (S _ _) -> throwError (error ("Attempt to acces QueryFunctionDescription of the url of a public role before the expression has been compiled. This counts as a system programming error. User type = " <> (show userType)))
+          Peer _ _ -> pure unit
+      unless (MAP.isEmpty $ publicRoleTransactions transactionPerUser) (lift saveMarkedPublicResources)
+    -- Send to peers even if publishing failed; then report the failure.
+    lift $ sendPeerTransactions transactionPerUser
+    either throwError pure published
     -- Remove the deltas; we don't want to execute them again.
     AA.modify (\t -> over Transaction (\tr -> tr { deltas = [] }) t)
     -- Now finally remove contexts and roles.

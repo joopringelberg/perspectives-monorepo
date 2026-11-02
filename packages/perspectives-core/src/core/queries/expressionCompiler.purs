@@ -46,7 +46,7 @@ import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (MonadPerspectives, (###=))
 import Perspectives.DependencyTracking.Array.Trans (runArrayT)
 import Perspectives.DomeinCache (modifyCalculatedPropertyInDomeinFile, modifyCalculatedRoleInDomeinFile)
-import Perspectives.Error.Pretty (humanizePerspectivesError)
+import Perspectives.Error.Pretty (humanizePerspectivesError, renderPerspectivesError)
 import Perspectives.External.CoreModuleList (isExternalCoreModule)
 import Perspectives.External.HiddenFunctionCache (lookupHiddenFunctionCardinality, lookupHiddenFunctionIsEffect, lookupHiddenFunctionNArgs)
 import Perspectives.Identifiers (endsWithSegments, isExternalRole, isTypeUri, qualifyWith, typeUri2ModelUri)
@@ -63,6 +63,7 @@ import Perspectives.Parsing.Arc.PhaseTwo.TypeCombination (compileContextTypeComb
 import Perspectives.Parsing.Arc.PhaseTwoDefs (CurrentlyCalculated(..), PhaseThree, addBinding, getsDF, isBeingCalculated, isIndexedContextInCurrentCompilation, isIndexedRoleInCurrentCompilation, lift2, lookupVariableBinding, loopErrorMessage, throwError, withCurrentCalculation, withFrame)
 import Perspectives.Parsing.Arc.Position (ArcPosition, endOfName)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
+import Perspectives.PerspectivesState (addWarning)
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), RoleInContext(..), context2RoleInContextADT, domain, equalDomainKinds, functional, makeComposition, mandatory, productOfDomains, range, replaceContext, replaceRange, roleInContext2Role, setCardinality, sumOfDomains, traverseQfd)
 import Perspectives.Query.QueryTypes (Range) as QT
 import Perspectives.Representation.ADT (ADT(..), commonLeavesInADT)
@@ -84,7 +85,7 @@ import Perspectives.Representation.TypeIdentifiers (RoleKind(..)) as RTI
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.Types.ObjectGetters (allTypesInContextADT, allTypesInRoleADT, enumeratedRoleContextType, equalsOrGeneralisesRoleInContext, equalsOrSpecialisesRoleInContext, isUnlinked_, qualifyContextInDomain, qualifyEnumeratedRoleInDomain, qualifyRoleInDomain)
-import Prelude (bind, discard, eq, map, pure, show, unit, void, ($), (&&), (-), (<$>), (<*>), (<<<), (<>), (==), (>>=), (||))
+import Prelude (Unit, bind, discard, eq, map, pure, show, unit, unless, void, ($), (&&), (-), (<$>), (<*>), (<<<), (<>), (==), (>>=), (||))
 import Simple.JSON (writeJSON)
 
 ------------------------------------------------------------------------------------
@@ -454,7 +455,7 @@ compileSimpleStep currentDomain (PublicRole pos ident Nothing) = do
   pure $ SQD currentDomain (QF.PublicRole (RoleInstance ident) Nothing) (RDOM $ UET $ RoleInContext { context: cType, role: rType }) True True
 
 compileSimpleStep currentDomain (PublicRole pos ident (Just declaredType)) = do
-  expectedType <- resolvePublicRoleType pos declaredType
+  expectedType <- resolvePublicRoleType pos ident declaredType
   pure $ SQD
     currentDomain
     (QF.PublicRole (RoleInstance ident) (Just $ writeJSON expectedType))
@@ -462,9 +463,18 @@ compileSimpleStep currentDomain (PublicRole pos ident (Just declaredType)) = do
     True
     True
 
-compileSimpleStep currentDomain (PublicContext pos ident) = do
+compileSimpleStep currentDomain (PublicContext pos ident Nothing) = do
   rType <- lift2 $ contextType_ (ContextInstance ident)
-  pure $ SQD currentDomain (QF.PublicContext (ContextInstance ident)) (CDOM $ UET $ rType) True True
+  pure $ SQD currentDomain (QF.PublicContext (ContextInstance ident) Nothing) (CDOM $ UET $ rType) True True
+
+compileSimpleStep currentDomain (PublicContext pos ident (Just declaredType)) = do
+  expectedType <- resolvePublicContextType pos ident declaredType
+  pure $ SQD
+    currentDomain
+    (QF.PublicContext (ContextInstance ident) (Just $ writeJSON expectedType))
+    (CDOM expectedType)
+    True
+    True
 
 compileSimpleStep currentDomain s@(Value pos range stringRepresentation) = pure $
   SQD currentDomain (QF.Constant range stringRepresentation) (VDOM range Nothing) True True
@@ -710,8 +720,9 @@ compileSimpleStep currentDomain (Me _) = pure $ SQD currentDomain (QF.DataTypeGe
 
 -- | Resolve an asserted public-role type without retrieving the public resource.
 -- | A context type denotes its External role; an enumerated role type denotes itself.
-resolvePublicRoleType :: ArcPosition -> String -> PhaseThree (ADT RoleInContext)
-resolvePublicRoleType pos declaredType = do
+-- | Warns if a context type is asserted for an identifier that is not that of an External role.
+resolvePublicRoleType :: ArcPosition -> String -> String -> PhaseThree (ADT RoleInContext)
+resolvePublicRoleType pos ident declaredType = do
   declaredRole <- lift2 $ try $ getEnumeratedRole (EnumeratedRoleType declaredType)
   case declaredRole of
     Right (EnumeratedRole { id, context }) ->
@@ -719,11 +730,35 @@ resolvePublicRoleType pos declaredType = do
     Left _ -> do
       declaredContext <- lift2 $ try $ getContext (ContextType declaredType)
       case declaredContext of
-        Right _ -> pure $ UET $ RoleInContext
-          { context: ContextType declaredType
-          , role: EnumeratedRoleType $ externalRoleType_ declaredType
-          }
+        Right _ -> do
+          unless (isExternalRole ident)
+            (warnPhaseThree $ PublicRoleWithContextType ident (ContextType declaredType) pos (endOfName pos ident))
+          pure $ UET $ RoleInContext
+            { context: ContextType declaredType
+            , role: EnumeratedRoleType $ externalRoleType_ declaredType
+            }
         Left _ -> throwError $ UnknownRole pos (endOfName pos declaredType) declaredType
+
+-- | Resolve an asserted public-context type without retrieving the public resource.
+-- | A role type is accepted with a warning; it then denotes its own context type
+-- | (for an External role type, that is the context it is the External role of).
+resolvePublicContextType :: ArcPosition -> String -> String -> PhaseThree (ADT ContextType)
+resolvePublicContextType pos ident declaredType = do
+  declaredContext <- lift2 $ try $ getContext (ContextType declaredType)
+  case declaredContext of
+    Right _ -> pure $ UET $ ContextType declaredType
+    Left _ -> do
+      declaredRole <- lift2 $ try $ getEnumeratedRole (EnumeratedRoleType declaredType)
+      case declaredRole of
+        Right (EnumeratedRole { context }) -> do
+          warnPhaseThree $ PublicContextWithRoleType ident (EnumeratedRoleType declaredType) pos (endOfName pos ident)
+          pure $ UET context
+        Left _ -> throwError $ UnknownContext pos (endOfName pos declaredType) (ContextType declaredType)
+
+warnPhaseThree :: PerspectivesError -> PhaseThree Unit
+warnPhaseThree e = lift2 do
+  rendered <- renderPerspectivesError e
+  addWarning { message: rendered, error: "", externalRoleId: "", contextName: "" }
 
 compileUnaryStep :: Domain -> UnaryStep -> FD
 compileUnaryStep currentDomain (LogicalNot pos s) = do

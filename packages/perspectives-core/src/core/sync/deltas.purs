@@ -26,7 +26,7 @@ import Control.Monad.AvarMonadAsk (modify, gets) as AA
 import Control.Monad.State.Trans (StateT, execStateT, get, lift, modify, put)
 import Data.Array (catMaybes, concat, elemIndex, filter, filterA, foldl, head, nub, null, snoc, sortBy, union)
 import Data.DateTime.Instant (toDateTime)
-import Data.Map (Map, empty, filter, insert, lookup, toUnfoldable, values) as Map
+import Data.Map (Map, empty, filter, filterKeys, insert, lookup, toUnfoldable, values) as Map
 import Data.Maybe (Maybe(..), fromJust, isJust, maybe)
 import Data.Newtype (over, unwrap)
 import Data.Ordering (Ordering)
@@ -76,23 +76,23 @@ import Perspectives.UnschemedIdentifiers (UnschemedResourceIdentifier, unschemeP
 import Prelude (Unit, bind, compare, discard, eq, flip, map, not, pure, show, unit, void, when, ($), (*>), (<$>), (<<<), (<>), (==), (>=>), (>>=), (>>>), (||))
 import Simple.JSON (writeJSON)
 
--- | Splits the transaction in versions specific for each peer and sends them.
--- | If a public roles are involved, will return their TransactionForPeer instances.
--- IMPLEMENTATION NOTICE: we cannot handle these instances here by calling executeTransactionForPublicRole
+-- | Splits the transaction in versions specific for each peer and public role, but does not send them.
+-- | Send the peer versions with `sendPeerTransactions`; select the public role versions with `publicRoleTransactions`.
+-- | The caller should publish the public role versions before sending to peers, so that peers can retrieve
+-- | the public resources they learn about.
+-- IMPLEMENTATION NOTICE: we cannot handle the public role versions here by calling executeTransactionForPublicRole
 -- because that would need cyclic model imports.
 distributeTransaction :: Transaction -> MonadPerspectives TransactionPerUser
 distributeTransaction (Transaction tr@{ changedDomeinFiles }) = do
   for_ changedDomeinFiles (ModelUri >>> saveCachedDomeinFile)
   -- Sort the deltas into the required partial order before distributing to peers.
   let sortedTransaction = Transaction tr { deltas = sortTransactionDeltas tr.deltas }
-  -- Send the Transaction to all involved.
-  addPublicKeysToTransaction sortedTransaction >>= distributeTransactie'
+  addPublicKeysToTransaction sortedTransaction >>= transactieForEachUser
 
-distributeTransactie' :: Transaction -> MonadPerspectives TransactionPerUser
-distributeTransactie' t = do
-  (customizedTransacties :: TransactionPerUser) <- transactieForEachUser t
-  sendPeerTransactions customizedTransacties
-  map (unsafePartial fromJust) <<< Map.filter isJust <$> forWithIndex customizedTransacties sendTransactie
+publicRoleTransactions :: TransactionPerUser -> TransactionPerUser
+publicRoleTransactions = Map.filterKeys case _ of
+  PublicDestination _ -> true
+  Peer _ _ -> false
 
 sendPeerTransactions :: TransactionPerUser -> MonadPerspectives Unit
 sendPeerTransactions customizedTransacties =
@@ -152,11 +152,6 @@ sendPeerTransactions customizedTransacties =
   fromRecipient :: UnschemedResourceIdentifier -> Array { recipient :: String, wrappedKey :: String } -> String
   fromRecipient recipient wrappedKeys =
     unsafePartial $ fromJust $ _.wrappedKey <$> head (filter (\wk -> wk.recipient == unwrap recipient) wrappedKeys)
-
--- | If we have the visitor user, handle it by augmenting resources in the public store with the deltas.
-sendTransactie :: TransactionDestination -> TransactionForPeer -> MonadPerspectives (Maybe TransactionForPeer)
-sendTransactie (Peer _ _) _ = pure Nothing
-sendTransactie (PublicDestination r) t = pure $ Just t
 
 -- | Send a transaction using the Couchdb Channel.
 sendTransactieToUserUsingCouchdb :: Url -> String -> TransactionForPeer -> MonadPerspectives Unit

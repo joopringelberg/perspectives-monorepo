@@ -372,7 +372,7 @@ data QueryFunction
   | RoleIndividual RoleInstance
   | ContextIndividual ContextInstance
 
-  | PublicContext ContextInstance
+  | PublicContext ContextInstance (Maybe String)
   | PublicRole RoleInstance (Maybe String)
 
   | CreateContext ContextType RoleType
@@ -443,7 +443,7 @@ instance showQueryFunction :: Show QueryFunction where
   show (RoleIndividual roleInstance) = "RoleIndividual " <> show roleInstance
   show (ContextIndividual contextInstance) = "ContextIndividual " <> show contextInstance
 
-  show (PublicContext contextInstance) = "PublicContext " <> show contextInstance
+  show (PublicContext contextInstance _) = "PublicContext " <> show contextInstance
   show (PublicRole roleInstance _) = "PublicRole " <> show roleInstance
 
   show (CreateContext contextType roleType) = "CreateContext " <> show contextType <> " " <> show roleType
@@ -514,7 +514,7 @@ instance eqQueryFunction :: Eq QueryFunction where
   eq (RoleIndividual a) (RoleIndividual b) = eq a b
   eq (ContextIndividual a) (ContextIndividual b) = eq a b
 
-  eq (PublicContext a) (PublicContext b) = eq a b
+  eq (PublicContext a assertedType) (PublicContext b assertedType') = eq a b && eq assertedType assertedType'
   eq (PublicRole a assertedType) (PublicRole b assertedType') = eq a b && eq assertedType assertedType'
 
   eq (CreateContext a p) (CreateContext b q) = eq a b && eq p q
@@ -589,7 +589,13 @@ instance writeForeignQueryFunction :: WriteForeign QueryFunction where
   writeImpl (RoleIndividual roleInstance) = writeImpl { constructor: "RoleIndividual", arg1: writeJSON roleInstance, arg2: "" }
   writeImpl (ContextIndividual contextInstance) = writeImpl { constructor: "ContextIndividual", arg1: writeJSON contextInstance, arg2: "" }
 
-  writeImpl (PublicContext contextInstance) = writeImpl { constructor: "PublicContext", arg1: writeJSON contextInstance, arg2: "" }
+  writeImpl (PublicContext contextInstance assertedType) = writeImpl
+    { constructor: "PublicContext"
+    , arg1: writeJSON contextInstance
+    , arg2: case assertedType of
+        Nothing -> ""
+        Just typeAssertion -> typeAssertion
+    }
   writeImpl (PublicRole roleInstance assertedType) = writeImpl
     { constructor: "PublicRole"
     , arg1: writeJSON roleInstance
@@ -669,7 +675,10 @@ instance readForeignQueryFunction :: ReadForeign QueryFunction where
       "Constant", range, string -> flip Constant string <$> readJSON' range
       "RoleIndividual", roleInstance, _ -> RoleIndividual <<< RoleInstance <$> readJSON' roleInstance
       "ContextIndividual", contextInstance, _ -> ContextIndividual <<< ContextInstance <$> readJSON' contextInstance
-      "PublicContext", contextInstance, _ -> PublicContext <<< ContextInstance <$> readJSON' contextInstance
+      "PublicContext", contextInstance, assertedType -> do
+        ctxt <- ContextInstance <$> readJSON' contextInstance
+        if assertedType == "" then pure $ PublicContext ctxt Nothing
+        else pure $ PublicContext ctxt (Just assertedType)
       "PublicRole", roleInstance, assertedType -> do
         role <- RoleInstance <$> readJSON' roleInstance
         if assertedType == "" then pure $ PublicRole role Nothing
@@ -739,7 +748,10 @@ instance ordQueryFunction :: Ord QueryFunction where
   compare (RoleIndividual roleInstance) (RoleIndividual roleInstance') = compare roleInstance roleInstance'
   compare (ContextIndividual contextInstance) (ContextIndividual contextInstance') = compare contextInstance contextInstance'
 
-  compare (PublicContext contextInstance) (PublicContext contextInstance') = compare contextInstance contextInstance'
+  compare (PublicContext contextInstance assertedType) (PublicContext contextInstance' assertedType') =
+    case compare contextInstance contextInstance' of
+      EQ -> compare assertedType assertedType'
+      ordering -> ordering
   compare (PublicRole roleInstance assertedType) (PublicRole roleInstance' assertedType') =
     case compare roleInstance roleInstance' of
       EQ -> compare assertedType assertedType'

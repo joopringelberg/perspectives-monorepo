@@ -24,7 +24,7 @@ module Perspectives.Query.Interpreter where
 
 import Control.Alternative (guard)
 import Control.Bind (join)
-import Control.Monad.Error.Class (catchError, throwError)
+import Control.Monad.Error.Class (catchError, throwError, try)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Writer (WriterT, execWriterT, tell)
 import Control.Plus (empty)
@@ -585,18 +585,51 @@ interpretSQD (SQD _ (PublicRole individual assertedType) _ _ _) a = case asserte
     case readJSON typeAssertion of
       Left e -> throwError $ error $ "Cannot read asserted public-role type: " <> show e
       Right (expectedType :: ADT RoleInContext) -> do
-        matches <- (lift $ roleMatchesTypeFilter individual expectedType) :: AssumptionTracking Boolean
-        if matches then pure [ consOnMainPath (R individual) a ]
-        else do
-          lift $ addWarning
-            { message: "Public resource '" <> unwrap individual <> "' does not satisfy its asserted role type " <> show expectedType <> "; it was ignored."
-            , error: ""
-            , externalRoleId: ""
-            , contextName: ""
-            }
-          pure []
+        -- A public resource may not have been published yet, or be unreachable. Then it simply yields no result.
+        (lift $ try $ roleMatchesTypeFilter individual expectedType) >>= case _ of
+          Left e -> do
+            lift $ addWarning
+              { message: "Public resource '" <> unwrap individual <> "' could not be retrieved; it was ignored."
+              , error: show e
+              , externalRoleId: ""
+              , contextName: ""
+              }
+            pure []
+          Right true -> pure [ consOnMainPath (R individual) a ]
+          Right false -> do
+            lift $ addWarning
+              { message: "Public resource '" <> unwrap individual <> "' does not satisfy its asserted role type " <> show expectedType <> "; it was ignored."
+              , error: ""
+              , externalRoleId: ""
+              , contextName: ""
+              }
+            pure []
 
-interpretSQD (SQD _ (PublicContext individual) _ _ _) a = pure $ consOnMainPath (C individual) a
+interpretSQD (SQD _ (PublicContext individual assertedType) _ _ _) a = case assertedType of
+  Nothing -> pure $ consOnMainPath (C individual) a
+  Just typeAssertion -> ArrayT do
+    case readJSON typeAssertion of
+      Left e -> throwError $ error $ "Cannot read asserted public-context type: " <> show e
+      Right (expectedType :: ADT ContextType) -> do
+        -- A public resource may not have been published yet, or be unreachable. Then it simply yields no result.
+        (lift $ try $ contextMatchesTypeFilter individual expectedType) >>= case _ of
+          Left e -> do
+            lift $ addWarning
+              { message: "Public resource '" <> unwrap individual <> "' could not be retrieved; it was ignored."
+              , error: show e
+              , externalRoleId: ""
+              , contextName: ""
+              }
+            pure []
+          Right true -> pure [ consOnMainPath (C individual) a ]
+          Right false -> do
+            lift $ addWarning
+              { message: "Public resource '" <> unwrap individual <> "' does not satisfy its asserted context type " <> show expectedType <> "; it was ignored."
+              , error: ""
+              , externalRoleId: ""
+              , contextName: ""
+              }
+            pure []
 
 interpretSQD (SQD _ (RegExMatch (RegExP reg)) _ _ _) a = pure $ consOnMainPath (V "RegExMatch" (Value result)) a
   where

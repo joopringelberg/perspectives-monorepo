@@ -233,14 +233,17 @@ After state evaluation, the Transaction is inspected for new items added since p
 
 When the transaction is sharing (`share = true`), `distributeTransaction` is called:
 - First saves any changed domain files.
-- Then partitions the deltas by recipient using `transactieForEachUser` (every delta names the user instances who should receive it; `userRoleBottoms` maps role instances to their outermost filler to find the actual `PerspectivesUser`).
-- For each `Peer` destination: sends the `TransactionForPeer` via AMQP (or saves to the outgoing post database if not connected).
-- For each `PublicDestination`: `expandDeltas` decorates the deltas with the public-resource storage URL, then `executeDeltas` applies them locally (writing to the public CouchDB store). These deltas are *not* sent anywhere.
+- Then partitions the deltas by recipient using `transactieForEachUser` (every delta names the user instances who should receive it; `userRoleBottoms` maps role instances to their outermost filler to find the actual `PerspectivesUser`). It does not send anything.
+
+`phase2` then:
+- For each `PublicDestination` (selected with `publicRoleTransactions`): `expandDeltas` decorates the deltas with the public-resource storage URL, then `executeDeltas` applies them locally. These deltas are *not* sent anywhere.
+- Saves the public resources that are marked for storage (`saveMarkedPublicResources`), so they are in the public CouchDB store before any peer can learn about them. Without this, they would wait for the periodic persistence pass, and a peer could see, say, an External role without its context.
+- For each `Peer` destination: sends the `TransactionForPeer` via AMQP (or saves to the outgoing post database if not connected), using `sendPeerTransactions`. Peers are sent their transactions even if publishing failed; the failure is rethrown afterwards.
 - `deltas` is cleared from the Transaction to prevent re-execution.
 
 See [Transaction Distribution to Peers](transaction-distribution.md) for details, including how `pub:` and `def:` PerspectivesUsers resources are handled.
 
-When `share = false`, `distributeTransaction` is skipped and `publicRoleTransactions` is an empty map.
+When `share = false`, `distributeTransaction` is skipped and the map of destinations is empty.
 
 ### Step 2.4 – Physical removal of contexts and roles
 
@@ -335,8 +338,9 @@ runMonadPerspectivesTransaction' share authoringRole action
           │
           ├─ IF new createdContexts/Roles, rolesToExit, or destructive scheduledAssignments: ──► phase1
           │
-          ├─ [if share] distributeTransaction → send to Peer destinations
-          │                                  → execute on PublicDestination destinations
+          ├─ [if share] distributeTransaction → one TransactionForPeer per destination
+          │    ├─ execute on PublicDestination destinations, then saveMarkedPublicResources
+          │    └─ sendPeerTransactions → send to Peer destinations
           ├─ Clear deltas
           ├─ Remove contexts (ContextRemoval) and roles (RoleRemoval)
           ├─ [if non-sharing and removals happened] re-run recursivelyEvaluateStates on phase-2 entry invertedQueryResults

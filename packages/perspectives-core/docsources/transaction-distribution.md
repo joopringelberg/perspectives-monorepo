@@ -14,14 +14,13 @@ addDelta                      (while the transaction runs)
        stored in Transaction.userRoleBottoms
 
 phase2 → distributeTransaction (only for sharing transactions)
-  ├─ save changed DomeinFiles
-  ├─ sortTransactionDeltas
-  ├─ addPublicKeysToTransaction
-  └─ distributeTransactie'
-       ├─ transactieForEachUser   one TransactionForPeer per destination
-       ├─ sendPeerTransactions    group, encrypt, send over AMQP (Peer destinations)
-       └─ sendTransactie          return TransactionForPeer for PublicDestinations
-                                  (phase2 executes them against the public store)
+  │  ├─ save changed DomeinFiles
+  │  ├─ sortTransactionDeltas
+  │  ├─ addPublicKeysToTransaction
+  │  └─ transactieForEachUser       one TransactionForPeer per destination
+  ├─ publicRoleTransactions         execute PublicDestinations against the public store,
+  │                                 then saveMarkedPublicResources
+  └─ sendPeerTransactions           group, encrypt, send over AMQP (Peer destinations)
 ```
 
 ---
@@ -59,13 +58,14 @@ The `Eq` and `Ord` instances of `TransactionDestination` compare a `Peer` **on i
 
 ## 3. Public destinations
 
-For a `PublicDestination`, `sendTransactie` returns the `TransactionForPeer` instead of sending it. `phase2` (in `Perspectives.RunMonadPerspectivesTransaction`) then:
+`publicRoleTransactions` selects the `TransactionForPeer`s for `PublicDestination`s. `phase2` (in `Perspectives.RunMonadPerspectivesTransaction`) then:
 
 - computes the publication URL from the public role's `at` expression;
 - expands the deltas so that they target `pub:` identifiers;
-- executes them locally against the public database.
+- executes them locally against the public database;
+- saves the public resources marked for storage (`saveMarkedPublicResources`).
 
-These deltas never travel over AMQP. See [Public Resource Identifiers](public-resource-identifiers.md) for the `pub:` scheme.
+Only then does it send the peer transactions. So a peer that learns about a public resource can retrieve it: it does not have to wait for the periodic persistence pass. These deltas never travel over AMQP. See [Public Resource Identifiers](public-resource-identifiers.md) for the `pub:` scheme.
 
 ---
 
@@ -133,7 +133,7 @@ Also, until the peer's first transaction arrives, the PDR reads the peer's data 
 
 ## Related modules
 
-- `Perspectives.Deltas`: `addDelta`, `computeUserRoleBottom`, `distributeTransaction`, `transactieForEachUser`, `sendPeerTransactions`, `sendTransactieToUserUsingAMQP`
+- `Perspectives.Deltas`: `addDelta`, `computeUserRoleBottom`, `distributeTransaction`, `transactieForEachUser`, `publicRoleTransactions`, `sendPeerTransactions`, `sendTransactieToUserUsingAMQP`
 - `Perspectives.Sync.Transaction`: `Transaction`, `TransactionDestination`
 - `Perspectives.Sync.TransactionForPeer`: `TransactionForPeer`, `EncryptedTransactionForPeer`
 - `Perspectives.RunMonadPerspectivesTransaction`: `phase2`, which calls distribution and executes public-destination deltas

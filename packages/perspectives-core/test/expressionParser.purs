@@ -15,11 +15,11 @@ import Perspectives.Parsing.Arc.Position (ArcPosition(..))
 import Perspectives.Parsing.Arc.Statement (assignment, roleAssignment)
 import Perspectives.Parsing.Arc.Statement.AST (Assignment(..)) as PAS
 import Perspectives.Parsing.Arc.Statement.AST (Assignment(..), AssignmentOperator(..))
-import Perspectives.Representation.InstanceIdentifiers (RoleInstance(..))
+import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..))
 import Perspectives.Representation.QueryFunction (FunctionName(..))
 import Perspectives.Representation.QueryFunction (QueryFunction(..)) as QF
 import Perspectives.Representation.Range (Range(..))
-import Simple.JSON (readJSON)
+import Simple.JSON (readJSON, writeJSON)
 import Test.Unit (TestF, suite, test, testSkip)
 import Test.Unit.Assert (assert)
 
@@ -59,6 +59,37 @@ theSuite = suite "Perspectives.Parsing.Arc.Expression" do
       Right (QF.PublicRole (RoleInstance identifier) Nothing) ->
         assert "The legacy PublicRole should have no type assertion" (identifier == "pub:cw_test#role")
       _ -> assert "The legacy PublicRole representation should remain readable" false
+
+  test "SimpleStep: PublicContext without type assertion" do
+    (r :: Either ParseError Step) <- runIndentParser "publiccontext pub:https://perspectives.domains/cw_test/#context" simpleStep
+    case r of
+      Left e -> assert (show e) false
+      Right (Simple (PublicContext _ identifier Nothing)) ->
+        assert "The public resource identifier should be parsed" (identifier == "pub:https://perspectives.domains/cw_test/#context")
+      _ -> assert "The unannotated public context should be parsed" false
+
+  test "SimpleStep: PublicContext with type assertion" do
+    (r :: Either ParseError Step) <- runIndentParser "publiccontext pub:https://perspectives.domains/cw_test/#context (cm:Repository)" simpleStep
+    case r of
+      Left e -> assert (show e) false
+      Right (Simple (PublicContext _ identifier (Just assertedType))) -> do
+        assert "The public resource identifier should be parsed" (identifier == "pub:https://perspectives.domains/cw_test/#context")
+        assert "The asserted context type should be parsed" (assertedType == "cm:Repository")
+      _ -> assert "The annotated public context should be parsed" false
+
+  test "PublicContext query function reads the legacy unannotated representation" do
+    let legacy = "{\"constructor\":\"PublicContext\",\"arg1\":\"\\\"pub:cw_test#context\\\"\",\"arg2\":\"\"}"
+    case readJSON legacy of
+      Left e -> assert (show e) false
+      Right (QF.PublicContext (ContextInstance identifier) Nothing) ->
+        assert "The legacy PublicContext should have no type assertion" (identifier == "pub:cw_test#context")
+      _ -> assert "The legacy PublicContext representation should remain readable" false
+
+  test "PublicContext query function round-trips its type assertion" do
+    let original = QF.PublicContext (ContextInstance "pub:cw_test#context") (Just "assertion")
+    case readJSON (writeJSON original) of
+      Left e -> assert (show e) false
+      Right (parsed :: QF.QueryFunction) -> assert "The PublicContext should survive serialisation" (parsed == original)
 
   test "SimpleStep: Binding" do
     (r :: Either ParseError Step) <- runIndentParser "binding" simpleStep

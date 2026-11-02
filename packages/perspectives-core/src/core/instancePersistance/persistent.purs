@@ -50,6 +50,7 @@ module Perspectives.Persistent
   , saveEntiteit
   , saveEntiteit_
   , saveMarkedResources
+  , saveMarkedPublicResources
   , forceSaveRole
   , forceSaveDomeinFile
   , forceSaveContext
@@ -65,7 +66,7 @@ import Prelude
 import Control.Monad.AvarMonadAsk (gets, modify)
 import Control.Monad.Error.Class (try)
 import Control.Monad.Except (catchError, throwError)
-import Data.Array (cons, delete, elemIndex)
+import Data.Array (cons, delete, elemIndex, filter)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.Maybe (Maybe(..), isJust, maybe)
@@ -199,6 +200,11 @@ fetchEntiteit tryToFix id = ensureAuthentication (Resource $ unwrap id) \_ ->
       if test decodingErrorRegex (show e) then do
         errorPersistence (show $ Custom ("fetchEntiteit: failed to decode resource " <> unwrap id <> ". Parser message: " <> show e))
         throwError $ error ("fetchEntiteit: failed to retrieve resource " <> unwrap id <> " from couchdb.")
+      -- A public resource is hosted elsewhere and may just not have been published yet, or be unreachable.
+      -- Its absence says nothing about the integrity of local data, so we never try to fix references to it.
+      else if isInPublicScheme (unwrap id) then do
+        when tryToFix $ warnPersistence ("fetchEntiteit: failed to retrieve public resource " <> unwrap id <> ": " <> show e)
+        throwError $ error ("fetchEntiteit: failed to retrieve resource " <> unwrap id <> " from couchdb.")
       -- Try to fix by restoring the resource
       else if tryToFix then do
         offLine <- internetRequiredButMissing (unwrap id)
@@ -307,8 +313,21 @@ forceSaveEntiteit r entId = do
 
 -- | Failed saves remain queued for a later persistence pass.
 saveMarkedResources :: MonadPerspectives Unit
-saveMarkedResources = do
-  (toBeSaved :: Array ResourceToBeStored) <- gets _.entitiesToBeStored
+saveMarkedResources = gets _.entitiesToBeStored >>= saveResources
+
+-- | Saves only the marked resources in the public scheme. Peers learn about public resources through
+-- | transactions; these resources should be retrievable by the time such a transaction arrives.
+-- | Failed saves remain queued for a later persistence pass.
+saveMarkedPublicResources :: MonadPerspectives Unit
+saveMarkedPublicResources = gets _.entitiesToBeStored >>= saveResources <<< filter isPublic
+  where
+  isPublic :: ResourceToBeStored -> Boolean
+  isPublic (Ctxt c) = isInPublicScheme (unwrap c)
+  isPublic (Rle r) = isInPublicScheme (unwrap r)
+  isPublic (Dfile _) = false
+
+saveResources :: Array ResourceToBeStored -> MonadPerspectives Unit
+saveResources toBeSaved =
   for_ toBeSaved \(rs :: ResourceToBeStored) ->
     try
       ( case rs of

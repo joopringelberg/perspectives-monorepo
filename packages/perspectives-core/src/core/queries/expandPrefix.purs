@@ -79,7 +79,7 @@ instance containsPrefixesSimpleStep :: ScanSymbols SimpleStep where
   scan (SpecialisesRoleType pos s) = SpecialisesRoleType pos <$> f s
   scan (IsInState pos s) = IsInState pos <$> f s
   scan (PublicRole pos s mtype) = PublicRole pos <$> f s <*> traverse f mtype
-  scan (PublicContext pos s) = PublicContext pos <$> f s
+  scan (PublicContext pos s mtype) = PublicContext pos <$> f s <*> traverse f mtype
   scan (TypeTimeOnlyContext pos s) = TypeTimeOnlyContext pos <$> f s
   scan (TypeTimeOnlyEnumeratedRole pos s1 s2) = TypeTimeOnlyEnumeratedRole pos <$> f s1 <*> f s2
   scan (TypeTimeOnlyCalculatedRole pos s) = TypeTimeOnlyCalculatedRole pos <$> f s

@@ -141,6 +141,8 @@ data PerspectivesError
   | SelfOnlyShouldBeAuthorOnly String ArcPosition ArcPosition EnumeratedPropertyType
   | StateDoesNotExist StateIdentifier ArcPosition ArcPosition
   | NoNotificationAspect ContextType ArcPosition ArcPosition
+  | PublicRoleWithContextType String ContextType ArcPosition ArcPosition
+  | PublicContextWithRoleType String EnumeratedRoleType ArcPosition ArcPosition
 
   | RolErrorBoundary String String
   | ContextErrorBoundary String String
@@ -294,6 +296,8 @@ instance showPerspectivesError :: Show PerspectivesError where
     <> "' is functional or there is no other user role that can change the property. In both cases `authoronly` is more appropriate."
   show (StateDoesNotExist stateId start end) = "(StateDoesNotExist) The state '" <> show stateId <> "' is not modelled (between " <> show start <> " and " <> show end <> ")."
   show (NoNotificationAspect ctype start end) = "(NoNotificationAspect) The context type '" <> show ctype <> "' has no notification aspect: notifications will not be sent to the user " <> showPosition start end
+  show (PublicRoleWithContextType ident ctype start end) = "(PublicRoleWithContextType) 'publicrole " <> ident <> "' asserts the context type '" <> show ctype <> "', which stands for its External role. But '" <> ident <> "' does not identify an External role. Use 'publicrole " <> ident <> "$External (" <> show ctype <> ")' or 'publiccontext " <> ident <> " (" <> show ctype <> ")' " <> showPosition start end
+  show (PublicContextWithRoleType ident rtype start end) = "(PublicContextWithRoleType) 'publiccontext " <> ident <> "' asserts the role type '" <> show rtype <> "', but publiccontext yields a context. Use a context type, or 'publicrole' for a role " <> showPosition start end
 
   show (RolErrorBoundary boundaryName err) = "(RolErrorBoundary) ErrorBoundary in '" <> boundaryName <> "' for PerspectRol (" <> err <> ")"
   show (ContextErrorBoundary boundaryName err) = "(ContextErrorBoundary) ErrorBoundary in '" <> boundaryName <> "' for PerspectContext (" <> err <> ")"

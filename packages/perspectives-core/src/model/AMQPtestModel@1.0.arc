@@ -160,7 +160,7 @@ domain model://joopringelberg.nl#AMQPtestModel@1.0
                 TestContextCreated = true
 
       state ContextCreated = TestContextCreated
-        state TestSucceeded = exists publicrole pub:https://perspectives.domains/cw_bobsdatabase/#bobscontext (mm:TestContext)
+        state TestSucceeded = exists publicrole pub:https://perspectives.domains/cw_bobsdatabase/#bobscontext$External (mm:TestContext)
           on entry
             do for Follower once settled
               TestSucceeded = true

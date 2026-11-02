@@ -96,18 +96,49 @@ compileFunction qfd = case qfd of
   UQD _ _ _ _ _ _ -> unsafePartial $ compileUQD qfd
   BQD _ _ _ _ _ _ _ -> unsafePartial $ compileBQD qfd
 
+publicContextWithAssertion :: ContextInstance -> ADT ContextType -> String ~~> String
+publicContextWithAssertion individual expectedType _ = ArrayT do
+  -- A public resource may not have been published yet, or be unreachable. Then it simply yields no result.
+  (lift $ try $ contextMatchesTypeFilter individual expectedType) >>= case _ of
+    Left e -> do
+      lift $ addWarning
+        { message: "Public resource '" <> unwrap individual <> "' could not be retrieved; it was ignored."
+        , error: show e
+        , externalRoleId: ""
+        , contextName: ""
+        }
+      pure []
+    Right true -> pure [ unwrap individual ]
+    Right false -> do
+      lift $ addWarning
+        { message: "Public resource '" <> unwrap individual <> "' does not satisfy its asserted context type " <> show expectedType <> "; it was ignored."
+        , error: ""
+        , externalRoleId: ""
+        , contextName: ""
+        }
+      pure []
+
 publicRoleWithAssertion :: RoleInstance -> ADT RoleInContext -> String ~~> String
 publicRoleWithAssertion individual expectedType _ = ArrayT do
-  matches <- (lift $ roleMatchesTypeFilter individual expectedType) :: AssumptionTracking Boolean
-  if matches then pure [ unwrap individual ]
-  else do
-    lift $ addWarning
-      { message: "Public resource '" <> unwrap individual <> "' does not satisfy its asserted role type " <> show expectedType <> "; it was ignored."
-      , error: ""
-      , externalRoleId: ""
-      , contextName: ""
-      }
-    pure []
+  -- A public resource may not have been published yet, or be unreachable. Then it simply yields no result.
+  (lift $ try $ roleMatchesTypeFilter individual expectedType) >>= case _ of
+    Left e -> do
+      lift $ addWarning
+        { message: "Public resource '" <> unwrap individual <> "' could not be retrieved; it was ignored."
+        , error: show e
+        , externalRoleId: ""
+        , contextName: ""
+        }
+      pure []
+    Right true -> pure [ unwrap individual ]
+    Right false -> do
+      lift $ addWarning
+        { message: "Public resource '" <> unwrap individual <> "' does not satisfy its asserted role type " <> show expectedType <> "; it was ignored."
+        , error: ""
+        , externalRoleId: ""
+        , contextName: ""
+        }
+      pure []
 
 ---------------------------------------------------------------------------------------------------
 -- COMPILESQD
@@ -205,7 +236,11 @@ compileSQD (SQD dom (PublicRole individual (Just assertedType)) _ _ _) = case re
   Left e -> throwError $ error $ "Cannot read asserted public-role type: " <> show e
   Right (expectedType :: ADT RoleInContext) -> pure $ publicRoleWithAssertion individual expectedType
 
-compileSQD (SQD dom (PublicContext individual) _ _ _) = pure $ unsafeCoerce (\x -> (pure $ unwrap individual :: MonadPerspectivesQuery String))
+compileSQD (SQD dom (PublicContext individual Nothing) _ _ _) = pure $ unsafeCoerce (\x -> (pure $ unwrap individual :: MonadPerspectivesQuery String))
+
+compileSQD (SQD dom (PublicContext individual (Just assertedType)) _ _ _) = case readJSON assertedType of
+  Left e -> throwError $ error $ "Cannot read asserted public-context type: " <> show e
+  Right (expectedType :: ADT ContextType) -> pure $ publicContextWithAssertion individual expectedType
 
 compileSQD (SQD dom (Value2Role _) _ _ _) = pure $ unsafeCoerce (\x -> pure x :: MPQ String)
 

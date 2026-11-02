@@ -119,7 +119,8 @@ data Step
 | `RoleTypeIndividual pos name` | A role-type individual |
 | `TypeOfContext pos` | The type of the current context instance |
 | `TypeOfRole pos` | The type of the current role instance |
-| `PublicRole pos name` | The public role of a published context |
+| `PublicRole pos name mtype` | A published role (`publicrole <pub-id> (Type)`). A context type as `Type` stands for its External role; the compiler warns (`PublicRoleWithContextType`) if `<pub-id>` then does not end in `$External` |
+| `PublicContext pos name mtype` | A published context (`publiccontext <pub-id> (ContextType)`). The compiler warns (`PublicContextWithRoleType`) if `Type` is a role type, and uses that role's context type |
 | `SpecialisesRoleType pos name` | Boolean: does the current role type specialise `name`? |
 | `IsInState pos stateName` | Boolean: is the entity in the named state? |
 | `Translate pos` | Translate a type identifier to a human-readable string |
@@ -750,8 +751,10 @@ The following previously missing handlers have been added to `interpretSQD`:
 - **`MeF`** (current user): added as a top-level `SQD` pattern; retrieves the current `PerspectivesUser` and returns the matching role in `socialEnvironment`.
 - **`RoleTypeConstant qname`**: returns `RT qname` on the main path.
 - **`ContextTypeConstant qname`**: returns `CT qname` on the main path.
-- **`PublicRole individual`**: returns `R individual` on the main path.
-- **`PublicContext individual`**: returns `C individual` on the main path.
+- **`PublicRole individual assertedType`**: without a type, returns `R individual` on the main path without retrieving it. With a type, retrieves the role and returns it only if it exists and satisfies the type; otherwise it yields nothing and adds a warning.
+- **`PublicContext individual assertedType`**: the same for contexts, returning `C individual`.
+
+Without a type, the compiler retrieves the public instance to find its type, so it must exist when the model is compiled. With a type, nothing is retrieved at compile time; the asserted type is stored as a JSON-encoded ADT, which `normalizeTypeNames` converts to stable type identifiers. A missing public resource never starts the referential-integrity fixer.
 - **`RegExMatch (RegExP reg)`**: evaluates the regex against the string value at the head and returns a boolean `Value`.
 - **`IsInStateF`**: added to both the `C cid` (context instance) branch and the `R rid` (role instance) branch; checks whether the given state identifier is active for the given context or role.
 

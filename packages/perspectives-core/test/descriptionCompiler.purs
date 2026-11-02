@@ -24,14 +24,16 @@ import Prelude
 import Control.Monad.Free (Free)
 import Data.Array (null)
 import Data.Either (Either(..))
-import Data.Foldable (for_)
+import Data.Foldable (any, for_)
 import Data.List (List(..))
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
+import Data.String (Pattern(..), contains)
 import Data.Tuple (Tuple(..))
 import Effect (Effect)
 import Effect.Aff (Aff)
 import Foreign.Object (lookup)
+import Perspectives.CoreTypes (Warning)
 import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord)
 import Perspectives.Parsing.Arc (domain)
 import Perspectives.Parsing.Arc.IndentParser (runIndentParser)
@@ -39,6 +41,7 @@ import Perspectives.Parsing.Arc.PhaseThree (phaseThree)
 import Perspectives.Parsing.Arc.PhaseTwo (traverseDomain)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (runPhaseTwo', toStableDomeinFile)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
+import Perspectives.PerspectivesState (getWarnings)
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), RoleInContext(..))
 import Perspectives.Representation.ADT (ADT(..))
 import Perspectives.Representation.CalculatedProperty (CalculatedProperty(..))
@@ -62,7 +65,7 @@ modelUri = "model://perspectives.domains#DescriptionCompilerTest"
 compileModel
   :: String
   -> (Array PerspectivesError -> Aff Unit)
-  -> (DomeinFileRecord Stable -> Aff Unit)
+  -> (DomeinFileRecord Stable -> Array Warning -> Aff Unit)
   -> Aff Unit
 compileModel source onError onSuccess = do
   parsed <- runIndentParser ("domain " <> modelUri <> "\n" <> source) domain
@@ -73,10 +76,13 @@ compileModel source onError onSuccess = do
       case result of
         Left errors -> onError errors
         Right (DomeinFile df) -> do
-          compiled <- runP $ phaseThree df state.postponedStateQualifiedParts Nil
+          Tuple compiled warnings <- runP do
+            compiled <- phaseThree df state.postponedStateQualifiedParts Nil
+            warnings <- getWarnings
+            pure $ Tuple compiled warnings
           case compiled of
             Left errors -> onError errors
-            Right (Tuple corrected _) -> onSuccess $ unwrap $ toStableDomeinFile (DomeinFile corrected)
+            Right (Tuple corrected _) -> onSuccess (unwrap $ toStableDomeinFile (DomeinFile corrected)) warnings
 
 roleQuery :: String -> DomeinFileRecord Stable -> Maybe QueryFunctionDescription
 roleQuery name df = case lookup (modelUri <> "$" <> name) df.calculatedRoles of
@@ -97,9 +103,29 @@ compiles
 compiles title source select matches = test title $
   compileModel source
     (\errors -> assert (show errors) false)
-    \df -> case select df of
+    \df _ -> case select df of
       Nothing -> assert "Expected a compiled calculation" false
       Just query -> assert ("Unexpected typed query: " <> show query) (matches query)
+
+-- | Like `compiles`, but also checks whether a compiler warning whose message contains `warningTag` was given.
+compilesWarning
+  :: String
+  -> String
+  -> (DomeinFileRecord Stable -> Maybe QueryFunctionDescription)
+  -> (QueryFunctionDescription -> Boolean)
+  -> String
+  -> Boolean
+  -> Free TestF Unit
+compilesWarning title source select matches warningTag expectWarning = test title $
+  compileModel source
+    (\errors -> assert (show errors) false)
+    \df warnings -> do
+      case select df of
+        Nothing -> assert "Expected a compiled calculation" false
+        Just query -> assert ("Unexpected typed query: " <> show query) (matches query)
+      let warned = any (\{ message } -> contains (Pattern warningTag) message) warnings
+      if expectWarning then assert ("Expected a warning " <> warningTag <> ", got: " <> show warnings) warned
+      else assert ("Did not expect a warning " <> warningTag <> ", got: " <> show warnings) (not warned)
 
 rejects :: String -> String -> (PerspectivesError -> Boolean) -> Free TestF Unit
 rejects title source matches = test title $
@@ -108,7 +134,7 @@ rejects title source matches = test title $
         assert "Expected at least one compiler error" (not $ null errors)
         for_ errors \err -> assert ("Unexpected error: " <> show err) (matches err)
     )
-    (\_ -> assert "Expected the compiler to reject this query" false)
+    (\_ _ -> assert "Expected the compiler to reject this query" false)
 
 theSuite :: Free TestF Unit
 theSuite = suite "Perspectives.Query.DescriptionCompiler" do
@@ -119,6 +145,34 @@ theSuite = suite "Perspectives.Query.DescriptionCompiler" do
       SQD _ (PublicRole _ (Just _)) (RDOM (UET (RoleInContext { context: ContextType context, role: EnumeratedRoleType role }))) _ _ ->
         context == modelUri <> "$Box" && role == modelUri <> "$Box$Repository"
       _ -> false
+
+  compilesWarning "PublicRole with a context type for an External role identifier does not warn"
+    ("  case Box\n    thing ClaimedBox = publicrole pub:https://perspectives.domains/cw_test/#box$External (" <> modelUri <> "$Box)")
+    (roleQuery "Box$ClaimedBox")
+    (isPublicRoleWithRange (modelUri <> "$Box") (modelUri <> "$Box$External"))
+    "(PublicRoleWithContextType)"
+    false
+
+  compilesWarning "PublicRole with a context type for a context identifier warns"
+    ("  case Box\n    thing ClaimedBox = publicrole pub:https://perspectives.domains/cw_test/#box (" <> modelUri <> "$Box)")
+    (roleQuery "Box$ClaimedBox")
+    (isPublicRoleWithRange (modelUri <> "$Box") (modelUri <> "$Box$External"))
+    "(PublicRoleWithContextType)"
+    true
+
+  compilesWarning "PublicContext retains its asserted context range without a warning"
+    ("  case Box\n    thing Repository (mandatory)\n      property Claimed = exists publiccontext pub:cw_test#box (" <> modelUri <> "$Box)")
+    (propertyQuery "Box$Repository$Claimed")
+    (isExistsPublicContextWithRange (modelUri <> "$Box"))
+    "(PublicContextWithRoleType)"
+    false
+
+  compilesWarning "PublicContext with a role type warns and uses the role's context type"
+    ("  case Box\n    thing Repository (mandatory)\n      property Claimed = exists publiccontext pub:cw_test#box (" <> modelUri <> "$Box$External)")
+    (propertyQuery "Box$Repository$Claimed")
+    (isExistsPublicContextWithRange (modelUri <> "$Box"))
+    "(PublicContextWithRoleType)"
+    true
 
   compiles "Role identifier resolves getter and range"
     "  thing Role = AnotherRole\n  thing AnotherRole (mandatory)"
@@ -304,4 +358,15 @@ theSuite = suite "Perspectives.Query.DescriptionCompiler" do
 requiresDomain :: String -> PerspectivesError -> Boolean
 requiresDomain expected = case _ of
   DomainTypeRequired actual _ _ _ -> actual == expected
+  _ -> false
+
+isPublicRoleWithRange :: String -> String -> QueryFunctionDescription -> Boolean
+isPublicRoleWithRange expectedContext expectedRole = case _ of
+  SQD _ (PublicRole _ (Just _)) (RDOM (UET (RoleInContext { context: ContextType context, role: EnumeratedRoleType role }))) _ _ ->
+    context == expectedContext && role == expectedRole
+  _ -> false
+
+isExistsPublicContextWithRange :: String -> QueryFunctionDescription -> Boolean
+isExistsPublicContextWithRange expectedContext = case _ of
+  UQD _ _ (SQD _ (PublicContext _ (Just _)) (CDOM (UET (ContextType context))) _ _) _ _ _ -> context == expectedContext
   _ -> false

@@ -79,6 +79,14 @@ humanizePerspectivesError e = case e of
     contextType' <- toReadable contextType
     pure (NoNotificationAspect contextType' start end)
 
+  PublicRoleWithContextType ident contextType start end -> do
+    contextType' <- toReadable contextType
+    pure (PublicRoleWithContextType ident contextType' start end)
+
+  PublicContextWithRoleType ident roleType start end -> do
+    roleType' <- toReadable roleType
+    pure (PublicContextWithRoleType ident roleType' start end)
+
   -- Constructors that carry only strings: try to prettify strings that look like URIs.
   UnknownProperty pos end qname adt -> do
     adt' <- for adt \x -> case x of
