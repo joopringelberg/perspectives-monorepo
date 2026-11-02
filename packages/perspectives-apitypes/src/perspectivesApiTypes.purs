@@ -85,6 +85,7 @@ data RequestType
   | GetInspectableContext
   | GetInspectableRole
   | GetModelContextGraph
+  | Lsp
 
   | RemoveRoleFromClipboard
   | AddRoleToClipboard
@@ -176,6 +177,7 @@ instance decodeRequestType :: ReadForeign RequestType where
     "GetLocalRoleSpecialisation" -> GetLocalRoleSpecialisation
     "MatchContextName" -> MatchContextName
     "GetCouchdbUrl" -> GetCouchdbUrl
+    "Lsp" -> Lsp
     "GetRoleName" -> GetRoleName
     "Unsubscribe" -> Unsubscribe
     "ShutDown" -> ShutDown

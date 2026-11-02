@@ -4,6 +4,7 @@
   // 2. The PDR is loaded in the host page. 
 
 import { configurePDRproxy } from "perspectives-proxy";
+import sharedWorkerUrl from "perspectives-sharedworker?sharedworker&url";
 import PouchDB from "pouchdb-browser";
 import { getInstallationData } from "./installationData";
 
@@ -169,7 +170,7 @@ export function startPDR()
     // The proxy function configurePDRProxy will create a SharedWorker. The SharedWorker will load the PDR, using 'importScripts'
     // (dyanmic import is not supported in SharedWorkers).
     // As a result, the PDR runs in the SharedWorker.
-    configurePDRproxy("sharedWorkerChannel", {});
+    configurePDRproxy("sharedWorkerChannel", { sharedWorkerUrl: new URL(sharedWorkerUrl, window.location.href) });
   }
   // For easier debugging, attach to window in development
   if (import.meta.env.DEV) {

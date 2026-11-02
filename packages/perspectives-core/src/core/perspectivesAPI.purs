@@ -102,6 +102,7 @@ import Perspectives.TypePersistence.ContextSerialisation (screenForContextAndUse
 import Perspectives.TypePersistence.PerspectiveSerialisation (getReadableName, perspectiveForContextAndUser, perspectivesForContextAndUser, settingsPerspective)
 import Perspectives.Types.ObjectGetters (isDatabaseQueryRole, localRoleSpecialisation, lookForRoleType, lookForUnqualifiedRoleType, lookForUnqualifiedViewType, propertiesOfRole, rolesWithPerspectiveOnRoleAndProperty, string2EnumeratedRoleType, string2RoleType)
 import Prelude (Unit, bind, discard, identity, map, negate, pure, show, unit, void, ($), (&&), (/=), (<$>), (<<<), (<>), (==), (>=>), (>>=), (*>))
+import Perspectives.Lsp.Server (handleLspMessage)
 import Simple.JSON (read, readJSON_, unsafeStringify, writeJSON)
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -694,6 +695,17 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
         )
         (RoleInstance subject)
         onlyOnce
+
+    -- { request: "Lsp", subject: <JSON-RPC message> }
+    -- The PDR doubles as Language Server for ARC. Analysis may take a while, so it does not block the API consumer.
+    Api.Lsp -> do
+      state <- ask
+      liftAff $ void $ forkAff $ runMonadPerspectives
+        ( catchError
+            (handleLspMessage subject >>= \messages -> sendResponse (Result corrId messages) setter)
+            (\e -> sendResponse (Error corrId ("LSP message could not be handled: " <> show e)) setter)
+        )
+        state
 
     -- { request: "GetModelContextGraph", subject: ContextType }
     Api.GetModelContextGraph -> do

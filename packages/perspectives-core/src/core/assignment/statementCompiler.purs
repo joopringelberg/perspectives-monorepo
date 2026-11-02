@@ -46,7 +46,7 @@ import Perspectives.Parsing.Arc.Expression (endOf, startOf)
 import Perspectives.Parsing.Arc.Expression.AST (Step, VarBinding(..))
 import Perspectives.Parsing.Arc.PhaseThree.TypeLookup (lookForRoleTypeOfADT, lookForUnqualifiedPropertyType, lookForUnqualifiedRoleTypeOfADT)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseThree, addBinding, getsDF, lift2, throwError, withFrame)
-import Perspectives.Parsing.Arc.Position (ArcPosition)
+import Perspectives.Parsing.Arc.Position (ArcPosition, endOfName)
 import Perspectives.Parsing.Arc.Statement.AST (Assignment(..), AssignmentOperator(..), LetABinding(..), LetStep(..), Statements(..))
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Query.ExpressionCompiler (compileExpression, makeSequence)
@@ -330,7 +330,7 @@ compileActionEffect originDomain currentcontextDomain userRoleTypes statements =
       if qualifies
       -- Create a function description that describes the actual role creating and binding.
       then pure $ BQD originDomain (QF.Bind qualifiedRoleIdentifier) fillersQuery cte originDomain True True
-      else throwError $ RoleDoesNotBind f.start (ENR qualifiedRoleIdentifier) (unsafePartial $ domain2roleType (range fillersQuery))
+      else throwError $ RoleDoesNotBind f.start f.end (ENR qualifiedRoleIdentifier) (unsafePartial $ domain2roleType (range fillersQuery))
 
     Bind_ { bindingExpression, binderExpression, start, end } -> do
       -- bindingExpression should result in a functional role
@@ -518,7 +518,7 @@ compileActionEffect originDomain currentcontextDomain userRoleTypes statements =
       Just _ ->
         if lookupHiddenFunctionIsEffect effectName then do
           case (typeUri2ModelUri effectName) of
-            Nothing -> throwError (NotWellFormedName start effectName)
+            Nothing -> throwError (NotWellFormedName start (endOfName start effectName) effectName)
             Just modelName ->
               if isExternalCoreModule modelName then do
                 mexpectedNrOfArgs <- pure $ lookupHiddenFunctionNArgs effectName
@@ -538,7 +538,7 @@ compileActionEffect originDomain currentcontextDomain userRoleTypes statements =
         else throwError (NotAnEffect start end effectName)
     ExternalDestructiveEffect f@{ start, end, effectName, arguments } -> do
       case (typeUri2ModelUri effectName) of
-        Nothing -> throwError (NotWellFormedName start effectName)
+        Nothing -> throwError (NotWellFormedName start (endOfName start effectName) effectName)
         Just modelName ->
           if isExternalCoreModule modelName then do
             mexpectedNrOfArgs <- pure $ lookupHiddenFunctionNArgs effectName
@@ -590,7 +590,7 @@ compileActionEffect originDomain currentcontextDomain userRoleTypes statements =
       else do
         ctxts <- getsDF (keys <<< _.contexts)
         case filter (areLastSegmentsOf contextIdentifier) ctxts of
-          toomany | length toomany > 1 -> throwError $ NotUniquelyIdentifyingContext start (ContextType contextIdentifier) (ContextType <$> toomany)
+          toomany | length toomany > 1 -> throwError $ NotUniquelyIdentifyingContext start (endOfName start contextIdentifier) (ContextType contextIdentifier) (ContextType <$> toomany)
           justone | length justone == 1 -> pure $ ContextType $ unsafePartial fromJust $ head justone
           none -> throwError $ CannotFindContextType start end contextIdentifier
 
@@ -603,7 +603,7 @@ compileActionEffect originDomain currentcontextDomain userRoleTypes statements =
       case head candidates of
         Nothing -> (lift2 $ humanizePerspectivesError (RoleHasNoEnumeratedProperty rt propertyIdentifier start end)) >>= throwError
         Just (ENP et) | length candidates == 1 -> pure et
-        otherwise -> (lift2 $ humanizePerspectivesError (NotUniquelyIdentifyingPropertyType start (ENP $ EnumeratedPropertyType propertyIdentifier) candidates)) >>= throwError
+        otherwise -> (lift2 $ humanizePerspectivesError (NotUniquelyIdentifyingPropertyType start (endOfName start propertyIdentifier) (ENP $ EnumeratedPropertyType propertyIdentifier) candidates)) >>= throwError
 
     -- | If the name is already qualified, use it as-is; otherwise look for an EnumeratedRole with matching
     -- | local name in the Domain.
@@ -614,9 +614,9 @@ compileActionEffect originDomain currentcontextDomain userRoleTypes statements =
         (enumeratedRoles :: Object EnumeratedRole) <- getsDF _.enumeratedRoles
         (nameMatches :: Array EnumeratedRole) <- pure (filter (\(EnumeratedRole { id: roleId }) -> (unwrap roleId) `endsWithSegments` ident) (values enumeratedRoles))
         case head nameMatches of
-          Nothing -> throwError $ UnknownRole start ident
+          Nothing -> throwError $ UnknownRole start (endOfName start ident) ident
           (Just (EnumeratedRole { id: candidate })) | length nameMatches == 1 -> pure candidate
-          otherwise -> throwError $ NotUniquelyIdentifyingRoleType start (ENR $ EnumeratedRoleType ident) (ENR <<< identifier <$> nameMatches)
+          otherwise -> throwError $ NotUniquelyIdentifyingRoleType start (endOfName start ident) (ENR $ EnumeratedRoleType ident) (ENR <<< identifier <$> nameMatches)
 
     -- Compiles the Step and inverts it as well.
     -- NOTE: parameter userTypes is not used.

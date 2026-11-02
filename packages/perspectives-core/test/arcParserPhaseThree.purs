@@ -275,7 +275,7 @@ theSuite = suite "Perspectives.Parsing.Arc.PhaseThree" do
               -- logShow dr'
               (runP $ phaseThree dr' state.postponedStateQualifiedParts Nil) >>=
                 case _ of
-                  (Left [ (NotWellFormedName _ _) ]) -> assert "" true
+                  (Left [ (NotWellFormedName _ _ _) ]) -> assert "" true
                   otherwise -> do
                     assert ("Expected an unresolved binding error, got " <> show otherwise) false
 
@@ -293,7 +293,7 @@ theSuite = suite "Perspectives.Parsing.Arc.PhaseThree" do
               (runP $ phaseThree dr' state.postponedStateQualifiedParts Nil) >>=
                 -- logShow x'
                 case _ of
-                  (Left [ e@(NotUniquelyIdentifyingPropertyType _ _ _) ]) -> do
+                  (Left [ e@(NotUniquelyIdentifyingPropertyType _ _ _ _) ]) -> do
                     -- logShow e
                     assert "" true
                   otherwise -> do
@@ -336,7 +336,7 @@ theSuite = suite "Perspectives.Parsing.Arc.PhaseThree" do
               -- logShow dr'
               x' <- runP $ phaseThree dr' state.postponedStateQualifiedParts Nil
               case x' of
-                (Left [ (UnknownProperty _ _ _) ]) -> assert "" true
+                (Left [ (UnknownProperty _ _ _ _) ]) -> assert "" true
                 otherwise -> assert "The view refers to a non-existing property 'Datu' and that should be detected." false
 
   -- test "Testing qualifyPropertyReferences: reference to property on binding." do
@@ -666,7 +666,7 @@ theSuite = suite "Perspectives.Parsing.Arc.PhaseThree" do
   expectError "Bind to role without non-matching possible bindings"
     "domain model://example.org#Test\n  user Gast (mandatory)\n    property Prop1 (mandatory, Number)\n    perspective on EreGast\n      all roleverbs\n    state SomeState = Prop1 > 10\n      on entry\n        do\n          bind context >> Gast to EreGast\n  user Organisator\n    property Prop2\n  user EreGast filledBy Organisator\n"
     case _ of
-      (Left (RoleDoesNotBind _ _ _)) -> assert "ok" true
+      (Left (RoleDoesNotBind _ _ _ _)) -> assert "ok" true
       otherwise -> do
         logShow otherwise
         assert ("Expected the error RoleDoesNotBind, got " <> show otherwise) false

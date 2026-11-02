@@ -48,7 +48,7 @@ import Perspectives.Parsing.Arc.Expression (endOf, startOf)
 import Perspectives.Parsing.Arc.Expression.AST (SimpleStep(..), Step(..))
 import Perspectives.Parsing.Arc.PhaseThree.TypeLookup (lookForUnqualifiedPropertyType, lookForUnqualifiedPropertyType_)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseThree, getsDF, lift2, modifyDF, throwError, withDomeinFile)
-import Perspectives.Parsing.Arc.Position (ArcPosition(..))
+import Perspectives.Parsing.Arc.Position (ArcPosition(..), endOfName)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Query.ExpressionCompiler (compileExpression, compileStep, qualifyLocalRoleName)
 import Perspectives.Query.QueryTypes (Domain(..), domain2roleType, functional, range, roleInContext2Role)
@@ -315,11 +315,11 @@ handleScreens screenEs = do
         qualifyProperty chatRoleType prop = do
           candidates <- lookForUnqualifiedPropertyType_ prop chatRoleType
           case head candidates of
-            Nothing -> throwError $ UnknownProperty start' (ENP $ EnumeratedPropertyType prop) (ST chatRoleType)
+            Nothing -> throwError $ UnknownProperty start' (endOfName start' prop) (ENP $ EnumeratedPropertyType prop) (ST chatRoleType)
             (Just t) | length candidates == 1 -> case t of
               ENP p -> pure p
               CP p -> throwError $ PropertyCannotBeCalculated prop start' end'
-            otherwise -> throwError $ NotUniquelyIdentifyingPropertyType start' (ENP $ EnumeratedPropertyType prop) candidates
+            otherwise -> throwError $ NotUniquelyIdentifyingPropertyType start' (endOfName start' prop) (ENP $ EnumeratedPropertyType prop) candidates
 
   widgetCommonFields :: RoleType -> AST.WidgetCommonFields -> ThreeValuedLogic -> PhaseThree WidgetCommonFieldsDef
   widgetCommonFields subjectRoleType { title: title', perspective, fillFrom, typeAheadFillFromRole, fillPropertyValues, withProps, withPropsPositions, withoutProps, withoutVerbs, roleVerbs, fieldConstraints: fieldConstraints', start: start', end: end' } isFunctionalWidget = do
@@ -482,11 +482,11 @@ handleScreens screenEs = do
     qualifyProperty roleType { propertyName, start: pstart, end: pend } = do
       candidates <- lookForUnqualifiedPropertyType_ propertyName roleType
       case head candidates of
-        Nothing -> throwError $ UnknownProperty pstart (ENP $ EnumeratedPropertyType propertyName) (ST roleType)
+        Nothing -> throwError $ UnknownProperty pstart pend (ENP $ EnumeratedPropertyType propertyName) (ST roleType)
         (Just t) | length candidates == 1 -> case t of
           ENP p -> pure (ENP p)
           CP _ -> throwError $ PropertyCannotBeCalculated propertyName pstart pend
-        otherwise -> throwError $ NotUniquelyIdentifyingPropertyType pstart (ENP $ EnumeratedPropertyType propertyName) candidates
+        otherwise -> throwError $ NotUniquelyIdentifyingPropertyType pstart pend (ENP $ EnumeratedPropertyType propertyName) candidates
 
     -- NOTE: previously unused helper that referenced subjectRoleType; keep commented to avoid unused / scope issues.
     -- checkVerbsAndProps :: Array PropertyType -> ExplicitSet PropertyType -> Array PropertyVerb -> Perspective -> RoleType -> PhaseThree Unit
@@ -512,9 +512,9 @@ handleScreens screenEs = do
     compileFieldConstraint objRoleType { propertyName, minLines, maxLines, start: fcStart, end: fcEnd } = do
       candidates <- lookForUnqualifiedPropertyType_ propertyName objRoleType
       propertyType <- case head candidates of
-        Nothing -> throwError $ UnknownProperty fcStart (ENP $ EnumeratedPropertyType propertyName) (ST objRoleType)
+        Nothing -> throwError $ UnknownProperty fcStart (endOfName fcStart propertyName) (ENP $ EnumeratedPropertyType propertyName) (ST objRoleType)
         Just t | length candidates == 1 -> pure t
-        _ -> throwError $ NotUniquelyIdentifyingPropertyType fcStart (ENP $ EnumeratedPropertyType propertyName) candidates
+        _ -> throwError $ NotUniquelyIdentifyingPropertyType fcStart (endOfName fcStart propertyName) (ENP $ EnumeratedPropertyType propertyName) candidates
       -- Validate that the property has a String range.
       propRange <- lift2 $ rangeOfPropertyType propertyType
       if propRange == PString then pure { propertyType, minLines, maxLines }
@@ -559,16 +559,16 @@ collectPropertyTypes (AST.Properties ps) object start = do
       candidates <- lookForUnqualifiedPropertyType localPropertyName roleADT
       case head candidates of
         -- NOTICE that we have to choose a kind of property and arbitrarily choose to report it as Enumerated.
-        Nothing -> throwError $ UnknownProperty start (ENP $ EnumeratedPropertyType localPropertyName) (ENR <$> roleADT)
+        Nothing -> throwError $ UnknownProperty start (endOfName start localPropertyName) (ENP $ EnumeratedPropertyType localPropertyName) (ENR <$> roleADT)
         (Just t) | length candidates == 1 -> pure t
-        _ -> throwError $ NotUniquelyIdentifyingPropertyType start (ENP $ EnumeratedPropertyType localPropertyName) candidates
+        _ -> throwError $ NotUniquelyIdentifyingPropertyType start (endOfName start localPropertyName) (ENP $ EnumeratedPropertyType localPropertyName) candidates
 
 collectPropertyTypes (AST.View view) object start = do
   if isTypeUri view then do
     mview <- lift2 $ tryGetPerspectType (ViewType view)
     case mview of
       Just (View { propertyReferences }) -> pure $ PSet propertyReferences
-      Nothing -> throwError $ UnknownView start view
+      Nothing -> throwError $ UnknownView start (endOfName start view) view
   else do
     -- If the RoleIdentification is of a single role type (not an expression), add that role
     -- to the types we get from expanding the role specification as an expression.
@@ -585,14 +585,14 @@ collectPropertyTypes (AST.View view) object start = do
     -- handling all others, there can be no forward references.
     -- The property references in Views are, by now, qualified.
     case filter (areLastSegmentsOf view) (keys views) of
-      noCandidates | null noCandidates -> throwError $ UnknownView start view
+      noCandidates | null noCandidates -> throwError $ UnknownView start (endOfName start view) view
       candidates -> case filter (isViewOfObject roles') candidates of
-        noCandidates' | null noCandidates' -> throwError $ NotAViewOfObject start view
+        noCandidates' | null noCandidates' -> throwError $ NotAViewOfObject start (endOfName start view) view
         candidates' ->
           case length candidates' of
             1 -> unsafePartial case lookup (unsafePartial ARRP.head candidates') views of
               Just (View { propertyReferences }) -> pure $ PSet propertyReferences
-            _ -> throwError $ NotUniquelyIdentifyingView start (ViewType view) (ViewType <$> candidates')
+            _ -> throwError $ NotUniquelyIdentifyingView start (endOfName start view) (ViewType view) (ViewType <$> candidates')
   where
   isViewOfObject :: Array RoleType -> String -> Boolean
   -- | "Context" `isLocalNameOf` "model:Perspectives$Context"

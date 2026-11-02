@@ -238,7 +238,7 @@ loadAndCompileArcFileWithSidecar_ dfid@(ModelUri stableModelUri) rawText saveInC
               else
                 pure $ Left typeCheckErrors
     else
-      pure $ Left [ (DomeinFileIdIncompatible modelUriReadable sourceIdReadable pos) ]
+      pure $ Left [ (DomeinFileIdIncompatible modelUriReadable sourceIdReadable pos pos) ]
 
   -- The model under construction itself is not remapped, only its dependencies.
   -- With this function we cover both cases: models in terms of Stable and in terms of Readable.
@@ -259,7 +259,7 @@ type ArcSource = String
 type CrlSource = String
 
 parseError2PerspectivesError :: ParseError -> PerspectivesError
-parseError2PerspectivesError (ParseError message pos) = ParserError message (position2ArcPosition pos)
+parseError2PerspectivesError (ParseError message pos) = ParserError message (position2ArcPosition pos) (position2ArcPosition pos)
 
 -- | Strips all trailing whitespace and replaces it with a single newline, so the parser
 -- | (which requires exactly one trailing newline and no trailing blank lines) always succeeds.

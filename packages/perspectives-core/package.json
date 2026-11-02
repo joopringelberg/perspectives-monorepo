@@ -51,6 +51,7 @@
     "test:performance": "pnpm run build:performance && node scripts/performance-runner.mjs",
     "test:performance:amqp": "[ \"$(../../localdevelopment/servefromwhere)\" = local ] || { echo 'test:performance:amqp requires local routing' >&2; exit 1; } && pnpm run build:performance && node scripts/performance-runner.mjs --mode amqp",
     "test:performance:collector": "node --test test/performanceMeasurements.test.mjs",
+    "test:lsp": "pnpm exec spago build && node --test test/lsp.test.mjs",
     "test:performance:scaffold": "pnpm exec spago build && ROLLUP_INPUT=./output/Test.PerformanceHarnessTests/index.js ROLLUP_OUTPUT=./dist/test.performanceHarness.node.js rollup -c rollup.node.config.js && node dist/test.performanceHarness.node.js",
     "test:compileModelsFromFile": "pnpm exec spago build && ROLLUP_INPUT=./output/Test.ModelFileCompilation/index.js ROLLUP_OUTPUT=./dist/test.modelFileCompilation.node.js rollup -c rollup.node.config.js && NODE_EXTRA_CA_CERTS=\"$(mkcert -CAROOT)/rootCA.pem\" node dist/test.modelFileCompilation.node.js",
     "recompile:model": "pnpm exec spago build && ROLLUP_INPUT=./output/Tools.RecompileModelFromFile/index.js ROLLUP_OUTPUT=./dist/recompile.model.node.js rollup -c rollup.node.config.js && node dist/recompile.model.node.js",

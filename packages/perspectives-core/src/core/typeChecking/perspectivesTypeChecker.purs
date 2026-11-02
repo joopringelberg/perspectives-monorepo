@@ -75,7 +75,7 @@ checkContext c = do
   -- I.e. when traversing the graph, the next node to be visited may not be in the path
   -- starting with c.
   catchError (lift $ throwOnCycle [] c)
-    \e -> fail $ CyclicAspects (position c) (identifier c)
+    \e -> fail $ CyclicAspects (position c) (position c) (identifier c)
 
   -- 3. The RoleKind of each RoleType must equal the position of the RoleType in the context.
   -- E.g.: all EnumeratedRoles and CalculatedRoles in rolInContext must have RoleKind RolInContext.

@@ -35,7 +35,7 @@ main = runTest do
         Right ctxt ->
           evalPhaseTwo (traverseDomain ctxt) >>=
             case _ of
-              Left (DuplicateContextDeclaration _ (ContextType contextId)) ->
+              Left (DuplicateContextDeclaration _ _ (ContextType contextId)) ->
                 assert "The duplicate context should be detected during phase two."
                   (contextId /= "")
               otherwise ->
@@ -48,7 +48,7 @@ main = runTest do
         Right ctxt ->
           evalPhaseTwo (traverseDomain ctxt) >>=
             case _ of
-              Left (DuplicateRoleDeclaration _ (ENR (EnumeratedRoleType roleId))) ->
+              Left (DuplicateRoleDeclaration _ _ (ENR (EnumeratedRoleType roleId))) ->
                 assert "The duplicate role should be detected during phase two."
                   (roleId /= "")
               otherwise ->

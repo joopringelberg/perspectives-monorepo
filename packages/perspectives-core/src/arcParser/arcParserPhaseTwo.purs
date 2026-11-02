@@ -42,7 +42,7 @@ import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord)
 import Perspectives.Identifiers (Namespace, isExternalRole, isTypeUri, newModelRegex, qualifyWith, typeUri2typeNameSpace_)
 import Perspectives.Parsing.Arc.AST (ContextE(..), ContextPart(..), FreeFormScreenE(..), PropertyE(..), PropertyMapping(..), PropertyPart(..), RoleE(..), RoleIdentification(..), RolePart(..), ScreenE(..), StateE(..), StateSpecification(..), ViewE(..), WhoWhatWhereScreenE(..))
 import Perspectives.Parsing.Arc.Expression.AST (FilledByAttribute(..), TypeCombination(..))
-import Perspectives.Parsing.Arc.Position (ArcPosition)
+import Perspectives.Parsing.Arc.Position (ArcPosition, endOfName)
 import Perspectives.Parsing.Arc.PhaseTwo.TypeCombination (compileRoleTypeCombination)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Query.ExpandPrefix (expandPrefix)
@@ -172,7 +172,7 @@ traverseContextE (ContextE { id, kindOfContext, public, contextParts, pos }) ns 
     -- TODO. This is strange: surely the unqualified name should be REPLACED by the qualified one!?
     -- Probably we currently just allow fully qualified aspect names.
     if isTypeUri expandedAspect then pure (Context $ contextUnderConstruction { contextAspects = cons (ContextType expandedAspect) contextAspects })
-    else throwError $ NotWellFormedName pos' contextName
+    else throwError $ NotWellFormedName pos' (endOfName pos' contextName) contextName
 
   handleParts (Context contextUnderConstruction) (IndexedContext indexedName pos') = do
     qualifiedIndexedName <- expandNamespace indexedName
@@ -205,7 +205,7 @@ traverseContextE (ContextE { id, kindOfContext, public, contextParts, pos }) ns 
   ensureContextIsNewInDomeinFile (Context { id: contextId@(ContextType ident), pos }) = do
     domeinFile <- getDF
     case lookup ident domeinFile.contexts of
-      Just _ -> throwError $ DuplicateContextDeclaration pos contextId
+      Just _ -> throwError $ DuplicateContextDeclaration pos pos contextId
       Nothing -> pure unit
 
   addContextToDomeinFile :: Context -> PhaseTwo Unit
@@ -344,7 +344,7 @@ traverseEnumeratedRoleE_ role@(EnumeratedRole { id: rn, kindOfRole }) roleParts 
   handleParts roleName (EnumeratedRole roleUnderConstruction@{ context, roleAspects, propertyAliases }) (RoleAspect a pos' mPropertyMapping) = do
     if kindOfRole == TI.ExternalRole && isExternalRole a
     -- If the aspect is an External role, flag it down.
-    then throwError (AspectForExternalRole pos' a)
+    then throwError (AspectForExternalRole pos' (endOfName pos' a) a)
     else do
       expandedAspect <- expandNamespace a
       if isTypeUri expandedAspect then do
@@ -367,7 +367,7 @@ traverseEnumeratedRoleE_ role@(EnumeratedRole { id: rn, kindOfRole }) roleParts 
               , propertyAliases = maybe propertyAliases (union propertyAliases) mPropertyMapping'
               }
           )
-      else throwError $ NotWellFormedName pos' a
+      else throwError $ NotWellFormedName pos' (endOfName pos' a) a
 
   -- INDEXEDROLE
   handleParts roleName (EnumeratedRole roleUnderConstruction) (IndexedRole indexedName pos') = do
@@ -502,8 +502,8 @@ ensureRoleIsNewInDomeinFile pos roleType = do
   domeinFile <- getDF
   let roleIdentifier = roletype2string roleType
   case lookup roleIdentifier domeinFile.enumeratedRoles, lookup roleIdentifier domeinFile.calculatedRoles of
-    Just _, _ -> throwError $ DuplicateRoleDeclaration pos roleType
-    _, Just _ -> throwError $ DuplicateRoleDeclaration pos roleType
+    Just _, _ -> throwError $ DuplicateRoleDeclaration pos pos roleType
+    _, Just _ -> throwError $ DuplicateRoleDeclaration pos pos roleType
     _, _ -> pure unit
 
 traverseCalculatedRoleE_ :: CalculatedRole -> List RolePart -> PhaseTwo Role

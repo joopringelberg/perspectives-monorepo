@@ -26,6 +26,7 @@ import Prelude
 
 import Data.Generic.Rep (class Generic)
 import Data.Newtype (class Newtype)
+import Data.String (length)
 import Simple.JSON (class ReadForeign, class WriteForeign)
 
 -- | `Position` represents the position of the parser in the input.
@@ -55,3 +56,7 @@ instance ordArcPosition :: Ord ArcPosition where
 
 arcParserStartPosition :: ArcPosition
 arcParserStartPosition = ArcPosition { line: 1, column: 1 }
+
+-- | The position just after a name that starts at the given position (assumes the name is on a single line).
+endOfName :: ArcPosition -> String -> ArcPosition
+endOfName (ArcPosition { line, column }) name = ArcPosition { line, column: column + length name }

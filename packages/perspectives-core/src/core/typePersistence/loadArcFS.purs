@@ -141,4 +141,4 @@ loadCompileAndSaveArcFile' :: String -> String -> MonadPerspectives MultiplePers
 loadCompileAndSaveArcFile' = loadAndPersistArcFile false \_ df -> storeDomeinFileInCouchdb (toStableDomeinFile df) *> pure []
 
 parseError2PerspectivesError :: ParseError -> PerspectivesError
-parseError2PerspectivesError (ParseError message pos) = ParserError message (position2ArcPosition pos)
+parseError2PerspectivesError (ParseError message pos) = ParserError message (position2ArcPosition pos) (position2ArcPosition pos)

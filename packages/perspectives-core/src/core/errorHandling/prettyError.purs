@@ -80,47 +80,47 @@ humanizePerspectivesError e = case e of
     pure (NoNotificationAspect contextType' start end)
 
   -- Constructors that carry only strings: try to prettify strings that look like URIs.
-  UnknownProperty pos qname adt -> do
+  UnknownProperty pos end qname adt -> do
     adt' <- for adt \x -> case x of
       ENR rtype -> ENR <$> toReadable rtype
       CR rtype -> CR <$> toReadable rtype
 
     qname' <- swapPropertyType qname
-    pure (UnknownProperty pos qname' adt')
+    pure (UnknownProperty pos end qname' adt')
 
-  UnknownRole pos s -> UnknownRole pos <$> humanizeString s
-  UnknownContext pos s -> UnknownContext pos <$> toReadable s
-  UnknownView pos s -> UnknownView pos <$> humanizeString s
-  NotAViewOfObject pos s -> NotAViewOfObject pos <$> humanizeString s
-  NotUniquelyIdentifyingPropertyType pos lname alts -> do
+  UnknownRole pos end s -> UnknownRole pos end <$> humanizeString s
+  UnknownContext pos end s -> UnknownContext pos end <$> toReadable s
+  UnknownView pos end s -> UnknownView pos end <$> humanizeString s
+  NotAViewOfObject pos end s -> NotAViewOfObject pos end <$> humanizeString s
+  NotUniquelyIdentifyingPropertyType pos end lname alts -> do
     lname' <- swapPropertyType lname
     alts' <- traverse swapPropertyType alts
-    pure (NotUniquelyIdentifyingPropertyType pos lname alts')
-  NotUniquelyIdentifyingView pos lname alts -> do
+    pure (NotUniquelyIdentifyingPropertyType pos end lname alts')
+  NotUniquelyIdentifyingView pos end lname alts -> do
     lname' <- toReadable lname
     alts' <- traverse toReadable alts
-    pure (NotUniquelyIdentifyingView pos lname' alts')
-  NotUniquelyIdentifyingContext pos lname alts -> do
+    pure (NotUniquelyIdentifyingView pos end lname' alts')
+  NotUniquelyIdentifyingContext pos end lname alts -> do
     lname' <- toReadable lname
     alts' <- traverse toReadable alts
-    pure (NotUniquelyIdentifyingContext pos lname' alts')
-  DuplicateContextDeclaration pos ctype -> do
+    pure (NotUniquelyIdentifyingContext pos end lname' alts')
+  DuplicateContextDeclaration pos end ctype -> do
     ctype' <- toReadable ctype
-    pure (DuplicateContextDeclaration pos ctype')
-  NotUniquelyIdentifyingRoleType pos lname alts -> do
+    pure (DuplicateContextDeclaration pos end ctype')
+  NotUniquelyIdentifyingRoleType pos end lname alts -> do
     lname' <- swapRoleType lname
     alts' <- traverse swapRoleType alts
-    pure (NotUniquelyIdentifyingRoleType pos lname' alts')
-  DuplicateRoleDeclaration pos rtype -> do
+    pure (NotUniquelyIdentifyingRoleType pos end lname' alts')
+  DuplicateRoleDeclaration pos end rtype -> do
     rtype' <- swapRoleType rtype
-    pure (DuplicateRoleDeclaration pos rtype')
-  NotUniquelyIdentifyingState pos lname alts -> do
+    pure (DuplicateRoleDeclaration pos end rtype')
+  NotUniquelyIdentifyingState pos end lname alts -> do
     lname' <- toReadable lname
     alts' <- traverse toReadable alts
-    pure (NotUniquelyIdentifyingState pos lname' alts')
-  NoCalculatedAspect pos ert -> do
+    pure (NotUniquelyIdentifyingState pos end lname' alts')
+  NoCalculatedAspect pos end ert -> do
     ert' <- toReadable ert
-    pure (NoCalculatedAspect pos ert')
+    pure (NoCalculatedAspect pos end ert')
   CannotModifyCalculatedProperty props start end -> do
     props' <- traverse swapPropertyType props
     pure (CannotModifyCalculatedProperty props' start end)

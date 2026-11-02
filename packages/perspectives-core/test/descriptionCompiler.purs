@@ -225,7 +225,7 @@ theSuite = suite "Perspectives.Query.DescriptionCompiler" do
   rejects "Logical not rejects a String"
     "  thing Role1 (mandatory)\n    property Prop1 (String)\n    property Prop2 = not Prop1"
     case _ of
-      NotABoolean _ -> true
+      NotABoolean _ _ -> true
       _ -> false
 
   compiles "Exists accepts a context and returns Boolean"
@@ -271,13 +271,13 @@ theSuite = suite "Perspectives.Query.DescriptionCompiler" do
   rejects "Comparison rejects incompatible value ranges"
     "  thing Role1 (mandatory)\n    property Prop1 (Boolean)\n    property Prop2 (String)\n    property Prop3 = Prop1 == Prop2"
     case _ of
-      TypesCannotBeCompared _ _ _ -> true
+      TypesCannotBeCompared _ _ _ _ -> true
       _ -> false
 
   rejects "Logical and rejects Number operands"
     "  thing Role1 (mandatory)\n    property Prop1 (Number)\n    property Prop2 (Number)\n    property Prop3 = Prop1 and Prop2"
     case _ of
-      WrongTypeForOperator _ _ _ -> true
+      WrongTypeForOperator _ _ _ _ -> true
       _ -> false
 
   compiles "Filter composes the source with its compiled predicate"

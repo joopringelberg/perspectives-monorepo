@@ -29,6 +29,7 @@ module Perspectives.Parsing.Messages where
 
 import Control.Monad.Except (ExceptT, throwError) as Except
 import Data.Array (intercalate, singleton)
+import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
 import Perspectives.CoreTypes (MonadPerspectives)
@@ -55,44 +56,44 @@ import Prelude (class Eq, class Show, show, (<<<), (<>), (<$>))
 -- | Each error should have an ArcPosition.
 data PerspectivesError
   = DefaultPrototype ContextType ContextType
-  | CyclicAspects ArcPosition ContextType
+  | CyclicAspects ArcPosition ArcPosition ContextType
   | WrongRoleKind RoleType RoleKind RoleKind
   -- | MissingForUser ArcPosition String
   | MissingRoleForPropertyAssignment ArcPosition ArcPosition
-  | NotWellFormedName ArcPosition String
-  | AspectForExternalRole ArcPosition String
-  | RoleMissingInContext ArcPosition String String
-  | UnknownContext ArcPosition ContextType
-  | UnknownRole ArcPosition String
+  | NotWellFormedName ArcPosition ArcPosition String
+  | AspectForExternalRole ArcPosition ArcPosition String
+  | RoleMissingInContext ArcPosition ArcPosition String String
+  | UnknownContext ArcPosition ArcPosition ContextType
+  | UnknownRole ArcPosition ArcPosition String
   | CannotModifyRole ArcPosition ArcPosition String
-  | UnknownState ArcPosition String
-  | UnknownProperty ArcPosition PropertyType (ADT RoleType)
-  | UnknownView ArcPosition String
-  | NotAViewOfObject ArcPosition String
-  | NotUniquelyIdentifyingPropertyType ArcPosition PropertyType (Array PropertyType)
-  | NotUniquelyIdentifyingView ArcPosition ViewType (Array ViewType)
-  | NotUniquelyIdentifyingContext ArcPosition ContextType (Array ContextType)
-  | NotUniquelyIdentifyingRoleType ArcPosition RoleType (Array RoleType)
-  | NotUniquelyIdentifyingState ArcPosition StateIdentifier (Array StateIdentifier)
+  | UnknownState ArcPosition ArcPosition String
+  | UnknownProperty ArcPosition ArcPosition PropertyType (ADT RoleType)
+  | UnknownView ArcPosition ArcPosition String
+  | NotAViewOfObject ArcPosition ArcPosition String
+  | NotUniquelyIdentifyingPropertyType ArcPosition ArcPosition PropertyType (Array PropertyType)
+  | NotUniquelyIdentifyingView ArcPosition ArcPosition ViewType (Array ViewType)
+  | NotUniquelyIdentifyingContext ArcPosition ArcPosition ContextType (Array ContextType)
+  | NotUniquelyIdentifyingRoleType ArcPosition ArcPosition RoleType (Array RoleType)
+  | NotUniquelyIdentifyingState ArcPosition ArcPosition StateIdentifier (Array StateIdentifier)
   | UnknownElementaryQueryStep
-  | IncompatibleQueryArgument ArcPosition Domain Step
+  | IncompatibleQueryArgument ArcPosition ArcPosition Domain Step
   | ContextHasNoRole (ADT ContextType) String ArcPosition ArcPosition
   | RoleHasNoProperty (ADT EnumeratedRoleType) String ArcPosition ArcPosition
   | RoleHasNoEnumeratedProperty (ADT EnumeratedRoleType) String ArcPosition ArcPosition
   | UniversalRoleHasNoParts
-  | RoleHasNoBinding ArcPosition (ADT EnumeratedRoleType)
+  | RoleHasNoBinding ArcPosition ArcPosition (ADT EnumeratedRoleType)
   | RoleCannotHaveBinding ArcPosition ArcPosition String
   | IncompatibleDomainsForJunction Domain Domain
-  | RoleDoesNotBind ArcPosition RoleType (ADT RoleInContext)
+  | RoleDoesNotBind ArcPosition ArcPosition RoleType (ADT RoleInContext)
   | LocalRoleDoesNotBind ArcPosition ArcPosition String (ADT RoleInContext)
-  | IncompatibleComposition ArcPosition Range Domain
+  | IncompatibleComposition ArcPosition ArcPosition Range Domain
   | IncompatibleDomains ArcPosition ArcPosition
-  | TypesCannotBeCompared ArcPosition Range Range
-  | NotABoolean ArcPosition
-  | WrongTypeForOperator ArcPosition (Array RAN.Range) Domain
+  | TypesCannotBeCompared ArcPosition ArcPosition Range Range
+  | NotABoolean ArcPosition ArcPosition
+  | WrongTypeForOperator ArcPosition ArcPosition (Array RAN.Range) Domain
   | MissingValueForAssignment ArcPosition ArcPosition
-  | ArgumentMustBeSequenceFunction ArcPosition
-  | UnknownVariable ArcPosition String
+  | ArgumentMustBeSequenceFunction ArcPosition ArcPosition
+  | UnknownVariable ArcPosition ArcPosition String
   | NotALetWithAssignment PureLetStep
   | NotAPureLet LetStep
   | CannotCreateCalculatedRole CalculatedRoleType ArcPosition ArcPosition
@@ -119,13 +120,13 @@ data PerspectivesError
   | CurrentSubjectNotAllowed ArcPosition ArcPosition
   | FillerRestrictionNotAnAspectSubtype ArcPosition ArcPosition String String
   | RecursiveDefinition String
-  | ExpressionsShouldBeFunctional Boolean Boolean ArcPosition
-  | NoMonths ArcPosition
+  | ExpressionsShouldBeFunctional Boolean Boolean ArcPosition ArcPosition
+  | NoMonths ArcPosition ArcPosition
   | NotARootContext ArcPosition ArcPosition ContextType
   | PropertyCannotBeCalculated String ArcPosition ArcPosition
   | NotASelfPerspective ArcPosition ArcPosition
   | UndeclaredPrefix ArcPosition ArcPosition String
-  | ProvideContext ArcPosition
+  | ProvideContext ArcPosition ArcPosition
 
   | UnauthorizedForProperty String RoleType RoleType PropertyType PropertyVerb (Maybe ArcPosition) (Maybe ArcPosition)
   | UnauthorizedForRole String RoleType RoleType (Array RoleVerb) (Maybe ArcPosition) (Maybe ArcPosition)
@@ -136,8 +137,8 @@ data PerspectivesError
   | MissingPerspective
   | UserHasNoPerspective RoleType RoleType ArcPosition ArcPosition
   | PerspectiveCannotBeAuthorOnly String ArcPosition EnumeratedRoleType ArcPosition EnumeratedPropertyType
-  | SelfOnlyNeedsTwoRoles String ArcPosition EnumeratedPropertyType
-  | SelfOnlyShouldBeAuthorOnly String ArcPosition EnumeratedPropertyType
+  | SelfOnlyNeedsTwoRoles String ArcPosition ArcPosition EnumeratedPropertyType
+  | SelfOnlyShouldBeAuthorOnly String ArcPosition ArcPosition EnumeratedPropertyType
   | StateDoesNotExist StateIdentifier ArcPosition ArcPosition
   | NoNotificationAspect ContextType ArcPosition ArcPosition
 
@@ -147,11 +148,11 @@ data PerspectivesError
   | DomeinFileErrorBoundary String String
   | ApiErrorBoundary String
   | RuleErrorBoundary String String
-  | ParserError String ArcPosition
+  | ParserError String ArcPosition ArcPosition
   | MissingObject ArcPosition ArcPosition
-  | NoCalculatedAspect ArcPosition EnumeratedRoleType
+  | NoCalculatedAspect ArcPosition ArcPosition EnumeratedRoleType
 
-  | DomeinFileIdIncompatible String String ArcPosition
+  | DomeinFileIdIncompatible String String ArcPosition ArcPosition
   | PerspectivesFileFormatError String String
 
   -- Screens
@@ -163,8 +164,8 @@ data PerspectivesError
   | FieldConstraintRequiresStringRange ArcPosition ArcPosition PropertyType
 
   | MultipleDefaultUserRoles ContextType
-  | DuplicateContextDeclaration ArcPosition ContextType
-  | DuplicateRoleDeclaration ArcPosition RoleType
+  | DuplicateContextDeclaration ArcPosition ArcPosition ContextType
+  | DuplicateRoleDeclaration ArcPosition ArcPosition RoleType
 
   | Custom String
   -- Incoming transaction / delta errors
@@ -173,36 +174,37 @@ data PerspectivesError
   | DeltaExecutionError String
 
 derive instance eqPerspectivesError :: Eq PerspectivesError
+derive instance genericPerspectivesError :: Generic PerspectivesError _
 
 instance showPerspectivesError :: Show PerspectivesError where
   show (DefaultPrototype expected given) = "Invalid type for DefaultPrototype. Expected: '" <> unwrap expected <> "' but found '" <> unwrap given <> "'."
-  show (CyclicAspects pos c) = "Context '" <> unwrap c <> "' has cyclic aspects: " <> show pos
+  show (CyclicAspects pos _ c) = "Context '" <> unwrap c <> "' has cyclic aspects: " <> show pos
   show (WrongRoleKind roletype expected found) = "Role '" <> show roletype <> "' has kind '" <> show found <> "' but should have kind '" <> show expected <> "'."
   -- show (MissingForUser pos localBotName) = "(MissingForUser) The BotRole '" <> localBotName <> "' should have a 'ForUser' clause: " <> show pos
   show (MissingRoleForPropertyAssignment start end) = "(MissingRoleForPropertyAssignment) The role for this property assignment is not specified (between " <> show start <> "and " <> show end <> ")."
-  show (NotWellFormedName pos name) = "(NotWellFormedName) The name '" <> name <> "' is not well-formed (it cannot be expanded to a fully qualified name): " <> show pos
-  show (AspectForExternalRole pos name) = "(AspectForExternalRole) The external role should not have an external role as named aspect (it will automatically acquire the external role of any context aspects specified for its context): '" <> name <> "', at: " <> show pos
-  show (RoleMissingInContext pos localRoleName ctxt) = "(RoleMissingInContext) The local role name '" <> localRoleName <> "' cannot be found in the context: '" <> ctxt <> "', at: " <> show pos
-  show (UnknownRole pos qname) = "(UnknownRole) The role '" <> qname <> "' is not defined, at: " <> show pos
+  show (NotWellFormedName pos _ name) = "(NotWellFormedName) The name '" <> name <> "' is not well-formed (it cannot be expanded to a fully qualified name): " <> show pos
+  show (AspectForExternalRole pos _ name) = "(AspectForExternalRole) The external role should not have an external role as named aspect (it will automatically acquire the external role of any context aspects specified for its context): '" <> name <> "', at: " <> show pos
+  show (RoleMissingInContext pos _ localRoleName ctxt) = "(RoleMissingInContext) The local role name '" <> localRoleName <> "' cannot be found in the context: '" <> ctxt <> "', at: " <> show pos
+  show (UnknownRole pos _ qname) = "(UnknownRole) The role '" <> qname <> "' is not defined, at: " <> show pos
   show (CannotModifyRole start end r) = "(CannotModifyRole) The role '" <> r <> "' cannot be modified, between " <> show start <> " and " <> show end <> ". Is it an aspect role from another model? If not, check whether you have defined this role in the current model."
-  show (UnknownState pos qname) = "(UnknownState) The state '" <> qname <> "' is not defined, at: " <> show pos
-  show (UnknownProperty pos qname roleType) = "(UnknownProperty) The property '" <> propertytype2string qname <> "' is not defined for role '" <> show roleType <> "', at: " <> show pos
-  show (UnknownContext pos qname) = "(UnknownContext) The context '" <> show qname <> "' is not defined, at: " <> show pos
-  show (UnknownView pos qname) = "(UnknownView) The view '" <> qname <> "' is not defined, at: " <> show pos
-  show (NotAViewOfObject pos qname) = "(NotAViewOfObject) The view '" <> qname <> "' is not a view of the current object, at: " <> show pos
-  show (NotUniquelyIdentifyingPropertyType pos lname alts) = "(NotUniquelyIdentifyingPropertyType) The local name '" <> propertytype2string lname <> "' does not uniquely identify a resource. Choose one from: " <> (intercalate ", " (propertytype2string <$> alts)) <> ", at: " <> show pos <> ", or choose a resource from another context."
-  show (NotUniquelyIdentifyingView pos lname alts) = "(NotUniquelyIdentifyingView) The view name '" <> unwrap lname <> "' does not uniquely identify a view. Choose one from: " <> (intercalate ", " (unwrap <$> alts)) <> ", at: " <> show pos <> "."
-  show (NotUniquelyIdentifyingContext pos lname alts) = "(NotUniquelyIdentifyingContext) The context name '" <> unwrap lname <> "' does not uniquely identify a context. Choose one from: " <> (intercalate ", " (unwrap <$> alts)) <> ", at: " <> show pos <> "."
-  show (NotUniquelyIdentifyingRoleType pos lname alts) = "(NotUniquelyIdentifyingRoleType) The role type name '" <> roletype2string lname <> "' does not uniquely identify a role type. Choose one from: " <> (intercalate ", " (roletype2string <$> alts)) <> ", at: " <> show pos <> "."
-  show (NotUniquelyIdentifyingState pos lname alts) = "(NotUniquelyIdentifyingState) The state name '" <> unwrap lname <> "' does not uniquely identify a state. Choose one from: " <> (intercalate ", " (unwrap <$> alts)) <> ", at: " <> show pos <> "."
+  show (UnknownState pos _ qname) = "(UnknownState) The state '" <> qname <> "' is not defined, at: " <> show pos
+  show (UnknownProperty pos _ qname roleType) = "(UnknownProperty) The property '" <> propertytype2string qname <> "' is not defined for role '" <> show roleType <> "', at: " <> show pos
+  show (UnknownContext pos _ qname) = "(UnknownContext) The context '" <> show qname <> "' is not defined, at: " <> show pos
+  show (UnknownView pos _ qname) = "(UnknownView) The view '" <> qname <> "' is not defined, at: " <> show pos
+  show (NotAViewOfObject pos _ qname) = "(NotAViewOfObject) The view '" <> qname <> "' is not a view of the current object, at: " <> show pos
+  show (NotUniquelyIdentifyingPropertyType pos _ lname alts) = "(NotUniquelyIdentifyingPropertyType) The local name '" <> propertytype2string lname <> "' does not uniquely identify a resource. Choose one from: " <> (intercalate ", " (propertytype2string <$> alts)) <> ", at: " <> show pos <> ", or choose a resource from another context."
+  show (NotUniquelyIdentifyingView pos _ lname alts) = "(NotUniquelyIdentifyingView) The view name '" <> unwrap lname <> "' does not uniquely identify a view. Choose one from: " <> (intercalate ", " (unwrap <$> alts)) <> ", at: " <> show pos <> "."
+  show (NotUniquelyIdentifyingContext pos _ lname alts) = "(NotUniquelyIdentifyingContext) The context name '" <> unwrap lname <> "' does not uniquely identify a context. Choose one from: " <> (intercalate ", " (unwrap <$> alts)) <> ", at: " <> show pos <> "."
+  show (NotUniquelyIdentifyingRoleType pos _ lname alts) = "(NotUniquelyIdentifyingRoleType) The role type name '" <> roletype2string lname <> "' does not uniquely identify a role type. Choose one from: " <> (intercalate ", " (roletype2string <$> alts)) <> ", at: " <> show pos <> "."
+  show (NotUniquelyIdentifyingState pos _ lname alts) = "(NotUniquelyIdentifyingState) The state name '" <> unwrap lname <> "' does not uniquely identify a state. Choose one from: " <> (intercalate ", " (unwrap <$> alts)) <> ", at: " <> show pos <> "."
   show (Custom s) = s
-  show (ParserError message pos) = "(ParserError) " <> message <> show pos
+  show (ParserError message pos _) = "(ParserError) " <> message <> show pos
   -- TODO: Als extra kunnen we de Constructors hieronder voorzien van ArcPosition.
   show (MissingObject start end) = "(MissingObject) The expression contains a reference to the 'currentobject' variable but there is no current object in scope (between " <> show start <> " and " <> show end <> ")"
   show (UnknownElementaryQueryStep) = "(UnknownElementaryQueryStep) This step is unknown"
-  show (IncompatibleQueryArgument pos dom step) = "(IncompatibleQueryArgument) Cannot get " <> show step <> " from " <> show dom <> ", at: " <> show pos
-  show (NoCalculatedAspect start calculatedRoleName) = "(NoCalculatedAspect) The role '" <> show calculatedRoleName <> "' is implied to be an aspect (by providing an explicit context type) but CalculatedRoles cannot be used as an Aspect."
-  show (DomeinFileIdIncompatible manifestDfid sourceDfid start) = "(DomeinFileIdIncompatible) The manifest is for " <> show manifestDfid <> " while the arc source mentions " <> show sourceDfid <> "."
+  show (IncompatibleQueryArgument pos _ dom step) = "(IncompatibleQueryArgument) Cannot get " <> show step <> " from " <> show dom <> ", at: " <> show pos
+  show (NoCalculatedAspect start _ calculatedRoleName) = "(NoCalculatedAspect) The role '" <> show calculatedRoleName <> "' is implied to be an aspect (by providing an explicit context type) but CalculatedRoles cannot be used as an Aspect."
+  show (DomeinFileIdIncompatible manifestDfid sourceDfid start _) = "(DomeinFileIdIncompatible) The manifest is for " <> show manifestDfid <> " while the arc source mentions " <> show sourceDfid <> "."
   show (PerspectivesFileFormatError pfileString errorString) = "(PerspectivesFileFormatError) This string cannot be parsed as a valid PFile value: '" <> pfileString <> "', because: " <> errorString
   show (ScreenForUserRoleOnly start end) = "(ScreenForUserRoleOnly) Only a user role may contain a screen definition!"
   show (WidgetCardinalityMismatch start end) = "(WidgetCardinalityMismatch) The cardinality of the Widget and the Role do not suit each other (between " <> show start <> " and " <> show end <> ")."
@@ -211,25 +213,25 @@ instance showPerspectivesError :: Show PerspectivesError where
   show (UnknownMarkDownAction start end actionName roletype) = "(UnknownMarkDownAction) The action '" <> actionName <> "' is not defined for the role '" <> show roletype <> "'! Between " <> show start <> " and " <> show end <> ")."
   show (FieldConstraintRequiresStringRange start end pt) = "(FieldConstraintRequiresStringRange) The property '" <> propertytype2string pt <> "' must have a String range to use minLines/maxLines constraints. Between " <> show start <> " and " <> show end <> "."
   show (MultipleDefaultUserRoles ctype) = "(MultipleDefaultUserRoles) The context '" <> unwrap ctype <> "' has more than one user role marked as default. At most one user role may be the default."
-  show (DuplicateContextDeclaration pos ctype) = "(DuplicateContextDeclaration) The context '" <> unwrap ctype <> "' is declared more than once. Each context type may be declared only once. At: " <> show pos
-  show (DuplicateRoleDeclaration pos rtype) = "(DuplicateRoleDeclaration) The role '" <> roletype2string rtype <> "' is declared more than once. Each role type may be declared only once within its context. At: " <> show pos
+  show (DuplicateContextDeclaration pos _ ctype) = "(DuplicateContextDeclaration) The context '" <> unwrap ctype <> "' is declared more than once. Each context type may be declared only once. At: " <> show pos
+  show (DuplicateRoleDeclaration pos _ rtype) = "(DuplicateRoleDeclaration) The role '" <> roletype2string rtype <> "' is declared more than once. Each role type may be declared only once within its context. At: " <> show pos
   show (ContextHasNoRole ctype qn start end) = "(ContextHasNoRole) The Context-type '" <> show ctype <> "' has no enumerated role with the name '" <> qn <> "' (it may have a calculated role but that cannot be used here). Between " <> show start <> " and " <> show end
   show (RoleHasNoProperty rtype qn start end) = "(RoleHasNoProperty) The Role-type '" <> show rtype <> "' has no property with the name '" <> qn <> "' (between " <> show start <> " and " <> show end <> ")."
   show (RoleHasNoEnumeratedProperty rtype qn start end) = "(RoleHasNoEnumeratedProperty) The Role-type '" <> show rtype <> "' has no enumerated property with the name '" <> qn <> "' (between " <> show start <> " and " <> show end <> "). It may have a calculated property, but we cannot use that in this situation."
   show UniversalRoleHasNoParts = "(UniversalRoleHasNoParts) 'NoBinding' gives no access to properties, aspects, binding, etc."
-  show (RoleHasNoBinding pos rtype) = "(RoleHasNoBinding) The role '" <> show rtype <> "' has no binding. If it is a Sum-type, one of its members may have no binding " <> show pos
+  show (RoleHasNoBinding pos _ rtype) = "(RoleHasNoBinding) The role '" <> show rtype <> "' has no binding. If it is a Sum-type, one of its members may have no binding " <> show pos
   show (RoleCannotHaveBinding start end roletype) = "(RoleCannotHaveBinding) External Roles cannot have a binding. " <> roletype <> ", from " <> show start <> " to " <> show end
   show (IncompatibleDomainsForJunction dom1 dom2) = "(IncompatibleDomainsForJunction) These two domains cannot be joined in a disjunction of conjunction: '" <> show dom1 <> "', '" <> show dom2 <> "'."
-  show (RoleDoesNotBind pos rtype adt) = "(RoleDoesNotBind) The role '" <> show rtype <> "' cannot be filled by roles of type '" <> show adt <> "' (it may have an aspect that is stricter than its own filler restriction!), at: " <> show pos
+  show (RoleDoesNotBind pos _ rtype adt) = "(RoleDoesNotBind) The role '" <> show rtype <> "' cannot be filled by roles of type '" <> show adt <> "' (it may have an aspect that is stricter than its own filler restriction!), at: " <> show pos
   show (LocalRoleDoesNotBind start end lname adt) = "(LocalRoleDoesNotBind) The roles that name '" <> lname <> "' (from " <> show start <> " to " <> show end <> ") can be matched to, do not bind '" <> show adt <> "'."
-  show (IncompatibleComposition pos left right) = "(IncompatibleComposition) The result of the left operand (" <> show left <> ") and the argument of the right operand (" <> show right <> ") are incompatible."
+  show (IncompatibleComposition pos _ left right) = "(IncompatibleComposition) The result of the left operand (" <> show left <> ") and the argument of the right operand (" <> show right <> ") are incompatible."
   show (IncompatibleDomains pos1 pos2) = "(IncompatibleDomains) The result of the expression at " <> show pos1 <> " and " <> show pos2 <> " have incompatible domains (both must be contexts, roles or values)."
-  show (TypesCannotBeCompared pos left right) = "(TypesCannotBeCompared) The result of the left operand (" <> show left <> ") and of the right operand (" <> show right <> ") are incompatible in: " <> show pos
-  show (NotABoolean pos) = "(NotABoolean) The expression starting at " <> show pos <> " does not result in a boolean value."
-  show (WrongTypeForOperator pos allowedOps dom) = "(WrongTypeForOperator) This operator requires its arguments to be (one of): " <> show allowedOps <> ", but was given: " <> show dom <> ", at position " <> show pos
+  show (TypesCannotBeCompared pos _ left right) = "(TypesCannotBeCompared) The result of the left operand (" <> show left <> ") and of the right operand (" <> show right <> ") are incompatible in: " <> show pos
+  show (NotABoolean pos _) = "(NotABoolean) The expression starting at " <> show pos <> " does not result in a boolean value."
+  show (WrongTypeForOperator pos _ allowedOps dom) = "(WrongTypeForOperator) This operator requires its arguments to be (one of): " <> show allowedOps <> ", but was given: " <> show dom <> ", at position " <> show pos
   show (MissingValueForAssignment start end) = "(MissingValueForAssignment) This assignment statement needs a value expression on the right: from " <> show start <> " to " <> show end
-  show (ArgumentMustBeSequenceFunction pos) = "(ArgumentMustBeSequenceFunction) The right operand of '>>=' must be a monoidal function such as sum, product, minimum, or maximum, at: " <> show pos
-  show (UnknownVariable pos varName) = "(UnknownVariable) The variable '" <> varName <> "' is not known at position: " <> show pos
+  show (ArgumentMustBeSequenceFunction pos _) = "(ArgumentMustBeSequenceFunction) The right operand of '>>=' must be a monoidal function such as sum, product, minimum, or maximum, at: " <> show pos
+  show (UnknownVariable pos _ varName) = "(UnknownVariable) The variable '" <> varName <> "' is not known at position: " <> show pos
   show (NotALetWithAssignment (PureLetStep { start, end })) = "(NotALetWithAssignment) This let*-expression does not have an assignment in its body, hence is of no use in a rule. From " <> show start <> " to " <> show end
   show (NotAPureLet (LetStep { start, end })) = "(NotAPureLet) This let*-expression has an assignment in its body but it is used in a pure expression, so its body should be a pure expression, too. From " <> show start <> " to " <> show end
   show (CannotCreateCalculatedRole cr start end) = "(CannotCreateCalculatedRole) Can not create an instance of a calculated role (" <> show cr <> ") between: " <> show start <> " and: " <> show end
@@ -256,16 +258,16 @@ instance showPerspectivesError :: Show PerspectivesError where
   show (CurrentSubjectNotAllowed start end) = "(CurrentSubjectNotAllowed) The variable `currentsubject` is illegal in the expression between " <> show start <> " and " <> show end <> "."
   show (FillerRestrictionNotAnAspectSubtype rolePos aspectPos roleName aspectName) = "(FillerRestrictionNotAnAspectSubtype) The role " <> roleName <> " (at " <> show rolePos <> ") has a value for the filledBy clause that is not a subtype of that of its aspect " <> aspectName <> "(at " <> show aspectPos <> ")."
   show (RecursiveDefinition s) = "(RecursiveDefinition) " <> s
-  show (ExpressionsShouldBeFunctional left right pos) = "(ExpressionsShouldBeFunctional) The cardinality of the left and right term at " <> show pos <> " should both be functional. The left is " <> showCardinality left <> " and the right is " <> showCardinality right <> "."
+  show (ExpressionsShouldBeFunctional left right pos _) = "(ExpressionsShouldBeFunctional) The cardinality of the left and right term at " <> show pos <> " should both be functional. The left is " <> showCardinality left <> " and the right is " <> showCardinality right <> "."
     where
     showCardinality :: Boolean -> String
     showCardinality b = if b then "functional" else "relational"
-  show (NoMonths pos) = "(NoMonths) It is not allowed to subtract months from or add to a date. Try days or weeks instead."
+  show (NoMonths pos _) = "(NoMonths) It is not allowed to subtract months from or add to a date. Try days or weeks instead."
   show (NotARootContext start end qualifiedContextTypeIdentifier) = "(NotARootContext) " <> (unwrap qualifiedContextTypeIdentifier) <> " is not a RootContext but you try to create it without filling a role with it. Consider using 'create_ context <ContextType> bound to <roleExpression>' between " <> show start <> " and " <> show end <> "."
   show (PropertyCannotBeCalculated prop start end) = "(PropertyCannotBeCalculated) This property cannot be calculated " <> showPosition start end
   show (NotASelfPerspective start end) = "(NotASelfPerspective) `selfOnly` is restricted to self-perspectives: a perspective for a user role on that user role. Consider `authorOnly` instead: it may be what you need " <> showPosition start end
   show (UndeclaredPrefix start end prefix) = "(UndeclaredPrefix) The prefix used in '" <> prefix <> "' has not been declared (between " <> show start <> " and " <> show end <> ")."
-  show (ProvideContext pos) = "(ProvideContext) Provide context at position " <> show pos
+  show (ProvideContext pos _) = "(ProvideContext) Provide context at position " <> show pos
   show (UnauthorizedForProperty author userRole role property verb start end) = "(UnauthorizedForProperty) User " <> author <> " in role " <> show userRole <> " has no perspective on role " <> show role <> " that includes " <> show verb <> " for property " <> show property <> maybeShowPosition start end
   show (UnauthorizedForRole author userRole role verbs mstart mend) = "(UnauthorizedForRole) User " <> author <> " in role " <> show userRole <> " has no perspective on role " <> show role <> " that includes at least one of " <> show verbs <> maybeShowPosition mstart mend
   show (UnauthorizedForContext author userRole contextType) = "(UnauthorizedForContext) User " <> author <> " in role " <> show userRole <> " has no perspective on context " <> show contextType
@@ -281,10 +283,10 @@ instance showPerspectivesError :: Show PerspectivesError where
     <> "' (from "
     <> show userRoleStart
     <> ") is the only userrole with a perspective on it and the userrole is functional"
-  show (SelfOnlyNeedsTwoRoles userRoleName userRoleStart (EnumeratedPropertyType prop)) = "(SelfOnlyNeedsTwoRoles) `selfonly` on property '" <> prop <> "' of user '" <> userRoleName <> "' (from " <> show userRoleStart <>
+  show (SelfOnlyNeedsTwoRoles userRoleName userRoleStart _ (EnumeratedPropertyType prop)) = "(SelfOnlyNeedsTwoRoles) `selfonly` on property '" <> prop <> "' of user '" <> userRoleName <> "' (from " <> show userRoleStart <>
     ") \
     \ is meaningless because this users' perspective is the only perspective on it (consider `authoronly` instead)."
-  show (SelfOnlyShouldBeAuthorOnly userRoleName userRoleStart (EnumeratedPropertyType prop)) = "(SelfOnlyShouldBeAuthorOnly) `selfonly` on property '" <> prop <> "' of user '" <> userRoleName <> "' (from " <> show userRoleStart
+  show (SelfOnlyShouldBeAuthorOnly userRoleName userRoleStart _ (EnumeratedPropertyType prop)) = "(SelfOnlyShouldBeAuthorOnly) `selfonly` on property '" <> prop <> "' of user '" <> userRoleName <> "' (from " <> show userRoleStart
     <>
       ") \
       \ is meaningless because either '"

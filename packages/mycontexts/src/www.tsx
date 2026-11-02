@@ -10,7 +10,8 @@ declare global {
 import './styles/www.css';
 import './styles/accessibility.css'
 import {addRoleToClipboard, externalRoleType, i18next, FileDropZone, sendTransactionToProxy} from 'perspectives-react';
-import { ContextInstanceT, ContextType, CONTINUOUS, FIREANDFORGET, PDRproxy, RoleInstanceT, RoleType, ScreenDefinition, SharedWorkerChannelPromise, Unsubscriber, RoleOnClipboard, PropertySerialization, ValueT, Perspective, InspectableContext, InspectableRole, Warning, ConversationBranch } from 'perspectives-proxy';
+import { ContextInstanceT, ContextType, CONTINUOUS, FIREANDFORGET, PDRproxy, RoleInstanceT, RoleType, ScreenDefinition, SharedWorkerChannelPromise, Unsubscriber, RoleOnClipboard, PropertySerialization, ValueT, Perspective, InspectableContext, InspectableRole, Warning, ConversationBranch, getSharedWorkerConnection } from 'perspectives-proxy';
+import { arcEditorUrl, isVersionedModelManifest } from './arcEditorLaunch';
 import {AppContext, deconstructContext, deconstructLocalName, EndUserNotifier, externalRole, initUserMessaging, ModelDependencies, PerspectivesComponent, PSContext, UserMessagingPromise, UserMessagingMessage, ChoiceMessage, UserChoice, InspectableContextView, InspectableRoleInstanceView} from 'perspectives-react';
 import { constructPouchdbUser, getInstallationData } from './installationData';
 import { Me } from './me';
@@ -700,6 +701,18 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
       });
   }
 
+  // Opens the standalone ARC editor in another tab. It connects to the same SharedWorker.
+  openArcEditor()
+  {
+    window.open( arcEditorUrl(
+      { baseUrl: new URL( import.meta.env.BASE_URL, window.location.href ).href
+      , manifest: this.state.openContext!
+      , contextType: this.state.openContextType!
+      , userRoleType: this.state.openContextUserType!
+      , worker: getSharedWorkerConnection()
+      }), "_blank" );
+  }
+
   runAction( actionName : string )
   {
     const component = this;
@@ -926,6 +939,8 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
         >
           { component.state.openContext ? <NavDropdown.Item onClick={ () => component.pinContext( component.state.openContext! ) }>{ i18next.t("www_pincontext", {ns: 'mycontexts'}) }</NavDropdown.Item> : null }
           { component.state.openContext ? <NavDropdown.Item onClick={ () => component.copyContext( component.state.openContext! ) }>{ i18next.t("www_copycontext", {ns: 'mycontexts'}) }</NavDropdown.Item> : null }
+          { component.state.openContext && component.state.openContextUserType && isVersionedModelManifest( component.state.openContextType ) ?
+            <NavDropdown.Item onClick={ () => component.openArcEditor() }>{ i18next.t("www_editArcSource", {ns: 'mycontexts'}) }</NavDropdown.Item> : null }
           <NavDropdown.Item onClick={() => component.setState({showImportTransaction: true})}>{ i18next.t("www_importTransaction", {ns: 'mycontexts'}) }</NavDropdown.Item>
           { component.state.actions && Object.keys( component.state.actions ).length > 0 ? 
             <>

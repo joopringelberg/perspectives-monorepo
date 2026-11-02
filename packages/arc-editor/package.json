@@ -1,0 +1,20 @@
+{
+  "name": "arc-editor",
+  "private": true,
+  "version": "0.1.0",
+  "description": "POC: standalone Monaco-based ARC editor that shares the MyContexts SharedWorker/PDR.",
+  "type": "module",
+  "scripts": {
+    "build": "pnpm --filter perspectives-proxy run build && pnpm exec tsc --noEmit && vite build",
+    "build:into-mycontexts": "pnpm run build && rm -rf ../mycontexts/dist/arceditor && cp -r dist ../mycontexts/dist/arceditor",
+    "test": "node --test test/*.test.ts"
+  },
+  "dependencies": {
+    "monaco-editor": "0.52.2",
+    "perspectives-proxy": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "5.8.3",
+    "vite": "6.3.5"
+  }
+}

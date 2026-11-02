@@ -17,13 +17,13 @@ position = ArcPosition { line: 3, column: 7 }
 theSuite :: Free TestF Unit
 theSuite = suite "Perspectives.Error.Pretty" do
   test "renderPerspectivesError humanizes URI-like UnknownRole names" do
-    rendered <- runP $ renderPerspectivesError (UnknownRole position "model://example.org#MyModel$MyContext$MyRole")
+    rendered <- runP $ renderPerspectivesError (UnknownRole position position "model://example.org#MyModel$MyContext$MyRole")
     liftAff $ assert "UnknownRole should be rendered with the local type name" $
       rendered == "(UnknownRole) The role 'MyRole' is not defined, at: line 3, column 7"
 
   test "renderMultiplePerspectivesErrors renders each error before joining" do
     rendered <- runP $ renderMultiplePerspectivesErrors
-      [ UnknownRole position "model://example.org#MyModel$MyContext$MyRole"
+      [ UnknownRole position position "model://example.org#MyModel$MyContext$MyRole"
       , Custom "Second error"
       ]
     liftAff $ assert "Multiple errors should be humanized and newline-separated" $
