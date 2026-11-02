@@ -13,7 +13,7 @@ import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import { configurePDRproxy, PDRproxy, SharedWorkerChannelPromise } from "perspectives-proxy";
 import { ARC_LANGUAGE_ID, ARC_TAB_SIZE, arcLanguageConfiguration, arcMonarchLanguage } from "./arcLanguage.ts";
 import { parseLaunchParams } from "./launchParams.ts";
-import { diagnosticToMarker, DocumentSync, localTypeName, LspClient, lspRangeToRange, modelUriOfSourceUri, type LspCompletionList, type LspDiagnostic, type LspLocation, type LspMembers } from "./lspClient.ts";
+import { diagnosticToMarker, DocumentSync, localTypeName, LspClient, lspRangeToRange, modelUriOfSourceUri, type LspCompletionList, type LspDiagnostic, type LspLocation, type LspMembers, type LspPerspectivesOn } from "./lspClient.ts";
 import { NavigationHistory } from "./navigation.ts";
 import { enclosingContextOfRole } from "./structure.ts";
 import { classifyFeedback, ManifestSession, type ProxyLike, type WatchedProperty } from "./manifestSession.ts";
@@ -232,43 +232,76 @@ async function showMembers(expected: LspMembers["kind"]) {
   const what = expected === "properties" ? "a role (enumerated)" : "a context";
   if (!result || result.kind !== expected) { notice(`Place the cursor on the name of ${what} to list its ${expected}.`, "info"); return; }
   notice(undefined);
-  $("membersTitle").textContent = `${expected === "properties" ? "Properties" : "Roles"} of ${localTypeName(result.owner)}`;
-  $("membersTitle").title = result.owner;
+  showPanel(
+    `${expected === "properties" ? "Properties" : "Roles"} of ${localTypeName(result.owner)}`, result.owner, `No ${expected}.`,
+    result.members.map(m => ({
+      label: localTypeName(m.name), title: `${m.name} (${m.kind})`, location: m.location,
+      note: m.origin !== result.owner ? { text: ` from ${localTypeName(m.origin)}`, title: m.origin } : undefined,
+    })));
+}
+
+type PanelItem = { label: string; title: string; location: LspLocation | null; note?: { text: string; title: string } };
+
+/** Fill the side panel with items that jump to their location when clicked. */
+function showPanel(title: string, fullTitle: string, empty: string, items: PanelItem[]) {
+  $("membersTitle").textContent = title;
+  $("membersTitle").title = fullTitle;
   const list = $("membersList");
   list.replaceChildren();
-  if (result.members.length === 0) {
+  if (items.length === 0) {
     const li = document.createElement("li");
-    li.textContent = `No ${expected}.`;
+    li.textContent = empty;
     list.append(li);
   }
-  for (const m of result.members) {
+  for (const item of items) {
     const li = document.createElement("li");
     const button = document.createElement("button");
     button.type = "button";
-    button.textContent = localTypeName(m.name);
-    button.title = `${m.name} (${m.kind})`;
-    button.disabled = !m.location;
+    button.textContent = item.label;
+    button.title = item.title;
+    button.disabled = !item.location;
     button.addEventListener("click", async () => {
-      const [target] = await toMonacoLocations(m.location ? [m.location] : []);
+      const [target] = await toMonacoLocations(item.location ? [item.location] : []);
       const targetModel = target && monaco.editor.getModel(target.uri);
       if (targetModel) showModel(targetModel, target.range);
-      else notice(`No source available for ${m.name}.`, "info");
+      else notice(`No source available for ${item.title}.`, "info");
     });
     li.append(button);
-    if (m.origin !== result.owner) {
-      const origin = document.createElement("span");
-      origin.className = "origin";
-      origin.textContent = ` from ${localTypeName(m.origin)}`;
-      origin.title = m.origin;
-      li.append(origin);
+    if (item.note) {
+      const note = document.createElement("span");
+      note.className = "origin";
+      note.textContent = item.note.text;
+      note.title = item.note.title;
+      li.append(note);
     }
     list.append(li);
   }
   $("membersPanel").hidden = false;
 }
 
+// ---------- User roles with a perspective on a role or property ----------
+async function showPerspectivesOn(expected: "role" | "property") {
+  const model = editor.getModel();
+  const position = editor.getPosition();
+  if (!model || !position) return;
+  const params = await lspPosition(model, position);
+  if (!params) { notice("The language server is unavailable.", "info"); return; }
+  const result = await lsp!.request<LspPerspectivesOn | null>("perspectives/perspectivesOn", params);
+  const suffix = expected === "role" ? "Role" : "Property";
+  if (!result || !(result.kind.endsWith(suffix) || result.kind === "unknown")) {
+    notice(`Place the cursor on the name of a ${expected} to list the user roles with a perspective on it.`, "info");
+    return;
+  }
+  notice(undefined);
+  showPanel(
+    `Perspectives on ${localTypeName(result.target)}`, result.target, `No user role has a perspective on this ${expected}.`,
+    result.users.map(u => ({ label: localTypeName(u.user), title: u.user, location: u.location })));
+}
+
 editor.addAction({ id: "arc.showProperties", label: "Show All Properties of Role", contextMenuGroupId: "navigation", contextMenuOrder: 10, run: () => showMembers("properties") });
 editor.addAction({ id: "arc.showRoles", label: "Show All Roles of Context", contextMenuGroupId: "navigation", contextMenuOrder: 11, run: () => showMembers("roles") });
+editor.addAction({ id: "arc.perspectivesOnRole", label: "Show User Roles With a Perspective on Role", contextMenuGroupId: "navigation", contextMenuOrder: 13, run: () => showPerspectivesOn("role") });
+editor.addAction({ id: "arc.perspectivesOnProperty", label: "Show User Roles With a Perspective on Property", contextMenuGroupId: "navigation", contextMenuOrder: 14, run: () => showPerspectivesOn("property") });
 
 function jumpToContext() {
   const model = editor.getModel();

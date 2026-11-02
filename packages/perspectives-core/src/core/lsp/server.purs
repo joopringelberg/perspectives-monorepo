@@ -48,6 +48,7 @@ import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.Newtype (over, unwrap)
 import Data.Nullable (Nullable, notNull, null) as N
 import Data.String (Pattern(..), split, stripPrefix)
+import Data.String (length) as String
 import Data.Tuple (Tuple(..))
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
@@ -65,7 +66,7 @@ import Perspectives.DomeinCache (retrieveDomeinFile)
 import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, defaultDomeinFileRecord)
 import Perspectives.Identifiers (modelUriVersion, typeUri2ModelUri, unversionedModelUri)
 import Perspectives.Lsp.Diagnostics (Diagnostic, LspRange, error2Diagnostic, warning2Diagnostic)
-import Perspectives.Lsp.Resolve (Definition, Resolution(..), enclosingScope, localName, nameAt, propertyListObjectAt, references, resolve, selectionRange)
+import Perspectives.Lsp.Resolve (Definition, Resolution(..), enclosingScope, indexedDeclaration, localName, nameAt, propertyListObjectAt, references, resolve, selectionRange)
 import Perspectives.Parsing.Arc (domain)
 import Perspectives.Parsing.Arc.AST (ContextE(..))
 import Perspectives.Parsing.Arc.IndentParser (runIndentParser)
@@ -99,6 +100,8 @@ type Analysis =
   , contexts :: Object Context
   , enumeratedRoles :: Object EnumeratedRole
   , calculatedRoles :: Object CalculatedRole
+  -- The (expanded) names given with `indexed`, positioned at the context or role that declares them.
+  , indexedNames :: Array Definition
   }
 
 type Document = { text :: String, version :: Int, analysis :: Maybe Analysis }
@@ -178,6 +181,11 @@ handleLspMessage message = case readJSON_ message :: Maybe Incoming of
       Just ({ textDocument: { uri }, position } :: { textDocument :: { uri :: String }, position :: Position }) -> do
         mms <- catchError (members uri position) (\_ -> pure Nothing)
         pure [ respond id (maybe N.null N.notNull mms) ]
+      Nothing -> pure [ respondError id (-32602) "Invalid params" ]
+    Just "perspectives/perspectivesOn", Just id -> case params' params of
+      Just ({ textDocument: { uri }, position } :: { textDocument :: { uri :: String }, position :: Position }) -> do
+        mr <- catchError (perspectivesOn uri position) (\_ -> pure Nothing)
+        pure [ respond id (maybe N.null N.notNull mr) ]
       Nothing -> pure [ respondError id (-32602) "Invalid params" ]
     Just "perspectives/modelSource", Just id -> case params' params of
       Just ({ uri } :: { uri :: String }) -> do
@@ -281,6 +289,14 @@ mkAnalysis dfr namespaces =
   , contexts: dfr.contexts
   , enumeratedRoles: dfr.enumeratedRoles
   , calculatedRoles: dfr.calculatedRoles
+  , indexedNames: filter (\d -> d.line >= 1) $
+      ( catMaybes $ toUnfoldable dfr.contexts <#> \(Tuple _ (Context c)) -> c.indexedContext <#> \i ->
+          let ArcPosition { line, column } = c.pos in { name: unwrap i, kind: "indexedContext", line, column }
+      )
+        <>
+          ( catMaybes $ toUnfoldable dfr.enumeratedRoles <#> \(Tuple _ (EnumeratedRole r)) -> r.indexedRole <#> \i ->
+              let ArcPosition { line, column } = r.pos in { name: unwrap i, kind: "indexedRole", line, column }
+          )
   }
   where
   defs :: forall a. String -> (a -> ArcPosition) -> Object a -> Array Definition
@@ -303,8 +319,20 @@ definition uri position = do
   docs <- liftEffect $ Ref.read documents
   case resolutionAt docs uri position, OBJ.lookup uri docs of
     Local ds, Just { text } -> let lines = split (Pattern "\n") text in pure $ (\d -> { uri, range: selectionRange lines d }) <$> ds
-    External qualifiedName, _ -> externalDefinition qualifiedName
+    External qualifiedName, _ -> case indexedDefinitions docs qualifiedName of
+      [] -> externalDefinition qualifiedName
+      locations -> pure locations
     _, _ -> pure []
+
+-- | The `indexed` declarations of the name in the open documents.
+indexedDefinitions :: Object Document -> String -> Array Location
+indexedDefinitions docs name = concat $ (toUnfoldable docs :: Array (Tuple String Document)) <#> \(Tuple u doc) -> case doc.analysis of
+  Just a ->
+    let
+      lines = split (Pattern "\n") doc.text
+    in
+      filter (\d -> d.name == name) a.indexedNames <#> \d -> { uri: u, range: fromMaybe (selectionRange lines d) (indexedDeclaration lines (d.line - 1) name) }
+  Nothing -> []
 
 -----------------------------------------------------------
 -- REFERENCES
@@ -320,20 +348,57 @@ referencesAt uri position = do
       Unresolved -> []
   if null targets then pure []
   else concat <$> for (toUnfoldable docs :: Array (Tuple String Document)) \(Tuple u doc) -> case doc.analysis of
-    Just a -> do
-      let lines = split (Pattern "\n") doc.text
-      users <- usersWithPerspectiveOn a targets
-      pure $ ({ uri: u, range: _ } <$> references a.definitions a.namespaces lines targets)
-        <> ((\d -> { uri: u, range: selectionRange lines d }) <$> filter (\d -> elem d.name users) a.definitions)
+    Just a -> pure $ { uri: u, range: _ } <$> references a.definitions a.namespaces (split (Pattern "\n") doc.text) targets
     Nothing -> pure []
+
+-----------------------------------------------------------
+-- PERSPECTIVES ON A TYPE
+-----------------------------------------------------------
+-- | `location` is that of the perspective (or, lacking its position, of the declaration of the user role).
+type PerspectiveHolder = { user :: String, location :: Location }
+
+-- | `kind` is the kind of definition of the target (e.g. `enumeratedRole`, `calculatedProperty`), or `unknown`.
+type PerspectivesOn = { target :: String, kind :: String, users :: Array PerspectiveHolder }
+
+-- | The user roles, in all open documents, with a perspective on the role or property under the cursor.
+perspectivesOn :: String -> Position -> MonadPerspectives (Maybe PerspectivesOn)
+perspectivesOn uri position = do
+  docs <- liftEffect $ Ref.read documents
+  case OBJ.lookup uri docs, resolutionAt docs uri position of
+    Just { analysis: Just _ }, Local ds -> Just <$> forTargets docs (_.name <$> ds) (maybe "unknown" _.kind (head ds))
+    Just { analysis: Just a }, External q -> do
+      mrole <- roleView a q
+      kind <- case mrole of
+        Just _ -> pure "enumeratedRole"
+        Nothing -> maybe "unknown" (const "context") <$> contextView a q
+      Just <$> forTargets docs [ q ] kind
+    _, _ -> pure Nothing
+  where
+  forTargets :: Object Document -> Array String -> String -> MonadPerspectives PerspectivesOn
+  forTargets docs targets kind = do
+    users <- concat <$> for (toUnfoldable docs :: Array (Tuple String Document)) \(Tuple u doc) -> case doc.analysis of
+      Just a -> do
+        let lines = split (Pattern "\n") doc.text
+        holders <- usersWithPerspectiveOn a targets
+        pure $ catMaybes $ holders <#> \{ user, pos } -> case pos of
+          Just (ArcPosition { line, column }) ->
+            let
+              start = { line: line - 1, character: column - 1 }
+            in
+              Just { user, location: { uri: u, range: { start, end: start { character = String.length (fromMaybe "" (lines !! (line - 1))) } } } }
+          Nothing -> (\d -> { user, location: { uri: u, range: selectionRange lines d } }) <$> head (filter (\d -> d.name == user) a.definitions)
+      Nothing -> pure []
+    pure { target: fromMaybe "" (head targets), kind, users }
 
 -- | The (readable) user roles in the analysis that have a perspective on one of the targets: either a role
 -- | that is (one of) the object(s) of the perspective, or a property in its `props` or `view`.
 -- | A perspective on all properties (`props`) covers the properties of its object roles.
-usersWithPerspectiveOn :: Analysis -> Array String -> MonadPerspectives (Array String)
-usersWithPerspectiveOn a targets = map catMaybes $ for userRoles \(Tuple user perspectives) -> do
-  hit <- anyM (onTarget) perspectives
-  pure if hit then Just user else Nothing
+-- | One entry per perspective, with the position where the perspective starts.
+usersWithPerspectiveOn :: Analysis -> Array String -> MonadPerspectives (Array { user :: String, pos :: Maybe ArcPosition })
+usersWithPerspectiveOn a targets = concat <$> for userRoles \(Tuple user perspectives) ->
+  catMaybes <$> for perspectives \p@(Perspective { perspectiveStartPosition }) -> do
+    hit <- onTarget p
+    pure if hit then Just { user, pos: perspectiveStartPosition } else Nothing
   where
   userRoles :: Array (Tuple String (Array Perspective))
   userRoles = ((\(Tuple n (EnumeratedRole r)) -> Tuple n r.perspectives) <$> toUnfoldable a.enumeratedRoles)
@@ -357,10 +422,6 @@ usersWithPerspectiveOn a targets = map catMaybes $ for userRoles \(Tuple user pe
 
   isUniversal Universal = true
   isUniversal _ = false
-
-  anyM f xs = case uncons xs of
-    Nothing -> pure false
-    Just { head: x, tail } -> f x >>= if _ then pure true else anyM f tail
 
 -----------------------------------------------------------
 -- COMPLETION
@@ -571,7 +632,11 @@ externalDefinition qualifiedName = case typeUri2ModelUri qualifiedName of
         , find df.views (_.pos <<< unwrap) (stableName qualifiedName df.toStableViewType ViewType unwrap)
         ]
       lines = split (Pattern "\n") df.arc
-    pure $ (\(ArcPosition { line, column }) -> { uri: modelSourceScheme <> unversionedModelUri modelUri, range: selectionRange lines { name: qualifiedName, kind: "", line, column } }) <$> candidates
+      sourceUri = modelSourceScheme <> unversionedModelUri modelUri
+    pure case candidates of
+      -- Not a type: it may be the name of an indexed context or role.
+      [] -> maybe [] (\range -> [ { uri: sourceUri, range } ]) (indexedDeclaration lines 0 qualifiedName)
+      _ -> (\(ArcPosition { line, column }) -> { uri: sourceUri, range: selectionRange lines { name: qualifiedName, kind: "", line, column } }) <$> candidates
 
 retrieveInstalledModel :: String -> MonadPerspectives (DomeinFile Stable)
 retrieveInstalledModel modelUri = do

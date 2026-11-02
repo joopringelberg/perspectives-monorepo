@@ -39,6 +39,7 @@ module Perspectives.Lsp.Resolve
   , namesInLine
   , references
   , propertyListObjectAt
+  , indexedDeclaration
   ) where
 
 import Prelude
@@ -256,17 +257,41 @@ propertyListObjectAt lines line character =
     Nothing -> d
   words t = filter (_ /= "") (split (Pattern " ") (Str.trim (codeOf t)))
   -- Walk upwards through ever less indented lines.
-  up ind ofSeen i
+  up ind ofSeen i = walk ind ofSeen false i
+
+  walk ind ofSeen masterSeen i
     | i < 0 || ind == 0 = Nothing
     | otherwise =
         let
           t = fromMaybe "" (lines !! i)
           ws = words t
+          found name = Just { name, line: i + 1 }
         in
-          if Arr.null ws || indentation t >= ind then up ind ofSeen (i - 1)
+          if Arr.null ws || indentation t >= ind then walk ind ofSeen masterSeen (i - 1)
+          -- The role of a master/detail section is given on the line that encloses `master` or `detail`.
+          else if masterSeen then Arr.head ws >>= found
           else case ws of
-            _ | not ofSeen, Arr.take 2 ws == [ "perspective", "on" ] -> (\name -> { name, line: i + 1 }) <$> ws !! 2
-            _ | Arr.take 2 ws == [ "perspective", "of" ] -> up (indentation t) true (i - 1)
-            _ | ofSeen, Arr.head ws == Just "external" -> Just { name: "External", line: i + 1 }
-            _ | ofSeen, Arr.elem (fromMaybe "" (Arr.head ws)) [ "thing", "user", "context" ] -> (\name -> { name, line: i + 1 }) <$> ws !! 1
-            _ -> up (indentation t) ofSeen (i - 1)
+            _ | not ofSeen, Arr.take 2 ws == [ "perspective", "on" ] -> ws !! 2 >>= found
+            _ | Arr.take 2 ws == [ "perspective", "of" ] -> walk (indentation t) true false (i - 1)
+            _ | ofSeen, Arr.head ws == Just "external" -> found "External"
+            _ | ofSeen, Arr.elem (fromMaybe "" (Arr.head ws)) [ "thing", "user", "context" ] -> ws !! 1 >>= found
+            -- Screen widgets: `table ["title"] Role` and `form ["title"] Role`.
+            _ | not ofSeen, Arr.length ws >= 2, Arr.elem (fromMaybe "" (Arr.head ws)) [ "table", "form" ] -> Arr.last ws >>= found
+            _ | not ofSeen, Arr.elem (fromMaybe "" (Arr.head ws)) [ "master", "detail" ] -> walk (indentation t) false true (i - 1)
+            _ -> walk (indentation t) ofSeen false (i - 1)
+
+-- | The range (0-based) of the name in the first declaration `indexed <name>` at or after the 0-based line `from`
+-- | whose local part (after the prefix, `#` or `$`) equals that of the qualified `indexedName`.
+indexedDeclaration :: Array String -> Int -> String -> Maybe LspRange
+indexedDeclaration lines from indexedName = go (max 0 from)
+  where
+  target = localPart indexedName
+  localPart s = localName case lastIndexOf (Pattern ":") s of
+    Just i | not (contains (Pattern "#") s) -> Str.drop (i + 1) s
+    _ -> s
+  go i = case lines !! i of
+    Nothing -> Nothing
+    Just t -> case namesInLine t of
+      [ { name: "indexed" }, { start, name } ] | localPart name == target ->
+        Just { start: { line: i, character: start }, end: { line: i, character: start + SCU.length name } }
+      _ -> go (i + 1)

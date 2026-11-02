@@ -17,6 +17,9 @@ export type LspDiagnostic = {
 export type LspMember = { name: string; kind: string; origin: string; location: LspLocation | null };
 export type LspMembers = { owner: string; kind: "properties" | "roles"; members: LspMember[] };
 
+/** Answer to `perspectives/perspectivesOn`: the user roles with a perspective on `target`, located at that perspective. */
+export type LspPerspectivesOn = { target: string; kind: string; users: { user: string; location: LspLocation }[] };
+
 /** Answer to `textDocument/completion` (kind 10 = Property). */
 export type LspCompletionItem = { label: string; kind: number; detail?: string; sortText?: string };
 export type LspCompletionList = { isIncomplete: boolean; items: LspCompletionItem[] };

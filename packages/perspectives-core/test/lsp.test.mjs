@@ -134,3 +134,32 @@ test("propertyListObjectAt finds the object of the perspective whose property li
   assert.equal(at(2, src[2].length), null);
   assert.deepEqual(at(9, src[9].length), { name: "Other", line: 8 });
 });
+
+test("propertyListObjectAt finds the role of a table, form or master/detail section in a screen", () => {
+  const src = [
+    "    user U",
+    "      screen",
+    "        who",
+    "          Members",
+    "            master",
+    "              with props (",
+    "            detail",
+    "              props (Name, ",
+    "        what",
+    "          form \"Some title\" External",
+    "            props (",
+    "          table Things",
+    "            without props (",
+  ];
+  const at = (line) => fromMaybe(R.propertyListObjectAt(src)(line)(src[line].length));
+  assert.deepEqual(at(5), { name: "Members", line: 4 });
+  assert.deepEqual(at(7), { name: "Members", line: 4 });
+  assert.deepEqual(at(10), { name: "External", line: 10 });
+  assert.deepEqual(at(12), { name: "Things", line: 12 });
+});
+
+test("indexedDeclaration finds the name in an `indexed` declaration", () => {
+  const src = ["  case MyBrokers", "    indexed bs:Other", "    indexed bs:MyBrokers"];
+  assert.deepEqual(fromMaybe(R.indexedDeclaration(src)(0)("model://x#MyBrokers")), { start: { line: 2, character: 12 }, end: { line: 2, character: 24 } });
+  assert.equal(fromMaybe(R.indexedDeclaration(src)(0)("model://x#Nope")), null);
+});
