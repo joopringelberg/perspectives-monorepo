@@ -170,10 +170,16 @@ async function toMonacoLocations(locations: LspLocation[]): Promise<monaco.langu
 }
 
 /** The LSP uri and position for a request about `position` in `model`, after flushing pending edits. */
-async function lspPosition(model: monaco.editor.ITextModel, position: monaco.IPosition) {
+// `awaitAnalysis: false` only makes sure the server has the latest text: the PDR handles messages in the order they
+// are sent, but a request would otherwise wait for the complete recompilation (including dependencies) of that text.
+async function lspPosition(model: monaco.editor.ITextModel, position: monaco.IPosition, awaitAnalysis = true) {
   const uri = monacoToLsp.get(model.uri.toString());
   if (!lsp || !uri) return undefined;
-  if (model === mainModel) await mainSync?.flushPending();
+  if (model === mainModel) {
+    const flushed = mainSync?.flushPending();
+    if (awaitAnalysis) await flushed;
+    else flushed?.catch(() => undefined);
+  }
   return { textDocument: { uri }, position: { line: position.lineNumber - 1, character: position.column - 1 } };
 }
 
@@ -205,7 +211,8 @@ monaco.languages.registerReferenceProvider(ARC_LANGUAGE_ID, {
 monaco.languages.registerCompletionItemProvider(ARC_LANGUAGE_ID, {
   triggerCharacters: ["(", ","],
   async provideCompletionItems(model, position) {
-    const params = await lspPosition(model, position);
+    // `props (` is auto-closed to `props ()`, which compiles: do not wait for that compilation.
+    const params = await lspPosition(model, position, false);
     if (!params) return { suggestions: [] };
     const result = await lsp!.request<LspCompletionList | null>("textDocument/completion", params);
     const word = model.getWordUntilPosition(position);
