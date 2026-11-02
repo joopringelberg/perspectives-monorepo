@@ -1,0 +1,243 @@
+[desc="A description of functions available in the Parsing Library"]
+== The Parsing Library
+
+Namespace: `model://perspectives.domains#Parsing`.
+
+The Parsing library provides functions for compiling Perspectives Arc (`.arc`) source files into model files (DomeinFiles), and for managing those models in repositories and in the local model store. It also contains functions for model translation workflows (generating, editing, and applying translations for a model's user interface texts).
+
+NOTE: Most functions in this library expect a _versioned_ model URI of the form `model://some.domain#ModelName@x.y.z` (e.g. `model://perspectives.domains#System@1.0`).
+
+=== ParseAndCompileArc
+
+`ParseAndCompileArc( <modelUri>, <arcSource>, <basedOnVersion> ) returns String`
+
+Reads an Arc source text, parses it, and tries to compile it. The compiled model is neither cached nor stored. However, dependencies of the model are loaded, cached, and stored. Both warnings and compilation errors are returned as result strings. They are not sent to the client via the normal notification channel; the caller must inspect the return value to determine success or failure.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|modelUri|String|A versioned model URI identifying the model being compiled (e.g. `"model://perspectives.domains#System@1.0"`).
+|arcSource|String|The full text of the `.arc` source file.
+|basedOnVersion|String|An optional versioned model URI of the version this model is based on (may be empty or absent).
+|result|String|`"OK"` on success, or a string describing errors or warnings encountered during compilation.
+|===
+
+[code]
+----
+callExternal pars:ParseAndCompileArc( ModelUri, ArcSource, BasedOnVersion ) returns String
+----
+
+=== ApplyImmediately
+
+`ApplyImmediately( <modelUri>, <arcSource>, <basedOnVersion> )`
+
+Parses and compiles the Arc source text and saves the result to the cache. Any warnings are sent to the client as notifications.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|modelUri|String|A versioned model URI.
+|arcSource|String|The full text of the `.arc` source file.
+|basedOnVersion|String|An optional versioned model URI of the version this model is based on.
+|===
+
+[source,perspectivesarc]
+----
+callEffect pars:ApplyImmediately( ModelUri, ArcSource, BasedOnVersion )
+----
+
+=== UploadToRepository
+
+`UploadToRepository( <modelUri>, <arcSource>, <basedOnVersion> )`
+
+Parses and compiles the Arc source text and uploads the resulting model to the repository. The compiled model is neither cached nor stored locally. If the source is invalid, nothing happens.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|modelUri|String|A versioned model URI.
+|arcSource|String|The full text of the `.arc` source file.
+|basedOnVersion|String|An optional versioned model URI of the version this model is based on.
+|===
+
+[source,perspectivesarc]
+----
+callEffect pars:UploadToRepository( ModelUri, ArcSource, BasedOnVersion )
+----
+
+=== StoreModelLocally
+
+`StoreModelLocally( <modelUri>, <arcSource>, <basedOnVersion> )`
+
+Parses and compiles the Arc source text and stores the resulting model in the local model database. The compiled model is not cached. Attachments (stored queries, translations) are taken from the local model database, with the newly compiled stored queries overwriting those already present. If the source is invalid, nothing happens.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|modelUri|String|A versioned model URI.
+|arcSource|String|The full text of the `.arc` source file.
+|basedOnVersion|String|An optional versioned model URI of the version this model is based on.
+|===
+
+[source,perspectivesarc]
+----
+callEffect pars:StoreModelLocally( ModelUri, ArcSource, BasedOnVersion )
+----
+
+=== RemoveFromRepository
+
+`RemoveFromRepository( <modelUri> )`
+
+Removes the model identified by the versioned model URI from the repository.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|modelUri|String|A versioned model URI of the model to remove from the repository.
+|===
+
+[source,perspectivesarc]
+----
+callDestructiveEffect pars:RemoveFromRepository( ModelUri )
+----
+
+=== CompileRepositoryModels
+
+`CompileRepositoryModels( <modelsUrl>, <manifestsUrl> )`
+
+Compiles all models found at the given repository URL (e.g. `https://perspectives.domains/models_perspectives_domains`). Primarily a batch/maintenance tool.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|modelsUrl|String|The URL of the repository from which to compile models.
+|manifestsUrl|String|The URL of the manifests endpoint associated with the repository.
+|===
+
+[source,perspectivesarc]
+----
+callEffect pars:CompileRepositoryModels( ModelsUrl, ManifestsUrl )
+----
+
+=== GenerateFirstTranslation
+
+`GenerateFirstTranslation( <modelUri> ) returns String`
+
+Generates a fresh `ModelTranslation` from the DomeinFile identified by the versioned model URI and serialises it as a JSON string. This is the first step in the translation workflow: generate a translation template that can then be exported as YAML, edited, and re-imported.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|modelUri|String|A versioned model URI of the model for which to generate the translation.
+|result (functional)|String|A JSON-serialised `ModelTranslation` object.
+|===
+
+[code]
+----
+callExternal pars:GenerateFirstTranslation( ModelUri ) returns String
+----
+
+=== GetTranslationYaml
+
+`GetTranslationYaml( <modelTranslation> ) returns String`
+
+Converts a JSON-serialised `ModelTranslation` to a YAML representation suitable for editing by a human translator. If a stable-ID mapping is available in the repository for the model, the YAML output includes readable labels.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|modelTranslation|String|A JSON-serialised `ModelTranslation` (as produced by `GenerateFirstTranslation` or `AugmentModelTranslation`).
+|result (functional)|String|A YAML-formatted translation file.
+|===
+
+[code]
+----
+callExternal pars:GetTranslationYaml( ModelTranslationJson ) returns String
+----
+
+=== ParseYamlTranslation
+
+`ParseYamlTranslation( <pfile> ) returns String`
+
+Parses a YAML translation file (stored as a `File` property value) and returns a JSON-serialised `ModelTranslation`. This is the inverse of `GetTranslationYaml`: it converts the human-edited YAML back to the internal JSON format.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|pfile|File|A `File` property value whose content is a YAML translation file (MIME type `application/x-yaml`).
+|result (functional)|String|A JSON-serialised `ModelTranslation` object.
+|===
+
+[code]
+----
+callExternal pars:ParseYamlTranslation( TranslationYamlFile ) returns String
+----
+
+=== GenerateTranslationTable
+
+`GenerateTranslationTable( <modelTranslation>, <modelUri> )`
+
+Generates a translation lookup table from a `ModelTranslation` and uploads it as an attachment (`translationtable.json`) to the DomeinFile in the repository. The table is used at runtime to look up translated strings.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|modelTranslation|String|A JSON-serialised `ModelTranslation`.
+|modelUri|String|A versioned model URI of the model in the repository.
+|===
+
+[source,perspectivesarc]
+----
+callEffect pars:GenerateTranslationTable( ModelTranslationJson, ModelUri )
+----
+
+=== AugmentModelTranslation
+
+`AugmentModelTranslation( <modelTranslation>, <modelUri> ) returns String`
+
+Fills an existing `ModelTranslation` with translations retrieved from the `TranslationTable` attachment of the model in the repository. This is useful when the model has changed and a new `ModelTranslation` has been generated: it pre-fills all previously translated strings from the stored table. If no table is available, the original `ModelTranslation` is returned unchanged.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|modelTranslation|String|A JSON-serialised `ModelTranslation` (the freshly generated template to augment).
+|modelUri|String|A versioned model URI of the model whose translation table to use.
+|result (functional)|String|A JSON-serialised `ModelTranslation` with previously translated strings filled in.
+|===
+
+[code]
+----
+callExternal pars:AugmentModelTranslation( ModelTranslationJson, ModelUri ) returns String
+----
+
+=== GenerateTCPConfiguration
+
+`GenerateTCPConfiguration( <modelUri> ) returns String`
+
+Generates a TCP (Typed Context Projection) configuration — a JSON query plan — from the DomeinFile identified by the versioned model URI. The TCP uses this plan to create SQL views that materialise all Onlooker perspectives in the model, enabling direct SQL reporting without PDR involvement.
+
+NOTE: This function is currently a stub. Full implementation is pending.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|modelUri|String|A versioned model URI of the model for which to generate the TCP configuration.
+|result (functional)|String|A JSON-serialised TCP configuration object.
+|===
+
+[code]
+----
+callExternal pars:GenerateTCPConfiguration( ModelUri ) returns String
+----

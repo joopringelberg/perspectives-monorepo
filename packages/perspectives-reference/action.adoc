@@ -1,0 +1,233 @@
+[desc="Actions are executed by the end user and change property values and create or delete roles or contexts."]
+[[keyword-action]]
+== Actions
+
+An _action_ is a named set of <<concept-assignment,assignment statements>> that a user role can trigger manually. Actions appear inside <<concept-perspective,perspective>> blocks and are presented to the user as buttons or menu items in the user interface.
+
+[[action-declaration-syntax]]
+=== Declaration syntax
+
+[source]
+----
+action <ActionName>
+  <statements>
+  |
+  letA
+    {<name> <- <expression>}*
+  in
+    <statements>
+----
+
+`<ActionName>` is a simple identifier (no spaces, starting with an uppercase letter by convention).
+
+The body is either:
+
+* A sequence of <<concept-assignment,assignment statements>>, indented relative to the `action` keyword.
+* A `letA` block that binds intermediate values and then executes assignment statements in its `in` section.
+
+[[action-declaration-placement]]
+=== Where actions are declared
+
+An action is always declared inside a perspective block. The _subject_ and _object_ of the enclosing perspective determine the context in which the action runs.
+
+[source, arc]
+----
+user Manager = sys:Me
+  perspective on Reports
+    props (Title) verbs (Consult, SetPropertyValue)
+    action MarkDone
+      Status = "done" for origin
+----
+
+When the perspective has an object (a `perspective on` block), the action is a _role action_: the `origin` pseudo-variable inside the action body refers to the object role instance on which the user clicked.
+
+When there is no object role (an action declared inside a `perspective of` block without a nested `perspective on`), the action is a _context action_ that modifies the containing context.
+
+[[action-declaration-context-actions]]
+=== Context actions
+
+A context action appears at the top level of a user role's perspective block, without a `perspective on` object:
+
+[source, arc]
+----
+user Organiser = sys:Me
+  action CloseEvent
+    Status = "closed" for extern
+  perspective on Attendees
+    only (Create, Fill)
+----
+
+Context actions are visible regardless of which object role is selected.
+
+[[action-declaration-role-actions]]
+=== Role actions
+
+A role action is declared inside a `perspective on` block:
+
+[source, arc]
+----
+user Manager = sys:Me
+  perspective on Tasks
+    only (Create, Remove)
+    props (Title, Status) verbs (Consult, SetPropertyValue)
+    action Approve
+      Status = "approved" for origin
+    action Reject
+      Status = "rejected" for origin
+----
+
+Role actions operate on the currently selected instance of the object role. Within the action body, the implicit `origin` variable refers to that instance.
+
+[[action-declaration-state-qualified]]
+=== State-qualified actions
+
+An action may be placed inside an `in state` block within a perspective, making it available only when the specified state is active:
+
+[source, arc]
+----
+perspective on Order
+  props (Status) verbs (Consult)
+  in state Pending
+    props (DueDate) verbs (SetPropertyValue)
+    action Confirm
+      Status = "confirmed" for origin
+  in state Confirmed
+    action Dispatch
+      ShippedAt = now
+      Status = "dispatched" for origin
+----
+
+[[action-declaration-let]]
+=== Actions with `letA`
+
+For actions that need to compute intermediate values, use a `letA` block:
+
+[source, arc]
+----
+action CreateAndLinkProject
+  letA
+    newProject <- create context Project
+    link <- create role ProjectLinks
+  in
+    bind_ newProject >> extern to link
+    Name = "New Project" for newProject >> extern
+----
+
+[[action-declaration-staged-let]]
+=== Staged `letA` actions
+
+Use `once settled` inside the `in` section of a `letA` action to split the action body over consecutive transactions. The statements before `once settled` run in the current transaction. The indented block after `once settled` runs after that transaction has completed and its consequences have settled.
+
+[source, arc]
+----
+action CreateAndConfigureProject
+  letA
+    newProject <- create context Project
+    link <- create role ProjectLinks
+  in
+    bind_ newProject >> extern to link
+
+    once settled
+      Name = "New Project" for newProject >> extern
+----
+
+The bindings introduced by the outer `letA` remain available in later stages. Their runtime values are captured when a later stage is scheduled, so a binding that creates a role or context is not executed again in the next transaction.
+
+[[action-timing-keywords]]
+=== Timing keywords for automatic actions
+
+Timing keywords can be added to automatic action blocks: `do` blocks that run on entry into, or exit from, a state. They are not part of the declaration syntax of a named manual `action`, but they control when an automatic action is executed.
+
+[source, arc]
+----
+state Ready = SomeCondition
+  on entry
+    do for Manager once settled
+      Status = "ready" for extern
+----
+
+The timing phrase is placed after the optional `for <UserRole>` phrase and before the indented assignment block:
+
+[source]
+----
+do [for <UserRole>] [after <duration> | once settled] [until <duration>] [every <duration> [maximally <n> times]]
+  <statements>
+----
+
+The available timing keywords are:
+
+* `after <duration>` postpones the automatic action by a wall-clock duration. Example: `after 20 Milliseconds`.
+* `once settled` postpones the automatic action until the transaction that triggered the state transition has completed, including the consequences caused by state evaluation and automatic actions. The action then runs in a consecutive transaction, not embedded in the triggering transaction.
+* `every <duration>` repeats the automatic action at the given interval. Example: `every 5 Minutes`.
+* `maximally <n> times` limits a repeated automatic action. It is used after `every`.
+* `until <duration>` stops a repeated automatic action after the given duration. It must be used together with `every`.
+
+Durations use an integer followed by one of `Milliseconds`, `Seconds`, `Minutes`, `Hours`, or `Days`.
+
+Use `after` when real elapsed time is part of the model. Use `once settled` when the action depends on resources or property values that are created or changed as consequences of the transaction that triggered the current state transition.
+
+[[action-declaration-verbs]]
+=== Relation to role verbs
+
+The assignments in an action body must be consistent with the role verbs and property verbs granted in the enclosing perspective. The system checks that:
+
+* Role-creation assignments (`create role`, `create context`) require `Create` or `CreateAndFill`.
+* Role-removal assignments (`remove role`, `remove context`) require `Remove` or `RemoveContext`.
+* Role-deletion assignments (`delete role`, `delete context`) require `Delete` or `DeleteContext`.
+* Binding assignments (`bind`, `bind_`) require `Fill` or `CreateAndFill`.
+* Unbinding assignments (`unbind`, `unbind_`) require `RemoveFiller` or `Unbind`.
+* Property value assignments require the corresponding property verb (`SetPropertyValue`, `AddPropertyValue`, `RemovePropertyValue`, or `DeleteProperty`).
+
+[[action-declaration-examples]]
+=== Examples
+
+==== Simple property mutation
+
+[source, arc]
+----
+user Editor = sys:Me
+  perspective on Document
+    props (Title, Body) verbs (Consult, SetPropertyValue)
+    action Publish
+      Published = true for origin
+      PublishedAt = now for origin
+----
+
+==== Creating and binding
+
+[source, arc]
+----
+user Owner = sys:Me
+  perspective on Items
+    only (Create, Fill, Remove)
+    props (Name) verbs (Consult, SetPropertyValue)
+    action AddItem
+      create role Items
+----
+
+==== Context action with letA
+
+[source, arc]
+----
+user Me (default) = me
+  action ExportIdentity
+    letA
+      text <- callExternal ser:SerialiseFor( [role SomeContext$Me], context >> extern ) returns String
+    in
+      create file ("identity.json") as "text/json" in MyExport
+        text
+----
+
+==== Removing entries
+
+[source, arc]
+----
+user Manager = sys:Me
+  perspective on StartContexts
+    only (Remove)
+    action CleanUp
+      letA
+        oldEntries <- filter StartContexts with Expired
+      in
+        remove role oldEntries
+----

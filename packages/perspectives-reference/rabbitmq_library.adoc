@@ -1,0 +1,185 @@
+[desc="A description of functions available in the RabbitMQ Library"]
+== The RabbitMQ Library
+
+Namespace: `model://perspectives.domains#RabbitMQ`.
+
+The RabbitMQ library provides functions for managing AMQP accounts and queues on a RabbitMQ broker. These functions are used to configure the message broker that enables Perspectives peers to exchange transactions asynchronously.
+
+NOTE: Functions that require administrator access (marked _requires ADMIN_) must be called by a user who holds an administrative account on the RabbitMQ broker.
+
+=== PrepareAMQPaccount
+
+`PrepareAMQPaccount( <brokerServiceUrl>, <adminUserName>, <adminPassword>, <accountName>, <accountPassword>, <queueName> )`
+
+Creates a new user account and queue on a RabbitMQ broker and sets appropriate permissions. Requires administrator credentials.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|brokerServiceUrl|String|The URL of the RabbitMQ management API endpoint.
+|adminUserName|String|The administrator username for the RabbitMQ management API.
+|adminPassword|String|The administrator password for the RabbitMQ management API.
+|accountName|String|The username for the new account (typically a CUID).
+|accountPassword|String|The password for the new account (typically a CUID).
+|queueName|String|The name of the queue to create for the new account (typically a CUID).
+|===
+
+[source,perspectivesarc]
+----
+callEffect rabbitmq:PrepareAMQPaccount( BrokerServiceUrl, AdminUserName, AdminPassword, AccountName, AccountPassword, QueueName )
+----
+
+=== SetBindingKey
+
+`SetBindingKey( <brokerServiceUrl>, <adminUserName>, <adminPassword>, <queueName>, <routingKey> )`
+
+Creates a binding between a routing key (the user's public role identifier) and the user's queue, so peers can push transactions to the user's queue.  Requires administrator credentials.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|brokerServiceUrl|String|The URL of the RabbitMQ management API endpoint.
+|adminUserName|String|The administrator username.
+|adminPassword|String|The administrator password.
+|queueName|String|The name of the queue to bind.
+|routingKey|String|The routing key (typically the RoleInstance identifier of the user).
+|===
+
+[source,perspectivesarc]
+----
+callEffect rabbitmq:SetBindingKey( BrokerServiceUrl, AdminUserName, AdminPassword, QueueName, RoutingKey )
+----
+
+=== SetPassword
+
+`SetPassword( <brokerServiceUrl>, <adminUserName>, <adminPassword>, <accountName>, <accountPassword> )`
+
+Changes the password of an existing AMQP account. Requires administrator credentials.
+
+NOTE: This function is currently a stub (no-op).
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|brokerServiceUrl|String|The URL of the RabbitMQ management API endpoint.
+|adminUserName|String|The administrator username.
+|adminPassword|String|The administrator password.
+|accountName|String|The username of the account whose password to change.
+|accountPassword|String|The new password for the account.
+|===
+
+[source,perspectivesarc]
+----
+callEffect rabbitmq:SetPassword( BrokerServiceUrl, AdminUserName, AdminPassword, AccountName, NewPassword )
+----
+
+=== DeleteAMQPaccount
+
+`DeleteAMQPaccount( <brokerServiceUrl>, <adminUserName>, <adminPassword>, <accountName> )`
+
+Deletes a user account from the RabbitMQ broker. Requires administrator credentials.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|brokerServiceUrl|String|The URL of the RabbitMQ management API endpoint.
+|adminUserName|String|The administrator username.
+|adminPassword|String|The administrator password.
+|accountName|String|The username of the account to delete.
+|===
+
+[source,perspectivesarc]
+----
+callDestructiveEffect rabbitmq:DeleteAMQPaccount( BrokerServiceUrl, AdminUserName, AdminPassword, AccountName )
+----
+
+=== DeleteQueue
+
+`DeleteQueue( <brokerServiceUrl>, <adminUserName>, <adminPassword>, <queueName> )`
+
+Deletes a queue from the RabbitMQ broker. Requires administrator credentials.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|brokerServiceUrl|String|The URL of the RabbitMQ management API endpoint.
+|adminUserName|String|The administrator username.
+|adminPassword|String|The administrator password.
+|queueName|String|The name of the queue to delete.
+|===
+
+[source,perspectivesarc]
+----
+callDestructiveEffect rabbitmq:DeleteQueue( BrokerServiceUrl, AdminUserName, AdminPassword, QueueName )
+----
+
+=== SetPermissionsForAMQPaccount
+
+`SetPermissionsForAMQPaccount( <brokerServiceUrl>, <adminUserName>, <adminPassword>, <accountName>, <queueName> )`
+
+Sets the standard read/write/configure permissions for an AMQP account on a given queue. The permissions allow the account to configure, write, and read the named queue as well as the `amq.topic` exchange. Requires administrator credentials.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|brokerServiceUrl|String|The URL of the RabbitMQ management API endpoint.
+|adminUserName|String|The administrator username.
+|adminPassword|String|The administrator password.
+|accountName|String|The username of the account to update.
+|queueName|String|The name of the queue for which to set permissions.
+|===
+
+[source,perspectivesarc]
+----
+callEffect rabbitmq:SetPermissionsForAMQPaccount( BrokerServiceUrl, AdminUserName, AdminPassword, AccountName, QueueName )
+----
+
+=== StartListening
+
+`StartListening()`
+
+Starts listening for incoming transactions on the user's AMQP queue. This retrieves the BrokerService configuration from Perspectives state and establishes the connection.
+
+NOTE: This function takes no explicit arguments.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|_(no parameters)_| |Uses the BrokerService configuration already stored in Perspectives state.
+|===
+
+[source,perspectivesarc]
+----
+callEffect rabbitmq:StartListening()
+----
+
+=== SelfRegisterWithRabbitMQ
+
+`SelfRegisterWithRabbitMQ( <brokerServiceUrl>, <accountName>, <accountPassword>, <queueName> ) returns Boolean`
+
+Registers a new AMQP account by calling a self-registration service endpoint on the broker host. This endpoint uses fixed administrator credentials configured on the server side, so no admin credentials are required from the caller. Returns `"true"` on success and `"false"` on failure.
+
+For MyContexts the self-registration service is available at `https://mycontexts.com/rbsr/`.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|brokerServiceUrl|String|The URL of the self-registration service endpoint (e.g. `"https://mycontexts.com/rbsr/"`).
+|accountName|String|The desired username for the new account.
+|accountPassword|String|The password for the new account.
+|queueName|String|The name of the queue to create for the new account.
+|result (functional)|Boolean|`"true"` if registration succeeded, `"false"` otherwise.
+|===
+
+[code]
+----
+callExternal rabbitmq:SelfRegisterWithRabbitMQ( BrokerServiceUrl, AccountName, AccountPassword, QueueName ) returns Boolean
+----

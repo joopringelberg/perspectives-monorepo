@@ -1,0 +1,122 @@
+[desc="The right form of type names and keywords"]
+[[lexical_structure]]
+== Lexical structure of the Perspectives Language
+
+The lexicon of a language are its basic building blocks. In this chapter we describe how identifiers and keywords are formed.
+
+=== Identifiers
+All types are identified by **qualified** names. Here are some examples of qualified names:
+
+[cols="1,3", options="header"]
+|===
+|Name form |Explanation
+
+|`model://perspectives.domains#System`
+|A domain name must be qualified in a custom URI scheme (see below)
+
+|`model://perspectives.domains#MyModel$MyCase`
+|A fully qualified **case** name.
+
+|`model://some.other.domain.org#MyModel$MyCase$MyRole`
+|A fully qualified **role** name.
+
+|`model://perspectives.domains#MyModel$MyCase$MyRole$MyProperty`
+|A fully qualified **property** name.
+
+|`pre:MyCase`
+|A prefixed name is a qualified name as long as we have a use statement for the prefix: `use: pre for model://perspectives.domains#`
+|===
+
+Quite often the parser/compiler can guess the qualified name from just the local part of that name. If not, an error is signalled. The `use...for` statement may be used to abbreviate longer namespaces, e.g. `use mrl for model:MyModel$MyCase$MyRole` lets us identify the property given in the table as `mrl:MyProperty`.
+
+If the parser finds multiple qualified names with the same local part, either fully qualify the offending name or prefix it with enough **segments** to make it unique. For example, given the roles:
+
+```
+model:MyModel$ACase$MyRole
+model:MyModel$AnOtherCase$MyRole
+```
+
+the single segment `MyRole` does not uniquely identify either. However, `ACase$MyRole` does and the system does not complain.
+
+Finally, each context and role act as namespace containers. Hence, qualified names can become quite long!
+
+==== Custom URI scheme
+Type names are based on a custom URI scheme, informally: `model://authority/LocalModelName`.
+
+[NOTE]
+.Authority Component
+====
+The authority component in our custom URI scheme follows the definition in RFC 3986, Section 3.2. It identifies the organization or service responsible for the model namespace and is used to determine where model resources can be retrieved from. However, our notion of `perspectivesauthority` is restricted (see below), as it doesn't allow for a user information subcomponent or port number. Also the host subcomponent must be a domain name.
+====
+
+Some examples:
+
+|===
+|Name form|Explanation
+
+|`model://perspectives.domains#System`|The model System is qualified with the namespace model://perspectives.domains
+|`model//social.perspectives.domains#AnotherModel$MyCase`|The namespace can have subnamespaces, just like DNS style domains can have subdomains
+|===
+
+
+These URIs can be mapped onto URLs. We use that mapping to find the __location__ of the machine readable version of the model file. The first example maps to `https://perspectives.domains/models_perspectives_domains/System.json`. The server at perspectives.domains will understand that as a request for the file `System.json` in the Couchdb database `models_perspectives_domains`.
+
+[[concept-identifier]]
+==== Formal notation of identifiers
+[code]
+----
+identifier = qualifiedName | prefixedName | segmentedName
+qualfiedName = ‘model:’ perspectivesauthority segmentedName
+perspectivesauthority = '//' domain-name '#'
+prefixedName = prefix ‘:’ segmentedName
+prefix = lowerCase+
+segmentedName = segment [‘$’ segmentedName]*
+segment = upperCaseCharacter | [alphaNum | ‘_’]+
+----
+
+[NOTE]
+.Domain Name
+====
+In our custom URI scheme, we use the definition of "domain name" as specified in RFC 1034 and RFC 1123, referenced by RFC 3986. Domain names consist of labels separated by dots, containing letters, digits, and hyphens (with restrictions on hyphen placement).
+====
+
+[[keyword-use]]
+==== Prefixed identifiers: the `use` statement
+A prefixed identifier is a qualified name that uses a prefix to shorten the name. The prefix is defined by a `use` statement. For example, the prefix `mrl` can be defined as follows:
+
+[source,perspectivesarc]
+----
+use mrl for model://perspectives.domains#ExampleModel
+----
+
+==== On the character classes
+
+Perspectives is programmed in the Purescript language. We use the definitions of various character classes as defined in the Unicode package. These definitions are quite extensive; we do not repeat them here but refer the interested reader to the documentation of that package.
+
+|===
+|Name |Explanation
+
+| `upperCaseCharacter` 
+| From the documentation of isUpper: upper-case or title-case alphabetic Unicode characters (letters). Title case is used by a small number of letter ligatures like the single-character form of /Lj/.
+
+|`alphaNum` 
+|Alphabetic or numeric Unicode characters.
+
+|`lowerCase` 
+|Lower-case alphabetic Unicode characters (letters).
+
+|`stringLetter` 
+|Any character that is not a double quote, a backslash or an ampersand. Escape character sequences are allowed, too, but they are not documented here. We refer to the source code of `Text.Parsing.Parser.Token`
+|===
+
+=== Keywords
+The language keywords are reserved words that have a special meaning in the language. They cannot be used as identifiers. Keywords are described throughout the reference manual. They are listed in the <<keywords, overview of keywords>>.
+
+Keywords always start with a lower-case letter (e.g. `context`) but can contain upper-case letters (like in `filledBy`). 
+
+[[concept-publicidentifier]]
+=== Public identifiers
+To understand the concept of public identifiers, we need to discuss the internal representation of identifiers and where resources are stored. By default, resources (context- and role instances) are stored in the local IndexedDB database in the browser. However, we can also store resources elsewhere, like in a Couchdb database. The Perspectives Distributed Runtime obviously needs to know where to find the resources. This is done by adding a prefix to identifiers. For resources that are stored in the local database, we use the prefix `def`, separated by a colon sign from the actual identifier. Similarly we have resources that are stored in a Couchdb database on a server on the open internet. These resources are created for so called 'public user roles' (see:). Such a resource is prefixed with `pub`. The identifier itself, in this case, is an URL.
+
+We need not go into details of this URL. Suffice it to say that it can be copied from the MyContexts interface. This is because we need to be able to refer to such resources in <<concept-query, queries>>. The language has the keywords `publicrole` and `publiccontext` to refer to such resources.
+

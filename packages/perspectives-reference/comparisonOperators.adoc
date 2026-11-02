@@ -1,0 +1,9 @@
+[[concept-comparison-operator]]
+=== Comparison Operators `&lt;`, `&gt;`, `&lt;=`, `=&gt;`
+The comparison operators `&lt;`, `&gt;`, `&lt;=` and `=&gt;` are used to compare values in expressions. They return a Boolean value indicating whether the comparison is true or false.
+
+Note that email addresses are compared lexicographically, meaning that they are compared character by character from left to right.
+
+Comparing files is not very useful. Actual files are not compared; just the internal representation of claim data on a file.
+
+On comparing duration values, please note that their number values are compared. Take care to compare Minutes to Minutes, Days to Days, and so on. Comparing unsimilar duration values (e.g., Minutes to Days) leads to incorrect results.

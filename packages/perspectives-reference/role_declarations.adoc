@@ -1,0 +1,175 @@
+[desc="Declaring roles"]
+== Role Declarations
+A role is always declared in a context. Users have roles, but roles can also be used to represent things or even other contexts. A role is a type that can have instances. An instance of a role can be (but need not be) **filled** by another role. The main semantic function of a role is to provide a scope for properties and perspectives. 
+
+A role can have properties, which are attributes of the role. Properties can be mandatory or optional.
+
+There are five **kinds of roles**. Each can be declared with a specific keyword inside a **context** definition.
+
+[cols="1,4", options="header"]
+|===
+|Kind |Explanation
+
+|`user`
+|A **user** role represents living persons that perform **actions**. Actions are collected in a <<keyword-perspective,perspective>>. A **user** role can only be filled by another **user** role.
+
+|`thing`
+|A **thing** role has no perspective. It represents everything that is not a user. A **thing** role can only be filled by another **thing** role.
+
+|`context`
+|A **context** role is bound to the External Role of a <<keyword-context,context>>. It represents a **context** (instance) within another **context** (instance). A **context** role can only be filled by another **context** role, **or** by an **external** role.
+
+|`external`
+|An **external** role is a role that represents a <<keyword-context,context>>. An **external** role cannot be filled.
+
+|`public`
+|A calculated **user** role whose perspective on the context is published on a server on the internet and thus is available to all.
+|===
+
+Use these keywords to create Roles. Restrictions apply on filling roles:
+
+1.	user and thing roles can only be filled with the same kind;
+2.	a context role can be filled by a context role or an external role (but in a filledBy clause one should use the context type, not the type of its external role);
+3.	external roles cannot be filled.
+
+[[keyword-role]]
+=== Role
+
+|===
+|Occurs in |A role declaration must be directly embedded in an enclosing <<keyword-context,context body>> - and this includes the domain at the top level.
+|Body contains |<<keyword-property,property>>, <<keyword-perspective,perspective on/off>>, <<keyword-state,state>>, <<keyword-instate, in state>>, <<keyword-stateTransition, on entry>>, <<keyword-stateTransition, on exit>>, <<keyword-indexed, indexed>>.
+|Attributes | `mandatory`, `functional`, `relational`, `unlinked`, `default`
+|Function |To provide a scope for property declarations.
+|Keyword |`thing`, `user`, `context`, `public`, `external`
+|===
+
+==== Role Declaration Syntax
+A role can be filled by another role. In the type declaration we can restrict the the fillers to specific types. Without a restriction, any role type is allowed. It is not possible to declare a role that cannot be filled.
+
+The syntax for a role declaration is as follows:
+```
+roleDeclaration = enumerated-role | calculated-role
+enumerated-role = role-kind local-identifier ['relational'|'functional'] ['unlinked'] ['filledBy' filler]
+role-kind = 'user' | 'thing' | 'context' | 'external' | 'public'
+filler = fillingtype [, fillingtype]+ | fillingtype [+ fillingtype]+
+fillingtype = roletype ['in' contexttype] | contexttype
+calculated-role = role-kind local-identifier ['functional' | 'default'] = expression
+local-identifier = segment
+contexttype = identifier
+roletype = identifier
+```
+
+Explanation:
+
+1. Either `relational` or `functional` can be used to indicate the cardinality of the role. If neither is specified, the role is functional (has but a single value).
+2. The `unlinked` keyword indicates that the role is not registered within the context itself.
+3. The `default` keyword indicates that the specific calculated role is the role that the end user assumes when the context is entered, and no other role has been explicitly chosen before.
+4. To specify that a role must be filled by either this, or that role, use the comma operator to separate the types.
+5. To specify that a role must be filled by instances that have two or more types, use the plus operator to combine the types.
+6. For a filler role type, we can use 'in' and specify a context type, which indicates that the role must filled by a role from that context. If no context type is specified, the role can be filled by any role of that type.
+7. A calculated role is a role that is created by an <<concept-query, expression>>. The expression can be a function call, a filter, or any other valid expression that results in a role type.
+8. The `local-identifier` is a unique identifier for the role within its lexical context. It should start with a captital. See the definition of `segment` in the <<lexical_structure,Lexical Structure>> section for more details.
+9. `identifier` is also taken from the section on <<lexical_structure,Lexical Structure>>.
+
+This restriction on context types from which to take role types only makes sense with the knowledge that a role type from one context can be added to another context. Such a role is called an <<keyword-aspect,aspect role>>. An example: a generic role Driver will make sense in the context of a Vehicle. We can then add that role as an aspect role to the contexts Lorry, Taxi, and so on (and these will themselves be specialisations of Vehicle - where the specialising is done by adding Vehicle as an aspect!). The aspect role is a role that is added to the context, but it is not declared in that context. If we want to fill another role with just Taxi Drivers, we can use the syntax `filledBy Driver in Taxi`. This means that the role must be filled by instances of type Driver that are attached to (context) instances of type Taxi.
+
+==== Role Attributes
+[cols="1,4", options="header"]
+|===
+|Attribute |Explanation
+
+|`mandatory`
+|A role is mandatory if it must be filled by another role. This is not enforced by the parser or compiler.
+|`functional`
+|A functional role can have only one instance in a context.
+|`relational`
+|A relational role (also called a multi-role) can be filled by multiple roles.
+|`unlinked`
+|An unlinked role is not registered within the context itself. There is no semantic difference with an ordinary role; but the representation of its context doesn't refer to it.
+|`default`
+|A calculated role with the `default` attribute is the role that the end user assumes when the context is entered, and no other role has been explicitly chosen before.
+|===
+
+=== Examples
+
+[cols="25%,75%", options="header"]
+|===
+|Expression |Explanation
+
+a|
+----
+user Driver
+----
+|Declare a User role with default attributes: not mandatory, functional.
+
+a|
+----
+user Driver (mandatory, relational)
+----
+|Declare a User role with explicit attributes.
+
+a|
+----
+user Driver filledBy Person
+----
+|User role with default attributes, filled with the Person role.
+
+a|
+----
+user Parent filledBy Father, Mother
+----
+|User role filled by either of two roles.
+
+a|
+----
+user Driver (mandatory) filledBy Person
+----
+|User role with attributes, filled with the Person role.
+
+a|
+----
+user Driver filledBy Person + LicenseHolder
+----
+|User role that requires its fillers to have **two** types simultaneously. One role provides personal details, the other the drivers license.
+
+a|
+----
+thing UnfinishedRides = filter Rides with not Finished
+----
+|Calculate a role with an expression.
+
+a|
+----
+thing ListOfDocuments = callExternal "lib:DocNamesFromCouchdb" returns Document
+----
+
+|A call to a (fictitious) API function that results in instances of the type Document. We call a role that is created in this way a <<external-libraries, *computed* role>>.
+
+a|
+----
+thing Account (unlinked)
+----
+|An **unlinked** role is not registered within the context itself. There is no semantic difference with an ordinary role; but the representation of its context doesn't refer to it.
+
+a|
+----
+user Guest (default) = me
+----
+|A calculated role that is the default role for the context.
+
+a|
+----
+public Visitor at "https://perspectives.domains/cw_servers_and_repositories/" = sys:Me
+----
+|A public user role that defaults to the system user (so, anyone), whose context- and role instances can be found at the given url. Access is supposed to be free (i.e. no credentials should be needed to access the instances).
+
+|===
+
+The syntax for the public role declaration is as follows:
+
+```
+public <RoleName> (default)* at <expression-with-stringvalue> = <expression-with-userrole-value>
+```
+
+In other words, the location where the resources for the public perspective are stored, results from an expression and so can be calculated. A public user role can be default, too.
+

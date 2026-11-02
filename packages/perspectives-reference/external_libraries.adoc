@@ -1,0 +1,112 @@
+[desc="We describe how functions are available that are both built-in, yet not part of the language"]
+[[external-libraries]]
+== Extensions of the Perspectives Language through Libraries
+
+A Perspective model consists in part of calculated roles and properties. It can also include state definitions, that are calculated in the same way but must lead to a Boolean value. All these calculations consist of compositions of built-in functions such as binding or context. In some contexts we call them _queries_.
+
+In this text we describe so-called *external functions* that are not built-in but added through libraries. A built-in function keyword is recognised by the parser. In contrast, the name of an external function is not recognised. We need to use an explicit calling mechanism to signal the system it is a function.
+
+Furthermore, while the types of the arguments of a built-in function are compared to the requirements of its parameters, this is not true for functions that come from libraries. The only check the parser/compiler system performs is on the number of arguments.
+
+We will call these non-built-in functions external.
+
+=== How to call external functions
+External functions must be called by way of the `callExternal` keyword. Some examples:
+
+[code]
+----
+callExternal sensor:ReadSensor( "clock", "now" ) returns DateTime
+callExternal util:GenSym() returns String
+----
+
+The syntax is simple: `callExternal` preceeds the qualified function name (more about them below), followed by a parenthesised list of parameter values separated by comma's. Finally, the keyword `returns`, followed by a Range type, rounds the expression off. This expression can be used in exactly the same places that other value-returning expressions can be used.
+
+Notice that such value-returning expressions cannot be composed like role- or context-returning expressions can be. Simply put: an external function call can never be followed by the `>>` keyword. This is not special for external functions; built-in functions that return a value cannot be followd by the composition keyword either (think of Property-getting expressions or literal values).
+
+Argument values can be of any Range type, that is a Boolean, String, DateTime, Number, Email or even File type. However, as stated above, no type check is performed by the system. The modeller is entirely responsible for providing the correct Range types!
+
+A word aside for implementators of these libraries. Confusingly, an external function is _always_ called with arguments that are Arrays of Strings. These, however, will be the serialised forms of the original Range typed values. The external function itself must convert these strings to their typed values. Similarly, even though an external function may have a return type of, say, Boolean, the actual value returned must be ["true"] or ["false"].
+
+=== How to compose expressions from external functions
+It is entirely legal to use an external function call in the position of the expression that should provide an argument value to another external function call. An example makes this clear:
+
+[code]
+----
+callExternal util:FormatDateTime( 
+    (callExternal sens:ReadSensor("clock", "now") returns DateTime), 
+    "nl-NL", 
+    "{\"dateStyle\": \"full\", \"timeStyle\": \"short\"}") 
+  returns String
+----
+
+The inner expression calls a function in the Sensor library. It returns a DateTime, that is in turn formatted by the call to a function in the Utilities library (under the hood, quite some type conversion will take place: the DateTime declared by the inner function is first serialised to its string representation and then converted back to a DateTime (in Purescript) by the formatting function). 
+
+Notice the unwieldly way that the Javascript object must be written up, with the double quotes around keywords and values escaped so as not to end the containing string prematurely.
+
+=== Using the implicit parameter value
+A query is essentially described as the composition of functions of a single argument. The arguments never appear in the query expression. The result of the expression left of the `<<` (composition) operator is supplied as argument to the function right of it.
+
+If we append an external function to a query, the same mechanism holds. In other words, a function with, say, three arguments, like `Replace`:
+
+`Replace( <pattern>, <replacement>, <value> ) returns String`
+
+could be used as follows:
+
+[code]
+----
+Repositories$NameSpace >> callExternal util:Replace( ".", "_" ) returns String
+----
+
+Here the step preceding the `callExternal` expression supplies the `value` argument to the third parameter of `Replace`. However, it may also be called like this:
+
+[code]
+----
+callExternal util:Replace( ".", "_", Repositories$NameSpace ) returns String
+----
+
+Here, the third parameter is included within the parameter list. 
+
+Notice that a query must applied to a role instance. Given the partial qualification of the property NameSpace, we might assume that the role is called Repositories (it needn't if Repositories is used as Aspect by the actual role type). So:
+
+* in the first form, callExternal is applied to a Value (the value of the Namespace property);
+* whereas in the second form, callExternal is applied to a role instance of Repositories. This means that `Repositories$Namespace` (as a property getter) is applied to that role instance and will retrieve the value of the property.
+
+The first form actually turns `Replace` into a function of a single argument, so it can be used just like any other query step function.
+
+=== Library namespaces
+All libraries have their own namespace. Actually, for each library there is a tiny model that just declares its name, for example:
+
+[code]
+----
+domain model://perspectives.domains#Utilities
+----
+
+All these libraries have a default prefix defined within the system. However, it is good form to declare the libraries you depend on, as a modeller:
+
+[code]
+----
+use util for domain model://perspectives.domains#Utilities
+----
+
+
+=== External side effects
+Apart from _functions_, an external library may also have procedures that perform a _side effect_ by adding something to the System's state. Such procedures are called through use of the keyword `callEffect`, like so:
+
+[code]
+----
+callEffect cdb:MakeDatabaseWriteProtected( Url, "cw_servers_and_repositories" )
+----
+
+The syntax is comparable to that of `callExternal`, but no return value type has to be specified (as there is no return value). This makes expressions like the above a _statement_ all on its own (statements using the built-in PL keywords usually are _assignments_, using e.g. the `=` operator).
+
+=== External *destructive* side effects
+Finally, we have procedures that perform a _destructive side effect_ by removing something from the System's state. Such procedures are called through use of the keyword `callDestructiveEffect`, like so:
+
+[code]
+----
+callDestructiveEffect cdb:RemoveModelFromLocalStore ( ModelToRemove )
+----
+
+The syntax is the same as that of `callEffect`. Destructive effects are treated differently in the Perspectives Distribution Runtime _Execution Model_. Currently, the only place to read more about this Execution Model is in https://mycontexts.com/techdoc/_execution_model.html[its chapter in the Perspectives Technical Documentation]. 
+
+Very briefly: things are only removed at the end of each series of state changes. This ensures that all queries that are evaluated during state change are based on a _monotonically growing_ state (only things are added). This makes it easier to understand what is happening on reading a model.

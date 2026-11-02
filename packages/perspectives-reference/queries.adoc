@@ -1,0 +1,174 @@
+[desc="Expressions to calculate role instances and property values"]
+[[concept-query]]
+== Queries, aka Expressions
+In Perspectives, information is stored in roles and contexts. Roles are embedded in contexts and can be filled with roles - also roles from other contexts. Thus contexts and roles form a graph structure. Queries are used to retrieve information from this graph structure. They can be used to calculate role instances and property values. The condition on a <<concept-state,state>> is a query, too. 
+
+As a role can have multiple instances and a role can fill multiple roles, queries can return multiple values. A query can be a simple path, or it can be a complex expression that combines multiple paths and operations. The order of values in a query result is not defined, though one can usually make a good guess. However, we do not guarantee that this order will always remain the same in future versions.
+
+We use the terms _query_ and _expression_ interchangeably (though arguably _expression_ is more a grammatical concept). A query is an expression that can be evaluated to retrieve information from the graph structure of roles and contexts.
+
+A very common query is a _path_. Many paths are just a sequence of role names and the operators `context`, `external`, `binding` and `binder` interleaved with the `>>` operator. Some examples of paths are:
+[source,perspectivesarc]
+----
+-- Two role queries:
+extern >> binder ShoppingLists
+  -- result: the role instance of ShoppingLists that is filled by the external role of the current context.
+sys:TheWorld >> PerspectivesUsers
+  -- result: all role instances of PerspectivesUsers in the context TheWorld.
+
+-- Two property queries:
+context >> extern >> Name
+  -- result: the value of property Name of the external role of the current role.
+binding >> context >> extern >> Name
+  -- result: the value of property Name of the external role of the context of the role that fills the current role.
+----
+
+=== Syntactical context of expressions
+Expressions occur in the following places:
+
+*  as the definition of a <<keyword-role,Calculated Role>>;
+*  as the definition of a <<keyword-property,Calculated Property>>;
+*  in a <<keyword-state,state>> declaration as its condition;
+*  in <<concept-assignment,assignment statements>>, to provide values for assignment operator parameters;
+*  in <<keyword-letA,letA statements>>, providing values for the bound variables;
+*  in <<keyword-letE, letE expressions>>, providing values for the bound variables;
+*  in the body of <<keyword-notify,notify>>;
+*  and recursively in expressions themselves.
+
+=== Expression Syntax
+The syntax for a query is as follows:
+```
+expression = simpleExpr | unaryExpr | binaryExpr | letE | computationExpr
+simpleExpr = 
+	identifier 
+	| 'this' 
+	| 'binding' ['in' contextidentifier]
+	| 'binder' roleidentifier ['in' contextidentifier]
+	| 'context' 
+	| 'extern' 
+  | 'indexedName'
+	| 'origin' 
+	| 'currentcontext'
+	| 'currentactor'
+	| 'notifieduser'
+	| 'modelname'
+	| 'contextType'
+	| 'roleTypes'
+	| 'specialisesRoleType' roleidentifier
+	| 'isInState' identifier
+	| regexp
+  | contextTypeIndividual
+  | roleTypeIndividual
+  | publicrole
+  | publiccontext
+	| value 
+	| variable 
+	| me
+	| >>= sequenceFunction 
+
+contextTypeIndividual = '[' 'context' identifier ']'
+roleTypeIndividual = '[' 'role' identifier ']'
+publicrole = 'publicrole' publicidentifier ['(' identifier ')']
+publiccontext = 'publiccontext' publicidentifier ['(' identifier ')']
+regexp = 'regexp' regexp-pattern [regexp-flags]
+regexp-flags = 'i' | 'g' | 'm' | 'y' | 'u'
+value = number | boolean | string | date | time | dateTime | markdown | email
+markdown = '<' markdown-text '>'
+variable = lowerCase+
+sequenceFunction = 'sum' | 'product' | 'count' | 'minimum' | 'maximum'
+
+unaryExpr = 
+	'not' expr 
+	| 'exists' expression 
+	| 'filledBy' expression 
+	| 'fills' expression
+	| 'available' expression 
+	| 'contextinstance' '(' contextidentifier ')' expression
+	| 'roleinstance' '(' roleidentifier ')' expression
+
+binaryExpr = 
+	'filter' expression 'with' expression 
+	'selectFrom' expression 'just' typeCombination
+	| expression operator expression
+
+typeCombination = contextTypeCombination | roleTypeCombination
+contextTypeCombination = roleidentifier 
+	| combination
+	| (roleidentifier [, roleidentifier]*)
+	| (combination [, combination*)]*)
+combination = (roleidentifier [+ roleidentifier]*)
+
+operator = 
+	'>>' | '>>' | '==' | '/=' | '<' | '<=' | '>' | '>=' 
+	| 'and' | 'or' 
+  | '+' | '-' | '*' | '/' 
+	| 'union' | 'orElse' | 'intersection'
+	| 'filledBy' | 'fills'
+	| 'matches'
+
+letE = 'letE' binding+ 'in' expression
+binding = variable '<-' expression
+
+contextidentifier = identifier
+roleidentifier = identifier
+
+computationExpr = 'callExternal' externalFunctionName '(' [expression] [, expression]* ')'
+externalFunctionName = qualifiedName | prefixedName
+
+```
+Explanation:
+
+1. Date, Time and DateTime values are in ISO 8601 format, e.g., `2023-10-01` for a date, `12:34:56` for a time, and `2023-10-01T12:00:00Z` for a dateTime.
+2. See the section <<concept-publicidentifier, Public Identifiers>> for the definition of `publicidentifier`. These expressions result in a single role or context instance.
+3. See the section <<concept-identifier, Identifiers>> for the definition of `identifier`. `contextidentifier` and `roleidentifier` are merely syntactic sugar.
+
+=== Operator precedence
+Operator precedence is ruled by weights for each operator. Parentheses can be used to override these precedences. An operator with higher precedence prevails of an operator with lower precedence. Hence, 
+
+```
+not SomeBoolean and not AnotherBoolean
+```
+
+will be interpreted as:
+
+```
+not (SomeBoolean and not AnotherBoolean)
+```
+
+which is usually not what you expect. instead, write:
+
+```
+(not SomeBoolean) and not AnotherBoolean
+```
+
+[cols="1,1", options="header"]
+|===
+|Operator|Precedence
+
+|>>|9
+|union, intersection, orElse|8
+|>>=|7
+|*|6
+|/|5
+|+, -|4
+|==, >, <, <=, >=|3
+|filledBy as infix operator|3
+|matches|3
+|and, or|2
+|not, exists, available, filledBy, fills|1
+|filter|0
+|===
+
+`selectFrom ... just ...`, while not an operator, has precedence 9, which means that it 'sticks together'.
+
+include::literalValues.adoc[]
+
+include::comparisonOperators.adoc[]
+
+include::setOperators.adoc[]
+
+include::letExpressions.adoc[]
+
+include::primaryFunctions.adoc[]
+
+include::typeLevelFunctions.adoc[]

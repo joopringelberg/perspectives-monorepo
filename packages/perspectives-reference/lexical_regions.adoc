@@ -1,0 +1,36 @@
+[desc="Lexical analysis: current context, object and subject."]
+[[concept-lexical-regions]]
+== Lexical regions in a Perspectives Language source text
+
+Below is an image of a perspectives language source text with its lexical regions indicated. Each definition body forms a lexical region (or _scope_). Throughout this text, we'll refer to these regions to clarify the context of various elements.
+
+* The body of a context definition provides a value for the **current context**. The example holds two such contexts: ShoppingListManagement and ShoppingList.
+* The body of a user role definition provides a value for the **current subject**. For example, in the context ShoppingListManagement we have the user role Manager. In lines 36 - 40 the current subject is Manager. 
+* However, the body of `perspective of Shopper` (lines 49-52) _also_ provides a value for the current subject. In this case, for the user role Shopper (definition not shown).
+* The same holds for the lines following `do for Shopper` (line 55) and `notify Shopper` (line 58).
+* In lines 38 and 39, the **current object** is ShoppingLists.
+* That is also true in the body of the definition of ShoppingLists (line 42).
+* Finally, in line 51 the **current object** is defined as well and it is ShoppingLists (in context ShoppingListManagement).
+
+.Lexical regions example
+[.fullwidth]
+image::current_regions.png[alt="Lexical regions in code"]
+
+Because the entire model text is the definition of a context (of kind Domain), the current context is always defined. This is not true for the current subject and current object. Either of them may be defined or not, depending on the lexical region. It is possible to have values for all three, as in line 51 (current context is ShoppingList, current subject is Shopper, current object is ShoppingLists).
+
+The language has four keywords that are linked to these concepts, the so-called <<concept-standard-variables, standard variables>>. They are `currentcontext` (always defined, as the current context), `currentactor` (defined in regions where there is a current subject except for in notifications) and `notifieduser` (defined in notify bodies). These keywords are _query steps_ in themselves as they each provide a value. That value, obviously, depends on the lexical location of its occurrence in the source text.
+
+What about current object? We don't have a keyword that directly corresponds to it. What comes near is the keyword `origin`. It is always defined in a <<concept-query,query>>. Its value is a role instance in:
+
+* the definition of a <<keyword-property,calculated property>>;
+* the condition of a role <<concept-state,state>>;
+* other expressions in a lexical context where current object is defined (as e.g. in a state transition of a thing role).
+
+But its value is a context in:
+
+* the definition of a <<keyword-role,calculated role>>;
+* the condition of a context state;
+* the object of a <<concept-perspective,perspective>> (when it is a query instead of a role type)
+* expressions in an <<keyword-action,action>> where there is no current object (these are so-called context actions).
+
+Not all of the above will make sense here and now. We refer back to this paragraph when needed.

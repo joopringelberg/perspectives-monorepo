@@ -1,0 +1,17 @@
+[[keyword-letE]]
+=== LetE Expressions
+A let expression is a way to bind a value to a name within a specific scope. It allows you to create a local variable that can be used within a certain block of code. The syntax for a let expression typically looks like this:
+
+```
+let <name> <- <value> in <expression>
+```
+
+In this syntax:
+
+- `let` is the keyword that introduces the let expression.
+- `<name>` is the name of the variable being defined. It should be all lower case!
+- `<value>` is the value being assigned to the variable.
+- `in` is a keyword that separates the variable definition from the expression that uses it.
+- `<expression>` is the code that makes use of the variable. It can be an arbitrary <<concept-query,expression>>.
+
+LetE expressions are useful for creating temporary variables that are only needed within a specific context, helping to keep code clean and organized.

@@ -1,0 +1,23 @@
+{
+  "name": "perspectives-reference",
+  "version": "0.25.0",
+  "private": true,
+  "description": "The Perspectives Language Reference Manual",
+  "type": "module",
+  "license": "ISC",
+  "scripts": {
+    "setup": "bundle install",
+    "build": "node scripts/build.mjs",
+    "build:pdf": "bundle exec asciidoctor-pdf --failure-level WARN overview.adoc -D output-pdf",
+    "publish:reference": "pnpm run build && scp -r output/. joop@inplace.works:/var/www/mycontexts.com/reference/",
+    "test": "node --test scripts/build.test.mjs",
+    "lint": "eslint scripts/"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^28.0.6",
+    "@rollup/plugin-node-resolve": "^16.0.1",
+    "highlight.js": "^11.11.1",
+    "perspectives-highlightjs": "workspace:*",
+    "rollup": "^4.44.0"
+  }
+}

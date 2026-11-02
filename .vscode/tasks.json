@@ -2,6 +2,16 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "label": "build perspectives-reference",
+      "type": "shell",
+      "command": "pnpm --filter perspectives-reference... build",
+      "options": {
+        "cwd": "${workspaceFolder:perspectives-reference}/../.."
+      },
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
       "label": "build mycontexts",
       "type": "shell",
       "command": "pnpm run build",

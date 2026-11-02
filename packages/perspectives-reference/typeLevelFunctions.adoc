@@ -1,0 +1,73 @@
+=== Type level functions
+Most queries involve navigating the space of context- and role instances. However, there are also a few keywords that operate at the type level, allowing you to query the types of the current context or role instance.
+
+[NOTE] 
+====
+This area of Perspectives is under development. More functions may be added in the future.
+====
+
+[[keyword-contextType]]
+==== contextType
+The `contextType` keyword is used to refer to the type of the current context instance. This can be useful when you want to check or compare the type of the context in an expression. For example, you might want to check if the current context is of a specific type before performing certain operations or calculations.
+
+This operation moves from the instance level to the type level.
+
+[[keyword-roleTypes]]
+==== roleTypes
+The `roleTypes` keyword is used to refer to the role types that exist in context type that is the current value of the query. This can be useful when you want to check or compare the types of roles in an expression. For example, you might want to check if a specific role type is present in the current context before performing certain operations or calculations.
+
+This operation expects a context type as input, and produces a set of role types as output. It operates purely at the type level.
+
+[[keyword-specialisesRoleType]]
+==== specialisesRoleType
+The `specialisesRoleType` keyword is used to check if a specific role type specialises another role type. This can be useful when you want to check or compare the types of roles in an expression. For example, you might want to check if a specific role type is a specialised version of another role type before performing certain operations or calculations.
+
+The following complex example is taken from the System model. It shows how to use the `contextType`, `roleTypes` and `specialisesRoleType` keywords to create an invitation for a user that is not yet connected to the system. The example uses a combination of type-level and instance-level queries to achieve this.
+
+[source,perspectivesarc]
+----
+  case Invitation
+
+    external
+      property SerialisedInvitation (File)
+      property Addressing = "This is an invitation to connect, sent by " + InviterLastName + ". Please contact this person to retrieve the security code needed to unlock the invitation.\n"
+      property Message (String)
+        maxLength = 256
+      property CompleteMessage = Addressing + Message
+      property ConfirmationCode (Number)
+      property EnteredCode (Number)
+      property InviterLastName = context >> Inviter >> LastName
+        readableName
+      property IWantToInviteAnUnconnectedUser (Boolean)
+      property CorrectCodeEntered = ConfirmationCode == EnteredCode
+      state Message = exists Message
+      state CreateInvitation = exists ConfirmationCode
+        on entry
+          do for Inviter
+            letA
+              transaction <- callExternal ser:SerialiseFor( ((filter origin >> context >> contextType >> roleTypes with specialisesRoleType model://perspectives.domains#System$Invitation$Invitee) orElse [role model://perspectives.domains#System$Invitation$Invitee])) returns String
+              invitation <- callExternal util:CreateInvitation( CompleteMessage, transaction, ConfirmationCode ) returns String
+            in
+              create file ("invitation_of_" + InviterLastName + ".json") as "text/json" in SerialisedInvitation for origin
+                invitation
+----
+
+[[keyword-selectFrom]]
+==== selectFrom ... just ...
+The `selectFrom ... just ...` construct allows you to select instances based on their types. It is used to filter instances of a specific type or combination of types from a given set of instances. This can be particularly useful when you want to work with a specific subset of instances that share certain characteristics defined by their types.
+
+For example, suppose you have constructed a sequence of Vehicles that are both Boats and Cars. You can use the `selectFrom ... just ...` construct to select only Cars, so you can meaningfully select their number of wheels. The following example illustrates this:
+
+[source,perspectivesarc]
+----
+selectFrom Vehicles just Car >> NumberOfWheels
+----
+
+This will parse and compile correctly, whereas the following will not, because `NumberOfWheels` is not a property of `Boat`:
+[source,perspectivesarc]
+----
+Vehicles >> NumberOfWheels
+----
+
+**NOTE** 
+Provide a context type when just using a single role type.

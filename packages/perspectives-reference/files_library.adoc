@@ -1,0 +1,25 @@
+[desc="A description of functions available in the Files Library"]
+== The Files Library
+
+Namespace: `model://perspectives.domains#Files`.
+
+=== FileText
+
+`<fileExpression> >> FileText()`
+
+`FileText( <file> )`
+
+Retrieves the text content of a file stored as a property value. The file must be of a text MIME type (e.g. `text/plain`, `text/html`) or `application/x-yaml`. For other MIME types, no value is returned.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|file|File|A serialised file property value (PerspectivesFile format).
+|result (functional)|String|The text content of the file.
+|===
+
+[code]
+----
+callExternal files:FileText( SomeDocument ) returns String
+----

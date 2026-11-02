@@ -1,0 +1,29 @@
+[[keyword-union]]
+=== union
+The `union` operator is used to combine two sets of instances into a single set that contains all unique instances from both sets. This operator is useful when you want to merge the results of two different queries or when you want to create a new set that includes all instances from multiple sources. The following example illustrates how to use the `union` operator:
+
+[source,perspectivesarc]
+----
+thing A_Union = RoleA union RoleB
+  -- result: a set containing all unique instances from RoleA and RoleB.
+----
+
+[[keyword-intersection]]
+=== intersection
+The `intersection` operator is used to find the common instances between two sets. This operator is useful when you want to identify instances that are present in both sets, allowing you to focus on shared characteristics or relationships. The following example illustrates how to use the `intersection` operator:
+
+[source,perspectivesarc]
+----
+thing A_Intersection = RoleA intersection RoleB
+  -- result: a set containing all instances that are present in both RoleA and RoleB.
+----
+
+[[keyword-orElse]]
+=== orElse
+The `orElse` operator is used to provide an alternative set of instances when the first set is empty. This operator is useful for creating fallback queries, ensuring that you always have a set of instances to work with, even if the primary query yields no results. The following example illustrates how to use the `orElse` operator:
+
+[source,perspectivesarc]
+----
+thing A_OrElse_B = RoleA orElse RoleB
+  -- result: a set containing all instances from RoleA if it is not empty; otherwise, all instances from RoleB.
+----

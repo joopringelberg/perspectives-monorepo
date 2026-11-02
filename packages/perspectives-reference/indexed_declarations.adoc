@@ -1,0 +1,46 @@
+[desc="Indexed contexts and roles"]
+[[keyword-indexed]]
+== Indexed context and roles
+A context or role can be declared to be indexed with a name. To understand the concept of indexing, keep in mind that Perspectives is a distributed system.
+
+Imagine the breakup of a gathering with a few people. Each of them can say: I will go home now. Will they end up in the same place? Not necessarily: in fact, only when they live together. The default is that everyone has his or her own home. Yet, all designate it with the same name: home. This is the essence indexed concepts: a name that is used by many, but that refers to different things for different people - as if it were a table of meanings _indexd_ by those people.
+
+We use this in Perspectives. For example, each user's installation of MyContexts has a context called MySystem (it is an instance of the PerspectivesSystem context type). It describes that installation to a certain extent. However, the MySystem context is not the same for each user. It is virtually indexed by the user name, so that each user has his or her own MySystem context. 
+
+Now we wrote 'virtually', because we do not need an index because there is no data store that holds all instances of the PerspectivesSystem context. Each user's MySystem context is created and managed independently within their own installation. And each has its own unique identifier. Yet, in the Perspectives Language (e.g. in <<concept-query,query expressions>>) we can refer to it as if it were a single context, because we use the same name for it: MySystem. The software disambiguates the name locally. In other words, each user can find his or her own instance of PerspectivesSystem by using the name MySystem.
+
+[NOTE]
+====
+An astute reader might notice that, as long as each instance of a particular indexed context only occurs in a single installation, there would be no need to have unique identifiers for them - we might just call every one 'home', for example. However, we think it cannot be ruled out that users need to know about each others homes (or whatever other indexed concepts). We have not pursued this line of thought yet but are prepared for a future where that might be necessary.
+====
+
+=== Indexed Contexts
+Each model can declare as many indexed context types as its author deems necessary. Notice, however, that such a type may only have a single instance (in an installation)! Otherwise it would be undetermined what instance rightfully bears the indexed name. A common practice is to declare the root context of a model as indexed, so that each user has his or her own instance of the root context. This is done with the `indexed` keyword. The following indexed names are used in the models that each installation of Perspectives has:
+[cols="1,3", options="header"]
+|===
+|Indexed Name |Explanation
+|MySystem |The root context of the Perspectives system.
+|MyBrokers |In the model that is used to manage RabbitMQ brokers. Each user needs to sign up to a broker in order to be able to exchange information with other users.
+|MyCouchdbApp |In the model that is used to manage Couchdb applications. Each installation installs models from Repositories and these depend on Couchdb applications.
+|HyperTextApp |This model is used to create public or private hypertext pages.
+|TheWorld |This represents 'the world' of perspectives users. Conceptually it holds all users (`PerspectivesUsers`). However, there is no instance that holds all users, because each user has his or her own instance of TheWorld, containing just those users that are relevant to that user. TheWorld also has role `NonPerspectivesUsers` and its instances represent people that are not themselves users of Perspectives, but that we nevertheless want to refer to.
+|MySocialEnvironment |A layer 'above' TheWorld. Role 'Person' is defined here. It is filled with instances of PerspectivesUsers or NonPerspectivesUsers. 
+|===
+
+=== Indexed Roles
+There is but a single instance of an indexed role in the models that are necessary to run Perspectives. This is the role `User` in `PerspectivesSystem`, which is the system user role. It is indexed by the name `sys:Me` and it is used to refer to the system user in queries and other expressions. The system user is the user that runs the Perspectives system, in other words its owner.
+
+=== Examples
+Below we have an excerpt from the Perspectives System model, which declares `sys:MySystem` to be the indexed name of context type PerspectivesSystem. The fragment also shows the role User, indexed with `sys:Me`.
+[source,perspectivesarc]
+----
+domain model://perspectives.domains#System
+  use sys for model://perspectives.domains#System
+
+  case PerspectivesSystem
+    indexed sys:MySystem
+
+    user User (mandatory) filledBy PerspectivesUsers
+      indexed sys:Me
+
+----

@@ -1,0 +1,160 @@
+[desc="Roles have properties, either enumerated or calculated"]
+== Property declarations
+A property declaration defines a property of a role. A property can be either an enumerated property or a calculated property. An enumerated property has a fixed set of values, while a calculated property is derived from other properties or data.
+A property declaration has the following syntax:
+----
+property = enumerated-property | calculated-property
+enumerated-property = 'property' local-identifier '(' property-range [modifier] ')' 
+												constraining-facet* 
+modifier = ['mandatory'] ['relational'] ['functional'] ['authoronly'] ['selfonly']
+calculated-property = 'property' local-identifier ['functional'] '=' expression
+property-range = 'String' | 'Number' | 'Boolean' | 'DateTime' | 'Date' | 'Time' | 'Boolean' | 'Number' | 'Email' | 'File' | 'Year' | 'Month' | 'Week' | 'Day' | 'Hour' | 'Minute' | 'Second' | 'MilliSecond' | 'MarkDown'
+local-identifier = segment
+constraining-facet = minLength '=' integer
+									 | maxLength '=' integer
+									 | pattern '=' string [string]
+									 | whiteSpace '=' ('Preserve' | 'Replace' | 'Collapse')
+									 | enumeration '=' '(' literal (',' literal)* ')'
+									 | maxInclusive '=' literal
+									 | minInclusive '=' literal
+									 | maxExclusive '=' literal
+									 | minExclusive '=' literal
+									 | totalDigits '=' integer
+									 | fractionDigits '=' integer
+									 | messageProperty
+									 | mediaProperty
+									 | readableName
+----
+Explanation:
+
+1. Either `relational` or `functional` can be used to indicate the cardinality of the property. If neither is specified, the property is functional (has but a single value).
+2. A calculated property is a property that is created by an <<concept-query, expression>>. The expression can be a function call, a filter, or any other valid expression that results in a property value.
+3. A calculated property can be declared to be functional. Its calculation may actually return a list of values, but the compiler treats it as functional nevertheless. In runtime that means that the first value is used, and the rest is ignored. This is useful for <<concept-comparison-operator,comparison operators>> that are defined on single values, such as `=`, `<`, `>`, etc.
+4. The `local-identifier` is a unique identifier for the role within its lexical context. It should start with a captital. See the definition of `segment` in the <<lexical_structure,Lexical Structure>> section for more details.
+
+[[keyword-property]] 
+=== Property
+
+|===
+|Occurs in |A property declaration can only occur in an enclosing enumerated <<keyword-role,role body>>.
+|Body contains |<<concept-constraining-facets, minlength, maxlength, pattern, whiteSpace, enumeration, maxInclusive, minInclusive, totalDigits, fractionDigits, messageProperty, mediaProperty, readableName>>.
+|Function |To define a property of a role.
+|Keyword |`property`
+|===
+
+
+[[concept-range]]
+=== Range
+A property must be declared with a valid range, or it will be a String. The table below gives the valid range types and the form of their literals in model text:
+
+[cols="1,2", options="header"]
+|===
+|Range type |Literal form
+
+|String |"This is a string literal"
+|Date |'2022-03-11'
+|Time |"hh:mm:ss" and "hh:mm:ss.sss"
+|DateTime |'YYYY-MM-DDTHH:mm:ss.sssZ', but time may be left out
+|Boolean |true
+|Number |123
+|Email |john@doe.com
+|File |_
+|Year, Month, Week, Day, Hour, Minute, Second, MilliSecond |Duration type values must be written as integers
+|MarkDown |\<<This is a **markdown** literal.>>
+|===
+
+See this page for the link:https://tc39.es/ecma262/multipage/numbers-and-dates.html#sec-date-time-string-format[supported time format].
+See this page for the  link:https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/parse#Date_Time_String_Format[supported date-time format].
+
+Note that there is no literal form for a File property. However, we do have an assignment statement to create files (<<keyword-create,`create file...`>>).
+
+[[concept-constraining-facets]]
+=== Constraining facets
+Apart from the `mandatory` constraint, a number of other so-called _constraining facets_ may be specified with the property. They are inspired on the XML specification: see link:https://www.w3.org/TR/xmlschema-2/#rf-facets[Constraining Facets]. The `mediaProperty`, `messageProperty` and `readableName` facets are specific to Perspectives and are not part of the XML specification.
+
+[cols="1,3,2", options="header"]
+|===
+|Constraint |Explanation |Applies to
+
+|minLength |Input may not be shorter than given integer |Number
+|maxLength |Input may not be longer than given integer |Number
+|pattern |String form of the input must match a regular expression |String, Date, Number, Email, the mime type of File
+|whiteSpace |Specifies how whitespace in the input is handled |Preserve, Replace, Collapse
+|enumeration |Only the given values are valid |String, Date, Number, Email
+|maxInclusive |Upper bound for the value, including the bound itself |Date, Number
+|minInclusive |Lower bound for the value, including the bound itself |Date, Number
+|maxExclusive |Upper bound for the value |Date, Number
+|minExclusive |Lower bound for the value |Date, Number
+|totalDigits |Cap on the number of digits in the input |Number
+|fractionDigits |Cap on the number of digits in the fraction (the decimal part) |Number
+|messageProperty |Signifies that this property has the semantic role of containing messages for a chat |String
+|mediaProperty |Signifies that this property has the semantic role of containing media references (claim data) for a chat |String
+|readableName |A property with this role facet will be used to display a role in the GUI. |String
+|===
+
+=== Whitespace regime
+
+[cols="1,3", options="header"]
+|===
+|Regime |Explanation
+
+|Preserve |No normalization is done, the value is not changed (this is the behavior required by [XML 1.0 (Second Edition)] for element content).
+|Replace |All occurrences of #x9 (tab), #xA (line feed) and #xD (carriage return) are replaced with #x20 (space).
+|Collapse |After the processing implied by replace, contiguous sequences of #x20's are collapsed to a single #x20, and leading and trailing #x20's are removed.
+|===
+
+Facet examples
+
+[source,perspectivesarc]
+----
+property Text (mandatory, String)
+	minLength = 100
+	maxLength = 200
+	
+property ADateTime (DateTime)
+	minInclusive = '2022-04-15'
+
+property ANumber (Number)
+	minInclusive = 10
+	maxInclusive = 80
+
+property WeekDay (String)
+	enumeration = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+
+property Apple (String)
+	pattern = ".*appel.*" "Any word with the string `appel` in it."
+
+property Source (File)
+  pattern = "text/arc" "Only .arc files (Perspectives Language source files) are allowed, so use `text//arc."
+----
+
+The pattern must be enclosed in strings. Furthermore, observe the following:
+
+* To match $, use \\$
+* For character classes, use double backslash: \\w etc.
+* Forward slashes don't have to be escaped.
+
+E.g.:
+
+[source,perspectivesarc]
+----
+  pattern "https://\\w+\\$" "An URL that ends on a $ sign"
+----
+
+[[keyword-authoronly-property]]
+=== Author-only and self-only modifiers
+[[keyword-selfonly-property]]
+A property can be declared with the `authoronly` or `selfonly` modifier. The `authoronly` modifier indicates that only the author of a property value can see that value. The `selfonly` modifier indicates that only the user who himself is the object role instance bearing the property is informed of its value, *even if it is set by another user in another user role*. These modifiers are useful for properties that contain sensitive information, such as passwords or personal notes.
+
+Compare with the same-named modifiers of a perspective (<<keyword-selfonly>>, <<keyword-authoronly>>).
+
+=== Property declaration examples
+[source,perspectivesarc]
+----
+property LastHandledUpgrade (String)
+property Messages (relational, String)
+property UserName = SpecificUserName orElse callExternal util:BottomIdentifier() returns String
+property Version (mandatory, String)
+  pattern = "^[0-9]+\\.[0-9]+(?:\\.dev)?$" "The form MAJOR.MINOR where both are integer numbers, or MAJOR.MINOR.dev."
+property ModelName (functional) = binder Versions >> context >> extern >> binder Manifests >> LocalModelName
+----

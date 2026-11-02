@@ -9,6 +9,18 @@ For more information on the Perspectives Project, see its [documentation start p
 
 We also have a document with [summary information for developers](https://github.com/joopringelberg/perspectives-monorepo/blob/master/localdevelopment.md).
 
+## Language reference
+
+The [Perspectives Language Reference Manual](packages/perspectives-reference/README.md)
+is maintained in the `perspectives-reference` workspace package. It was imported
+from the separate documentation repository without history; the other
+documentation remains there.
+
+After installing the package's Ruby dependencies with
+`pnpm --filter perspectives-reference setup`, build the HTML manual and its
+workspace highlighter with `pnpm --filter perspectives-reference... build`.
+The package README covers PDF generation, previewing, and manual publishing.
+
 ## Weekly progress reports
 
 The [weekly report workflow](.github/workflows/weekly-report.yml) creates an issue

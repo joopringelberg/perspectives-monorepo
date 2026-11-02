@@ -1,0 +1,549 @@
+[desc="Designing a screen for a user role"]
+[[concept-screen]]
+== Screens
+
+A _screen_ defines the user interface layout that is presented to a user role when that user opens a context. Screens are declared inside `user` role declarations, after the role's perspectives.
+
+There are two kinds of screens:
+
+* *Who-What-Where screens* — structured layout with three named sections: `who`, `what`, and `where`.
+* *Classic (free-form) screens* — flexible layout composed of tabs, rows, columns, tables, forms, markdown, chat, and conditional blocks.
+
+[[screens-declaration]]
+=== Declaration syntax
+
+[source]
+----
+screen [<title>]
+  <who-what-where-body>
+  |
+  <classic-body>
+----
+
+The optional `<title>` is a double-quoted string that names the screen.
+
+[[screens-who-what-where]]
+=== Who-What-Where screens
+
+A who-what-where screen is identified by the presence of the `who` keyword as the first section inside `screen`. It divides the interface into three standard areas:
+
+* *who* — user roles and persons involved in the context (left panel).
+* *what* — the main content area showing the current context's roles (centre).
+* *where* — navigation links to related contexts (right panel).
+
+[source]
+----
+screen
+  who
+    [markdown <...>]
+    [<tableFormItem>]*
+  what
+    [markdown <...>]
+    [<tableFormItem>]*
+    |
+    <classicBody>
+  where
+    [markdown <...>]
+    [<tableFormItem>]*
+----
+
+Each of `who`, `what`, and `where` may contain:
+
+* An optional `markdown` block (shown above the table-form items).
+* Zero or more _table-form items_, each describing a master-detail panel (table + form) for a specific role.
+* `when` conditional guards (see <<screens-when>>).
+
+==== Table-form items
+
+A table-form item describes a role with a master (table) and a detail (form) view:
+
+[source]
+----
+<RoleName>
+  master
+    [markdown <...>]
+    [fillfrom <expression>]
+    [typeaheadfillfrom <RoleName>]
+    [props (<PropertyName>{, <PropertyName>}*) [verbs (<PropertyVerb>{, <PropertyVerb>}*)]]
+    [without props (<PropertyName>{, <PropertyName>}*)]
+    [with props (<PropertyName>{, <PropertyName>}*)]
+    [only (<RoleVerb>{, <RoleVerb>}*)]
+    [no roleverbs]
+  detail
+    [same sub-clauses as master]
+----
+
+The `master` section configures the table (list view); `detail` configures the form (single-item view). Both sections support:
+
+* `props (...)` with optional `verbs (...)` — selects which properties to display and which operations are allowed.
+* `without props (...)` — excludes specific properties from the display.
+* `with props (...)` — limits the display to specific properties.
+* `only (...)` — restricts available role-level operations.
+* `no roleverbs` — hides all role-level buttons.
+* `markdown <...>` — inserts a static or computed markdown block above the table or form.
+* `fillfrom <expression>` — determines (through a query expression) which candidates are offered when filling new role instances; it does not create fillers automatically.
+* `typeaheadfillfrom <RoleName>` — uses the named role as candidate source and renders a typeahead picker.
+
+Example:
+[source, arc]
+----
+screen
+  who
+    Manager
+      master
+        props (FirstName, LastName) verbs (Consult)
+      detail
+        props (FirstName, LastName, Email) verbs (Consult)
+  what
+    markdown <### Introductions
+               Select an introduction below to view details.
+               >
+    Introductions
+      master
+        props (Title) verbs (Consult, SetPropertyValue)
+      detail
+        props (Title, Description) verbs (Consult, SetPropertyValue)
+  where
+----
+
+==== The `what` section as a free-form area
+
+The `what` section of a who-what-where screen may alternatively contain a _free-form_ sub-screen (using `tab`, `row`, or `column`) instead of table-form items:
+
+[source, arc]
+----
+screen
+  who
+  what
+    column
+      row
+        form Settings
+      row
+        table Items
+  where
+----
+
+[[screens-classic]]
+=== Classic (free-form) screens
+
+A classic screen is introduced by `screen` followed by `tab`, `row`, or `column` (not `who`). It offers a grid-based layout.
+
+==== Tabs
+
+[source]
+----
+screen [<title>]
+  tab "<TabTitle>" [default]
+    <screenElement>*
+  [tab "<TabTitle>" ...]*
+----
+
+Each `tab` receives a quoted string label. The optional `default` keyword marks the tab that is shown first. Tabs contain screen elements.
+
+Example:
+[source, arc]
+----
+screen "Project"
+  tab "Overview" default
+    row
+      form extern
+  tab "Tasks"
+    row
+      table Tasks
+----
+
+==== Rows and columns
+
+[source]
+----
+row
+  <screenElement>*
+
+column
+  <screenElement>*
+----
+
+`row` lays out its children horizontally; `column` lays them out vertically. Rows and columns may be nested.
+
+[[screens-elements]]
+=== Screen elements
+
+The following elements may appear inside `row`, `column`, or `tab` blocks.
+
+==== `table`
+
+[source]
+----
+table <RoleName>
+  [fillfrom <expression>]
+  [with props (<PropertyName>{, <PropertyName>}*)]
+  [without props (<PropertyName>{, <PropertyName>}*)]
+  [props (<PropertyName>{, <PropertyName>}*) [verbs (<PropertyVerb>{, <PropertyVerb>}*)]]
+  [only (<RoleVerb>{, <RoleVerb>}*)]
+  [no roleverbs]
+  [fields
+    <PropertyName>
+      [minLines = <N>]
+      [maxLines = <N>]]
+----
+
+Displays the instances of `<RoleName>` in a table. The optional sub-clauses restrict which properties and operations are visible:
+
+* `with props (...)` — show only the listed properties.
+* `without props (...)` — show all properties _except_ the listed ones.
+* `props (...) verbs (...)` — suppress specific verbs for specific properties.
+* `only (...)` / `no roleverbs` — limit or remove role-level buttons.
+[[keyword-fillfrom]]
+* `fillfrom <expression>` — determines (through a query expression) which candidates are offered when filling new role instances; it does not create fillers automatically.
+* `fields` — set display constraints (minimum and maximum number of text lines) for individual properties.
+
+Example:
+[source, arc]
+----
+table Tasks
+  with props (Title, Status)
+  only (Create, Remove)
+----
+
+==== `form`
+
+[source]
+----
+form <RoleName>
+  [fillfrom <expression>]
+  [with props (<PropertyName>{, <PropertyName>}*)]
+  [without props (<PropertyName>{, <PropertyName>}*)]
+  [props (<PropertyName>{, <PropertyName>}*) [verbs (<PropertyVerb>{, <PropertyVerb>}*)]]
+  [only (<RoleVerb>{, <RoleVerb>}*)]
+  [no roleverbs]
+  [fields
+    <PropertyName>
+      [minLines = <N>]
+      [maxLines = <N>]]
+----
+
+Displays the (first) instance of `<RoleName>` as an editable form. The same sub-clauses as `table` are available.
+
+Example:
+[source, arc]
+----
+form extern
+  without props (InternalId)
+----
+
+[[keyword-typeaheadform]]
+==== `typeaheadform`
+
+[source]
+----
+typeaheadform ["<DisplayLabel>"] <RoleName>
+----
+
+Displays a typeahead form widget for `<RoleName>`. Unlike a regular `form`, it offers an autocomplete/search picker for selecting role instances. This is useful when the candidate list is large and should be filtered while typing.
+
+Example:
+[source, arc]
+----
+what
+  row
+    typeaheadform "Persons" Candidates
+----
+
+The role name (here `Candidates`) should refer to a role type that is defined in the same model/context. See <<keyword-typeaheadfillfrom,typeaheadfillfrom>> for the requirement that candidates are available to the current user through perspectives.
+
+[[screens-typeahead-economize]]
+==== Use typeahead to economize on cache size
+
+When a role has many instances, using `form` or `table` may lead to performance issues due to caching all instances for the current user. In such cases, `typeaheadform` and `typeaheadfillfrom` can be used to provide a more efficient interface that only loads candidates as needed. However, these widgets rest on a database technique that assumes the presence of the special property `filterValue` on the role. Add this property by including the following role as aspect:
+
+[source, arc]
+----
+  thing RoleWithFilter
+    property FilterValue (String)
+----
+
+As an example, consider the modelling in the System model of the `Persons` role type:
+[source, arc]
+----
+    user Persons (relational, unlinked) filledBy (PerspectivesUsers, NonPerspectivesUsers)
+      aspect sys:RoleWithFilter
+      -- We need to be able to filter Persons by LastName for the typeaheadfiller widget.
+      -- NOTE: when LastName changes, FilterValue will not follow automatically.
+      state HasLastName = exists LastName
+        on entry
+          do for Me
+            FilterValue = LastName
+----
+
+The `Persons` role type therefore can be used a candidate source for `typeaheadfillfrom` and `typeaheadform` without caching all instances for the current user.
+
+==== `markdown`
+
+[source]
+markdown <text>
+----
+
+Inserts a static Markdown text block. The content is enclosed between `<` and `>`. The opening `<` immediately follows the `markdown` keyword; the closing `>` ends the block. Any amount of whitespace, including newlines, may appear between them — indentation is automatically stripped.
+
+Markdown content supports standard Markdown syntax (headings, bold, italic, links, lists). Action links may be embedded using `[[action: <ActionName> | <label>]]`.
+
+Example:
+[source, arc]
+----
+markdown <### Welcome
+           Select a task from the table to view its details.
+           Click [[action: AddTask | Add Task]] to create a new task.
+           >
+----
+
+A markdown block can also carry a run-time condition:
+
+[source]
+----
+markdown <text> [when <expression>]
+----
+
+When the condition is present, the block is only shown when the expression evaluates to `true`.
+
+==== `chat`
+
+[source]
+----
+chat <RoleName> messages <MessagesPropertyName> media <MediaPropertyName>
+----
+
+Displays a chat interface bound to the named role. The `messages` keyword names the property that stores text messages (must be a relational `String` property with `messageProperty` facet); the `media` keyword names the property that stores media attachments (must be a relational `String` property with `mediaProperty` facet).
+
+Example:
+[source, arc]
+----
+chat Conversation messages Messages media Media
+----
+
+NOTE: The role used with `chat` typically has `aspect sys:Chat`, which provides the required `Messages` and `Media` properties.
+
+[[screens-when]]
+==== `when` — conditional elements
+
+[source]
+----
+when <condition>
+  <screenElement>*
+----
+
+The `when` construct makes one or more screen elements conditional. The `<condition>` is a query expression evaluated against the current context. When the condition evaluates to `true`, the enclosed elements are rendered; otherwise they are hidden.
+
+`when` may appear:
+
+* Inside `row`, `column`, or `tab` blocks (classic screen).
+* Inside `who`, `what`, or `where` sections (who-what-where screen), wrapping table-form items.
+
+Example — classic screen:
+[source, arc]
+----
+row
+  when Settings >> ShowDetails
+    form Details
+----
+
+Example — who-what-where screen:
+[source, arc]
+----
+what
+  when IsManager
+    Projects
+      master
+        props (Name) verbs (Consult, SetPropertyValue)
+      detail
+  Tasks
+    master
+    detail
+----
+
+[[screens-markdown-properties]]
+=== Markdown in widget fields
+
+Both `table` and `form` can include a `markdown` block _above_ the widget (inside the widget declaration, before any property sub-clauses). This inserts descriptive text directly above the widget:
+
+[source, arc]
+----
+table Peers
+  markdown <### Your peers
+             These people are connected to you on MyContexts.
+             >
+  with props (FirstName, LastName)
+----
+
+=== Refining the available properties and verbs
+
+A form, table or master-detail screen is based on the perspective a user role has on a particular role in the context (including itself). However, the perspective of a user role on a particular role may include many properties and verbs that are not relevant for the screen. In such cases, it is useful to be able to refine the perspective to include only the relevant properties and verbs.
+
+==== Refining properties and verbs for a form or table
+
+When refining for a form or table, we can either
+
+* specify a list of properties and verbs to include and accept the verbs from the perspective, or
+* accept all properties from the perspective, but restrict the verbs to a specified list.
+
+[source, arc]
+----
+    user Tester = sys:Me
+      perspective on TestRole
+        props (Text, Bool, ADate, ANumber, AnEmail, WeekDay) verbs (Consult, SetPropertyValue)
+        only (Remove, Create)
+
+      screen "Test screen"
+        who
+        what
+          row
+            form "With props style" TestRole
+              with props (Text, WeekDay, ADate)
+          row
+            form "Without props style" TestForm
+              without props (Bool, AnEmail, ANumber)
+----
+
+The first form uses the `with props` refinement, which means that it only includes the properties Text, WeekDay and ADate. The second form uses the `without props` refinement, which means that it includes all properties except for Bool, AnEmail and ANumber.
+
+If we want to refine the verbs, we can use the following syntax:
+
+[source, arc]
+----
+      screen "Test screen"
+        who
+        what
+          row
+            form TestRole
+              props (Text, WeekDay, ADate) verbs (Consult)
+----
+
+In this example, the form will include all properties of TestRole, but the user can only Consult Text, WeekDay and ADate.
+
+==== Refining properties and verbs for a master-detail screen
+
+When refining for a master-detail screen, we can combine both refinements:
+
+[source, arc]
+----
+    user Tester = sys:Me
+      perspective on TestTable
+        defaults
+
+      screen
+        who
+        what
+        where
+          TestTable
+            master
+              without props (Text, ADate)
+              props (Bool, ANumber, AnEmail) verbs (Consult)
+            detail
+              with props (Text, Bool)
+              props (Text, Bool) verbs (Consult, SetPropertyValue)
+----
+
+[[keyword-typeaheadfillfrom]]
+==== `typeaheadfillfrom` versus `fillfrom`
+
+Within `master`, `fillfrom` and `typeaheadfillfrom` both determine which roles can fill a relational role:
+
+* `fillfrom <expression>` uses a query expression.
+* `typeaheadfillfrom <RoleName>` uses a role name and typeahead filtering.
+* In both cases, candidates must be available to the current user through perspectives.
+
+Example:
+[source, arc]
+----
+screen
+  who
+    Deelnemer
+      master
+        typeaheadfillfrom Candidates
+        with props (LastName)
+      detail
+    Gast
+      master
+        fillfrom Candidates
+        with props (LastName)
+      detail
+  what
+    row
+      typeaheadform "Persons" Candidates
+  where
+----
+
+In this example, `Candidates` refers to a role type defined in the same context (for example `user Candidates = ...`). Note that it must have the property `filterValue` (see <<screens-typeahead-economize>>), and the user must have a perspective on it that makes candidates available.
+
+==== Ordering properties
+A side effect of using `with props` is that the properties are displayed in the order they are declared. This allows you to control the display order of properties.
+
+[[screens-examples]]
+=== Complete examples
+
+==== Simple who-what-where screen
+
+[source, arc]
+----
+user Manager = sys:Me
+  perspective on Meetings
+    only (CreateAndFill, Remove)
+    props (Title, Date) verbs (Consult, SetPropertyValue)
+
+  screen
+    who
+      Manager
+        master
+          props (FirstName) verbs (Consult)
+        detail
+          props (FirstName, LastName) verbs (Consult)
+    what
+      Meetings
+        master
+          props (Title, Date) verbs (Consult)
+        detail
+          props (Title, Date, Agenda) verbs (Consult, SetPropertyValue)
+    where
+----
+
+==== Classic tabbed screen
+
+[source, arc]
+----
+user Admin = sys:Me
+  perspective on Users
+    props (Name, Role) verbs (Consult, SetPropertyValue)
+  perspective on Settings
+    props (MaxUsers, AllowGuests) verbs (Consult, SetPropertyValue)
+
+  screen "Administration"
+    tab "Users" default
+      row
+        table Users
+    tab "Settings"
+      row
+        form Settings
+----
+
+==== Free-form screen with conditional elements
+
+[source, arc]
+----
+user Participant = sys:Me
+  perspective on Tasks
+    only (Create, Remove)
+    props (Title, Done) verbs (Consult, SetPropertyValue)
+  perspective on Config
+    props (ShowArchived) verbs (Consult, SetPropertyValue)
+
+  screen "Tasks"
+    row
+      form Config
+    row
+      table Tasks
+        with props (Title, Done)
+    row
+      when Config >> ShowArchived
+        table ArchivedTasks
+          with props (Title)
+          no roleverbs
+----

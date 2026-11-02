@@ -1,0 +1,52 @@
+[desc="A description of functions available in the Sensor Library"]
+== The Sensor Library
+
+Namespace: `model://perspectives.domains#Sensor`.
+
+=== ReadSensor
+
+`ReadSensor( <device>, <sensor> )`
+
+Reads a value from a sensor on a device. A _device_ is an object in software (or hardware) that exposes one or more named _sensors_ — dials or gauges that yield a value when read.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|device|String|The name of the device to read from (see table below).
+|sensor|String|The name of the sensor on the device (see table below).
+|result (functional)|String|The value returned by the sensor. The declared return type in `callExternal` determines how the string is interpreted.
+|===
+
+[code]
+----
+callExternal sensor:ReadSensor( "clock", "now" ) returns DateTime
+----
+
+==== Available Devices and Sensors
+
+[cols="1,1,4"]
+|===
+|Device |Sensor | Explanation
+
+|`clock`|`now`|Returns the current date and time as a `DateTime` value.
+|`contextcache`|`size`|Returns the number of context instances currently held in the context cache.
+|`rolecache`|`size`|Returns the number of role instances currently held in the role cache.
+|`domaincache`|`size`|Returns the number of domain files currently held in the domain cache.
+|`querycache`|`size`|Returns the number of compiled queries currently held in the query cache.
+|`entities`|`identifier`|Returns the name of the database used to store entity instances.
+|`models`|`identifier`|Returns the name of the database used to store model files.
+|===
+
+NOTE: Cache sizes are mainly useful for diagnostic and monitoring purposes.
+
+The `clock/now` sensor is commonly combined with `util:FormatDateTime` to produce a human-readable date string:
+
+[source,perspectivesarc]
+----
+callExternal util:FormatDateTime(
+    (callExternal sensor:ReadSensor( "clock", "now" ) returns DateTime),
+    "nl-NL",
+    "{\"dateStyle\": \"full\", \"timeStyle\": \"short\"}")
+  returns String
+----

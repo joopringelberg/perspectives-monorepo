@@ -1,0 +1,13 @@
+.overflow-scroll {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+/* Make images with role .fullwidth span the container width */
+.imageblock.fullwidth img {
+  width: 100% !important;
+  max-width: 100% !important;
+  height: auto;
+}

@@ -34,6 +34,9 @@
 			"path": "packages/perspectives-tcp"
 		},
 		{
+			"path": "packages/perspectives-reference"
+		},
+		{
 			"path": "."
 		}
 
@@ -57,7 +60,9 @@
 			"perspectives-tcp",
 			"rabbitmq-service",
 			"sharedfilestorage",
-			"arc-editor"
+			"arc-editor",
+			"perspectives-reference",
+			"perspectives-reference"
 		],
 		"purescript.sourcePath": ".",
 		"purescript.buildCommand": "pnpm exec spago build --json-errors",

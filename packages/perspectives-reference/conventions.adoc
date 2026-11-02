@@ -1,0 +1,11 @@
+[desc="On notation and concepts used to describe the Perspectives Language"]
+== Conventions used in this Reference Manual
+
+A Perspectives model is a nested hierarchy of type declarations, where the top level type must be a <<keyword-context,Domain>>. Indentation is meaningful in PL, so we use indentation to indicate the nesting of types. The top level type is not indented, the next level is indented by two spaces, and so on.
+
+=== Terminology
+*  A _type_ is defined in a model text by its _definition_. There are but three sorts of types: _contexts_, _roles_ and _properties_.
+*  A _definition_ is a set of lines that fully define a type. A type definition consists of a _declaration_ and a _body_.
+*  A _declaration_ is a single line that is the start of a type definition. It must start with a keyword.
+*  The _body_ of a type definition is the set of lines that follow the declaration line and that are indented by two spaces or more.
+*  A _kind_ is a subdivision of a type. Only contexts and roles have kinds.

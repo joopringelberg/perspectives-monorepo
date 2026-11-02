@@ -1,0 +1,41 @@
+[[keyword-binder]]
+=== binding and binder
+anchor:keyword-binding[]
+The `binding` and `binder` keywords are used to traverse the link connecting role instances. `binding` refers to the role instance that fills the current role, while `binder` refers to a role instance that is filled by the current role. However, as roles can be filled by multiple other roles, `binder` can return multiple role instances. `binder` must be used with a role type to narrow the results to instances of that specific role type.
+
+[source,perspectivesarc]
+----
+case ShoppingListManagement
+  context ShoppingLists (relational) filledBy ShoppingList
+    property Date (Date)
+
+  -- `binding` example:
+  user AllShoppers = ShoppingLists >> binding >> context >> Shopper
+
+case ShoppingList
+  external
+    -- `binder` example:
+    property Date = context >> extern >> binder ShoppingLists Date
+  
+  user Shopper = sys:SocialMe
+----
+
+[[keyword-context_operator]]
+=== context
+The `context` keyword is used to refer to the context in which a role instance exists. It can be used, for example, to access properties of other roles and use them in a calculated property. The example above shows how to use `context` to access the `Date` property of the `ShoppingLists` role from within the `ShoppingList` role.
+
+[[keyword-extern]]
+=== extern
+The `extern` keyword is used to refer to the external role of the context. Every context will have a single external role, which is the role that represents the context itself. The `extern` keyword can be used to navigate to that role and access its properties. The example above shows how to use `extern` to access the `Date` property of the `ShoppingLists` role from within the `ShoppingList` role.
+
+[[keyword-indexedName]]
+=== indexedName
+The `indexedName` keyword is used to refer to the indexed name of a role- or context instance. Usually the indexed name is used verbatim in a query to refer to a specific instance. However, in some cases a query result will be an indexed role and we would like to refer to the indexed name that has been coined in the model. In such cases, the `indexedName` keyword can be used to refer to the indexed name of the current role or context instance.
+
+=== modelname
+The `modelname` keyword is used to refer to the name of the model in which the type of the current role or context instance exists. 
+**NOTE**: the result is the **stable identifier**, not the readable name.
+
+[[keyword-filledBy]]
+=== filledBy, fills
+The `filledBy` and `fills` keywords are used to create a boolean value. `filledBy` checks if the current role instance is **ultimately** filled by another role instance, while `fills` checks if the current role instance **ultimately** fills another role instance. There may be roles in between the two role instances, but the check will traverse through all of them. The `filledBy` and `fills` keywords can be used to create a boolean value that can be used in a query or in a calculated property.

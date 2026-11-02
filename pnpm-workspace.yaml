@@ -9,6 +9,7 @@ packages:
   - packages/perspectives-proxy
   - packages/perspectives-rabbitmq-service
   - packages/perspectives-react
+  - packages/perspectives-reference
   - packages/perspectives-sharedfilestorage
   - packages/perspectives-sharedworker
   - packages/perspectives-tcp

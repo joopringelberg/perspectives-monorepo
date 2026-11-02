@@ -1,0 +1,83 @@
+[desc="A description of functions available in the Serialise Library"]
+== The Serialise Library
+
+Namespace: `model://perspectives.domains#Serialise`.
+
+=== SerialiseFor
+
+`<contextExpression> >> SerialiseFor( <userType> )`
+
+`SerialiseFor( <userType>, <externalRole> )`
+
+Serialises a context instance as a transaction delta string, filtered to include only the information that is visible from the perspective of a given user role type. The result is suitable for transmission to another peer and can be used when constructing an Invitation.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|userType|String|The qualified name of a user role type (e.g. `"model://perspectives.domains#System$PerspectivesSystem$User"`). Only information visible to this role type is included.
+|externalRole|RoleInstance|The external role of the context instance to serialise.
+|result (functional)|String|A serialised transaction string representing the context and its visible contents.
+|===
+
+[code]
+----
+callExternal ser:SerialiseFor( "model://perspectives.domains#System$PerspectivesSystem$User" ) returns String
+----
+
+=== AddChannel
+
+`AddChannel()`
+
+Creates a new channel and binds it to an Invitation context in the role `PrivateChannel`. This function should be called on an instance of `sys:Invitation`.
+
+NOTE: This function takes no explicit arguments. It operates on the context instance it is applied to.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|_(no parameters)_| |Operates on the current context instance (an `sys:Invitation`).
+|===
+
+[source,perspectivesarc]
+----
+callEffect ser:AddChannel()
+----
+
+=== AddConnectedPartnerToChannel
+
+`AddConnectedPartnerToChannel( <user>, <channelId> )`
+
+Adds a connected partner (peer) to an existing channel. The channel is identified by the channel context instance identifier.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|user|RoleInstance|A role instance representing the peer user to add to the channel. The bottom of the filler chain is used to identify the system user.
+|channelId|String|The identifier of the channel context instance (a `ContextInstance`).
+|===
+
+[source,perspectivesarc]
+----
+callEffect ser:AddConnectedPartnerToChannel( ConnectedPartner, ChannelId )
+----
+
+=== CreateCopyOfChannelDatabase
+
+`CreateCopyOfChannelDatabase( <channelName> )`
+
+Ensures that the channel database exists (creating it if necessary) and sets up synchronisation with the post database. This is used on the side of the `ConnectedPartner` when accepting an Invitation.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|channelName|String|The name of the channel database to create (or confirm the existence of).
+|===
+
+[source,perspectivesarc]
+----
+callEffect ser:CreateCopyOfChannelDatabase( ChannelDatabaseName )
+----

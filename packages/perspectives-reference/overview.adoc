@@ -1,0 +1,75 @@
+:stylesheet: adoc-colony.css
+// Uncomment this to generate pdf:
+// bundle exec asciidoctor-pdf overview.adoc
+
+:docinfo: shared
+:imagesdir: ./images
+
+
+:doctype: book
+:toc: left
+
+:sectnums:
+:multipage-level: 2
+
+:sectnumlevels: 4
+:toclevels: 3
+:tabsize: 2
+= The Perspectives Language Reference Manual
+// Joop Ringelberg <joop.ringelberg@perspect.it>
+
+This is the reference manual of the Perspectives Language. 
+
+For historical reasons, https://joopringelberg.github.io/perspectives-documentation/perspectives%20language%20reference.html[here is the previous reference].
+ 
+== Language Fundamentals
+
+include::conventions.adoc[leveloffset=+1]
+
+include::lexical_structure.adoc[leveloffset=+1]
+
+include::lexical_regions.adoc[leveloffset=+1]
+
+== Core Language
+
+include::context_declarations.adoc[leveloffset=+1]
+
+include::role_declarations.adoc[leveloffset=+1]
+
+include::indexed_declarations.adoc[leveloffset=+1]
+
+include::properties.adoc[leveloffset=+1]
+
+include::queries.adoc[leveloffset=+1]
+
+include::perspectives.adoc[leveloffset=+1]
+
+include::state_declarations.adoc[leveloffset=+1]
+
+include::assignments.adoc[leveloffset=+1]
+
+include::action.adoc[leveloffset=+1]
+
+include::screens.adoc[leveloffset=+1]
+
+== External Libraries
+
+include::external_libraries.adoc[leveloffset=+1]
+
+include::utilities_library.adoc[leveloffset=+1]
+
+include::couchdb_library.adoc[leveloffset=+1]
+
+include::serialise_library.adoc[leveloffset=+1]
+
+include::parsing_library.adoc[leveloffset=+1]
+
+include::sensor_library.adoc[leveloffset=+1]
+
+include::rabbitmq_library.adoc[leveloffset=+1]
+
+include::files_library.adoc[leveloffset=+1]
+
+== References
+
+include::keywords.adoc[leveloffset=+1]

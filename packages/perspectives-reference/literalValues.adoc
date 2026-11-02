@@ -1,0 +1,169 @@
+[[concept-literalvalue]]
+=== Literal values
+Values generally are entered by the end user of MyContexts. However, for most <<concept-range,range types>> literal values can also be given in the expressions themselves. These we call _literal values_. The one exception is the file value: there is no literal notation for a file. See also <<concept-range,Range>>.
+
+Strings, Numbers, Booleans, DateTime, Markdown and email values are written as follows:
+
+[cols="1,3", options="header"]
+|===
+|Value expression |Explanation
+
+|"a string" 
+|A string should be enclosed in quotes. Any character can be inside a string, that is not a double quote, a backslash or an ampersand. Escape character sequences are allowed, too, but they are not documented here. We refer to the source code of https://pursuit.purescript.org/packages/purescript-parsing/5.0.3/docs/Text.Parsing.Parser.Token[Text.Parsing.Parser.Token].
+
+|123
+|Currently Perspectives only supports integers.
+
+|true, false
+|These are the entire population of the Boolean type.
+
+|'2019-10-04', '13:15:00', '2011-10-10T14:48:00'
+|Date, Time and DateTime expressions are parsed by Javascript Date.parse(), enclosed in single quotes. See https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/parse#Date_Time_String_Format[Date Time String Format] for more details.
+
+|<## Heading
+ some text>
+|Markdown should be enclosed in angular brackets.
+
+|john@example.com
+|This is a valid email address.
+
+|1 Day, 1 Hour, 1 Minute, 2 Seconds, 3 Years, 1 Week, 1 Month, 10 MilliSeconds
+| Duration values must be written as integers.
+|===
+
+[[keyword-roleinstance]]
+=== Instances calculated from an expression
+[[keyword-contextinstance]]
+It is possible to refer to a role- or context individual by way of an arbitray String-valued expression. This expression:
+
+```
+contextinstance (identifier) expression
+```
+
+returns the context instance of type <<concept-identifier,identifier>> (a **qualified** name) that is identified by the String value that is the result of the `expression`. We need to provide the type of the instance in the model text; otherwise the compiler cannot perform its checks.
+
+Similarly we have `roleinstance`.
+
+[[keyword-publiccontext]]
+=== Public instance literals
+[[keyword-publicrole]]
+The `publicrole` and `publiccontext` keywords allow us to refer in a model to public resources. The original use case was when we needed to introduce the base repository for perspectives.domains in the System model. A repository is described by a context instance; we needed to have that base repository present in every installation (for other reasons, this is no longer the way we introduce that repository in an installation).
+
+[cols="3,2", options="header"]
+|===
+|Value expression |Explanation
+
+a|
+----
+publicrole pub:someUrl#someIdentifier
+----
+|A way to write a literal role instance value (exclusively for public roles).
+
+a|
+----
+publiccontext pub:someUrl#someIdentifier
+----
+|A way to write a literal context instance value (exclusively for public contexts).
+|===
+
+See <<concept-publicidentifier,Public identifiers>> for their lexical syntax.
+
+==== Type annotations
+Reference to a public instance in a model text requires lookup of that resource during compilation, because the compiler needs to establish the type of the resource. However, this precludes forward references to public instances that have not yet been declared (or created). To circumvent this limitation, we can annotate the public instance declaration with a **type annotation** specifying its type explicitly. This annotation should be in parenthesis directly behind the public instance identifier. For example:
+
+[source,perspectivesarc]
+----
+publicrole pub:someUrl#someIdentifier (SomeRoleType)
+publiccontext pub:someUrl#someIdentifier (SomeContextType)
+----
+
+With a type annotation, the compiler does not retrieve the resource. Instead, the resource is retrieved when the expression is evaluated, and the PDR checks that it has (a specialisation of) the declared type. If the resource cannot be retrieved — because it has not been published (yet), or because the server cannot be reached — or if it does not have the declared type, the expression yields no result (and a warning is issued). Hence an annotated public instance can be used to test whether a public resource exists:
+
+[source,perspectivesarc]
+----
+state Published = exists publiccontext pub:https://perspectives.domains/cw_bobsdatabase/#bobscontext (mm:TestContext)
+----
+
+Without a type annotation, the expression yields the identifier without retrieving the resource at runtime. So `exists publicrole pub:...` (without annotation) is always true and should not be used to test whether a public resource exists.
+
+==== Which type to use
+`publicrole` refers to a _role_ instance, `publiccontext` to a _context_ instance. The type annotation should match:
+
+* For `publiccontext`, use a context type. 
+* For `publicrole`, use a role type. A context type is allowed as well: it then stands for the _External role_ of that context type. In that case, the identifier must be that of an External role, i.e. it must end in `$External`:
+
+[source,perspectivesarc]
+----
+publicrole pub:https://perspectives.domains/cw_servers_and_repositories/#perspectives_domains$External (cm:Repository)
+----
+
+It is an easy mistake to use the identifier of a context with `publicrole`, or a role type with `publiccontext`. The compiler warns against both:
+
+[cols="2,3", options="header"]
+|===
+|Warning |Cause and remedy
+
+|`PublicRoleWithContextType`
+|`publicrole` has a context type as annotation, but the identifier does not end in `$External`. The identifier then (probably) refers to a context rather than to its External role, and the role will never be found. Either add `$External` to the identifier, or use `publiccontext` with the same identifier and type.
+
+|`PublicContextWithRoleType`
+|`publiccontext` has a role type as annotation. The compiler uses the context type of that role instead (for an External role type, that is the context type it belongs to). Use a context type, or use `publicrole` to refer to a role.
+|===
+
+NOTE: A public resource is written to its public database at the end of the transaction that creates it, before any peers are informed about the changes made in that transaction. Hence, when a peer learns about a public resource, it can retrieve it.
+
+
+=== Indexed individuals
+Some individuals can be referred to by a name coined in a model. We call these <<keyword-indexed,indexed>>. 
+
+A modeller can declare a type to be _indexed_. Such a type can only have a single instance, but these instances must be unique for each user. In order to reference them in a model text irrespective of the specific installation (or user), one uses the _indexed name_. `MySystem` is an example. Actually, an indexed name should be fully qualified. The usual practice is to use prefixes, as in `sys:MySystem`. 
+
+An indexed individual can simply be referred to in a model text by just using its name (an indexed type name by itself is an expression that yields its unique instance for each installation).
+
+[[keyword-this]]
+=== `This`
+`This` is a keyword that refers to the current value of the expression at the syntactical position where it is used (notice that this value need not be a singleton; it can be a _sequence_ of values). It is rarely used. Here is an example:
+
+[source,perspectivesarc]
+----
+filter context >> SelectedClipboardItem with not (this >>= first == origin)
+----
+
+In this query, we filter instances in the role SelectedClipboardItem by checking if the first element is equal to the origin. In this situation we need `this` to be able to use the binary comparison operator.
+
+[[keyword-me]]
+=== `Me`
+`Me` is a keyword that refers to the user role instance of the end user who is currently logged in. It is a literal value that can be used in expressions. It is not a variable, so it cannot be assigned a value. In terms of the `System` model, it is the instance of the Persons role that is filled by the instance of the PerspectivesUsers role that represents the end user. Use `me` to fill calculated roles that are meant to be filled by the end user, that require no special properties. For example:
+[source,perspectivesarc]
+----
+user Guest = me
+----
+
+
+[[concept-standard-variables]]
+=== Standard variables
+There are four standard variables that may be used inside expressions without providing a value for them: `currentcontext`, `currentactor`, `origin` and `notifieduser`. See the paragraph on <<concept-lexical-regions, lexical regions>> for more information.
+
+
+[cols="1,2", options="header"]
+|===
+|Standard variable|Value in runtime
+|`currentcontext`|Is bound to an instance of the lexical <<concept-lexical-regions,current context>> type.
+|`origin`|Is bound to the context or role instance that the entire expression containing `origin` is applied to.
+|`currentactor`|Is bound to the user role instance for whom an action is executed automatically or who executes the action by hand (the <<concept-lexical-regions, current user)
+|`notifieduser`|Is bound to the user role instance who is notified. Useful to personalise a notification.
+|===
+
+Here is an example for `origin` and `currentactor`, taken from `model://perspectives.domains#HyperContext`. Context role Pages is filled with a context type named Page, that has a role Author. The automatic action will create and fill an instance of that role with the current actor - being the Manager for whom the action is executed.
+
+
+[source,perspectivesarc]
+----
+  context Pages (relational) filledBy Page
+    state PageAvailable = exists binding
+      on entry
+        do for Manager
+          bind currentactor to Author in origin >> binding >> context
+----
+
+The query fragment `origin >> binding >> context` selects the Page that fills the context role Pages instance.

@@ -1,0 +1,81 @@
+[desc="Declaring contexts"]
+== Context Declarations
+A context is a type that can contain other types. A context can have instances. An instance is always constructed by an end user and can be - and usually is - shared with other users (by providing them with a <<concept-perspective, perspective>> on it).
+
+The most important function of a context type is to provide a scope for role types. A role type can only be instantiated in context instances of the type that defines the role. This means that a role type can only be instantiated in a context instance of the same type as the context type that contains the role type.
+
+However, a context definition also provides a scope to hold other context definitions. This allows for a hierarchy of context types, which can be convenient to structure a model.
+
+A context instance can also 'contain' other context instances. This is done by defining a context role kind and filling its instances with context instances. This is a powerful mechanism to structure data in a model.
+As instances, contexts are merely collections of role instances.
+
+[NOTE]
+====
+There is no relation between the nesting of context definitions and the nesting of context instances. A context instance can contain context instances of any type (subject to modelled restrictions!), regardless of the nesting of their definitions.
+====
+
+
+There are four **kinds of context**. Each can be declared with a specific keyword. Each can hold some, but not all, other context declarations.
+
+[cols="1,4", options="header"]
+|===
+|Kind |Explanation
+
+|`domain`
+|A **domain** is the top level context of a model. A **domain** can contain **roles** and **contexts**, and `use statements`. The name of a domain **must** start with `model:`, as in `model:TestDomain`.
+
+|`case`
+|A **case** revolves around a central concept (a **role**) and must contain the user roles that have a perspective on that concept.
+
+|`party`
+|A **party** is for the purpose of introducing user roles that can be referred from cases. Use **party** to structure an organisation. A **party** can contain other parties.
+
+|`activity`
+|An **activity** is about doing things in a context with clear responsibilities. An **activity** may contain states.
+|===
+
+Context declarations can only be nested inside other Context definitions, with limitations:
+
+[cols="1,1,1,1,1", options="header"]
+|===
+|        | domain | case | party | activity
+
+| domain   |   x   |  x   |  x    | 
+| case     |       |      |  x    | x
+| party    |       |      |  x    | 
+| activity |       |      |       | x
+|===
+
+[NOTE]
+====
+The context kinds are intended to underline semantics that are beyond the formal structure of the model. They are not enforced by the language, but they are strongly recommended to be used as intended.
+====
+
+=== Public, Private, Shared
+Perspectives data are neither public nor private: they are shared. However, some contexts are intended to be shared widely. We call such context *public*, meaning that they can be accessed by anyone with the right URL.
+
+Public instances are exclusively constructed through the mechanisme of a `public role`: this is a (fictitional) user role that 'lives' at a specific URL. Anyone can take on this role and thus access the public instance. This is a powerful mechanism to share data with the world.
+
+[NOTE]
+====
+We can think of the world wide web as a collection of context instances. Each instance has at least two roles: its author and the public role. The author can change the instance, the public role can only read it.
+====
+
+[[keyword-context]]
+=== Context
+
+|===
+|Occurs in |A context declaration can only occur in an enclosing context body - or it must be the domain at the top level.
+|Body contains |<<keyword-context,domain, case, party, activity>>, <<keyword-role, user, thing, context, external, public>>, <<keyword-use,use>>, <<keyword-indexed, indexed>>.
+|Function |To hold other context declarations, and to provide a scope for role declarations.
+|Keyword |`domain`, `case`, `party`, `activity`
+|===
+
+=== Example
+[source,perspectivesarc]
+----
+domain model://joopringelberg.nl#ShoppingList
+  use sl for model://joopringelberg.nl#ShoppingList
+
+  case ShoppingListManagement
+----

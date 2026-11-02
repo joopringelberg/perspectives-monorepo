@@ -1,0 +1,368 @@
+[desc="A description of functions available in the Utilities Library"]
+== The Utilities Library
+
+Namespace: `model://perspectives.domains#Utilities`.
+
+=== GenSym
+
+`GenSym()`
+
+Generate a random symbol.
+
+[code]
+----
+callExternal util:GenSym() returns String
+----
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|result (functional)|String|A random string.
+|===
+
+=== RoleIdentifier
+
+`<roleExpression> >> RoleIdentifier()`
+
+`RoleIdentifier(role)`
+
+Returns the internal identifier of a role instance.
+
+[code]
+----
+callExternal util:RoleIdentifier( Visitor ) returns String
+----
+
+[cols="1,1,4"]
+|===
+|Parameter/Result|Type | Explanation
+
+|role|RoleInstance|An instance of a role.
+|result (functional)|RoleIdentifier| An identifier like "def:#defe6263_7ebf_43d1_ae9d_25d3f8146d05".
+|===
+
+=== ContextIdentifier
+
+`<contextExpression> >> ContextIdentifier()`
+
+`ContextIdentifier( <context> )`
+
+Returns the internal identifier of a context instance.
+
+[code]
+----
+callExternal util:ContextIdentifier( Chat ) returns String
+----
+
+[cols="1,1,4"]
+|===
+|Parameter/Result|Type | Explanation
+
+|context|ContextInstance|An instance of a context.
+|result (functional)|ContextIdentifier| An identifier like "def:#defe6263_7ebf_43d1_ae9d_25d3f8146d05".
+|===
+
+=== SystemIdentifier
+`systemIdentifier()`
+
+Returns the string that identifies a particular installation. It is not a Resource Identifier (it doesn't have a storage scheme prepended, e.g. "def:#blablabla" - it is just "blablabla")
+
+[cols="1,1,4"]
+|===
+|Parameter/Result|Type | Explanation
+
+|result (functional)|String|The raw identifier of the installation. The ID of the PerspectivesSystem instance is constructed from it.
+|===
+
+[code]
+----
+callExternal util:SystemIdentifier() returns String
+----
+
+=== Replace
+
+`<valueExpression> >> Replace( <target>, <replacement> ) returns String`
+
+`Replace( <target>, <replacement>, <value> ) returns String`
+
+Replace parts of a string with another string.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result|Type | Explanation
+
+|target|String|A literal string to find and replace in the value.
+|replacement|String|A string to replace the matches with.
+|value|String|The string value in which the replacement takes place.
+|result (functional)|String|The string with the replacement.
+|===
+
+[code]
+----
+callExternal util:Replace( ".", "_", Repositories$NameSpace ) returns String
+----
+
+=== ReplaceR
+
+`<valueExpression> >> ReplaceR( <pattern>, <replacement> ) returns String`
+
+`ReplaceR( <pattern>, <replacement>, <value> ) returns String`
+
+Replace parts of a string with another string.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result|Type | Explanation
+
+|pattern|Regular expression|A regular expression in string form, like the parameter of the https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Regular_expressions#creating_a_regular_expression[Javascript RegExp object].
+|replacement|String|A string to replace the matches with.
+|value|String|The string value in which the replacement takes place.
+|result (functional)|String|The string with the replacement.
+|===
+
+[code]
+----
+callExternal util:ReplaceR( "\\$.*$", "NewName", Repositories$NameSpace ) returns String
+----
+NOTE: to use a character class like \n in a regular expression, _escape_ the backslash (\) character with another backslash, like this: \\n.
+
+=== SelectR
+
+`<valueExpression> >> SelectR( <pattern> ) returns String`
+
+`SelectR( <pattern>, <value> ) returns String`
+
+Select part of a string.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result|Type | Explanation
+
+|pattern|Regular expression|A regular expression in string form, like the parameter of the https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Regular_expressions#creating_a_regular_expression[Javascript RegExp object].
+|value|String|The string value to select from.
+|result (functional)|String|The selected substring.
+|===
+
+[code]
+----
+callExternal util:SelectR( "#(.*)", Repositories$NameSpace ) returns String
+----
+NOTE: to use a character class like \n in a regular expression, _escape_ the backslash (\) character with another backslash, like this: \\n.
+
+=== Random
+
+`<numberExpression> >> Random( <lowerBound> ) returns Number`
+
+`Random( <lowerBound>, <upperBound> ) returns Number`
+
+Returns a random integer between lower- and upperbound.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result|Type | Explanation
+
+|lowerBound|Integer|
+|upperBound|Integer|
+|result (functional)|String|Result will be a random integer uniformly distributed in the closed interval `[low, high]`.
+|===
+
+[code]
+----
+callExternal util:Random( "1", "10" ) returns Number
+----
+
+=== FormatDateTime
+
+`<stringExpression> >> FormatDateTime( <date>, <locale> ) returns String`
+
+`FormatDateTime( <date>, <locale>, <options> ) returns Number`
+
+Format a date.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result|Type | Explanation
+
+|date|DateTime|A DateTime Value(see below).
+|locale|String|A locale according to the [specification], e.g. "en-EN" or "nl-NL".
+|options|String|This should be the serialisation of a JSON object: all identifiers and string are required to be in double quotes and these quotes must be escaped by a backslash to prevent breaking the surrounding string.
+|result (functional)|String|A string that shows the date (and optionally time) in the required format.
+|===
+
+DateTime (PDate) values can be entered literally in Perspectives Language, or can be entered through the user interface, or can be read from the system clock (see the Sensor library, device "clock", sensor "now"). For the form of the literal representation see https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/parse#Date_Time_String_Format[DateTime String Format] on MDN. Summary: the type must conform to YYYY-MM-DDTHH:mm:ss.sssZ, but time may be left out.
+
+The options object may contain any key-value pairs as specified in https://tc39.es/ecma402/#sec-createdatetimeformat[this ECMA specification].
+
+For a discussion of the `locale` and the `options` object, see https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/DateTimeFormat[DateTimeFormat] on MDN.
+
+[code]
+----
+callExternal util:FormatDateTime( SomeDate, "nl-NL", "{\"dateStyle\": \"full\", \"timeStyle\": \"short\"}" ) returns Number
+----
+
+=== EvalExpression
+`<roleExpression> >> EvalExpression( <expression> ) returns String`
+
+`EvalExpression( <expression>, <role> ) returns String`
+
+Parse, compile and evaluate an expression with respect to a particular role instance.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result|Type | Explanation
+
+|expression|String|A Perspectives Language query expression such as can be used in models for calculated properties.
+|role|roleInstance|A role instance.
+|result (unknown)|String|A string representation of the result of the query, whatever its Range type is.
+|===
+
+[code]
+----
+callExternal util:EvalExpression( "1 + 3" ) returns Number
+callExternal util:EvalExpression( TotalNumberOfItems / 5 ) returns Number
+----
+
+=== SystemParameter
+`SystemParameter( <parametername> ) returns <Value>`
+
+Read a value from PerspectivesState. The following parameternames can be used:
+
+|===
+|parametername|Result type | Explanation
+
+|"IsFirstInstallation"|Boolean|By default true. Should be false for a user who installs MyContexts on yet another device.
+|===
+
+[code]
+----
+callExternal util:SystemParameter( "IsFirstInstallation" ) returns Boolean
+----
+
+=== CreateInvitation
+`CreateInvitation( <message>, <serialisedTransaction>, <confirmationCode> ) returns <String>`
+
+Given a serialised transaction and the string representation of a ConfirmationCode, creates a serialised Invitation.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result|Type | Explanation
+
+|message|String|A readable message for the destination user.
+|serialisedTransaction|String|A serialised context that will be uploaded to the destination user's installation. It will then be parsed into an Invitation context.
+|confirmationCode|String|A confirmation code that will be used to confirm the transaction.
+|result|String|A serialised Invitation context that can be sent to the destination user.
+|===
+
+The following is an excerpt from the Perspectives System model, which shows how to use the CreateInvitation function. It is used to create an invitation for a user to connect with another user. The serialised transaction is created by serialising the context that contains the role types that are relevant for the invitation.
+
+
+[source,perspectivesarc]
+----
+  case Invitation
+    external
+      property SerialisedInvitation (File)
+      property CompleteMessage = ...
+      property ConfirmationCode (Number)
+      property InviterLastName = context >> Inviter >> LastName
+        readableName
+      ...
+      state CreateInvitation = exists ConfirmationCode
+        on entry
+          do for Inviter
+            letA
+              transaction <- callExternal ser:SerialiseFor( ... ) returns String
+              invitation <- callExternal util:CreateInvitation( CompleteMessage, transaction, ConfirmationCode ) returns String
+            in
+              create file ("invitation_of_" + InviterLastName + ".json") as "text/json" in SerialisedInvitation for origin
+                invitation
+----
+
+=== GetSharedFileServerKey
+`GetSharedFileServerKey( <sharedFileServerKey> ) returns <String>`
+
+Given the users' own SharedFileServerKey, fetches a new key from the Perspectives Shared File Service.
+This is used by the manager of the BrokerService to provide new users with a SharedFileServerKey that they can use to store files in the Shared File Service. This manager is by construction the first peer to get into contact with a new installation.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result|Type | Explanation
+
+|sharedFileServerKey|String|The user's own SharedFileServerKey that will be used to fetch a new key.
+|result|String|A new SharedFileServerKey that can be used to store files in the Shared File Service.
+|===
+
+The following is an excerpt from the Perspectives System model, which shows how this function is used.
+[source,perspectivesarc]
+----
+    user PerspectivesUsers (relational)
+      ...
+      property SharedFileServerKey (String)
+      state NoKey = (not HasKey) and (exists sys:SocialMe >> SharedFileServerKey)
+        on entry
+          do for Initializer
+            SharedFileServerKey = callExternal util:GetSharedFileServerKey( sys:SocialMe >> SharedFileServerKey ) returns String
+            HasKey = true
+      property HasKey (Boolean)
+----
+
+
+=== IdbSet
+`IdbSet( <key>, <value> )`
+
+A thin wrapper around the set method of the idb-keyval library (https://www.npmjs.com/package/idb-keyval)
+NOTE: There is not yet a corresponding `IdbGet` function!
+
+[cols="1,1,4"]
+|===
+|Parameter/Result|Type | Explanation
+
+|key|String|The key under which the value will be stored.
+|value|String|The value to be stored.
+|===
+
+[source,perspectivesarc]
+----
+  callEffect util:IdbSet( Name, Limit )
+----
+
+=== SetCurrentLanguage
+`SetCurrentLanguage( <key>, <value> )`
+
+Sets the current language in the PerspectivesState and in IndexedDB. This is used to set the language for the user interface and other language-dependent features.
+
+NOTE: The `key` is always "currentLanguage" and the `value` is a string that represents the language code, such as "en-US" or "nl-NL". The value is stored in the PerspectivesState and in IndexedDB. Notice, too, that the first parameter should be factored out.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result|Type | Explanation
+
+|key|String|Should always be "currentLanguage".
+|value|String|The language code, such as "en-US" or "nl-N
+|===
+
+[source,perspectivesarc]
+----
+  callEffect util:SetCurrentLanguage( "currentLanguage", CurrentLanguage )
+----
+
+=== IsLowerVersion
+`IsLowerVersion( <version1>, <version2> ) returns <Boolean>`
+
+Compares two Semantic version strings and returns true if the first version is lower than the second version.
+[cols="1,1,4"]
+|===
+|Parameter/Result|Type | Explanation
+
+|version1|String|The first version string to compare.
+|version2|String|The second version string to compare.
+|result|Boolean|True if the first version is lower than the second version, false otherwise.
+|===
+
+The following is an excerpt from the Perspectives System model. It is a simplified version of the condition on a state that is used to run an upgrade script when the Perspectives system is upgraded to a new version. The condition checks if the last handled upgrade is lower than the version of the upgrade script, and if the current version of the Perspectives system is lower than the version of the upgrade script.
+
+[source,perspectivesarc]
+----
+        state Upgrade3_0_9 = callExternal util:IsLowerVersion( LastHandledUpgrade, "3.0.9" ) returns Boolean and 
+          (callExternal util:IsLowerVersion( "3.0.9", callExternal util:SystemParameter( "PDRVersion" ) returns String) returns Boolean) 
+----

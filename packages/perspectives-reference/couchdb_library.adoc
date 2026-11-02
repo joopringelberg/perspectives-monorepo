@@ -1,0 +1,542 @@
+[desc="A description of functions available in the Couchdb Library"]
+== The Couchdb Library
+
+Namespace: `model://perspectives.domains#Couchdb`.
+
+The Couchdb library provides functions for managing CouchDB databases, users, and replication, as well as for managing locally stored models and performing queries on instance storage.
+
+NOTE: Several functions require elevated CouchDB privileges. The required level is noted for each function: _SERVERADMIN_ (full server administrator), _DATABASEADMIN_ (administrator of a specific database), or _WRITINGMEMBER_ (write access to the database).
+
+=== CreateCouchdbDatabase
+
+`CreateCouchdbDatabase( <databaseUrl>, <databaseName> )`
+
+Creates a new CouchDB database. Fails silently if either argument is missing. Requires _SERVERADMIN_ access.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|databaseUrl|String|The base URL of the CouchDB server (e.g. `"https://myserver.com/"`).
+|databaseName|String|The name of the database to create.
+|===
+
+[source,perspectivesarc]
+----
+callEffect cdb:CreateCouchdbDatabase( ServerUrl, DatabaseName )
+----
+
+=== CreateEntitiesDatabase
+
+`CreateEntitiesDatabase( <databaseUrl>, <databaseName>, <namespace> )`
+
+Creates a new CouchDB database and installs all standard design document views (role view, context view, pending invitations view, etc.) needed to query Perspectives entity instances. Also creates a `TheWorld` context instance in the new database.  Requires _SERVERADMIN_ access.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|databaseUrl|String|The base URL of the CouchDB server.
+|databaseName|String|The name of the database to create.
+|namespace|String|The namespace/domain used to construct the public URL of the database (e.g. the domain used in `public Visitor at <location>` declarations).
+|===
+
+[source,perspectivesarc]
+----
+callEffect cdb:CreateEntitiesDatabase( ServerUrl, DatabaseName, Namespace )
+----
+
+=== DeleteCouchdbDatabase
+
+`DeleteCouchdbDatabase( <databaseUrl>, <databaseName> )`
+
+Deletes an existing CouchDB database. Fails silently if either argument is missing. Requires _SERVERADMIN_ access.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|databaseUrl|String|The base URL of the CouchDB server.
+|databaseName|String|The name of the database to delete.
+|===
+
+[source,perspectivesarc]
+----
+callDestructiveEffect cdb:DeleteCouchdbDatabase( ServerUrl, DatabaseName )
+----
+
+=== CreateUser
+
+`CreateUser( <databaseUrl>, <userName>, <password> )`
+
+Creates a new CouchDB user account. Requires _SERVERADMIN_ access.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|databaseUrl|String|The base URL of the CouchDB server.
+|userName|String|The username for the new account.
+|password|String|The password for the new account.
+|===
+
+[source,perspectivesarc]
+----
+callEffect cdb:CreateUser( ServerUrl, UserName, Password )
+----
+
+=== DeleteUser
+
+`DeleteUser( <databaseUrl>, <userName> )`
+
+Deletes an existing CouchDB user account. Requires _SERVERADMIN_ access.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|databaseUrl|String|The base URL of the CouchDB server.
+|userName|String|The username of the account to delete.
+|===
+
+[source,perspectivesarc]
+----
+callDestructiveEffect cdb:DeleteUser( ServerUrl, UserName )
+----
+
+=== ResetPassword
+
+`ResetPassword( <databaseUrl>, <userName>, <password> )`
+
+Resets the password of an existing CouchDB user account. Requires _SERVERADMIN_ access.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|databaseUrl|String|The base URL of the CouchDB server.
+|userName|String|The username of the account whose password to reset.
+|password|String|The new password.
+|===
+
+[source,perspectivesarc]
+----
+callEffect cdb:ResetPassword( ServerUrl, UserName, NewPassword )
+----
+
+=== MakeWritingMemberOf
+
+`MakeWritingMemberOf( <databaseUrl>, <databaseName>, <userName> )`
+
+Grants a user write access to a database by adding the database name as a role to the user's CouchDB user document. Requires _SERVERADMIN_ access.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|databaseUrl|String|The base URL of the CouchDB server.
+|databaseName|String|The name of the database. This name is added as a role to the user document.
+|userName|String|The username to grant write access to.
+|===
+
+[source,perspectivesarc]
+----
+callEffect cdb:MakeWritingMemberOf( ServerUrl, DatabaseName, UserName )
+----
+
+=== RemoveAsWritingMemberOf
+
+`RemoveAsWritingMemberOf( <databaseUrl>, <databaseName>, <userName> )`
+
+Revokes a user's write access to a database by removing the database name from the roles in the user's CouchDB user document. Requires _SERVERADMIN_ access.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|databaseUrl|String|The base URL of the CouchDB server.
+|databaseName|String|The name of the database whose role to remove from the user document.
+|userName|String|The username to revoke write access from.
+|===
+
+[source,perspectivesarc]
+----
+callEffect cdb:RemoveAsWritingMemberOf( ServerUrl, DatabaseName, UserName )
+----
+
+=== RefreshRecoveryPoint
+
+`RefreshRecoveryPoint( <databaseName>, <lastSeq> ) returns String`
+
+Records the current sequence number of a CouchDB database as a recovery point. This can later be used with `RecoverFromRecoveryPoint` to re-process changes since that point.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|databaseName|String|The name of the CouchDB database.
+|lastSeq|String|The last known sequence number (may be empty; an empty string means start from the beginning).
+|result (functional)|String|The new sequence number recorded as the recovery point.
+|===
+
+[code]
+----
+callExternal cdb:RefreshRecoveryPoint( DatabaseName, LastSeq ) returns String
+----
+
+=== RecoverFromRecoveryPoint
+
+`RecoverFromRecoveryPoint( <databaseName> )`
+
+Re-processes all CouchDB changes since the last recovery point recorded for the given database.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|databaseName|String|The name of the CouchDB database to recover.
+|===
+
+[source,perspectivesarc]
+----
+callEffect cdb:RecoverFromRecoveryPoint( DatabaseName )
+----
+
+=== MakeDatabasePublic
+
+`MakeDatabasePublic( <databaseUrl>, <databaseName> )`
+
+Removes all member restrictions from a database's security document, making all documents in the database publicly readable (and writable, unless the database is also write-protected). First execution requires _SERVERADMIN_; thereafter a _DATABASEADMIN_ may change it.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|databaseUrl|String|The base URL of the CouchDB server.
+|databaseName|String|The name of the database to make public.
+|===
+
+[source,perspectivesarc]
+----
+callEffect cdb:MakeDatabasePublic( ServerUrl, DatabaseName )
+----
+
+=== MakeDatabaseWriteProtected
+
+`MakeDatabaseWriteProtected( <databaseUrl>, <databaseName> )`
+
+Adds a `validate_doc_update` function to the database so that only users who have the database name as a role may create, update, or delete documents. Requires _DATABASEADMIN_ or _SERVERADMIN_ access.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|databaseUrl|String|The base URL of the CouchDB server.
+|databaseName|String|The name of the database to write-protect.
+|===
+
+[source,perspectivesarc]
+----
+callEffect cdb:MakeDatabaseWriteProtected( ServerUrl, DatabaseName )
+----
+
+=== MakeAdminOfDb
+
+`MakeAdminOfDb( <databaseUrl>, <databaseName>, <userName> )`
+
+Adds a user to the `admins` section of the database's security document. Requires _DATABASEADMIN_ or _SERVERADMIN_ access.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|databaseUrl|String|The base URL of the CouchDB server.
+|databaseName|String|The name of the database.
+|userName|String|The username to make a database administrator.
+|===
+
+[source,perspectivesarc]
+----
+callEffect cdb:MakeAdminOfDb( ServerUrl, DatabaseName, UserName )
+----
+
+=== RemoveAsAdminFromDb
+
+`RemoveAsAdminFromDb( <databaseUrl>, <databaseName>, <userName> )`
+
+Removes a user from the `admins` section of the database's security document. Requires _DATABASEADMIN_ or _SERVERADMIN_ access.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|databaseUrl|String|The base URL of the CouchDB server.
+|databaseName|String|The name of the database.
+|userName|String|The username to remove as administrator.
+|===
+
+[source,perspectivesarc]
+----
+callEffect cdb:RemoveAsAdminFromDb( ServerUrl, DatabaseName, UserName )
+----
+
+=== MakeMemberOf
+
+`MakeMemberOf( <databaseUrl>, <databaseName>, <userName> )`
+
+Adds a user to the `members.names` section of the database's security document, granting read access. Requires _DATABASEADMIN_ or _SERVERADMIN_ access.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|databaseUrl|String|The base URL of the CouchDB server.
+|databaseName|String|The name of the database.
+|userName|String|The username to add as a member.
+|===
+
+[source,perspectivesarc]
+----
+callEffect cdb:MakeMemberOf( ServerUrl, DatabaseName, UserName )
+----
+
+=== RemoveAsMemberOf
+
+`RemoveAsMemberOf( <databaseUrl>, <databaseName>, <userName> )`
+
+Removes a user from the `members.names` section of the database's security document. Requires _DATABASEADMIN_ or _SERVERADMIN_ access.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|databaseUrl|String|The base URL of the CouchDB server.
+|databaseName|String|The name of the database.
+|userName|String|The username to remove as member.
+|===
+
+[source,perspectivesarc]
+----
+callEffect cdb:RemoveAsMemberOf( ServerUrl, DatabaseName, UserName )
+----
+
+=== DeleteDocument
+
+`DeleteDocument( <url> )`
+
+Deletes a CouchDB document identified by a combined database/document URL. The URL must be parseable into a database part and a document part. Requires _WRITINGMEMBER_ access to the database.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|url|String|A URL of the form `<databaseUrl>/<documentId>`.
+|===
+
+[source,perspectivesarc]
+----
+callDestructiveEffect cdb:DeleteDocument( DocumentUrl )
+----
+
+=== ReplicateContinuously
+
+`ReplicateContinuously( <databaseUrl>, <couchdbUrl>, <source>, <target> )`
+
+Sets up continuous CouchDB replication from a source database to a target database using the `_replicator` database. Any previously configured replication between the same source and target is stopped first. Requires write access to the `_replicator` database.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|databaseUrl|String|The URL of the CouchDB `_replicator` database.
+|couchdbUrl|String|The base URL of the CouchDB server hosting the source and target databases.
+|source|String|The name of the source database.
+|target|String|The name of the target database.
+|===
+
+[source,perspectivesarc]
+----
+callEffect cdb:ReplicateContinuously( ReplicatorUrl, CouchdbUrl, SourceDb, TargetDb )
+----
+
+=== EndReplication
+
+`EndReplication( <databaseUrl>, <source>, <target> )`
+
+Stops continuous replication between a source and target database by removing the corresponding document from the `_replicator` database. Requires write access to the `_replicator` database.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|databaseUrl|String|The URL of the CouchDB `_replicator` database.
+|source|String|The name of the source database.
+|target|String|The name of the target database.
+|===
+
+[source,perspectivesarc]
+----
+callDestructiveEffect cdb:EndReplication( ReplicatorUrl, SourceDb, TargetDb )
+----
+
+=== AddModelToLocalStore
+
+`AddModelToLocalStore( <modelName> )`
+
+Downloads and installs a model into the local models database. If the model is already present, it is overwritten. Also handles inverted queries and clears the query cache. Requires write access to the local models database.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|modelName|String|The model URI of the model to install (e.g. `"model://perspectives.domains#System@1.0"`). If no version is given, the unversioned model is loaded.
+|===
+
+[source,perspectivesarc]
+----
+callEffect cdb:AddModelToLocalStore( ModelName )
+----
+
+=== RemoveModelFromLocalStore
+
+`RemoveModelFromLocalStore( <versionedModelURI> )`
+
+Removes a model from the local models database. Schedules removal of the model's root context and the DomeinFile itself. The argument may be a versioned or unversioned model URI.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|versionedModelURI|String|The (versioned or unversioned) model URI of the model to remove.
+|===
+
+[source,perspectivesarc]
+----
+callDestructiveEffect cdb:RemoveModelFromLocalStore( ModelUri )
+----
+
+=== UpdateModel
+
+`UpdateModel( <modelName>, <dependencies> )`
+
+Updates an already-installed model to its latest version from the repository. Does not install the model if it is not yet present in the local store. Also updates stored queries and clears the query cache.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|modelName|String|The stable, versioned model URI of the model to update.
+|dependencies|String|`"true"` to also update the model's dependencies; `"false"` to update only the model itself.
+|===
+
+[source,perspectivesarc]
+----
+callEffect cdb:UpdateModel( ModelUri, "true" )
+----
+
+=== RoleInstances
+
+`RoleInstances( <roleType> ) returns RoleInstance`
+
+Retrieves all instances of a particular role type from both the CouchDB entities database and the role cache. Also returns instances of roles that use the given type as an Aspect.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|roleType|String|The fully qualified enumerated role type name (e.g. `"model://perspectives.domains#System$PerspectivesSystem$User"`).
+|result|RoleInstance|All instances of the given role type (may return multiple values).
+|===
+
+[code]
+----
+callExternal cdb:RoleInstances( "model://perspectives.domains#System$PerspectivesSystem$User" ) returns RoleInstance
+----
+
+The following example shows a typical use, where a calculated user role collects all system user instances:
+
+[source,perspectivesarc]
+----
+user: Users = callExternal cdb:RoleInstances( sysUser ) returns: model://perspectives.domains#System$PerspectivesSystem$User
+----
+
+=== ContextInstances
+
+`ContextInstances( <contextType> ) returns ContextInstance`
+
+Retrieves all instances of a particular context type from both the CouchDB entities database and the context cache.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|contextType|String|The fully qualified type name of the context type.
+|result|ContextInstance|All instances of the given context type (may return multiple values).
+|===
+
+[code]
+----
+callExternal cdb:ContextInstances( "model://perspectives.domains#MyApp$MyContext" ) returns ContextInstance
+----
+
+=== PendingInvitations
+
+`PendingInvitations()`
+
+Retrieves all pending Invitation role instances from the entities database and the role cache. These are instances of `model://perspectives.domains#System$Invitation`.
+
+NOTE: This function takes no explicit arguments.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|result|RoleInstance|All pending invitation role instances (may return multiple values).
+|===
+
+[code]
+----
+callExternal cdb:PendingInvitations() returns RoleInstance
+----
+
+=== AddCredentials
+
+`AddCredentials( <url>, <userName>, <password> )`
+
+Adds CouchDB credentials for a server URL to the current session and to the user's local persistent storage. These credentials will be retrieved automatically on each subsequent session. The username may include a storage scheme prefix, which is discarded.
+
+NOTE: This function causes a change in `PerspectivesState` but does not affect the Perspectives Universe.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|url|String|The URL of the CouchDB server to associate the credentials with.
+|userName|String|The CouchDB username (the storage scheme prefix, if any, is ignored).
+|password|String|The password.
+|===
+
+[source,perspectivesarc]
+----
+callEffect cdb:AddCredentials( ServerUrl, UserName, Password )
+----
+
+=== ClearAndFillInvertedQueriesDatabase
+
+`ClearAndFillInvertedQueriesDatabase()`
+
+Clears the inverted queries database and re-populates it from all locally installed models. This is a maintenance operation, useful after migrating or repairing the local installation.
+
+NOTE: This function takes no explicit arguments.
+
+[cols="1,1,4"]
+|===
+|Parameter/Result |Type | Explanation
+
+|_(no parameters)_| |Operates on the locally installed models database.
+|===
+
+[source,perspectivesarc]
+----
+callEffect cdb:ClearAndFillInvertedQueriesDatabase()
+----
