@@ -73,6 +73,8 @@ The PouchDB document ID for a stored delta is deterministic:
 - **`_v<resourceVersion>`** — the literal character `_v` followed by the decimal version number.
 - **`<safeAuthorGuid>`** — the CUID part of the author's `PerspectivesUser` identifier.
 
+`safeKey` is idempotent: it strips storage information only when the key starts with a URI scheme. Already-normalised binding and property keys retain their role-instance identifier (for example, `role#binding` and `role#Model$Name`). This allows version lookups and delta-store operations to normalise either raw or already-safe keys without changing resource identity.
+
 Because two deltas that conflict on the same resource version differ only in their authors, their document IDs differ in the final segment.  This makes all deltas uniquely addressable and allows range queries over a resource's version history.
 
 ### 3.3 DeltaStoreRecord fields

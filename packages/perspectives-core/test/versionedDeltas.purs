@@ -4,6 +4,7 @@ import Prelude
 
 import Data.Array (any)
 import Data.Either (Either(..))
+import Data.Foldable (for_)
 import Data.Identity (Identity(..))
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
@@ -13,7 +14,7 @@ import Effect.Class (liftEffect)
 import Foreign.Object (insert, values)
 import Perspectives.DomeinFile (DomeinFile(..), defaultDomeinFileRecord, stampDomeinFileTypeVersion)
 import Perspectives.Parsing.Arc.Position (ArcPosition(..))
-import Perspectives.Persistence.DeltaStore (deltaStoreDocIdWithDeltaId)
+import Perspectives.Persistence.DeltaStore (deltaStoreDocIdWithDeltaId, safeKey)
 import Perspectives.Representation.Context (Context(..), ContextKind(..), defaultContext)
 import Perspectives.Representation.InstanceIdentifiers (PerspectivesUser(..), RoleInstance(..), Value(..))
 import Perspectives.Representation.TypeIdentifiers (ContextType(..))
@@ -73,6 +74,26 @@ theSuite = suite "Versioned delta phase 0/1" do
     let docId = deltaStoreDocIdWithDeltaId "def:#role" 4 (PerspectivesUser "def:#author") "0123456789abcdef9876543210"
     Assert.assert "doc ids should end in the short delta id suffix" (docId == "role_v4_author|0123456789abcdef")
 
+  suite "resource key normalisation" do
+    for_ [ "", "def:#", "loc:cw_roles#", "rem:https://example.org/cw_roles/#", "pub:https://example.org/cw_roles/#", "pub:cw_roles#" ] \prefix ->
+      for_
+        [ { resource: "role", expected: "role" }
+        , { resource: "context$External", expected: "context$External" }
+        , { resource: "role#binding", expected: "role#binding" }
+        , { resource: "role#model://example.org#Model$Context$Role$Name", expected: "role#Model$Name" }
+        , { resource: "role#Model$Context$Role$Name", expected: "role#Model$Name" }
+        , { resource: "role#Model$Name", expected: "role#Model$Name" }
+        , { resource: "role#Name", expected: "role#Name" }
+        ]
+        \{ resource, expected } ->
+          test ("normalises " <> prefix <> resource <> " idempotently") do
+            let canonical = safeKey (prefix <> resource)
+            Assert.equal expected canonical
+            Assert.equal expected (safeKey canonical)
+
+    test "preserves an empty key" do
+      Assert.equal "" (safeKey "")
+
   suite "version gaps across storage addresses" do
     let
       localKey = "def:#repository#binding"
@@ -93,6 +114,12 @@ theSuite = suite "Versioned delta phase 0/1" do
 
     test "looks up the existing version using the canonical resource key" do
       Assert.equal [] $ gaps 1 [ delta publicKey 2, delta localKey 3 ]
+
+    test "accepts a property removal when the version lookup normalises the key again" do
+      let
+        propertyKey = "def:#repository#model://example.org#Model$Role$Name"
+        lookupVersion key = Identity $ if safeKey key == "repository#Model$Name" then 1 else 0
+      Assert.equal [] $ unwrap $ checkForGapsWith lookupVersion [ delta propertyKey 2 ]
 
     test "preserves the original address and author of a genuinely missing version" do
       Assert.equal [ { author, resourceKey: publicKey, expectedVersion: 2 } ] $

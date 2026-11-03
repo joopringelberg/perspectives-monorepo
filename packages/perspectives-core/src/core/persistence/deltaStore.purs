@@ -63,7 +63,7 @@ import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistence.Types (MonadPouchdb)
 import Perspectives.Representation.InstanceIdentifiers (PerspectivesUser)
-import Perspectives.ResourceIdentifiers (takeGuid)
+import Perspectives.ResourceIdentifiers (getResourceIdentifierScheme, takeGuid)
 import Perspectives.Sync.CanonicalJson (computeDeltaId, shortDeltaId)
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
 import Simple.JSON (read', readJSON')
@@ -94,10 +94,14 @@ deltaStoreDatabaseName = getSystemIdentifier >>= pure <<< (_ <> "_deltastore")
 -- |   "def:#somecuid#model://domain#A$B$C$D"                → "somecuid#A$D"
 -- |   "somecuid"                                            → "somecuid" (already safe)
 -- |   "somecuid#binding"                                    → "somecuid#binding" (idempotent)
+-- |   "somecuid#A$D"                                       → "somecuid#A$D" (idempotent)
 safeKey :: String -> String
 safeKey key =
   let
-    guidPart = takeGuid key -- strips scheme prefix (def:#, loc:db#, rem:url#)
+    -- takeGuid alone also strips the role ID from already-safe sub-resource keys.
+    guidPart = case getResourceIdentifierScheme key of
+      Just _ -> takeGuid key
+      Nothing -> key
   in
     case Str.indexOf (Str.Pattern "#") guidPart of
       Nothing -> guidPart -- no suffix, just the CUID
