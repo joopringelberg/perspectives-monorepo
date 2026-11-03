@@ -42,6 +42,8 @@ module Perspectives.SaveUserData
   , findMostGeneralAllowedFillerType
   , replaceBinding
   , scheduleContextRemoval
+  , scheduleLocalContextRemoval
+  , scheduleLocalRoleRemoval
   , scheduleRoleRemoval
   , setBinding
   , setBindingWithMode
@@ -59,6 +61,8 @@ import Data.Array (concat, cons, delete, elemIndex, find, nub, union)
 import Data.Maybe (Maybe(..), isJust)
 import Data.Newtype (over, unwrap)
 import Data.Show (show)
+import Data.Foldable (foldr)
+import Data.Set as Set
 import Data.Traversable (for, for_, traverse)
 import Data.TraversableWithIndex (forWithIndex)
 import Foreign.Object (Object, values)
@@ -103,7 +107,7 @@ import Perspectives.Sync.Transaction (Transaction(..))
 import Perspectives.Types.ObjectGetters (allUnlinkedRoles, isUnlinked_)
 import Perspectives.TypesForDeltas (RoleBindingDelta(..), RoleBindingDeltaType(..), UniverseRoleDelta(..), UniverseRoleDeltaType(..))
 import Perspectives.Warning (PerspectivesWarning(..))
-import Prelude (Unit, bind, discard, not, pure, unit, void, ($), (&&), (<$>), (<<<), (<>), (==), (>>=), (||), (/=))
+import Prelude (Unit, bind, discard, not, pure, unit, void, ($), (&&), (*>), (<$>), (<<<), (<>), (==), (>>=), (||), (/=))
 
 synchronise :: Boolean
 synchronise = true
@@ -119,8 +123,20 @@ data FillBindingMode
 -- | Add the actual removal instruction to the end of the scheduledAssignments.
 -- | (we build a last-in, last-out stack of destructive effects)
 -- | Returns the user role instances that should be informed of the removal.
+-- | The removal is local (not shared with peers) while the exit actions of a locally removed resource are executed.
 scheduleRoleRemoval :: Boolean -> RoleInstance -> MonadPerspectivesTransaction (Array RoleInstance)
 scheduleRoleRemoval sync id = do
+  local <- gets (\(Transaction { removingLocally }) -> removingLocally)
+  scheduleRoleRemoval_ sync local id
+
+-- | Like scheduleRoleRemoval, but the removal is not shared with peers.
+scheduleLocalRoleRemoval :: RoleInstance -> MonadPerspectivesTransaction Unit
+scheduleLocalRoleRemoval = void <<< scheduleRoleRemoval_ synchronise true
+
+-- | `sync` determines whether STATE EVALUATION and SYNCHRONISATION take place;
+-- | `local` suppresses SYNCHRONISATION only.
+scheduleRoleRemoval_ :: Boolean -> Boolean -> RoleInstance -> MonadPerspectivesTransaction (Array RoleInstance)
+scheduleRoleRemoval_ sync local id = do
   -- It may happen that two public roles with the same address both have a perspective on this role instance.
   -- In that case, we remove the instance for the first public role (in a random order). 
   -- We should check whether it is still there before we try to remove it.
@@ -153,29 +169,41 @@ scheduleRoleRemoval sync id = do
     if contextIsScheduledToBeRemoved || roleIsUntouchable || roleIsScheduledToBeRemoved then pure []
     else do
       modify
-        ( over Transaction \t@{ scheduledAssignments, rolesToExit } -> t
+        ( over Transaction \t@{ scheduledAssignments, rolesToExit, localRemovals } -> t
             { rolesToExit = rolesToExit `union` [ id ]
             , scheduledAssignments = scheduledAssignments `union` [ RoleRemoval id ]
+            , localRemovals = if local then Set.insert (unwrap id) localRemovals else localRemovals
             }
         )
       -- Remove now empty roles that may be on the clipboard, in recent contexts, in pinned contexts and in notifications.
       emptyRoles <- (lift $ emptyRolesToRemove id)
-      for_ emptyRoles (scheduleRoleRemoval false)
+      for_ emptyRoles (scheduleRoleRemoval_ false local)
       if sync then (lift $ try $ (getPerspectRol id)) >>= handlePerspectRolError' "scheduleRoleRemoval" []
         \role@(PerspectRol { pspType: roleType, context: contextId, binding }) -> do
           -- STATE EVALUATION
           users <- statesAndPeersForRoleInstanceToRemove role
           -- SYNCHRONISATION ADDS DELTAS
-          synchroniseRoleRemoval role users
-          pure users
+          if local then pure []
+          else synchroniseRoleRemoval role users *> pure users
       else pure []
 
 -- | Schedules all roles in the context, including its external role, for removal.
 -- | Add the actual removal instruction to the end of the scheduledAssignments.
 -- | (we build a last-in, last-out stack of destructive effects)
 -- | Does nothing if the context has been scheduled for removal before in this transaction.
+-- | The removal is local (not shared with peers) while the exit actions of a locally removed resource are executed.
 scheduleContextRemoval :: Maybe RoleType -> Array RoleInstance -> ContextInstance -> MonadPerspectivesTransaction Unit
 scheduleContextRemoval authorizedRole usersWithPerspectiveOnEmbeddingRole id = do
+  local <- gets (\(Transaction { removingLocally }) -> removingLocally)
+  scheduleContextRemoval_ local authorizedRole usersWithPerspectiveOnEmbeddingRole id
+
+-- | Like scheduleContextRemoval, but the removal of the context and its roles is not shared with peers.
+-- | Neither are removals scheduled by the exit actions of the context and its roles.
+scheduleLocalContextRemoval :: Maybe RoleType -> ContextInstance -> MonadPerspectivesTransaction Unit
+scheduleLocalContextRemoval authorizedRole = scheduleContextRemoval_ true authorizedRole []
+
+scheduleContextRemoval_ :: Boolean -> Maybe RoleType -> Array RoleInstance -> ContextInstance -> MonadPerspectivesTransaction Unit
+scheduleContextRemoval_ local authorizedRole usersWithPerspectiveOnEmbeddingRole id = do
   alreadyScheduled <- gets
     ( \(Transaction { scheduledAssignments, untouchableContexts }) ->
         isJust (elemIndex id untouchableContexts) || isJust
@@ -203,28 +231,7 @@ scheduleContextRemoval authorizedRole usersWithPerspectiveOnEmbeddingRole id = d
         unlinkedRoleTypes <- lift (contextType ###= allUnlinkedRoles)
         unlinkedInstances <- lift $ concat <$> (for unlinkedRoleTypes \rt -> id ##= getUnlinkedRoleInstances rt)
         allRoleInstances <- pure $ (cons br $ unlinkedInstances <> (concat $ values rolInContext))
-
-        subject <- getSubject
-        let rkey = unwrap (context_buitenRol ctxt)
-        rversion <- lift $ incrementResourceVersion rkey
-        signedDelta <- signVersionedDelta $ stripResourceSchemes $ UniverseRoleDelta
-          { id
-          , contextType: context_pspType ctxt
-          , roleType: over ContextType buitenRol (context_pspType ctxt)
-          , authorizedRole
-          -- Note that in this case, the authorizedRole is NOT the type of the roleInstance.
-          , roleInstance: context_buitenRol ctxt
-          , deltaType: RemoveExternalRoleInstance
-          , subject
-          , resourceKey: rkey
-          , resourceVersion: rversion
-          }
-        userRoleTypes <- lift (getContext (context_pspType ctxt) >>= pure <<< userRole)
-        -- TODO: we missen de users die een perspectief hebben op de contextrol waar de context in is ingebed.
-        (users :: Array RoleInstance) <- lift (concat <$> (traverse (\(userRole :: RoleType) -> id ##= getRoleInstances userRole) userRoleTypes))
-        -- Remove the own user
-        addDelta $ DeltaInTransaction { users: users <> usersWithPerspectiveOnEmbeddingRole, delta: signedDelta }
-
+        if local then pure unit else synchroniseContextRemoval ctxt
         -- If one of these roles is on the clipboard, schedule its removal as well.
         allItems <- lift $ allItemsOnClipboard
         for_ allItems \item -> do
@@ -235,11 +242,38 @@ scheduleContextRemoval authorizedRole usersWithPerspectiveOnEmbeddingRole id = d
               if isJust $ elemIndex roleOnClipboard allRoleInstances then void $ scheduleRoleRemoval false {-do not share with peers-}  item
               else pure unit
         modify
-          ( over Transaction \t@{ scheduledAssignments, rolesToExit } -> t
+          ( over Transaction \t@{ scheduledAssignments, rolesToExit, localRemovals } -> t
               { scheduledAssignments = scheduledAssignments `union` [ (ContextRemoval id authorizedRole) ]
               , rolesToExit = nub $ rolesToExit <> allRoleInstances
+              , localRemovals =
+                  if local then foldr Set.insert localRemovals (cons (unwrap id) (unwrap <$> allRoleInstances))
+                  else localRemovals
               }
           )
+
+  -- SYNCHRONISATION
+  synchroniseContextRemoval :: PerspectContext -> MonadPerspectivesTransaction Unit
+  synchroniseContextRemoval ctxt = do
+    subject <- getSubject
+    let rkey = unwrap (context_buitenRol ctxt)
+    rversion <- lift $ incrementResourceVersion rkey
+    signedDelta <- signVersionedDelta $ stripResourceSchemes $ UniverseRoleDelta
+      { id
+      , contextType: context_pspType ctxt
+      , roleType: over ContextType buitenRol (context_pspType ctxt)
+      , authorizedRole
+      -- Note that in this case, the authorizedRole is NOT the type of the roleInstance.
+      , roleInstance: context_buitenRol ctxt
+      , deltaType: RemoveExternalRoleInstance
+      , subject
+      , resourceKey: rkey
+      , resourceVersion: rversion
+      }
+    userRoleTypes <- lift (getContext (context_pspType ctxt) >>= pure <<< userRole)
+    -- TODO: we missen de users die een perspectief hebben op de contextrol waar de context in is ingebed.
+    (users :: Array RoleInstance) <- lift (concat <$> (traverse (\(userRole :: RoleType) -> id ##= getRoleInstances userRole) userRoleTypes))
+    -- Remove the own user
+    addDelta $ DeltaInTransaction { users: users <> usersWithPerspectiveOnEmbeddingRole, delta: signedDelta }
 
 -- Only called when the external role is also 'bound' in a DBQ role.
 removeContextIfUnbound :: RoleInstance -> Maybe RoleType -> MonadPerspectivesTransaction Unit
@@ -276,36 +310,38 @@ removeContextInstance id authorizedRole = do
 -- | STATE EVALUATION
 -- | QUERY UPDATES
 -- | SYNCHRONISATION
--- | Adds a RemoveExternalRoleInstance delta to the transaction.
-stateEvaluationAndQueryUpdatesForContext :: ContextInstance -> Maybe RoleType -> MonadPerspectivesTransaction Unit
-stateEvaluationAndQueryUpdatesForContext id authorizedRole = do
+-- | Adds a RemoveExternalRoleInstance delta to the transaction, unless `share` is false (the context is removed locally).
+stateEvaluationAndQueryUpdatesForContext :: Boolean -> ContextInstance -> Maybe RoleType -> MonadPerspectivesTransaction Unit
+stateEvaluationAndQueryUpdatesForContext share id authorizedRole = do
   (lift $ try $ getPerspectContext id) >>=
     handlePerspectContextError "stateEvaluationAndQueryUpdatesForContext"
       \(ctxt@(PerspectContext { pspType: contextType, rolInContext, buitenRol })) -> do
         users1 <- concat <$> for (concat $ values rolInContext) handleRoleOnContextRemoval
         users2 <- handleRoleOnContextRemoval buitenRol
         -- SYNCHRONISATION
-        subject <- getSubject
-        -- (roleType ###>> hasAspect (EnumeratedRoleType "sys:RootContext$External"))
-        let rkey = unwrap (context_buitenRol ctxt)
-        rversion <- lift $ incrementResourceVersion rkey
-        delta <- signVersionedDelta
-          ( stripResourceSchemes $ UniverseRoleDelta
-              { id
-              , contextType
-              , roleType: externalRoleType contextType
-              , authorizedRole
-              , roleInstance: context_buitenRol ctxt
-              , deltaType: RemoveExternalRoleInstance
-              , subject
-              , resourceKey: rkey
-              , resourceVersion: rversion
-              }
-          )
-        addDelta $ DeltaInTransaction
-          { users: nub $ users1 <> users2
-          , delta
-          }
+        if not share then pure unit
+        else do
+          subject <- getSubject
+          -- (roleType ###>> hasAspect (EnumeratedRoleType "sys:RootContext$External"))
+          let rkey = unwrap (context_buitenRol ctxt)
+          rversion <- lift $ incrementResourceVersion rkey
+          delta <- signVersionedDelta
+            ( stripResourceSchemes $ UniverseRoleDelta
+                { id
+                , contextType
+                , roleType: externalRoleType contextType
+                , authorizedRole
+                , roleInstance: context_buitenRol ctxt
+                , deltaType: RemoveExternalRoleInstance
+                , subject
+                , resourceKey: rkey
+                , resourceVersion: rversion
+                }
+            )
+          addDelta $ DeltaInTransaction
+            { users: nub $ users1 <> users2
+            , delta
+            }
 
 -- | Modifies the context instance by detaching the given role instances.
 -- | PERSISTENCE of the context instance.

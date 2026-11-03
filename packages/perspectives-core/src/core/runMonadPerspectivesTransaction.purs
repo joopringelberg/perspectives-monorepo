@@ -221,6 +221,8 @@ phase1 share authoringRole r = do
   rolesThatHaveNotExited <- lift $ filterA (\rid -> rid ##>> exists' getActiveRoleStates) rolesToExit
   if not $ null rolesThatHaveNotExited then lift $ debugState (padding <> "Transaction " <> show transactionNumber <> " Roles that have not exited: " <> show rolesThatHaveNotExited)
   else pure unit
+  -- Read the local removals here: runSharing may run an embedded transaction that does not have them.
+  localRemovalsForRoles <- AA.gets \(Transaction tr) -> tr.localRemovals
   if null rolesThatHaveNotExited then pure unit
   else void $ runSharing share authoringRole
     ( for rolesThatHaveNotExited
@@ -233,7 +235,7 @@ phase1 share authoringRole r = do
             lift $ addBinding "currentcontext" [ unwrap ctxt ]
             queryUpdatesForRole rid
             -- Error boundary.
-            catchError (void $ for states (exitingRoleState rid))
+            catchError (withRemovingLocally (Set.member (unwrap rid) localRemovalsForRoles) (void $ for states (exitingRoleState rid)))
               \e -> do
                 lift $ addWarning { message: show NonCriticalError, error: (show e), externalRoleId: "", contextName: "" }
                 lift $ warnState ("Cannot exit role state for " <> show rid <> ", because " <> show e)
@@ -258,8 +260,9 @@ phase1 share authoringRole r = do
         _ -> pure false
     )
     scheduledAssignments
+  localRemovalsForContexts <- AA.gets \(Transaction tr) -> tr.localRemovals
   if null contextsThatHaveNotExited then pure unit
-  else void $ runSharing share authoringRole (for contextsThatHaveNotExited (unsafePartial exitContext))
+  else void $ runSharing share authoringRole (for contextsThatHaveNotExited (unsafePartial exitContext localRemovalsForContexts))
   -- First append the collected rolesToExit and ContextRemovals to the untouchableRoles and untouchableContexts
   -- to preserve the invariant.
   AA.modify
@@ -506,8 +509,10 @@ computeStateEvaluations (RoleStateQuery stateId roleInstances) = join <$> do
 isGuestRole :: CalculatedRoleType -> Boolean
 isGuestRole (CalculatedRoleType cr) = cr `hasLocalName` "Guest"
 
-exitContext :: Partial => ScheduledAssignment -> MonadPerspectivesTransaction Unit
-exitContext (ContextRemoval ctxt authorizedRole) = do
+-- | The first argument holds the identifiers of the resources that are removed locally (see Transaction.localRemovals).
+exitContext :: Partial => Set.Set String -> ScheduledAssignment -> MonadPerspectivesTransaction Unit
+exitContext localRemovals (ContextRemoval ctxt authorizedRole) = do
+  let local = Set.member (unwrap ctxt) localRemovals
   states <- lift (ctxt ##= contextType >=> liftToInstanceLevel contextRootStates)
   if null states then pure unit
   else do
@@ -515,7 +520,7 @@ exitContext (ContextRemoval ctxt authorizedRole) = do
     oldFrame <- lift pushFrame
     lift $ addBinding "currentcontext" [ unwrap ctxt ]
     -- Error boundary.
-    catchError (void $ for states (exitingState ctxt))
+    catchError (withRemovingLocally local (void $ for states (exitingState ctxt)))
       \e -> do
         lift $ addWarning { message: show NonCriticalError, error: (show e), externalRoleId: "", contextName: "" }
         lift $ warnState ("Cannot exit state, because " <> show e)
@@ -530,9 +535,20 @@ exitContext (ContextRemoval ctxt authorizedRole) = do
           }
       )
       t
-  -- Adds a RemoveExternalRoleInstance to the current transaction.
+  -- Adds a RemoveExternalRoleInstance to the current transaction, unless the context is removed locally.
   -- Severes the link between the roles and their fillers.
-  stateEvaluationAndQueryUpdatesForContext ctxt authorizedRole
+  stateEvaluationAndQueryUpdatesForContext (not local) ctxt authorizedRole
+
+-- | While the exit actions of a locally removed context or role are executed, removals they schedule are local, too.
+withRemovingLocally :: forall a. Boolean -> MonadPerspectivesTransaction a -> MonadPerspectivesTransaction a
+withRemovingLocally false a = a
+withRemovingLocally true a = do
+  previous <- AA.gets \(Transaction tr) -> tr.removingLocally
+  AA.modify \t -> over Transaction (\tr -> tr { removingLocally = true }) t
+  let restore = AA.modify \t -> over Transaction (\tr -> tr { removingLocally = previous }) t
+  r <- catchError a \e -> restore *> throwError e
+  restore
+  pure r
 
 -- We have to provide the invertedQueryResults, because we run this function inside an embedded (NEW!) transaction
 -- if sharing is false.

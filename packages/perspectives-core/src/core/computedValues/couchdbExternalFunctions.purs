@@ -43,7 +43,7 @@ import Data.Nullable (toMaybe)
 import Data.String (Pattern(..), Replacement(..), replace, stripSuffix)
 import Data.String.Regex.Flags (noFlags)
 import Data.String.Regex.Unsafe (unsafeRegex)
-import Data.Traversable (for, traverse)
+import Data.Traversable (traverse)
 import Data.TraversableWithIndex (traverseWithIndex)
 import Data.Tuple (Tuple(..))
 import Decacheable (decache)
@@ -99,7 +99,7 @@ import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
 import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..), PropertyType(..), RoleType(..))
 import Perspectives.ResourceIdentifiers (createDefaultIdentifier, resourceIdentifier2DocLocator, resourceIdentifier2WriteDocLocator, takeGuid)
 import Perspectives.RoleAssignment (roleIsMe)
-import Perspectives.SaveUserData (scheduleContextRemoval, scheduleRoleRemoval, setFirstBinding, synchronise)
+import Perspectives.SaveUserData (scheduleLocalContextRemoval, scheduleLocalRoleRemoval, setFirstBinding)
 import Perspectives.SetupCouchdb (contextViewFilter, roleViewFilter, setContext2RoleView, setContextView, setCredentialsView, setFiller2FilledView, setFilled2FillerView, setRoleFromContextView, setRoleView, setRole2ContextView)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable, Stable)
 import Perspectives.Sidecar.ToStable (toStable)
@@ -940,6 +940,8 @@ repository url' = case getFirstMatch (unsafeRegex "^(.*/).+$" noFlags) url' of
 -- | Schedules removal of the model root context, of the model's indexed contexts and roles
 -- | (and of the instances of sys:PerspectivesSystem$IndexedContexts, $IndexedRoles and $StartContexts they fill),
 -- | and finally of the DomeinFile itself. The latter happens at the very end of the transaction.
+-- | Removing a model concerns this installation only: none of these removals is shared with peers,
+-- | and neither are removals scheduled by the exit actions of the removed contexts and roles.
 removeModelFromLocalStore :: Array String -> RoleInstance -> MonadPerspectivesTransaction Unit
 removeModelFromLocalStore versionedModelURIA rid =
   try
@@ -948,7 +950,7 @@ removeModelFromLocalStore versionedModelURIA rid =
           let unversionedURI = unversionedModelUri versionedModelURI
           let cid = createDefaultIdentifier ((unsafePartial modelUri2ManifestUrl unversionedURI).manifestName <> "_modelRootContext")
           -- Schedule the model root context first, so its on exit runs while the indexed resources are still intact.
-          scheduleContextRemoval Nothing [] (ContextInstance cid)
+          scheduleLocalContextRemoval Nothing (ContextInstance cid)
           scheduleIndexedResourcesRemoval (ModelUri unversionedURI)
           scheduleDomeinFileRemoval (ModelUri unversionedURI)
           lift $ conversationCacheDelete unversionedURI
@@ -973,18 +975,16 @@ scheduleIndexedResourcesRemoval modelUri = (lift $ tryGetPerspectEntiteit modelU
         let external = RoleInstance $ buitenRol (unwrap indexedContext)
         indexedContextRoles <- lift $ rolesFilledBy mysystem DEP.indexedContext external
         startContextRoles <- lift $ rolesFilledBy mysystem DEP.startContexts external
-        users <- concat <$> for indexedContextRoles (scheduleRoleRemoval synchronise)
-        for_ startContextRoles (scheduleRoleRemoval synchronise)
-        scheduleContextRemoval
+        for_ (indexedContextRoles <> startContextRoles) scheduleLocalRoleRemoval
+        scheduleLocalContextRemoval
           (maybe Nothing (const $ Just $ ENR $ EnumeratedRoleType DEP.indexedContext) (head indexedContextRoles))
-          users
           indexedContext
     for_ (keys $ indexedRoles df) \indexedName -> (lift $ lookupIndexedRole indexedName) >>= case _ of
       Nothing -> pure unit
       Just indexedRole -> do
         indexedRoleRoles <- lift $ rolesFilledBy mysystem DEP.indexedRole indexedRole
-        for_ indexedRoleRoles (scheduleRoleRemoval synchronise)
-        void $ scheduleRoleRemoval synchronise indexedRole
+        for_ indexedRoleRoles scheduleLocalRoleRemoval
+        scheduleLocalRoleRemoval indexedRole
   where
   rolesFilledBy :: ContextInstance -> String -> RoleInstance -> MonadPerspectives (Array RoleInstance)
   rolesFilledBy ctxt roleType filler = do

@@ -37,6 +37,8 @@ Every transaction runs with a mutable `Transaction` record that accumulates all 
 | `postponedStateEvaluations` | `Array StateEvaluation` | State evaluations deferred because they depend on an untouchable resource |
 | `executedStateKeys` | `Set String` | `(stateId, instanceId)` pairs already processed; prevents duplicate execution |
 | `modelsToBeRemoved` | `Array ModelUri` | Models to be deleted after the transaction |
+| `localRemovals` | `Set String` | Identifiers of contexts and roles removed locally: their removal is not shared with peers |
+| `removingLocally` | `Boolean` | True while the exit actions of a locally removed context or role run; removals scheduled meanwhile are local too |
 | `publicKeys` | `EncodableMap PerspectivesUser PublicKeyInfo` | Cryptographic public-key data accompanying the deltas |
 
 ---
@@ -164,15 +166,19 @@ For each role in the snapshot of `rolesToExit` that still has active states, `qu
 - Removes the state from the role's active-state list.
 - Clears the corresponding keys from `executedStateKeys` so the same state can be re-entered later in the same transaction if the role is re-created.
 
+If the role is in `localRemovals`, its exit actions run with `removingLocally` set (see [Local removal](#local-removal)).
+
 Runs under `runSharing` for non-sharing transactions.
 
 ### Step 1.6 – Exit states of contexts scheduled for removal
 
 For each `ContextRemoval` in `scheduledAssignments` whose context still has active states, `exitContext` is called:
 - Exits all root states via `exitingState`.
-- Calls `stateEvaluationAndQueryUpdatesForContext`, which schedules role-level query updates and adds role instances to `rolesToExit`.
+- Calls `stateEvaluationAndQueryUpdatesForContext`, which schedules role-level query updates and adds role instances to `rolesToExit`. It also adds a `RemoveExternalRoleInstance` delta, unless the context is in `localRemovals`.
 
-Runs under `runSharing` for non-sharing transactions.
+If the context is in `localRemovals`, its exit actions run with `removingLocally` set (see [Local removal](#local-removal)).
+
+Runs under `runSharing` for non-sharing transactions. `localRemovals` is read from the outer transaction before `runSharing` is called, because an embedded transaction does not have it.
 
 ### Step 1.7 – Update untouchable lists
 
@@ -265,7 +271,15 @@ If `postponedStateEvaluations` is non-empty, those state evaluations are now run
 
 If there are no postponed state evaluations, any models in `modelsToBeRemoved` are deleted from the store (see `Perspectives.ModelRemoval`). Besides the DomeinFile, this removes the inverted queries, downstream state notifications and automatic effects the model contributed to other models, clears the query, state and translation caches for the model, and removes the model from the map of installed model URIs. Then `modelsToBeRemoved` is cleared.
 
-Models are scheduled for removal by `cdb:RemoveModelFromLocalStore`, which also schedules removal of the model root context, the model's indexed contexts and roles, and the `IndexedContexts`, `IndexedRoles` and `StartContexts` instances in `sys:MySystem` that they fill. Removing contexts and roles first means their `on exit` actions still run with the model's types available.
+Models are scheduled for removal by `cdb:RemoveModelFromLocalStore`, which also schedules removal of the model root context, the model's indexed contexts and roles, and the `IndexedContexts`, `IndexedRoles` and `StartContexts` instances in `sys:MySystem` that they fill. Removing contexts and roles first means their `on exit` actions still run with the model's types available. All these removals are local (see [Local removal](#local-removal)): removing a model concerns this installation only.
+
+### Local removal
+
+`scheduleLocalContextRemoval` and `scheduleLocalRoleRemoval` (in `Perspectives.SaveUserData`) schedule a removal that is not shared with peers. They add the identifiers of the removed resources (for a context: the context and all its roles) to `localRemovals` and add no removal deltas. State evaluation and query updates are unaffected.
+
+While the exit actions of a locally removed context or role run, `removingLocally` is true. `scheduleContextRemoval` and `scheduleRoleRemoval` then schedule local removals as well, so locality propagates through the cascade. Other changes made by those exit actions, such as property assignments, are shared as usual. Actions postponed with `after` or `once settled` run in a later transaction and are not local.
+
+Currently only `cdb:RemoveModelFromLocalStore` uses local removal. The removing user does not yet retract herself from shared contexts, so peers still regard her as a participant.
 
 ### Step 2.7 – Notify query subscribers
 

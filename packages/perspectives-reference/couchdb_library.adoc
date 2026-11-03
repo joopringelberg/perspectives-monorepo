@@ -408,6 +408,8 @@ Removes a model from the local installation. Schedules removal of:
 * each indexed context of the model, together with the instances of `sys:PerspectivesSystem$IndexedContexts` and `sys:PerspectivesSystem$StartContexts` that it fills;
 * each indexed role of the model, together with the instances of `sys:PerspectivesSystem$IndexedRoles` that it fills.
 
+Removing a model concerns this installation only: none of these removals is shared with peers, and neither are removals scheduled by the `on exit` actions of the removed contexts and roles. Other changes made by those actions are shared as usual.
+
 At the very end of the transaction, the DomeinFile itself is removed from the local models database, together with the inverted queries, downstream state notifications and automatic effects that the model contributed to other models. The argument may be a versioned or unversioned model URI.
 
 Other instances of types defined in the model are not removed automatically. Remove them in the `on exit` of a context that is removed (for example with `delete context bound to ...`), otherwise visiting such an instance later will install the model again.

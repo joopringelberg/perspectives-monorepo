@@ -101,6 +101,11 @@ newtype Transaction = Transaction
       -- should not be stored at all (executeDeltas for public roles).
       , isExecutingIncomingDeltas :: Boolean
       , isSharing :: Boolean
+      -- Identifiers of the contexts and roles that are removed locally in this transaction: their removal is not shared with peers.
+      , localRemovals :: Set.Set String
+      -- True while the exit actions of a locally removed context or role are executed.
+      -- Removals scheduled in the meantime are local, too.
+      , removingLocally :: Boolean
       )
   )
 
@@ -178,6 +183,8 @@ instance ReadForeign Transaction where
       , executedStateKeys: Set.empty
       , isExecutingIncomingDeltas: false
       , isSharing: false
+      , localRemovals: Set.empty
+      , removingLocally: false
       }
 
 derive newtype instance ReadForeign Transaction'
@@ -220,6 +227,8 @@ createTransaction authoringRole sharing =
       , executedStateKeys: Set.empty
       , isExecutingIncomingDeltas: false
       , isSharing: sharing
+      , localRemovals: Set.empty
+      , removingLocally: false
       }
 
 -- | We consider a Transaction to be 'empty' when it shows no difference to the clone of the original.
