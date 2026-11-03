@@ -15,6 +15,7 @@ perspectives-monorepo/
 ├── packages/
 │   ├── perspectives-core/          # PureScript PDR – the core runtime
 │   ├── mycontexts/                 # React/Vite browser app (the end-user product)
+│   ├── arc-editor/                 # Standalone Monaco ARC source editor
 │   ├── perspectives-react/         # Reusable React UI component library
 │   ├── perspectives-proxy/         # TypeScript bridge between GUI and PDR
 │   ├── perspectives-sharedworker/  # Browser SharedWorker shell for the PDR
@@ -171,6 +172,7 @@ Detailed instructions for each package are in `.github/instructions/`:
 |---|---|
 | perspectives-core | [perspectives-core.instructions.md](instructions/perspectives-core.instructions.md) |
 | mycontexts | [mycontexts.instructions.md](instructions/mycontexts.instructions.md) |
+| arc-editor | [arc-editor.instructions.md](instructions/arc-editor.instructions.md) |
 | perspectives-react | [perspectives-react.instructions.md](instructions/perspectives-react.instructions.md) |
 | perspectives-proxy | [perspectives-proxy.instructions.md](instructions/perspectives-proxy.instructions.md) |
 | perspectives-sharedworker | [perspectives-sharedworker.instructions.md](instructions/perspectives-sharedworker.instructions.md) |
