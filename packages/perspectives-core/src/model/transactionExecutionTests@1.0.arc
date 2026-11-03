@@ -1181,3 +1181,38 @@ domain model://joopringelberg.nl#TransactionExecutionTests@1.0
             RemainingIndexedContexts = (sys:MySystem >> IndexedContexts >>= count) for extern
             RemainingIndexedRoles = (sys:MySystem >> IndexedRoles >>= count) for extern
             TargetStillInUse = (exists (filter sys:MySystem >> ModelsInUse with (ModelToRemove == target) or (ModelToRemove == target + "@1.0"))) for extern
+
+  ------------------------------------------------------------------------------
+  ---- T28 — Remove a context locally
+  ---- `remove context locally` removes the context that fills the context role from this installation only.
+  ---- The context role instance itself remains, but here it no longer has a filler.
+  ---- Tester only has the verb RemoveContextLocally, so this also tests its authorization.
+  ------------------------------------------------------------------------------
+  case T28
+    aspect mm:Test
+
+    external
+      property Removed (Boolean)
+
+      state TestSucceeded = Removed and context >> ((exists Subscriptions) and (not exists Subscriptions >> binding))
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on extern
+        props (Removed) verbs (SetPropertyValue, Consult)
+      perspective on Subscriptions
+        only (CreateAndFill, RemoveContextLocally)
+      action RunTest
+        TestName = "T28 — Remove a context locally" for extern
+        create context SubscribedContext bound to Subscriptions
+        once settled
+          remove context locally Subscriptions
+          once settled
+            Removed = true for extern
+
+    context Subscriptions filledBy SubscribedContext
+
+    case SubscribedContext

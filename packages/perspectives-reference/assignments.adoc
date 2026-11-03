@@ -292,7 +292,33 @@ create_ context Meeting bound to contextRole
 remove context <expression>
 ----
 
-Removes the context role instance(s) produced by `<expression>` from their parent context. The context itself is _not_ deleted.
+Removes the context role instance(s) produced by `<expression>` from their parent context, together with the contexts that fill them. The removal is shared with peers.
+
+[[keyword-remove_contextlocally]]
+==== Remove a context locally
+
+[source]
+----
+remove context locally <expression>
+----
+
+Removes the contexts that fill the context role instance(s) produced by `<expression>` from this installation only. The removal is not shared with peers: for them, the context remains. Neither are removals done by the `on exit` actions of the removed contexts and their roles; other changes made by those actions are shared as usual.
+
+Removing a context locally means leaving it. The user role instances that the user fills in the context are removed in the installations of the other participants. Hence a user who may remove a context locally may leave it, and a user who may not, cannot.
+
+The context role instances themselves remain. In this installation they no longer have a filler; for peers they stay filled. To remove them as well, add `remove role <expression>`.
+
+Requires a perspective on the context role with `RemoveContextLocally`, `RemoveContext` or `DeleteContext`.
+
+Example:
+[source, arc]
+----
+user Member
+  perspective on Subscriptions
+    only (RemoveContextLocally)
+  action UnsubscribeFromAll
+    remove context locally Subscriptions
+----
 
 ==== Delete a context
 

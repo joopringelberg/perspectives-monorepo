@@ -160,27 +160,11 @@ compileActionEffect originDomain currentcontextDomain userRoleTypes statements =
             )
         )
       pure $ UQD currentcontextDomain QF.RemoveRole rle currentcontextDomain True True
-    RemoveContext { roleExpression, start, end } -> do
-      rle <- ensureRole subjects roleExpression
-      -- The range of the QueryFunctionDescription must consist of EnumeratedRoleTypes that have kind ContextRole.
-      isContextRole <- foldM
-        ( \isContextRole (QT.RoleInContext { role }) -> do
-            EnumeratedRole { kindOfRole } <- lift $ lift $ getEnumeratedRole role
-            pure $ isContextRole && (ContextRole == kindOfRole)
-        )
-        true
-        (allLeavesInADT $ unsafePartial domain2roleType $ range rle)
-      if isContextRole then do
-        -- Check for each of the subjects whether they have a sufficient perspective on the range of the role expression.
-        for_ subjects
-          ( \subject -> for_ (roleInContext2Role <$> (allLeavesInADT $ unsafePartial roleRange rle))
-              ( \object -> (lift $ lift $ roleHasPerspectiveOnRoleWithVerb subject object [ Verbs.DeleteContext, Verbs.RemoveContext ] (Just start) (Just end)) >>= case _ of
-                  Left e -> throwError e
-                  _ -> pure unit
-              )
-          )
-        pure $ UQD currentcontextDomain QF.RemoveContext rle currentcontextDomain True True
-      else throwError $ NotAContextRole start end
+    RemoveContext { roleExpression, start, end } ->
+      describeContextRemoval subjects roleExpression start end [ Verbs.DeleteContext, Verbs.RemoveContext ] QF.RemoveContext
+    -- RemoveContext and DeleteContext imply RemoveContextLocally.
+    RemoveContextLocally { roleExpression, start, end } ->
+      describeContextRemoval subjects roleExpression start end [ Verbs.DeleteContext, Verbs.RemoveContext, Verbs.RemoveContextLocally ] QF.RemoveContextLocally
     CreateRole { roleIdentifier, contextExpression, localName, start, end } -> do
       mnameGetterDescription <- ensureStringValue localName
       (cte :: QueryFunctionDescription) <- unsafePartial constructContextGetterDescription contextExpression
@@ -639,6 +623,30 @@ compileActionEffect originDomain currentcontextDomain userRoleTypes statements =
 
     -- Compiles the Step and inverts it as well.
     -- NOTE: parameter userTypes is not used.
+    -- | Compiles `remove context` and `remove context locally`. Each subject needs one of the verbs on the context role.
+    describeContextRemoval :: Array RoleType -> Step -> ArcPosition -> ArcPosition -> Array Verbs.RoleVerb -> QF.QueryFunction -> PhaseThree QueryFunctionDescription
+    describeContextRemoval subjects roleExpression start end verbs queryFunction = do
+      rle <- ensureRole subjects roleExpression
+      -- The range of the QueryFunctionDescription must consist of EnumeratedRoleTypes that have kind ContextRole.
+      isContextRole <- foldM
+        ( \isContextRole (QT.RoleInContext { role }) -> do
+            EnumeratedRole { kindOfRole } <- lift $ lift $ getEnumeratedRole role
+            pure $ isContextRole && (ContextRole == kindOfRole)
+        )
+        true
+        (allLeavesInADT $ unsafePartial domain2roleType $ range rle)
+      if isContextRole then do
+        -- Check for each of the subjects whether they have a sufficient perspective on the range of the role expression.
+        for_ subjects
+          ( \subject -> for_ (roleInContext2Role <$> (allLeavesInADT $ unsafePartial roleRange rle))
+              ( \object -> (lift $ lift $ roleHasPerspectiveOnRoleWithVerb subject object verbs (Just start) (Just end)) >>= case _ of
+                  Left e -> throwError e
+                  _ -> pure unit
+              )
+          )
+        pure $ UQD currentcontextDomain queryFunction rle currentcontextDomain True True
+      else throwError $ NotAContextRole start end
+
     ensureRole :: Array RoleType -> Step -> PhaseThree QueryFunctionDescription
     ensureRole userTypes stp = do
       -- An expression that results in a RoleInstance, in this state, for this usertype.

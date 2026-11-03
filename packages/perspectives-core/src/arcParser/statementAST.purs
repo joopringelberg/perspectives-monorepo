@@ -55,6 +55,7 @@ type WithTextRange f = { start :: ArcPosition, end :: ArcPosition | f }
 data Assignment
   = RemoveRole (WithTextRange (roleExpression :: Step))
   | RemoveContext (WithTextRange (roleExpression :: Step))
+  | RemoveContextLocally (WithTextRange (roleExpression :: Step))
   | CreateRole (WithTextRange (roleIdentifier :: String, localName :: Maybe Step, contextExpression :: Maybe Step))
   | CreateContext (WithTextRange (contextTypeIdentifier :: String, localName :: Maybe Step, roleTypeIdentifier :: Maybe String, contextExpression :: Maybe Step))
   | CreateContext_ (WithTextRange (contextTypeIdentifier :: String, localName :: Maybe Step, roleExpression :: Step))
@@ -80,6 +81,7 @@ data Assignment
 startOfAssignment :: Assignment -> ArcPosition
 startOfAssignment (RemoveRole { start }) = start
 startOfAssignment (RemoveContext { start }) = start
+startOfAssignment (RemoveContextLocally { start }) = start
 startOfAssignment (CreateRole { start }) = start
 startOfAssignment (CreateContext { start }) = start
 startOfAssignment (CreateContext_ { start }) = start
@@ -103,6 +105,7 @@ startOfAssignment (RunRoleAction { start }) = start
 endOfAssignment :: Assignment -> ArcPosition
 endOfAssignment (RemoveRole { end }) = end
 endOfAssignment (RemoveContext { end }) = end
+endOfAssignment (RemoveContextLocally { end }) = end
 endOfAssignment (CreateRole { end }) = end
 endOfAssignment (CreateContext { end }) = end
 endOfAssignment (CreateContext_ { end }) = end
@@ -166,6 +169,7 @@ derive instance ordAssignment :: Ord Assignment
 instance prettyPrintAssignment :: PrettyPrint Assignment where
   prettyPrint' t (RemoveRole { roleExpression }) = "Remove role " <> prettyPrint' t roleExpression
   prettyPrint' t (RemoveContext { roleExpression }) = "Remove context" <> prettyPrint' t roleExpression
+  prettyPrint' t (RemoveContextLocally { roleExpression }) = "Remove context locally" <> prettyPrint' t roleExpression
   prettyPrint' t (CreateRole { roleIdentifier, contextExpression }) = "CreateRole " <> roleIdentifier <> " " <> prettyPrint' t contextExpression
   prettyPrint' t (CreateContext { contextTypeIdentifier, roleTypeIdentifier, contextExpression }) =
     let

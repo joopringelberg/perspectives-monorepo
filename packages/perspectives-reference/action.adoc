@@ -173,6 +173,7 @@ The assignments in an action body must be consistent with the role verbs and pro
 
 * Role-creation assignments (`create role`, `create context`) require `Create` or `CreateAndFill`.
 * Role-removal assignments (`remove role`, `remove context`) require `Remove` or `RemoveContext`.
+* Local context removal (`remove context locally`) requires `RemoveContextLocally`, `RemoveContext` or `DeleteContext`.
 * Role-deletion assignments (`delete role`, `delete context`) require `Delete` or `DeleteContext`.
 * Binding assignments (`bind`, `bind_`) require `Fill` or `CreateAndFill`.
 * Unbinding assignments (`unbind`, `unbind_`) require `RemoveFiller` or `Unbind`.

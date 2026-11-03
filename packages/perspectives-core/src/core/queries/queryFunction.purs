@@ -390,6 +390,7 @@ data QueryFunction
   | Move
   | RemoveRole
   | RemoveContext
+  | RemoveContextLocally
   | AddPropertyValue EnumeratedPropertyType
   | RemovePropertyValue EnumeratedPropertyType
   | SetPropertyValue EnumeratedPropertyType
@@ -461,6 +462,7 @@ instance showQueryFunction :: Show QueryFunction where
   show Move = "Move"
   show RemoveRole = "RemoveRole"
   show RemoveContext = "RemoveContext"
+  show RemoveContextLocally = "RemoveContextLocally"
   show (AddPropertyValue enumeratedPropertyType) = "AddPropertyValue " <> show enumeratedPropertyType
   show (RemovePropertyValue enumeratedPropertyType) = "RemovePropertyValue " <> show enumeratedPropertyType
   show (SetPropertyValue enumeratedPropertyType) = "SetPropertyValue " <> show enumeratedPropertyType
@@ -532,6 +534,7 @@ instance eqQueryFunction :: Eq QueryFunction where
   eq Move Move = true
   eq RemoveRole RemoveRole = true
   eq RemoveContext RemoveContext = true
+  eq RemoveContextLocally RemoveContextLocally = true
   eq (AddPropertyValue a) (AddPropertyValue b) = eq a b
   eq (RemovePropertyValue a) (RemovePropertyValue b) = eq a b
   eq (SetPropertyValue a) (SetPropertyValue b) = eq a b
@@ -619,6 +622,7 @@ instance writeForeignQueryFunction :: WriteForeign QueryFunction where
   writeImpl Move = writeImpl { constructor: "Move", arg1: "", arg2: "" }
   writeImpl RemoveRole = writeImpl { constructor: "RemoveRole", arg1: "", arg2: "" }
   writeImpl RemoveContext = writeImpl { constructor: "RemoveContext", arg1: "", arg2: "" }
+  writeImpl RemoveContextLocally = writeImpl { constructor: "RemoveContextLocally", arg1: "", arg2: "" }
   writeImpl (AddPropertyValue enumeratedPropertyType) = writeImpl { constructor: "AddPropertyValue", arg1: writeJSON enumeratedPropertyType, arg2: "" }
   writeImpl (RemovePropertyValue enumeratedPropertyType) = writeImpl { constructor: "RemovePropertyValue", arg1: writeJSON enumeratedPropertyType, arg2: "" }
   writeImpl (SetPropertyValue enumeratedPropertyType) = writeImpl { constructor: "SetPropertyValue", arg1: writeJSON enumeratedPropertyType, arg2: "" }
@@ -698,6 +702,7 @@ instance readForeignQueryFunction :: ReadForeign QueryFunction where
       "Move", _, _ -> pure $ Move
       "RemoveRole", _, _ -> pure $ RemoveRole
       "RemoveContext", _, _ -> pure $ RemoveContext
+      "RemoveContextLocally", _, _ -> pure $ RemoveContextLocally
       "AddPropertyValue", enumeratedPropertyType, _ -> AddPropertyValue <$> readJSON' enumeratedPropertyType
       "RemovePropertyValue", enumeratedPropertyType, _ -> RemovePropertyValue <$> readJSON' enumeratedPropertyType
       "SetPropertyValue", enumeratedPropertyType, _ -> SetPropertyValue <$> readJSON' enumeratedPropertyType
@@ -772,6 +777,7 @@ instance ordQueryFunction :: Ord QueryFunction where
   compare Move Move = EQ
   compare RemoveRole RemoveRole = EQ
   compare RemoveContext RemoveContext = EQ
+  compare RemoveContextLocally RemoveContextLocally = EQ
   compare (AddPropertyValue enumeratedPropertyType) (AddPropertyValue enumeratedPropertyType') = compare enumeratedPropertyType enumeratedPropertyType'
   compare (RemovePropertyValue enumeratedPropertyType) (RemovePropertyValue enumeratedPropertyType') = compare enumeratedPropertyType enumeratedPropertyType'
   compare (SetPropertyValue enumeratedPropertyType) (SetPropertyValue enumeratedPropertyType') = compare enumeratedPropertyType enumeratedPropertyType'

@@ -279,7 +279,11 @@ Models are scheduled for removal by `cdb:RemoveModelFromLocalStore`, which also 
 
 While the exit actions of a locally removed context or role run, `removingLocally` is true. `scheduleContextRemoval` and `scheduleRoleRemoval` then schedule local removals as well, so locality propagates through the cascade. Other changes made by those exit actions, such as property assignments, are shared as usual. Actions postponed with `after` or `once settled` run in a later transaction and are not local.
 
-Currently only `cdb:RemoveModelFromLocalStore` uses local removal. The removing user does not yet retract herself from shared contexts, so peers still regard her as a participant.
+Local removal is used by the `remove context locally` assignment (verb `RemoveContextLocally`) and by `cdb:RemoveModelFromLocalStore`.
+
+Removing a context locally means leaving it. When a local context removal has an authorized (context) role, `scheduleContextRemoval_` sends a `RetractRoleInstance` delta for each user role instance in the context that the user fills (`isMe`), to the other participants. Its `authorizedRole` is the context role through which the context was removed. A peer accepts the retraction if the author's role has a perspective on that context role with `RemoveContextLocally`, `RemoveContext` or `DeleteContext`, and if the role instance is filled by the author. Unlike other deletions, a retraction is not suppressed by concurrent modifications (modify-wins-over-delete): leaving wins.
+
+The removal of the model root context has no authorized role, so it does not retract.
 
 ### Step 2.7 – Notify query subscribers
 

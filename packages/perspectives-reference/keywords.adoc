@@ -45,6 +45,7 @@
 * <<keyword-runRoleAction,runRoleAction>>
 * remove
 ** <<keyword-remove_contextinstance,remove context instance>>
+** <<keyword-remove_contextlocally,remove context locally>>
 ** <<keyword-remove_filler,remove filler (starting with filled role)>>
 ** <<keyword-remove_filled,remove filler (starting with filling role)>>
 ** <<keyword-remove_property,remove property value>>

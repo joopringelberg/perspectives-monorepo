@@ -407,6 +407,7 @@ deltaTypeSortPriority dt
   | dt == "RemoveRoleInstance" = 6
   | dt == "RemoveUnboundExternalRoleInstance" = 6
   | dt == "RemoveExternalRoleInstance" = 6
+  | dt == "RetractRoleInstance" = 6
   | dt == "RemoveBinding" = 6
   | dt == "ReplaceBinding" = 6
   | dt == "RemoveProperty" = 7

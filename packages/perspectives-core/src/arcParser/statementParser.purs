@@ -93,14 +93,18 @@ roleRemoval = do
   end <- getPosition
   pure $ RemoveRole { start, end, roleExpression }
 
+-- remove context [locally] <roleExpression>
 contextRemoval :: IP Assignment
 contextRemoval = do
   start <- getPosition
   reserved "remove"
   reserved "context"
+  locally <- isJust <$> optionMaybe (reserved "locally")
   roleExpression <- step
   end <- getPosition
-  pure $ RemoveContext { start, end, roleExpression }
+  pure $
+    if locally then RemoveContextLocally { start, end, roleExpression }
+    else RemoveContext { start, end, roleExpression }
 
 roleCreation :: IP Assignment
 roleCreation = do

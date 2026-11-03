@@ -88,6 +88,7 @@ assignmentContainsReference :: String -> Assignment -> Boolean
 assignmentContainsReference varName (RemoveRole { roleExpression }) = stepContainsVariableReference varName roleExpression
 
 assignmentContainsReference varName (RemoveContext { roleExpression }) = stepContainsVariableReference varName roleExpression
+assignmentContainsReference varName (RemoveContextLocally { roleExpression }) = stepContainsVariableReference varName roleExpression
 
 assignmentContainsReference varName (CreateRole { contextExpression }) = maybe false (stepContainsVariableReference varName) contextExpression
 

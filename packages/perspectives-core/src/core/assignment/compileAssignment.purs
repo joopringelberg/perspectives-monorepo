@@ -74,7 +74,7 @@ import Perspectives.Representation.QueryFunction (QueryFunction(..)) as QF
 import Perspectives.Representation.ThreeValuedLogic (pessimistic)
 import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedRoleType(..), RoleType(..))
 import Perspectives.ResourceIdentifiers (databaseLocation, resourceIdentifier2DocLocator)
-import Perspectives.SaveUserData (removeBinding, scheduleContextRemoval, scheduleRoleRemoval, setBinding, setFirstBinding, synchronise)
+import Perspectives.SaveUserData (removeBinding, scheduleContextRemoval, scheduleLocalContextRemoval, scheduleRoleRemoval, setBinding, setFirstBinding, synchronise)
 import Perspectives.ScheduledAssignment (ScheduledAssignment(..))
 import Perspectives.Sync.Transaction (Transaction(..))
 import Perspectives.Types.ObjectGetters (computesDatabaseQueryRole, hasContextAspect, isDatabaseQueryRole)
@@ -88,6 +88,20 @@ compileAssignment (UQD _ QF.RemoveRole rle _ _ mry) = do
   pure \contextId -> do
     (roles :: Array RoleInstance) <- lift (contextId ##= roleGetter)
     for_ roles (scheduleRoleRemoval synchronise)
+
+-- Removes, from this installation only, the contexts that fill the context role instances.
+-- The context role instances themselves remain: here they become empty, at peers they stay filled.
+-- Handles DBQ roles by not trying to remove anything, like RemoveContext.
+compileAssignment (UQD _ QF.RemoveContextLocally rle _ _ _) = do
+  roleGetter <- computesDatabaseQueryRole rle >>=
+    if _ then pure \_ -> ArrayT $ pure []
+    else context2role rle
+  pure \contextId -> do
+    (roles :: Array RoleInstance) <- lift (contextId ##= roleGetter)
+    for_ roles \ri -> do
+      authorizedRole <- lift $ roleType_ ri
+      contextsToBeRemoved <- lift (ri ##= binding >=> context)
+      for_ contextsToBeRemoved (scheduleLocalContextRemoval (Just (ENR authorizedRole)))
 
 -- Removes, from all contexts, both the role with kind ContextRole that hold the contexts, and the context themselves.
 -- Handles DBQ roles by not trying to remove a context role.

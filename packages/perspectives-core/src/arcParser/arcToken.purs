@@ -188,6 +188,7 @@ perspectDef = LanguageDef
 
       -- Expressions
       , "remove"
+      , "locally"
       , "create"
       , "create_"
       , "bound"

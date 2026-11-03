@@ -130,6 +130,7 @@ transactionExecutionTests =
   , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$RoleRemoveReordering", logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T26", logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T27", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T28", logConfiguration: emptyLogConfiguration }
   ]
 
 debugConfiguration :: LogConfiguration

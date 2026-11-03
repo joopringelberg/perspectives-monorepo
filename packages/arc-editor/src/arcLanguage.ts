@@ -7,12 +7,12 @@ export const ARC_LANGUAGE_ID = "arc";
 
 export const declarationKeywords = ["domain", "case", "party", "activity", "external", "thing", "context", "user", "property", "state", "use", "aspect", "indexed"];
 export const perspectiveKeywords = ["perspective", "on", "of", "view", "verbs", "props", "only", "except", "defaults", "all", "roleverbs", "action", "screen", "who", "what", "where", "tab", "row", "column", "form", "table", "markdown", "master", "detail", "with", "without", "when", "chat", "readableName"];
-export const statementKeywords = ["entry", "exit", "notify", "do", "for", "remove", "role", "create", "delete", "from", "in", "letA", "letE", "callEffect", "callExternal", "returns", "bind", "unbind", "move", "file", "as", "after", "until", "every", "maximally", "times", "once", "settled", "filledBy", "mandatory", "relational", "unlinked", "minLength", "maxLength", "enumeration", "pattern", "maxInclusive", "minInclusive", "functional", "calculated"];
+export const statementKeywords = ["entry", "exit", "notify", "do", "for", "remove", "locally", "role", "create", "delete", "from", "in", "letA", "letE", "callEffect", "callExternal", "returns", "bind", "unbind", "move", "file", "as", "after", "until", "every", "maximally", "times", "once", "settled", "filledBy", "mandatory", "relational", "unlinked", "minLength", "maxLength", "enumeration", "pattern", "maxInclusive", "minInclusive", "functional", "calculated"];
 export const operatorKeywords = ["either", "both", "binds", "matches", "regexp", "and", "or", "not", "exists", "available", "boundBy", "binder", "extern", "selectFrom", "just", "runContextAction", "runRoleAction", "publicrole", "publiccontext", "translate", "filter", "first", "count", "sum", "minimum", "maximum"];
 export const builtinVariables = ["currentcontext", "notifieduser", "origin", "currentactor"];
 export const typeKeywords = ["String", "Number", "Boolean", "DateTime", "File", "Email", "Date", "Time", "Duration"];
 export const durationKeywords = ["Milliseconds", "Seconds", "Minutes", "Hours", "Days", "Weeks", "Months", "Years"];
-export const verbKeywords = ["Remove", "Delete", "Create", "CreateAndFill", "Fill", "Unbind", "RemoveFiller", "Move", "RemovePropertyValue", "DeletePropertyValue", "DeleteProperty", "AddPropertyValue", "SetPropertyValue", "Consult"];
+export const verbKeywords = ["Remove", "RemoveContext", "RemoveContextLocally", "Delete", "DeleteContext", "Create", "CreateAndFill", "Fill", "Unbind", "RemoveFiller", "Move", "RemovePropertyValue", "DeletePropertyValue", "DeleteProperty", "AddPropertyValue", "SetPropertyValue", "Consult"];
 
 // Language configuration (monaco.languages.LanguageConfiguration).
 export const arcLanguageConfiguration = {

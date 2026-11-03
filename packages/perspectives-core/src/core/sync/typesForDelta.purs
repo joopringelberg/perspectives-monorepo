@@ -112,7 +112,7 @@ newtype UniverseRoleDelta = UniverseRoleDelta
       ( id :: ContextInstance
       , contextType :: ContextType
       , roleType :: EnumeratedRoleType
-      -- To be provided when deltaType is ConstructExternalRole or RemoveUnboundExternalRoleInstance or RemoveExternalRoleInstance.
+      -- To be provided when deltaType is ConstructExternalRole, RemoveUnboundExternalRoleInstance, RemoveExternalRoleInstance or RetractRoleInstance.
       -- It is the context role type that binds the external role; this is the role type that the user is authorized to construct and fill.
       -- It can also be a calculated rol that results in external roles (usually taken from the database).
       , authorizedRole :: Maybe RoleType
@@ -146,7 +146,9 @@ derive instance Ord UniverseRoleDelta
 -----------------------------------------------------------
 -- UNIVERSEROLEDELTATYPE
 -----------------------------------------------------------
-data UniverseRoleDeltaType = ConstructEmptyRole | ConstructExternalRole | RemoveRoleInstance | RemoveUnboundExternalRoleInstance | RemoveExternalRoleInstance
+-- | RetractRoleInstance: the author removed the context locally and retracts the role instance, which she fills, from it.
+-- | Its authorizedRole is the context role through which the context was removed locally.
+data UniverseRoleDeltaType = ConstructEmptyRole | ConstructExternalRole | RemoveRoleInstance | RemoveUnboundExternalRoleInstance | RemoveExternalRoleInstance | RetractRoleInstance
 
 derive instance genericUniverseRoleDeltaType :: Generic UniverseRoleDeltaType _
 instance showUniverseRoleDeltaType :: Show UniverseRoleDeltaType where

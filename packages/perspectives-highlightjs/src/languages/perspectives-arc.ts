@@ -124,7 +124,7 @@ const timing: Mode = {
 
 // ASSIGNMENT
 const remove: Mode = {
-    begin: [lexeme("remove"), whitespace, /\b(role|context)\b/],
+    begin: [lexeme("remove"), whitespace, /\b(role|context(\s+locally)?)\b/],
     beginScope: {
         1: base0E,
         2: base0E
@@ -242,7 +242,7 @@ const propertyRange: Mode = {
 
 // ROLE VERBS
 const roleVerbs: Mode = {
-    begin: /\b(Remove|Delete|Create|CreateAndFill|Fill|Unbind|RemoveFiller|Move)\b/,
+    begin: /\b(RemoveContextLocally|RemoveContext|RemoveFiller|Remove|DeleteContext|Delete|CreateAndFill|Create|Fill|Unbind|Move)\b/,
     scope: base0F
 };
 

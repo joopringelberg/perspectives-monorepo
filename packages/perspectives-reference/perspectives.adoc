@@ -109,6 +109,9 @@ no roleverbs
 | `RemoveContext`
 | Remove a context role instance together with the context it represents.
 
+| `RemoveContextLocally`
+| Remove the context that fills a context role instance from this installation only, and thereby leave it. Implied by `RemoveContext` and `DeleteContext`. See <<keyword-remove_contextlocally,remove context locally>>.
+
 | `Delete`
 | Permanently delete an object role instance and its underlying resource.
 

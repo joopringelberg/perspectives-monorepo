@@ -160,6 +160,7 @@ isDeletionDeltaType dt =
   dt == "RemoveRoleInstance"
     || dt == "RemoveExternalRoleInstance"
     || dt == "RemoveUnboundExternalRoleInstance"
+    || dt == "RetractRoleInstance"
 
 -- | Returns true if a DeltaStoreRecord is a sub-resource delta of the given
 -- | role instance (i.e. its resourceKey starts with safeKey(roleInstanceId) <> "#").

@@ -151,6 +151,7 @@ Other parser-supported statements include:
 - `bind <filler-query> to <RoleType> [in <context-query>]` and `bind_ <role-query> to <binder-query>`
 - `move <role-query> [to <context-query>]`
 - `remove filler of <filled-role-query>`, `remove filler <filler-query> from <filled-role-query>`, and `remove role|context <query>`
+- `remove context locally <context-role-query>`: removes the filling contexts from this installation only, and thereby leaves them (the user's own user roles in them are removed at peers). The context role instances remain. Requires `RemoveContextLocally`, `RemoveContext` or `DeleteContext`
 - Property assignments such as `<Property> = <query> [for <role-query>]`, and `delete property <Property> [from <role-query>]`
 - `callEffect`, `callDestructiveEffect`, `runContextAction`, and `runRoleAction` (see their dedicated sections)
 

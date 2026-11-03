@@ -145,6 +145,9 @@ instance containsPrefixesAssignment :: ScanSymbols Assignment where
   scan (RemoveRole r@{ roleExpression }) = do
     eroleExpression <- scan roleExpression
     pure $ RemoveRole r { roleExpression = eroleExpression }
+  scan (RemoveContextLocally r@{ roleExpression }) = do
+    eroleExpression <- scan roleExpression
+    pure $ RemoveContextLocally r { roleExpression = eroleExpression }
   scan (RemoveContext r@{ roleExpression }) = do
     eroleExpression <- scan roleExpression
     pure $ RemoveContext r { roleExpression = eroleExpression }

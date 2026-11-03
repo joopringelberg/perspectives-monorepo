@@ -1352,6 +1352,7 @@ roleVerb = do
     "RemoveFiller" -> pure RemoveFiller
     "Remove" -> pure Remove
     "RemoveContext" -> pure RemoveContext
+    "RemoveContextLocally" -> pure RemoveContextLocally
     "Delete" -> pure Delete
     "DeleteContext" -> pure DeleteContext
     "CreateAndFill" -> pure CreateAndFill

@@ -122,12 +122,14 @@ patterns:
         name: comment.userrole.arc
 
   ## ASSIGNMENT
-  ### remove role/context from <expr>
-  - match: \b(remove\s+)(role|context)\b
+  ### remove role/context [locally] <expr>
+  - match: \b(remove\s+)(role|context)(\s+locally)?\b
     captures: 
       1:
         name: keyword.assignment.arc
       2:
+        name: keyword.assignment.arc
+      3:
         name: keyword.assignment.arc
   ### create role RoleType [in <contextExpression>]
   - match: \b(create\s+role\s+)(\w+)(\s+in\b)?
@@ -204,7 +206,7 @@ patterns:
     
   ## ROLEVERBS
   - name: entity.name.label.roleverb.arc
-    match: \b(Remove|Delete|Create|CreateAndFill|Fill|Unbind|RemoveFiller|Move)\b
+    match: \b(RemoveContextLocally|RemoveContext|RemoveFiller|Remove|DeleteContext|Delete|CreateAndFill|Create|Fill|Unbind|Move)\b
 
 
   ## PROPERTYVERBS

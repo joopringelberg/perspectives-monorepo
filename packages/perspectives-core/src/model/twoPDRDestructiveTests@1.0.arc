@@ -875,3 +875,65 @@ domain model://joopringelberg.nl#TwoPDRDestructiveTests@1.0
 
       thing ExternOfTest3 = extern >> binder TestRole16 >> context >> extern
 
+  ------------------------------------------------------------------------------
+  ---- Remove a context locally: the Follower leaves it.
+  ---- The Leader creates a context in which she is Owner and the Follower is Member.
+  ---- The Follower removes that context locally. This retracts his Member role:
+  ---- in the Leader's PDR it is removed, after which the Leader reports success.
+  ------------------------------------------------------------------------------
+  case Test_RemoveContextLocally
+    aspect mm:Test
+    state TesterAvailable = (exists Leader) and (exists Follower)
+      on entry
+        do for Leader
+          letA
+            shared <- create context SharedContext bound to Shared
+          in
+            bind Leader >> binding to Owner in shared >> binding >> context
+            bind Follower >> binding to Member in shared >> binding >> context
+
+    -- Only the Follower acts in this state; in his PDR it is entered once his Member role has arrived.
+    state MemberArrived = exists Shared >> binding >> context >> Member
+      on entry
+        do for Follower after 500 Milliseconds
+          remove context locally Shared
+
+    -- Only in the Leader's PDR: the Follower's PDR no longer has the shared context.
+    state MemberLeft = (exists Shared >> binding >> context >> Owner) and (not exists Shared >> binding >> context >> Member)
+      on entry
+        do for Leader
+          TestSucceeded = true for extern
+
+    user Leader filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Leader
+      perspective on extern
+        props (TestSucceeded) verbs (SetPropertyValue, Consult)
+      perspective on Shared
+        only (CreateAndFill)
+      perspective on Shared >> binding >> context >> Owner
+        only (Create, Fill)
+      perspective on Shared >> binding >> context >> Member
+        only (Create, Fill)
+      action RunTest
+        TestName = "Remove a context locally" for extern
+
+    user Follower filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Follower
+      perspective on extern
+        props (TestSucceeded) verbs (Consult)
+      perspective on Shared
+        only (RemoveContextLocally)
+      perspective on Shared >> binding >> context >> Owner
+        props (FirstName) verbs (Consult)
+      perspective on Shared >> binding >> context >> Member
+        props (FirstName) verbs (Consult)
+
+    context Shared filledBy SharedContext
+
+    case SharedContext
+      user Owner filledBy (sys:TheWorld$PerspectivesUsers)
+        perspective on Member
+          props (FirstName) verbs (Consult)
+      user Member filledBy (sys:TheWorld$PerspectivesUsers)
+        perspective on Owner
+          props (FirstName) verbs (Consult)

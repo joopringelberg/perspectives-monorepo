@@ -416,7 +416,7 @@ These scripts directly test the two conflicting design goals.
 
 ---
 
-## Group 11 — Model Removal
+## Group 11 — Model Removal and Local Removal
 
 ### T27 — Remove a model
 
@@ -429,6 +429,18 @@ These scripts directly test the two conflicting design goals.
 **Triggering action:** `RunTest` records the number of `StartContexts`, `IndexedContexts` and `IndexedRoles` instances in `sys:MySystem` and removes the target's `ModelsInUse` instance, which is what the end user does to remove a model. Once that transaction has settled, it records the counts again.
 
 **Expected outcome:** Each count is exactly one lower, and there is no `ModelsInUse` instance for the target. The test model never refers to the target's types, so the target is not installed again just in time. To be checked manually: the target's DomeinFile is gone from the local models database.
+
+---
+
+### T28 — Remove a context locally
+
+**Path exercised:** Local context removal (see [Local removal](transaction-execution.md#local-removal)): the `remove context locally` assignment and its authorization by `RemoveContextLocally`.
+
+**Model setup:** `case T28` in `transactionExecutionTests@1.0.arc`. Context role `Subscriptions` is filled by `SubscribedContext`. Tester only has the verbs `CreateAndFill` and `RemoveContextLocally` on `Subscriptions`.
+
+**Triggering action:** `RunTest` creates a `SubscribedContext` bound to `Subscriptions`; once that has settled it removes it with `remove context locally Subscriptions`.
+
+**Expected outcome:** The `Subscriptions` instance still exists but has no filler. That peers retract the remover is tested in a two-PDR setting: `Test_RemoveContextLocally` in `twoPDRDestructiveTests@1.0.arc` (`test/DestructiveSynchronisationTests.purs`).
 
 ---
 
@@ -463,3 +475,4 @@ These scripts directly test the two conflicting design goals.
 | T25 | runSharing | Own-user reaction triggers further cascade |
 | T26 | serialisation | Concurrent transactions serialised by flag |
 | T27 | 1.9, 2.5, 2.6 | Model removal cleans up indexed resources and the model |
+| T28 | local removal | `remove context locally` keeps the context role, removes its filler |

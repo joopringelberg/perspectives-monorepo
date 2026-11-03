@@ -57,8 +57,8 @@ module Perspectives.SaveUserData
 import Control.Monad.AvarMonadAsk (gets, modify)
 import Control.Monad.Error.Class (try)
 import Control.Monad.State (lift)
-import Data.Array (concat, cons, delete, elemIndex, find, nub, union)
-import Data.Maybe (Maybe(..), isJust)
+import Data.Array (catMaybes, concat, cons, delete, elemIndex, find, null, nub, union)
+import Data.Maybe (Maybe(..), isJust, maybe)
 import Data.Newtype (over, unwrap)
 import Data.Show (show)
 import Data.Foldable (foldr)
@@ -231,7 +231,9 @@ scheduleContextRemoval_ local authorizedRole usersWithPerspectiveOnEmbeddingRole
         unlinkedRoleTypes <- lift (contextType ###= allUnlinkedRoles)
         unlinkedInstances <- lift $ concat <$> (for unlinkedRoleTypes \rt -> id ##= getUnlinkedRoleInstances rt)
         allRoleInstances <- pure $ (cons br $ unlinkedInstances <> (concat $ values rolInContext))
-        if local then pure unit else synchroniseContextRemoval ctxt
+        -- Removing a context locally means leaving it: retract the user roles I fill in it (if the removal is authorized by a context role).
+        if local then maybe (pure unit) (retractMyUserRoles ctxt) authorizedRole
+        else synchroniseContextRemoval ctxt
         -- If one of these roles is on the clipboard, schedule its removal as well.
         allItems <- lift $ allItemsOnClipboard
         for_ allItems \item -> do
@@ -250,6 +252,41 @@ scheduleContextRemoval_ local authorizedRole usersWithPerspectiveOnEmbeddingRole
                   else localRemovals
               }
           )
+
+  -- SYNCHRONISATION of leaving the context. Peers remove the user role instances I fill in it.
+  -- The authorizedRole is the context role through which the context is removed locally.
+  retractMyUserRoles :: PerspectContext -> RoleType -> MonadPerspectivesTransaction Unit
+  retractMyUserRoles ctxt@(PerspectContext { rolInContext }) authorized = do
+    myUserRoles <- lift $ catMaybes <$> traverse myUserRole (concat $ values rolInContext)
+    if null myUserRoles then pure unit
+    else do
+      userRoleTypes <- lift (getContext (context_pspType ctxt) >>= pure <<< userRole)
+      (users :: Array RoleInstance) <- lift (concat <$> (traverse (\(userRole :: RoleType) -> id ##= getRoleInstances userRole) userRoleTypes))
+      subject <- getSubject
+      for_ myUserRoles \(PerspectRol { id: roleInstance, pspType: roleType }) -> do
+        let rkey = unwrap roleInstance
+        rversion <- lift $ incrementResourceVersion rkey
+        delta <- signVersionedDelta $ stripResourceSchemes $ UniverseRoleDelta
+          { id
+          , contextType: context_pspType ctxt
+          , roleType
+          , authorizedRole: Just authorized
+          , roleInstance
+          , deltaType: RetractRoleInstance
+          , subject
+          , resourceKey: rkey
+          , resourceVersion: rversion
+          }
+        -- addDelta does not send deltas to myself.
+        addDelta $ DeltaInTransaction { users, delta }
+
+  myUserRole :: RoleInstance -> MonadPerspectives (Maybe PerspectRol)
+  myUserRole rid = do
+    role@(PerspectRol { pspType }) <- getPerspectRol rid
+    if rol_isMe role then do
+      EnumeratedRole { kindOfRole } <- getEnumeratedRole pspType
+      pure if kindOfRole == UserRole then Just role else Nothing
+    else pure Nothing
 
   -- SYNCHRONISATION
   synchroniseContextRemoval :: PerspectContext -> MonadPerspectivesTransaction Unit

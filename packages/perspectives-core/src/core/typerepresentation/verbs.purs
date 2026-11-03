@@ -41,6 +41,7 @@ import Simple.JSON (class ReadForeign, class WriteForeign, read', write, writeIm
 data RoleVerb
   = Remove -- Remove a single instance
   | RemoveContext -- Remove a contextrole instance together with its context.
+  | RemoveContextLocally -- Remove the context of a contextrole instance from this installation only. Implied by RemoveContext and DeleteContext.
   | Delete -- Remove all instances
   | DeleteContext -- Delete all contextrole instances together with their contexts.
   | Create -- Create an instance
@@ -160,7 +161,7 @@ roleVerbList2Verbs (Excluding excluded) = difference allVerbs excluded
 roleVerbList2Verbs (Including v) = v
 
 allVerbs :: Array RoleVerb
-allVerbs = [ Remove, Delete, Create, CreateAndFill, Fill, Unbind, RemoveFiller, Move, RemoveContext, DeleteContext ]
+allVerbs = [ Remove, Delete, Create, CreateAndFill, Fill, Unbind, RemoveFiller, Move, RemoveContext, RemoveContextLocally, DeleteContext ]
 
 hasOneOfTheVerbs :: Array RoleVerb -> RoleVerbList -> Boolean
 hasOneOfTheVerbs vs All = true

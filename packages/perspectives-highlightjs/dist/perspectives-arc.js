@@ -93,7 +93,7 @@ const timing = {
 };
 // ASSIGNMENT
 const remove = {
-    begin: [lexeme("remove"), whitespace, /\b(role|context)\b/],
+    begin: [lexeme("remove"), whitespace, /\b(role|context(\s+locally)?)\b/],
     beginScope: {
         1: base0E,
         2: base0E
@@ -193,7 +193,7 @@ const propertyRange = {
 };
 // ROLE VERBS
 const roleVerbs = {
-    begin: /\b(Remove|Delete|Create|CreateAndFill|Fill|Unbind|RemoveFiller|Move)\b/,
+    begin: /\b(RemoveContextLocally|RemoveContext|RemoveFiller|Remove|DeleteContext|Delete|CreateAndFill|Create|Fill|Unbind|Move)\b/,
     scope: base0F
 };
 // PROPERTY VERBS
@@ -209,7 +209,7 @@ const meta = {
 // SCREEN ELEMENTS (base04)
 const screenKeywords = {
     scope: base04,
-    begin: /\b(screen|tab|row|column|form|markdown|table|chat|messages|media|who|what|where|master|detail|when|fillfrom)\b/
+    begin: /\b(screen|tab|row|column|form|markdown|table|chat|messages|media|who|what|where|master|detail|when|fillfrom|typeaheadfiller|typeaheadform|typeaheadfillfrom)\b/
 };
 const use = {
     begin: [lexeme("use"), /.*/, lexeme("for")],

@@ -58,7 +58,7 @@ import Perspectives.Error.Pretty (renderPerspectivesError, renderPerspectivesWar
 import Perspectives.Identifiers (buitenRol, deconstructBuitenRol, typeUri2LocalName_, typeUri2ModelUri_)
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..))
 import Perspectives.Instances.Builders (lookupOrCreateContextInstance, lookupOrCreateRoleInstance, createAndAddRoleInstance)
-import Perspectives.Instances.ObjectGetters (getProperty, roleType)
+import Perspectives.Instances.ObjectGetters (bottom_, getProperty, roleType)
 import Perspectives.Instances.Values (parsePerspectivesFile)
 import Perspectives.Logging (traceSync, warnSync)
 import Perspectives.ModelDependencies (rootContext)
@@ -343,6 +343,17 @@ executeUniverseRoleDelta (UniverseRoleDelta { id, roleType, roleInstance, author
         Left e -> handleError e
         -- As external roles are always stored the same as their contexts, we can reliably retrieve the context instance id from the role id.
         Right _ -> scheduleContextRemoval authorizedRole [] (ContextInstance $ deconstructBuitenRol $ unwrap roleInstance)
+    -- The author removed the context locally and thereby leaves it. A user who may remove a context locally may leave it;
+    -- RemoveContext and DeleteContext imply RemoveContextLocally.
+    -- She can only retract role instances that she fills herself.
+    RetractRoleInstance -> do
+      (lift $ roleHasPerspectiveOnExternalRoleWithVerbs subject authorizedRole [ Verbs.RemoveContextLocally, Verbs.RemoveContext, Verbs.DeleteContext ] Nothing Nothing) >>= case _ of
+        Left e -> handleError e
+        Right _ -> do
+          let SignedDelta { author } = s
+          filler <- lift $ bottom_ roleInstance
+          if takeGuid (unwrap filler) == takeGuid (unwrap author) then void $ scheduleRoleRemoval synchronise roleInstance
+          else handleError $ Custom ("A user can only retract role instances that she fills herself. " <> show author <> " tried to retract " <> show roleInstance <> ".")
   where
   userCreatesThemselves :: Boolean
   userCreatesThemselves = case subject of
@@ -573,7 +584,8 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
           -- resourceVersion > localVersion: normal next expected version.
           -- (Gaps have already been ruled out by checkForGaps.)
           -- Apply modify-wins-over-delete logic before executing.
-          if isDeletionDeltaType deltaType then do
+          -- A retraction is not suppressed: leaving a context wins over concurrent modifications.
+          if isDeletionDeltaType deltaType && deltaType /= "RetractRoleInstance" then do
             -- Incoming is a role deletion. Check for concurrent local modifications on sub-resources.
             suppressedByModify <- isDeletionSuppressedByModifyWins resourceKey
             if suppressedByModify then do
@@ -634,6 +646,8 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
         == "RemoveExternalRoleInstance"
       || dt
         == "RemoveUnboundExternalRoleInstance"
+      || dt
+        == "RetractRoleInstance"
 
   -- | Returns true if an incoming deletion delta for `roleInstanceId` (a role instance ID)
   -- | should be suppressed because there are locally-applied modification deltas on
