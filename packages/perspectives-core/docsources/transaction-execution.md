@@ -259,11 +259,13 @@ After this optional post-removal pass, `scheduledAssignments`, `untouchableConte
 
 ### Step 2.5 – Postponed state evaluations
 
-If `postponedStateEvaluations` is non-empty, those state evaluations are now run via `evaluateStates` (the resources they depend on have been removed, so the conditions can now be evaluated). Afterwards the field is cleared and phase 2 recurses from the beginning.
+If `postponedStateEvaluations` is non-empty, those state evaluations are now run via `evaluateStates` (the resources they depend on have been removed, so the conditions can now be evaluated). Afterwards the field is cleared and phase 2 recurses from the beginning. `modelsToBeRemoved` is kept, so the models are removed in the recursive call.
 
 ### Step 2.6 – Remove models
 
-If there are no postponed state evaluations, any models in `modelsToBeRemoved` are deleted from the store.
+If there are no postponed state evaluations, any models in `modelsToBeRemoved` are deleted from the store (see `Perspectives.ModelRemoval`). Besides the DomeinFile, this removes the inverted queries, downstream state notifications and automatic effects the model contributed to other models, clears the query, state and translation caches for the model, and removes the model from the map of installed model URIs. Then `modelsToBeRemoved` is cleared.
+
+Models are scheduled for removal by `cdb:RemoveModelFromLocalStore`, which also schedules removal of the model root context, the model's indexed contexts and roles, and the `IndexedContexts`, `IndexedRoles` and `StartContexts` instances in `sys:MySystem` that they fill. Removing contexts and roles first means their `on exit` actions still run with the model's types available.
 
 ### Step 2.7 – Notify query subscribers
 

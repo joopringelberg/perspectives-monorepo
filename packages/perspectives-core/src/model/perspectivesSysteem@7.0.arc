@@ -706,7 +706,8 @@ domain model://perspectives.domains#System@7.0
         -- notify User
         --   "Model {ModelToRemove} has been removed completely."
         do for User
-          -- This will remove the model root context. In its on exit, we clean up the instance of IndexedContexts and StartContexts that were created for this model. It will also remove the model from the local store.
+          -- This removes the model root context (its on exit may do model-specific cleanup), the model's indexed contexts and roles,
+          -- the instances of IndexedContexts, IndexedRoles and StartContexts they fill, and finally the model itself from the local store.
           callDestructiveEffect cdb:RemoveModelFromLocalStore ( ModelToRemove )
     
     thing ModelsToUpdate = (filter ModelsInUse with isInState InstallUpdate or isInState InstallBuild)

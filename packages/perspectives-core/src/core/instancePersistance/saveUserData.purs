@@ -141,7 +141,16 @@ scheduleRoleRemoval sync id = do
           scheduledAssignments
       )
     roleIsUntouchable <- gets (\(Transaction { untouchableRoles }) -> isJust $ elemIndex id untouchableRoles)
-    if contextIsScheduledToBeRemoved || roleIsUntouchable then pure []
+    -- Scheduling the same removal twice would only add duplicate deltas.
+    roleIsScheduledToBeRemoved <- gets
+      ( \(Transaction { scheduledAssignments }) -> isJust $ find
+          ( case _ of
+              RoleRemoval rid -> rid == id
+              _ -> false
+          )
+          scheduledAssignments
+      )
+    if contextIsScheduledToBeRemoved || roleIsUntouchable || roleIsScheduledToBeRemoved then pure []
     else do
       modify
         ( over Transaction \t@{ scheduledAssignments, rolesToExit } -> t
@@ -164,12 +173,25 @@ scheduleRoleRemoval sync id = do
 -- | Schedules all roles in the context, including its external role, for removal.
 -- | Add the actual removal instruction to the end of the scheduledAssignments.
 -- | (we build a last-in, last-out stack of destructive effects)
+-- | Does nothing if the context has been scheduled for removal before in this transaction.
 scheduleContextRemoval :: Maybe RoleType -> Array RoleInstance -> ContextInstance -> MonadPerspectivesTransaction Unit
-scheduleContextRemoval authorizedRole usersWithPerspectiveOnEmbeddingRole id =
+scheduleContextRemoval authorizedRole usersWithPerspectiveOnEmbeddingRole id = do
+  alreadyScheduled <- gets
+    ( \(Transaction { scheduledAssignments, untouchableContexts }) ->
+        isJust (elemIndex id untouchableContexts) || isJust
+          ( find
+              ( case _ of
+                  ContextRemoval ctxt _ -> ctxt == id
+                  _ -> false
+              )
+              scheduledAssignments
+          )
+    )
+  if alreadyScheduled then pure unit
   -- It may happen that two public roles with the same address both have a perspective on this context instance.
   -- In that case, we remove the instance for the first public role (in a random order). 
   -- We should check whether it is still there before we try to remove it.
-  if isInPublicScheme (unwrap id) then (lift $ tryGetPerspectContext id) >>= case _ of
+  else if isInPublicScheme (unwrap id) then (lift $ tryGetPerspectContext id) >>= case _ of
     Nothing -> pure unit
     Just _ -> f
   else f
@@ -238,7 +260,12 @@ removeContextInstance id authorizedRole = do
       \(ctxt@(PerspectContext { pspType: contextType, rolInContext, buitenRol })) -> do
         unlinkedRoleTypes <- contextType ###= allUnlinkedRoles
         unlinkedInstances <- concat <$> (for unlinkedRoleTypes \rt -> id ##= getUnlinkedRoleInstances rt)
-        for_ (unlinkedInstances <> (concat $ values rolInContext)) removeEntiteit
+        for_ (unlinkedInstances <> (concat $ values rolInContext)) \rid -> do
+          -- Clean up the indexed role administration in state.
+          findIndexedRoleName rid >>= case _ of
+            Just indexedName -> removeIndexedRole indexedName
+            Nothing -> pure unit
+          removeEntiteit rid
         -- Clean up the indexed role administration in state.
         findIndexedContextName id >>= case _ of
           Just indexedName -> removeIndexedContext indexedName

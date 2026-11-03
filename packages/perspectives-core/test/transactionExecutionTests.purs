@@ -39,7 +39,7 @@ transactionExecutionTestModelConfiguration =
   , snapshotDirectory: transactionExecutionSnapshotDirectory
   , outputSnapshotDirectory: Nothing
   , testModel: transactionExecutionTestModel
-  , testModelLoadMethods: [ LoadModelFromRepository { modelUri: transactionExecutionTestModel } ]
+  , testModelLoadMethods: [ uninstallTargetLoadMethod, LoadModelFromRepository { modelUri: transactionExecutionTestModel } ]
   , indexedTestContext: transactionExecutionIndexedTestContext
   , testAppManager: transactionExecutionTestAppManager
   , testsType: transactionExecutionTestsType
@@ -61,7 +61,8 @@ transactionExecutionCompileTestModelConfiguration =
   transactionExecutionTestModelConfiguration
     { suiteName = "Transaction execution tests (compile)"
     , testModelLoadMethods =
-        [ CompileModelFromSource
+        [ uninstallTargetLoadMethod
+        , CompileModelFromSource
             { modelUri: transactionExecutionTestModel
             , sourcePath: "src/model/transactionExecutionTests@1.0.arc"
             , modelUriReadable: "model://joopringelberg.nl#TransactionExecutionTests@1.0"
@@ -69,6 +70,16 @@ transactionExecutionCompileTestModelConfiguration =
             }
         ]
     }
+
+-- | The model that test T27 removes. It is compiled from source, so it need not be published.
+-- | T27 refers to it by this Stable model URI.
+uninstallTargetLoadMethod :: TestModelLoadMethod
+uninstallTargetLoadMethod = CompileModelFromSource
+  { modelUri: "model://joopringelberg.nl#ms9lflili1@1.0"
+  , sourcePath: "src/model/uninstallTarget@1.0.arc"
+  , modelUriReadable: "model://joopringelberg.nl#UninstallTarget@1.0"
+  , basedOnVersion: Nothing
+  }
 
 transactionExecutionTestModel :: String
 -- transactionExecutionTestModel = "model://joopringelberg.nl#TransactionExecutionTests@1.0"
@@ -94,8 +105,7 @@ transactionExecutionSnapshotDirectory = "test/pdr-snapshot/newdeltas/alice"
 
 transactionExecutionTests :: Array ModelTest
 transactionExecutionTests =
-  [ 
-  { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T01", logConfiguration: emptyLogConfiguration }
+  [ { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T01", logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T02", logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T03", logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T04", logConfiguration: emptyLogConfiguration }
@@ -119,6 +129,7 @@ transactionExecutionTests =
   , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T23", logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$RoleRemoveReordering", logConfiguration: emptyLogConfiguration }
   , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T26", logConfiguration: emptyLogConfiguration }
+  , { testContextTypeName: "model://joopringelberg.nl#TransactionExecutionTests$T27", logConfiguration: emptyLogConfiguration }
   ]
 
 debugConfiguration :: LogConfiguration

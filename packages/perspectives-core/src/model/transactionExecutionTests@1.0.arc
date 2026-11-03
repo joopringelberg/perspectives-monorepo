@@ -1125,3 +1125,59 @@ domain model://joopringelberg.nl#TransactionExecutionTests@1.0
       action RunTest
         Trigger = true for extern
         TestName = "T26 — Concurrent transactions are serialised" for extern
+
+  ------------------------------------------------------------------------------
+  ---- T27 — Remove a model
+  ---- The test harness compiles and installs model://joopringelberg.nl#UninstallTarget@1.0
+  ---- (src/model/uninstallTarget@1.0.arc) under the Stable model URI model://joopringelberg.nl#ms9lflili1@1.0,
+  ---- before it loads this model. The target has an indexed context (filling an instance of StartContexts)
+  ---- and an indexed role, and does not clean these up itself.
+  ---- Removing its instance of ModelsInUse (what the end user does to remove a model) should remove exactly one
+  ---- instance of StartContexts, IndexedContexts and IndexedRoles in sys:MySystem, and the instance of ModelsInUse.
+  ---- On purpose, this test never refers to the types of the target model: doing so would install it again.
+  ------------------------------------------------------------------------------
+  case T27
+    aspect mm:Test
+
+    external
+      property InstalledStartContexts (Number)
+      property InstalledIndexedContexts (Number)
+      property InstalledIndexedRoles (Number)
+      property RemainingStartContexts (Number)
+      property RemainingIndexedContexts (Number)
+      property RemainingIndexedRoles (Number)
+      property TargetStillInUse (Boolean)
+
+      state TestSucceeded = (exists TargetStillInUse) and (not TargetStillInUse)
+          and (RemainingStartContexts + 1 == InstalledStartContexts)
+          and (RemainingIndexedContexts + 1 == InstalledIndexedContexts)
+          and (RemainingIndexedRoles + 1 == InstalledIndexedRoles)
+        on entry
+          do for Tester
+            TestSucceeded = true
+
+    user Tester filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Tester
+      perspective on extern
+        props (InstalledStartContexts, InstalledIndexedContexts, InstalledIndexedRoles) verbs (SetPropertyValue, Consult)
+        props (RemainingStartContexts, RemainingIndexedContexts, RemainingIndexedRoles, TargetStillInUse) verbs (SetPropertyValue, Consult)
+      perspective on sys:MySystem >> ModelsInUse
+        only (Remove)
+      action RunTest
+        letA
+          target <- "model://joopringelberg.nl#ms9lflili1"
+          -- Without a manifest in the repository, the PDR registers the model with or without its version,
+          -- depending on whether the repository could be consulted.
+          modelinuse <- filter sys:MySystem >> ModelsInUse with (ModelToRemove == target) or (ModelToRemove == target + "@1.0")
+        in
+          TestName = "T27 — Remove a model" for extern
+          InstalledStartContexts = (sys:MySystem >> StartContexts >>= count) for extern
+          InstalledIndexedContexts = (sys:MySystem >> IndexedContexts >>= count) for extern
+          InstalledIndexedRoles = (sys:MySystem >> IndexedRoles >>= count) for extern
+          remove role modelinuse
+
+          once settled
+            RemainingStartContexts = (sys:MySystem >> StartContexts >>= count) for extern
+            RemainingIndexedContexts = (sys:MySystem >> IndexedContexts >>= count) for extern
+            RemainingIndexedRoles = (sys:MySystem >> IndexedRoles >>= count) for extern
+            TargetStillInUse = (exists (filter sys:MySystem >> ModelsInUse with (ModelToRemove == target) or (ModelToRemove == target + "@1.0"))) for extern

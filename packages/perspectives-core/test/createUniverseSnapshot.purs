@@ -102,6 +102,7 @@ extraModels =
   -- , "model://joopringelberg.nl#RepositoryTools@1.0"
   -- The next model is not yet finished. We'll continue after the reboot.
   -- , "model://joopringelberg.nl#TestModelDependencies@1.0"
+  , "model://joopringelberg.nl#UninstallTarget@1.0"
   ]
 
 perspectivesDomainsRepository :: String

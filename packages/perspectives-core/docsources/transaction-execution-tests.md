@@ -416,6 +416,22 @@ These scripts directly test the two conflicting design goals.
 
 ---
 
+## Group 11 — Model Removal
+
+### T27 — Remove a model
+
+**Path exercised:** Step 1.9 (`cdb:RemoveModelFromLocalStore` as an `ExecuteDestructiveEffect`), phase-1 re-run for the removal of the model root context and the model's indexed resources, step 2.5 (`modelsToBeRemoved` survives postponed state evaluations) and step 2.6 (removal of the model and the resources it contributed).
+
+**Model setup:** `case T27` in `transactionExecutionTests@1.0.arc`. The target model `uninstallTarget@1.0.arc` creates an indexed context (filling a new `StartContexts` instance) and an indexed role. Its model root context has no `on exit`, so it does not clean up these resources itself. The test harness (`test/transactionExecutionTests.purs`) compiles and installs the target from source, under the Stable model URI `model://joopringelberg.nl#ms9lflili1@1.0`, before it loads the test model.
+
+**Initial state:** The target model is installed.
+
+**Triggering action:** `RunTest` records the number of `StartContexts`, `IndexedContexts` and `IndexedRoles` instances in `sys:MySystem` and removes the target's `ModelsInUse` instance, which is what the end user does to remove a model. Once that transaction has settled, it records the counts again.
+
+**Expected outcome:** Each count is exactly one lower, and there is no `ModelsInUse` instance for the target. The test model never refers to the target's types, so the target is not installed again just in time. To be checked manually: the target's DomeinFile is gone from the local models database.
+
+---
+
 ## Summary Table
 
 | ID  | Phase tested | Key mechanism under test |
@@ -446,3 +462,4 @@ These scripts directly test the two conflicting design goals.
 | T24 | runSharing | Peer transaction → own-user reaction distributed |
 | T25 | runSharing | Own-user reaction triggers further cascade |
 | T26 | serialisation | Concurrent transactions serialised by flag |
+| T27 | 1.9, 2.5, 2.6 | Model removal cleans up indexed resources and the model |

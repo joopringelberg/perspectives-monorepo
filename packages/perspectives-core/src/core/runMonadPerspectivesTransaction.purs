@@ -56,7 +56,8 @@ import Perspectives.Instances.Me (getMyType)
 import Perspectives.Instances.ObjectGetters (Filler_(..), context, contextType, filler2filledFromDatabase_, getActiveRoleStates, getActiveStates, roleType, roleType_)
 import Perspectives.Logging (debugState, errorCompiler, traceState, warnState)
 import Perspectives.ModelDependencies (sysUser)
-import Perspectives.Persistent (entityExists, saveMarkedPublicResources, tryRemoveEntiteit)
+import Perspectives.ModelRemoval (removeModelFromLocalDatabase)
+import Perspectives.Persistent (entityExists, saveMarkedPublicResources)
 import Perspectives.PerspectivesState (addBinding, addWarning, clearPublicRolesJustLoaded, decreaseTransactionLevel, getPublicRolesJustLoaded, increaseTransactionLevel, nextTransactionNumber, pushFrame, restoreFrame, transactionFlag, transactionLevel)
 import Perspectives.Query.QueryTypes (Calculation(..))
 import Perspectives.Query.UnsafeCompiler (context2propertyValue, getCalculatedRoleInstances)
@@ -391,7 +392,8 @@ phase2 share authoringRole r = do
     if null postponedStateEvaluations then do
       if not $ null modelsToBeRemoved then lift $ debugState (padding <> "Will remove these models: " <> show modelsToBeRemoved)
       else pure unit
-      lift $ void $ for modelsToBeRemoved tryRemoveEntiteit
+      lift $ void $ for modelsToBeRemoved removeModelFromLocalDatabase
+      AA.modify \t -> over Transaction (\tr -> tr { modelsToBeRemoved = [] }) t
       if not $ null correlationIdentifiers then do
         lift $ debugState $ padding <> "==========RUNNING EFFECTS IN " <> show transactionNumber <> "============"
         -- Sort from low to high, so we can never actualise a client side component after it has been removed.
@@ -423,7 +425,8 @@ phase2 share authoringRole r = do
           )
           t
         runSharing share authoringRole (evaluateStates (dedupeStateEvaluations postponedStateEvaluations))
-      AA.modify \t -> over Transaction (\tr -> tr { postponedStateEvaluations = [], modelsToBeRemoved = [] }) t
+      -- Do NOT reset modelsToBeRemoved here: the recursive call of phase2 removes them once no postponed evaluations remain.
+      AA.modify \t -> over Transaction (\tr -> tr { postponedStateEvaluations = [] }) t
       phase2 share authoringRole r
 
   where

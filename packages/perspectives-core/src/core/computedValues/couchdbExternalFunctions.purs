@@ -43,7 +43,7 @@ import Data.Nullable (toMaybe)
 import Data.String (Pattern(..), Replacement(..), replace, stripSuffix)
 import Data.String.Regex.Flags (noFlags)
 import Data.String.Regex.Unsafe (unsafeRegex)
-import Data.Traversable (traverse)
+import Data.Traversable (for, traverse)
 import Data.TraversableWithIndex (traverseWithIndex)
 import Data.Tuple (Tuple(..))
 import Decacheable (decache)
@@ -52,7 +52,7 @@ import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
 import Effect.Exception (error)
 import Foreign (unsafeToForeign)
-import Foreign.Object (empty, fromFoldable, insert, singleton)
+import Foreign.Object (empty, fromFoldable, insert, keys, singleton)
 import IDBKeyVal (idbDel, idbSet)
 import JS.Iterable (toArray)
 import LRUCache (rvalues)
@@ -68,10 +68,10 @@ import Perspectives.Couchdb.Revision (Revision_)
 import Perspectives.Deltas (addCreatedContextToTransaction)
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
 import Perspectives.DomeinCache (AttachmentFiles, addAttachments, fetchTranslations, getPatchAndBuild, getVersionToInstall, saveCachedDomeinFile, storeDomeinFileInCouchdbPreservingAttachments)
-import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, ModelDependency, addDownStreamAutomaticEffect, addDownStreamNotification, removeDownStreamAutomaticEffect, removeDownStreamNotification)
+import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, ModelDependency, addDownStreamAutomaticEffect, addDownStreamNotification, indexedContexts, indexedRoles, removeDownStreamAutomaticEffect, removeDownStreamNotification)
 import Perspectives.Error.Boundaries (handleDomeinFileError, handleExternalFunctionError, handleExternalStatementError)
 import Perspectives.External.HiddenFunctionCache (HiddenFunctionDescription)
-import Perspectives.Identifiers (Namespace, getFirstMatch, isModelUri, modelUri2ManifestUrl, modelUri2ModelUrl, modelUriVersion, unversionedModelUri, url2Authority)
+import Perspectives.Identifiers (Namespace, buitenRol, getFirstMatch, isModelUri, modelUri2ManifestUrl, modelUri2ModelUrl, modelUriVersion, unversionedModelUri, url2Authority)
 import Perspectives.Instances.Builders (constructContext, createAndAddRoleInstance, createAndAddRoleInstance_)
 import Perspectives.Instances.CreateContext (constructEmptyContext)
 import Perspectives.Instances.Me (computeMe_)
@@ -79,7 +79,7 @@ import Perspectives.Instances.ObjectGetters (binding, context, getEnumeratedRole
 import Perspectives.InvertedQuery.Storable (StoredQueries, clearInvertedQueriesDatabase, getInvertedQueriesOfModel, removeInvertedQueriesContributedByModel, saveInvertedQueries)
 import Perspectives.Logging (debugInstall, errorInstall, infoInstall, traceInstall, warnInstall)
 import Perspectives.ModelDependencies as DEP
-import Perspectives.Names (getMySystem, getUserIdentifier)
+import Perspectives.Names (getMySystem, getUserIdentifier, lookupIndexedContext, lookupIndexedRole)
 import Perspectives.Persistence.API (DesignDocument(..), Keys(..), MonadPouchdb, addAttachment, addDocument_, createDatabase, deleteDatabase, getAttachment, getDocument, recoverFromRecoveryPoint, refreshRecoveryPoint, replicateDatabase, retrieveDocumentVersion, splitRepositoryFileUrl, toFile, tryGetDocument_, withDatabase)
 import Perspectives.Persistence.API (deleteDocument, documentsInDatabase, excludeDocs) as Persistence
 import Perspectives.Persistence.Authentication (addCredentials) as Authentication
@@ -94,12 +94,12 @@ import Perspectives.PerspectivesState (clearQueryCache, contextCache, conversati
 import Perspectives.Query.UnsafeCompiler (getPropertyValues, getRoleInstances)
 import Perspectives.Representation.Class.Cacheable (CalculatedRoleType(..), ContextType(..), EnumeratedRoleType(..), cacheEntity)
 import Perspectives.Representation.Class.Identifiable (identifier)
-import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser(..), RoleInstance, Value(..), perspectivesUser2RoleInstance)
+import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser(..), RoleInstance(..), Value(..), perspectivesUser2RoleInstance)
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
 import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..), PropertyType(..), RoleType(..))
 import Perspectives.ResourceIdentifiers (createDefaultIdentifier, resourceIdentifier2DocLocator, resourceIdentifier2WriteDocLocator, takeGuid)
 import Perspectives.RoleAssignment (roleIsMe)
-import Perspectives.SaveUserData (scheduleContextRemoval, setFirstBinding)
+import Perspectives.SaveUserData (scheduleContextRemoval, scheduleRoleRemoval, setFirstBinding, synchronise)
 import Perspectives.SetupCouchdb (contextViewFilter, roleViewFilter, setContext2RoleView, setContextView, setCredentialsView, setFiller2FilledView, setFilled2FillerView, setRoleFromContextView, setRoleView, setRole2ContextView)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable, Stable)
 import Perspectives.Sidecar.ToStable (toStable)
@@ -937,6 +937,9 @@ repository url' = case getFirstMatch (unsafeRegex "^(.*/).+$" noFlags) url' of
   Just s -> pure s
 
 -- | The argument may be a versioned or unversioned modelURI, e.g. model://perspectives.domains#System@1.1.0
+-- | Schedules removal of the model root context, of the model's indexed contexts and roles
+-- | (and of the instances of sys:PerspectivesSystem$IndexedContexts, $IndexedRoles and $StartContexts they fill),
+-- | and finally of the DomeinFile itself. The latter happens at the very end of the transaction.
 removeModelFromLocalStore :: Array String -> RoleInstance -> MonadPerspectivesTransaction Unit
 removeModelFromLocalStore versionedModelURIA rid =
   try
@@ -944,12 +947,49 @@ removeModelFromLocalStore versionedModelURIA rid =
         Just versionedModelURI -> do
           let unversionedURI = unversionedModelUri versionedModelURI
           let cid = createDefaultIdentifier ((unsafePartial modelUri2ManifestUrl unversionedURI).manifestName <> "_modelRootContext")
+          -- Schedule the model root context first, so its on exit runs while the indexed resources are still intact.
           scheduleContextRemoval Nothing [] (ContextInstance cid)
+          scheduleIndexedResourcesRemoval (ModelUri unversionedURI)
           scheduleDomeinFileRemoval (ModelUri unversionedURI)
           lift $ conversationCacheDelete unversionedURI
         _ -> pure unit
     )
     >>= handleExternalStatementError "model://perspectives.domains#RemoveModelFromLocalStore"
+
+-- | Indexed contexts and indexed roles belong to the installation of a model. On removing the model, remove:
+-- |  * each indexed context instance, together with the IndexedContexts and StartContexts role instances in MySystem it fills;
+-- |  * each indexed role instance, together with the IndexedRoles role instances in MySystem it fills.
+-- | This does not retrieve the model from a repository if it is not available locally.
+-- | Never removes the indexed resources of model:System.
+scheduleIndexedResourcesRemoval :: ModelUri Stable -> MonadPerspectivesTransaction Unit
+scheduleIndexedResourcesRemoval modelUri | unwrap modelUri == DEP.systemModelName = pure unit
+scheduleIndexedResourcesRemoval modelUri = (lift $ tryGetPerspectEntiteit modelUri) >>= case _ of
+  Nothing -> pure unit
+  Just (df :: DomeinFile Stable) -> do
+    mysystem <- lift $ ContextInstance <$> getMySystem
+    for_ (keys $ indexedContexts df) \indexedName -> (lift $ lookupIndexedContext indexedName) >>= case _ of
+      Nothing -> pure unit
+      Just indexedContext -> do
+        let external = RoleInstance $ buitenRol (unwrap indexedContext)
+        indexedContextRoles <- lift $ rolesFilledBy mysystem DEP.indexedContext external
+        startContextRoles <- lift $ rolesFilledBy mysystem DEP.startContexts external
+        users <- concat <$> for indexedContextRoles (scheduleRoleRemoval synchronise)
+        for_ startContextRoles (scheduleRoleRemoval synchronise)
+        scheduleContextRemoval
+          (maybe Nothing (const $ Just $ ENR $ EnumeratedRoleType DEP.indexedContext) (head indexedContextRoles))
+          users
+          indexedContext
+    for_ (keys $ indexedRoles df) \indexedName -> (lift $ lookupIndexedRole indexedName) >>= case _ of
+      Nothing -> pure unit
+      Just indexedRole -> do
+        indexedRoleRoles <- lift $ rolesFilledBy mysystem DEP.indexedRole indexedRole
+        for_ indexedRoleRoles (scheduleRoleRemoval synchronise)
+        void $ scheduleRoleRemoval synchronise indexedRole
+  where
+  rolesFilledBy :: ContextInstance -> String -> RoleInstance -> MonadPerspectives (Array RoleInstance)
+  rolesFilledBy ctxt roleType filler = do
+    instances <- ctxt ##= getRoleInstances (ENR $ EnumeratedRoleType roleType)
+    filterA (\r -> (r ##> binding) >>= pure <<< eq (Just filler)) instances
 
 scheduleDomeinFileRemoval :: ModelUri Stable -> MonadPerspectivesTransaction Unit
 scheduleDomeinFileRemoval id = AMA.modify (over Transaction \t@{ modelsToBeRemoved } -> t { modelsToBeRemoved = cons id modelsToBeRemoved })

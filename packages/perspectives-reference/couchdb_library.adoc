@@ -397,11 +397,20 @@ Downloads and installs a model into the local models database. If the model is a
 callEffect cdb:AddModelToLocalStore( ModelName )
 ----
 
+[[couchdb-remove-model-from-local-store]]
 === RemoveModelFromLocalStore
 
 `RemoveModelFromLocalStore( <versionedModelURI> )`
 
-Removes a model from the local models database. Schedules removal of the model's root context and the DomeinFile itself. The argument may be a versioned or unversioned model URI.
+Removes a model from the local installation. Schedules removal of:
+
+* the model's root context (its `on exit` can be used for model-specific cleanup; it runs while the model's indexed resources still exist);
+* each indexed context of the model, together with the instances of `sys:PerspectivesSystem$IndexedContexts` and `sys:PerspectivesSystem$StartContexts` that it fills;
+* each indexed role of the model, together with the instances of `sys:PerspectivesSystem$IndexedRoles` that it fills.
+
+At the very end of the transaction, the DomeinFile itself is removed from the local models database, together with the inverted queries, downstream state notifications and automatic effects that the model contributed to other models. The argument may be a versioned or unversioned model URI.
+
+Other instances of types defined in the model are not removed automatically. Remove them in the `on exit` of a context that is removed (for example with `delete context bound to ...`), otherwise visiting such an instance later will install the model again.
 
 [cols="1,1,4"]
 |===
