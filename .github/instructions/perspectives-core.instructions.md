@@ -239,3 +239,9 @@ The codebase is documented in English, and all comments and documentation should
 
 ## ARC model semantics
 For tasks involving ARC model syntax or behavior—including parser, query, perspective, state, or transaction debugging—consult the detailed reference in [`.github/instructions/arc-language.instructions.md`](arc-language.instructions.md). The reference summarizes model semantics; confirm implementation-sensitive behavior in the cited parser/runtime sources and `docsources`.
+
+### Keep the language reference in sync
+
+When changing user-visible ARC syntax or semantics (including type-checking rules, queries, perspectives, states, assignments, actions, screens, or external functions), update the affected chapters and examples in the [Perspectives Language Reference Manual](../../packages/perspectives-reference/overview.adoc) in the same change. This also applies to bug fixes that change documented behaviour; internal refactors that preserve language behaviour do not require manual changes.
+
+Follow the [perspectives-reference instructions](perspectives-reference.instructions.md) for authoring and validation. Check related lexical rules and keyword documentation when syntax changes, and update the [ARC language instructions](arc-language.instructions.md) if their semantics summary is affected.

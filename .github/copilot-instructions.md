@@ -23,6 +23,7 @@ perspectives-monorepo/
 │   ├── perspectives-utilities/     # PureScript utility functions
 │   ├── perspectives-tcp/           # Node.js TCP/AMQP transaction collection server
 │   ├── perspectives-highlightjs/   # Highlight.js language definition for ARC
+│   ├── perspectives-reference/     # AsciiDoc Perspectives Language Reference Manual
 │   ├── language-perspectives-arcII/# VS Code extension for ARC syntax coloring
 │   ├── purescript-avar-monadask/   # PureScript: AVar in MonadAsk shared memory
 │   ├── purescript-lru-cache/       # PureScript: LRU cache wrapper
@@ -178,6 +179,7 @@ Detailed instructions for each package are in `.github/instructions/`:
 | perspectives-utilities | [perspectives-utilities.instructions.md](instructions/perspectives-utilities.instructions.md) |
 | perspectives-tcp | [perspectives-tcp.instructions.md](instructions/perspectives-tcp.instructions.md) |
 | perspectives-highlightjs | [perspectives-highlightjs.instructions.md](instructions/perspectives-highlightjs.instructions.md) |
+| perspectives-reference | [perspectives-reference.instructions.md](instructions/perspectives-reference.instructions.md) |
 | language-perspectives-arcII | [language-perspectives-arcII.instructions.md](instructions/language-perspectives-arcII.instructions.md) |
 | purescript-avar-monadask | [purescript-avar-monadask.instructions.md](instructions/purescript-avar-monadask.instructions.md) |
 | purescript-lru-cache | [purescript-lru-cache.instructions.md](instructions/purescript-lru-cache.instructions.md) |
