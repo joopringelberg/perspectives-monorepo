@@ -214,6 +214,7 @@ modelSources =
   , { modelUri: "model://joopringelberg.nl#TransactionExecutionTests@1.0", filePath: "src/model/transactionExecutionTests@1.0.arc" }
   , { modelUri: "model://joopringelberg.nl#AMQPtestModel@1.0", filePath: "src/model/AMQPtestModel@1.0.arc" }
   , { modelUri: "model://joopringelberg.nl#AMQPtestSetup@1.0", filePath: "src/model/AMQPtestSetup@1.0.arc" }
+  , { modelUri: "model://joopringelberg.nl#UninstallTarget@1.0", filePath: "src/model/uninstallTarget@1.0.arc" }
   ]
 
 -- | Directory where the PDR snapshot is cached between test runs.

@@ -29,6 +29,8 @@
 -- | `snapshotDirectory`.  That snapshot can subsequently be used by
 -- | `withPDRCached` to start PDR instances without paying the model
 -- | installation cost.
+-- | Patch sources and the complete model inventory are documented in
+-- | `test/patches/README.md`.
 -- |
 -- | Run with:
 -- | pnpm run create:universeSnapshot
@@ -183,7 +185,7 @@ main = launchAff_ do
           runMonadPerspectivesTransaction' shareWithPeers (ENR $ EnumeratedRoleType sysUser)
             (addModelToLocalStore_ [ modelUri ] (RoleInstance "Ignored"))
 
-      -- Now patch CouchdbManagement and RepositoryRegistry and recompile locally.
+      -- Patch installed models from current local sources and recompile locally.
       runInPDR pdr do
         -- patchModels and recompileLocalModel log on the UPGRADE topic.
         setTopicLogLevel UPGRADE Debug
@@ -195,6 +197,9 @@ main = launchAff_ do
           , Tuple "model://joopringelberg.nl#AMQPtestModel" amqptestmodel
           , Tuple "model://joopringelberg.nl#AMQPtestSetup" amqptestsetup
           , Tuple "model://perspectives.domains#BrokerServices" brokerservices
+          , Tuple "model://joopringelberg.nl#UninstallTarget" uninstalltarget
+          , Tuple "model://joopringelberg.nl#TransactionExecutionTests" transactionexecutiontests
+          , Tuple "model://joopringelberg.nl#TwoPDRDestructiveTests" twopdrdestructivetests
           ]
         for_
           [ "model://perspectives.domains#System"
@@ -203,6 +208,9 @@ main = launchAff_ do
           , "model://joopringelberg.nl#AMQPtestModel"
           , "model://joopringelberg.nl#AMQPtestSetup"
           , "model://perspectives.domains#BrokerServices"
+          , "model://joopringelberg.nl#UninstallTarget"
+          , "model://joopringelberg.nl#TransactionExecutionTests"
+          , "model://joopringelberg.nl#TwoPDRDestructiveTests"
           ]
           \modelUri -> do
             success <- recompileLocalModel (ModelUri modelUri)
@@ -219,3 +227,6 @@ foreign import amqptestmodel :: String
 foreign import amqptestsetup :: String
 foreign import brokerservices :: String
 foreign import system :: String
+foreign import uninstalltarget :: String
+foreign import transactionexecutiontests :: String
+foreign import twopdrdestructivetests :: String
