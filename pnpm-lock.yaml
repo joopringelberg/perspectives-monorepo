@@ -553,6 +553,24 @@ importers:
         specifier: ^5.14.0
         version: 5.14.0(rollup@4.44.0)
 
+  packages/perspectives-reference:
+    devDependencies:
+      '@rollup/plugin-commonjs':
+        specifier: ^28.0.6
+        version: 28.0.6(rollup@4.44.0)
+      '@rollup/plugin-node-resolve':
+        specifier: ^16.0.1
+        version: 16.0.1(rollup@4.44.0)
+      highlight.js:
+        specifier: ^11.11.1
+        version: 11.11.1
+      perspectives-highlightjs:
+        specifier: workspace:*
+        version: link:../perspectives-highlightjs
+      rollup:
+        specifier: ^4.44.0
+        version: 4.44.0
+
   packages/perspectives-sharedfilestorage:
     dependencies:
       '@paralleldrive/cuid2':

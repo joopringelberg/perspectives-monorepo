@@ -30,6 +30,7 @@ callExternal sensor:ReadSensor( "clock", "now" ) returns DateTime
 |Device |Sensor | Explanation
 
 |`clock`|`now`|Returns the current date and time as a `DateTime` value.
+|`clock`|`today`|Returns the current date as a `Date` value.
 |`contextcache`|`size`|Returns the number of context instances currently held in the context cache.
 |`rolecache`|`size`|Returns the number of role instances currently held in the role cache.
 |`domaincache`|`size`|Returns the number of domain files currently held in the domain cache.
