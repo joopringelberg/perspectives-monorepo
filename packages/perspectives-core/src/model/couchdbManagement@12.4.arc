@@ -593,7 +593,7 @@ domain model://perspectives.domains#CouchdbManagement@12.4
     user CBAdmin = extern >> binder BespokeDatabases >> context >> Admin
       perspective on External
         props (DatabaseLocation, Endorsed, DatabaseName) verbs (Consult, SetPropertyValue)
-        props (BaseUrl, Name) verbs (Consult)
+        props (Public, BaseUrl, Name) verbs (Consult)
       perspective on Owner
         all roleverbs
         props (LastName) verbs (Consult)
