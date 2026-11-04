@@ -3,6 +3,8 @@
   "private": true,
   "version": "0.1.0",
   "description": "POC: standalone Monaco-based ARC editor that shares the MyContexts SharedWorker/PDR.",
+  "author": "Joop Ringelberg",
+  "license": "UNLICENSED",
   "type": "module",
   "scripts": {
     "build": "pnpm --filter perspectives-proxy run build && pnpm exec tsc --noEmit && vite build",

@@ -89,3 +89,10 @@ Every jump (to a definition, a reference or a member) is recorded in a navigatio
 - **SharedWorker required.** In page-hosted mode (Safari/iOS/Android) MyContexts has no SharedWorker. In that case the launch parameters are missing or unusable, and the editor shows an error.
 - **Same origin required.** The editor must be served from the same origin as MyContexts.
 - **Verification.** Verification in the cloud environment used only unit tests and a browser smoke test against a fake SharedWorker that speaks the proxy protocol. That test covered load, edit, save and feedback, and confirmed that a second page on the same worker sees the update. No real PDR, CouchDB or model compilation was exercised.
+
+## License
+
+The original contents of this package are proprietary and all rights are
+reserved by Joop Ringelberg. No license to use, copy, modify, or distribute
+those contents is granted. Third-party dependencies and materials remain
+subject to their respective licenses. See [LICENSE](./LICENSE).
