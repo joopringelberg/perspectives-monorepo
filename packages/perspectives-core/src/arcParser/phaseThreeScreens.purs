@@ -57,7 +57,7 @@ import Perspectives.Representation.Class.PersistentType (getCalculatedRole, getE
 import Perspectives.Representation.Class.Property (hasFacet, rangeOfPropertyType)
 import Perspectives.Representation.Class.Role (allProperties, displayName, perspectivesOfRoleType, roleADTOfRoleType, roleTypeIsFunctional)
 import Perspectives.Representation.ExplicitSet (ExplicitSet(..), elements_)
-import Perspectives.Representation.Perspective (Perspective(..), perspectiveSupportsProperty, perspectiveSupportsRoleVerbs)
+import Perspectives.Representation.Perspective (Perspective(..), PropertyVerbs(..), perspectiveSupportsProperty, perspectiveSupportsRoleVerbs)
 import Perspectives.Representation.Range (Range(..))
 import Perspectives.Representation.ScreenDefinition (ChatDef(..), ColumnDef(..), FieldConstraintDef, FormDef(..), MarkDownDef(..), PropertyRestrictions, PropertyValueFillers, RowDef(..), ScreenDefinition(..), ScreenElementDef(..), ScreenKey(..), ScreenMap, TabDef(..), TableDef(..), TableFormDef(..), TableFormOrWhenDef(..), TypeAheadFillerDef(..), TypeAheadFormDef(..), What(..), WhenDef(..), WhenTableFormDef(..), WhereTo(..), Who(..), WhoWhatWhereScreenDef(..), WidgetCommonFieldsDef)
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..), optimistic, pessimistic)
@@ -458,10 +458,15 @@ handleScreens screenEs = do
       -> Array PropertyType
       -> LIST.List { propertyName :: String, position :: ArcPosition }
       -> PhaseThree Unit
-    warnOnPropertiesOutsidePerspective perspective' included properties =
+    warnOnPropertiesOutsidePerspective (Perspective perspective') included properties = do
+      -- Inherited perspectives can contain stable property IDs; screen selections are readable.
+      readablePropertyVerbs <- lift2 $ traverse
+        (traverse (\(PropertyVerbs props verbs) -> PropertyVerbs <$> traverse toReadable props <*> pure verbs))
+        perspective'.propertyVerbs
+      let readablePerspective = Perspective perspective' { propertyVerbs = readablePropertyVerbs }
       for_ (zip (fromFoldable properties) included)
         \(Tuple { propertyName, position: ArcPosition { line, column } } propertyType) ->
-          if perspectiveSupportsProperty perspective' propertyType then pure unit
+          if perspectiveSupportsProperty readablePerspective propertyType then pure unit
           else
             lift2 $ addWarning
               { message: "This user does not have a perspective that includes '" <> propertyName <> "', in line " <> show line <> " column " <> show column

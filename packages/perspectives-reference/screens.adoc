@@ -378,6 +378,8 @@ table Peers
 
 A form, table or master-detail screen is based on the perspective a user role has on a particular role in the context (including itself). However, the perspective of a user role on a particular role may include many properties and verbs that are not relevant for the screen. In such cases, it is useful to be able to refine the perspective to include only the relevant properties and verbs.
 
+Perspectives inherited through role aspects are included, also when the aspects are defined in an imported model and their object roles are specialised in the current context. A `with props` selection does not grant additional access: the compiler warns if a selected property is not included in the applicable perspective.
+
 ==== Refining properties and verbs for a form or table
 
 When refining for a form or table, we can either

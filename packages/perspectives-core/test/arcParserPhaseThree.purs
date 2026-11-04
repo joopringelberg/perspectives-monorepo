@@ -8,41 +8,48 @@ import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.List (List(..))
 import Data.Maybe (Maybe(..))
+import Data.String (Pattern(..), contains)
 import Data.Tuple (Tuple(..))
+import Effect (Effect)
 import Effect.Aff (Aff)
 import Effect.Aff.Class (liftAff)
 import Effect.Class.Console (logShow)
-import Foreign.Object (keys, lookup)
+import Foreign.Object (empty, insert, keys, lookup)
 import Node.Encoding as ENC
 import Node.FS.Aff (readTextFile)
 import Node.Path as Path
 import Parsing (ParseError)
 import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.DomeinCache (removeDomeinFileFromCache, storeDomeinFileInCache)
-import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord)
+import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, defaultDomeinFileRecord)
 import Perspectives.External.CoreModules (addAllExternalFunctions)
 import Perspectives.Identifiers (Namespace)
+import Perspectives.ModelDependencies.Readable (chatAspect)
 import Perspectives.Parsing.Arc (domain) as ARC
 import Perspectives.Parsing.Arc.AST (ContextE(..))
 import Perspectives.Parsing.Arc.IndentParser (runIndentParser)
 import Perspectives.Parsing.Arc.PhaseThree (phaseThree)
 import Perspectives.Parsing.Arc.PhaseTwo (traverseDomain)
-import Perspectives.Parsing.Arc.PhaseTwoDefs (runPhaseTwo', toStableDomeinFile)
+import Perspectives.Parsing.Arc.PhaseTwoDefs (runPhaseTwo', runPhaseTwo_', toStableDomeinFile)
+import Perspectives.Parsing.Arc.PhaseThree.Screens (handleScreens)
+import Perspectives.Parsing.Arc.Position (arcParserStartPosition)
+import Perspectives.PerspectivesState (getWarnings)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), RoleInContext(..), queryFunction, range)
 import Perspectives.Representation.ADT (ADT(..), equalsOrSpecialises_)
 import Perspectives.Representation.Action (effectOfAction)
 import Perspectives.Representation.CNF (toConjunctiveNormalForm)
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
-import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
+import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..), defaultEnumeratedRole)
+import Perspectives.Representation.EnumeratedProperty (EnumeratedProperty(..))
 import Perspectives.Representation.ExplicitSet (ExplicitSet(..))
-import Perspectives.Representation.Perspective (Perspective(..), StateSpec(..))
+import Perspectives.Representation.Perspective (Perspective(..), PropertyVerbs(..), StateSpec(..), perspectiveSupportsProperty)
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
 import Perspectives.Representation.QueryFunction (QueryFunction(..)) as QF
 import Perspectives.Representation.Range (Range(..))
 import Perspectives.Representation.Class.PersistentType (getEnumeratedRole)
 import Perspectives.Representation.Class.Role (completeDeclaredType, completeExpandedType, declaredType, expandUnexpandedLeaves, toConjunctiveNormalForm_)
-import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), StateIdentifier(..), propertytype2string)
+import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleKind(UserRole), RoleType(..), StateIdentifier(..), propertytype2string)
 import Perspectives.Representation.Verbs (PropertyVerb(..))
 import Perspectives.Representation.View (View(..))
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable)
@@ -50,6 +57,7 @@ import Test.Parsing.DomeinFileSelectors (ensureCRole, ensureDescription, ensureE
 import Test.Perspectives.Utils (runP)
 import Test.Unit (Test, TestF, TestSuite, suite, test, testOnly)
 import Test.Unit.Assert (assert)
+import Test.Unit.Main (runTest)
 
 withDomeinFile :: forall a. Namespace -> DomeinFile Readable -> MonadPerspectives a -> MonadPerspectives a
 withDomeinFile ns df mpa = do
@@ -126,10 +134,104 @@ recursiveFillerComparisonSuite = test "Recursive filler matching uses the filler
                     liftAff $ assert "Employee itself is not a Person for recursive filler matching." (not $ employeeType `equalsOrSpecialises_` personType)
                     liftAff $ assert "An Employee filled by a Person would match Person only via its runtime filler chain." (employeeRuntimeType `equalsOrSpecialises_` personType)
 
+inheritedScreenPropertiesSuite :: Free TestF Unit
+inheritedScreenPropertiesSuite = suite "Inherited screen properties" do
+  for_
+    [ { stable: false, property: "LastName", expectedWarnings: 0 }
+    , { stable: true, property: "LastName", expectedWarnings: 0 }
+    , { stable: true, property: "PrivateName", expectedWarnings: 1 }
+    ]
+    \{ stable, property, expectedWarnings } -> test ("Screen selects " <> property <> " from an inherited perspective (stable IDs: " <> show stable <> ")") do
+      let
+        model = "model://example.org#MyTestDomain"
+        lastName = EnumeratedPropertyType (model <> "$Body$Admin$LastName")
+        stableLastName = EnumeratedPropertyType (model <> "$lastNameCuid")
+        source = "domain " <> model <> "\n"
+          <> "  case Body\n"
+          <> "    user Admin\n"
+          <> "      property LastName (String)\n"
+          <> "      property PrivateName (String)\n"
+          <> "    user Accounts\n"
+          <> "      perspective on Admin\n"
+          <> "        props (LastName) verbs (Consult)\n"
+          <> "  case Repository\n"
+          <> "    user Admin\n"
+          <> "      aspect "
+          <> model
+          <> "$Body$Admin\n"
+          <> "    user Authors\n"
+          <> "      aspect "
+          <> model
+          <> "$Body$Accounts\n"
+          <> "      screen\n"
+          <> "        who\n"
+          <> "          Admin\n"
+          <> "            master\n"
+          <> "              with props ("
+          <> property
+          <> ")\n"
+          <> "            detail\n"
+          <> "        what\n"
+          <> "          row\n"
+          <> "            markdown <Repository>\n"
+          <> "        where\n"
+      parsed <- runIndentParser source ARC.domain
+      case parsed of
+        Left err -> assert (show err) false
+        Right root -> do
+          Tuple result state <- runPhaseTwo' (traverseDomain root)
+          case result of
+            Left err -> assert (show err) false
+            Right (DomeinFile df) -> do
+              compiled <- runP $ phaseThree df state.postponedStateQualifiedParts Nil
+              case compiled of
+                Left err -> assert (show err) false
+                Right (Tuple corrected _) -> do
+                  author@(EnumeratedRole authorRecord) <- ensureERole (model <> "$Repository$Authors") corrected
+                  (EnumeratedProperty lastNameRecord) <- ensureEnumeratedProperty (model <> "$Body$Admin$LastName") corrected
+                  let
+                    -- Model the stable property IDs carried by an imported aspect perspective.
+                    stablePerspective (Perspective p) = Perspective p
+                      { propertyVerbs = p.propertyVerbs <#> map
+                          (\(PropertyVerbs props verbs) -> PropertyVerbs (props <#> \prop -> if prop == ENP lastName then ENP stableLastName else prop) verbs)
+                      }
+                    author' = if stable then EnumeratedRole authorRecord { perspectives = map stablePerspective authorRecord.perspectives } else author
+                    properties = if stable then insert (model <> "$lastNameCuid") (EnumeratedProperty lastNameRecord { id = stableLastName }) corrected.enumeratedProperties else corrected.enumeratedProperties
+                    screenDF = corrected
+                      { enumeratedRoles = insert (model <> "$Repository$Authors") author' corrected.enumeratedRoles
+                      , enumeratedProperties = properties
+                      }
+                  assert "Authors inherits the LastName permission on Admin" $
+                    case head authorRecord.perspectives of
+                      Nothing -> false
+                      Just p -> perspectiveSupportsProperty p (ENP lastName)
+                  Tuple screenResult warnings <- runP do
+                    -- Who/what/where screens check their objects against System's Chat aspect.
+                    let systemModel = "model://perspectives.domains#System"
+                    void $ storeDomeinFileInCache (ModelUri systemModel) $ DomeinFile
+                      ( defaultDomeinFileRecord
+                          { id = ModelUri systemModel
+                          , namespace = ModelUri systemModel
+                          , enumeratedRoles = insert chatAspect (defaultEnumeratedRole chatAspect "Chat" UserRole systemModel arcParserStartPosition) empty
+                          }
+                      )
+                    Tuple screenResult _ <- runPhaseTwo_' (handleScreens state.screens) screenDF empty empty Nil
+                    warnings <- getWarnings
+                    pure $ Tuple screenResult warnings
+                  case screenResult of
+                    Left err -> assert (show err) false
+                    Right _ -> do
+                      let relevant = filter (contains (Pattern "does not have a perspective that includes") <<< _.message) warnings
+                      assert ("Unexpected screen warnings: " <> show relevant) (length relevant == expectedWarnings)
+
+main :: Effect Unit
+main = runTest inheritedScreenPropertiesSuite
+
 theSuite :: Free TestF Unit
 theSuite = suite "Perspectives.Parsing.Arc.PhaseThree" do
   completeTypeNormalisationSuite
   recursiveFillerComparisonSuite
+  inheritedScreenPropertiesSuite
 
   test "Testing qualifyActionRoles." do
     (r :: Either ParseError ContextE) <- {-pure $ unwrap $-}  runIndentParser "domain model://example.org#MyTestDomain\n  thing Role (mandatory) filledBy YetAnotherRole\n  thing AnotherRole = Role >> binding\n  thing YetAnotherRole (mandatory)\n  user SomeUser\n    perspective on AnotherRole\n      all roleverbs" ARC.domain
