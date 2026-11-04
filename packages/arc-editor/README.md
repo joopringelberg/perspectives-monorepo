@@ -30,6 +30,8 @@ pnpm -F arc-editor build                 # dist/, base = <mycontexts buildPath>a
 pnpm -F arc-editor build:into-mycontexts # copy into ../mycontexts/dist/arceditor
 ```
 
+MyContexts' `publish:www` and `publish:root` scripts also run `build:into-mycontexts` after building MyContexts and before uploading, with `BUILD_PATH=/www/` and `BUILD_PATH=/` respectively.
+
 `BUILD_PATH` overrides the base path; for example, use `BUILD_PATH=/` for the MyContexts dev server and copy `dist` to `mycontexts/public/arceditor`. Then:
 
 1. Serve MyContexts with the editor under `arceditor/`.
