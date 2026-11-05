@@ -2,6 +2,26 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "label": "publish:www mycontexts",
+      "type": "shell",
+      "command": "pnpm run publish:www",
+      "options": {
+        "cwd": "${workspaceFolder:mycontexts}"
+      },
+      "group": "build",
+      "problemMatcher": ["$tsc"]
+    },
+    {
+      "label": "build arc-editor",
+      "type": "shell",
+      "command": "pnpm run build",
+      "options": {
+        "cwd": "${workspaceFolder:arc-editor}"
+      },
+      "group": "build",
+      "problemMatcher": ["$tsc"]
+    },
+    {
       "label": "build perspectives-reference",
       "type": "shell",
       "command": "pnpm --filter perspectives-reference... build",

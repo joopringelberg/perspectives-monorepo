@@ -4,6 +4,9 @@
 			"path": "packages/perspectives-core"
 		},
 		{
+			"path": "packages/arc-editor"
+		},
+		{
 			"path": "packages/perspectives-apitypes"
 		},
 		{
