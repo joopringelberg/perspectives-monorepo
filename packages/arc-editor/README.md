@@ -70,7 +70,7 @@ The mitigations:
 - `perspectives/perspectivesOn {textDocument, position}`: `{target, kind, users}`: one entry per perspective, in every open document, of a user role on the role or property under the cursor (a perspective on a role, or a perspective whose `props`/`view` cover the property; `props` without a list covers all properties of the object). Each `location` is the start of that perspective. The editor exposes this as the context menu actions *Show User Roles With a Perspective on Role* and *... on Property*, listed in the side panel.
 - `perspectives/modelSource {uri}`: returns the ARC source of an installed model for `perspectives-model:<model uri>` locations. The editor shows that source read-only.
 
-Every jump (to a definition, a reference or a member) is recorded in a navigation history. Use the Back/Forward buttons or Alt+Left/Alt+Right to move through it.
+Every jump (to a definition, a reference, a member or a positioned feedback message) is recorded in a navigation history. Use the Back/Forward buttons or Alt+Left/Alt+Right to move through it.
 
 **Limitations.**
 - The whole file is re-parsed and re-compiled on every (debounced) change.
@@ -83,6 +83,11 @@ Every jump (to a definition, a reference or a member) is recorded in a navigatio
 - **Folding** is indentation based: every indented block (type, perspective and state declarations, `on entry`/`on exit`, `screen`, `who`/`what`/`where` and their roles, `markdown`, `tab`/`table`/`form`, `master`/`detail`) can be folded.
 - **Find** (Ctrl/Cmd+F) searches the exact text, with *Match Case* and *Match Whole Word* options.
 - **Jump to Context of Role** (context menu) moves to the context that lexically encloses the role under the cursor; for an aspect role, that is the context the aspect is added to.
+- **Resizable feedback pane:** drag the divider above ArcFeedback. With the divider focused, Up/Down resize by 20 pixels; Home/End choose the smallest/largest height. Both panes retain usable space, subject to the available window height.
+- **Feedback navigation:** click a message containing `line N, column N`, or focus it with Tab and press Enter/Space, to focus the main source at that one-based position. Ranges jump to their start; positions beyond the current source are clamped to valid editor positions. All feedback property values are displayed. Messages without source coordinates remain plain text; the editor does not invent a location for them. Feedback describes the last compilation, so unsaved edits may make its positions stale.
+- **Navigation shortcuts:** see the [inventory of active shortcuts and unloaded Monaco navigation features](navigation-shortcuts.md), including macOS/Windows/Linux differences and navigation-history limitations.
+- **Cursor undo/redo:** Cmd/Ctrl+U undoes the last cursor movement; Cmd/Ctrl+R redoes it while the editor text has focus. This is separate from Back/Forward jump history and resets when the text changes or another model is opened.
+- **Command palette:** press F1 while the editor has focus to search and run available editor commands, including commands without keyboard shortcuts.
 
 ## Limitations
 

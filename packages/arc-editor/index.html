@@ -17,17 +17,20 @@
       <button id="save" type="button" disabled title="Save (Ctrl/Cmd+S)">Save</button>
     </header>
     <div id="notice" role="alert" hidden></div>
-    <div id="workspace">
-      <main id="editor"></main>
-      <aside id="membersPanel" hidden aria-label="Members">
-        <h2><span id="membersTitle"></span> <button id="membersClose" type="button" title="Close">×</button></h2>
-        <ul id="membersList"></ul>
-      </aside>
+    <div id="panes">
+      <div id="workspace">
+        <main id="editor"></main>
+        <aside id="membersPanel" hidden aria-label="Members">
+          <h2><span id="membersTitle"></span> <button id="membersClose" type="button" title="Close">×</button></h2>
+          <ul id="membersList"></ul>
+        </aside>
+      </div>
+      <div id="feedbackSplitter" role="separator" tabindex="0" aria-label="Resize feedback pane" aria-orientation="horizontal" aria-controls="feedbackPanel" title="Drag to resize feedback; use Up/Down, Home/End when focused"></div>
+      <section id="feedbackPanel" aria-label="ArcFeedback">
+        <h2>ArcFeedback <span id="feedbackKind" class="badge"></span></h2>
+        <pre id="feedback">No feedback yet.</pre>
+      </section>
     </div>
-    <section id="feedbackPanel" aria-label="ArcFeedback">
-      <h2>ArcFeedback <span id="feedbackKind" class="badge"></span></h2>
-      <pre id="feedback">No feedback yet.</pre>
-    </section>
     <script type="module" src="./src/main.ts"></script>
   </body>
 </html>

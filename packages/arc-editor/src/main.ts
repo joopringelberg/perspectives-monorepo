@@ -9,12 +9,16 @@ import "monaco-editor/esm/vs/editor/standalone/browser/referenceSearch/standalon
 import "monaco-editor/esm/vs/editor/contrib/folding/browser/folding";
 import "monaco-editor/esm/vs/editor/contrib/find/browser/findController";
 import "monaco-editor/esm/vs/editor/contrib/suggest/browser/suggestController";
+import "monaco-editor/esm/vs/editor/contrib/cursorUndo/browser/cursorUndo";
+import "monaco-editor/esm/vs/editor/standalone/browser/quickAccess/standaloneCommandsQuickAccess";
 import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import { configurePDRproxy, PDRproxy, SharedWorkerChannelPromise } from "perspectives-proxy";
 import { ARC_LANGUAGE_ID, ARC_TAB_SIZE, arcLanguageConfiguration, arcMonarchLanguage } from "./arcLanguage.ts";
 import { parseLaunchParams } from "./launchParams.ts";
 import { diagnosticToMarker, DocumentSync, localTypeName, LspClient, lspRangeToRange, modelUriOfSourceUri, type LspCompletionList, type LspDiagnostic, type LspLocation, type LspMembers, type LspPerspectivesOn } from "./lspClient.ts";
 import { NavigationHistory } from "./navigation.ts";
+import { feedbackEntries } from "./feedback.ts";
+import { setupFeedbackSplitter } from "./feedbackSplitter.ts";
 import { enclosingContextOfRole } from "./structure.ts";
 import { classifyFeedback, ManifestSession, type ProxyLike, type WatchedProperty } from "./manifestSession.ts";
 
@@ -63,6 +67,12 @@ const editor = monaco.editor.create($("editor"), {
   wordBasedSuggestions: "off",
 });
 mainModel.updateOptions({ tabSize: ARC_TAB_SIZE, insertSpaces: true });
+monaco.editor.addKeybindingRules([{
+  keybinding: monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyR,
+  command: "cursorRedo",
+  when: "editorTextFocus",
+}]);
+setupFeedbackSplitter($("panes"), $("feedbackSplitter"), $("feedbackPanel"));
 
 let savedSource: string | undefined;   // The source as last loaded from / saved to the PDR.
 let saving = false;
@@ -377,7 +387,24 @@ function onPropertyChange(prop: WatchedProperty) {
     }
     case "ArcFeedback": {
       const kind = classifyFeedback(s.ArcFeedback);
-      $("feedback").textContent = s.ArcFeedback || "No feedback yet.";
+      const feedback = $("feedback");
+      feedback.replaceChildren();
+      for (const entry of feedbackEntries(s.ArcFeedback || "No feedback yet.")) {
+        const position = entry.position;
+        if (!position) { feedback.append(document.createTextNode(entry.text)); continue; }
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = entry.text;
+        button.title = `Go to line ${position.lineNumber}, column ${position.column}`;
+        button.addEventListener("click", () => {
+          const target = mainModel.validatePosition(position);
+          showModel(mainModel, {
+            startLineNumber: target.lineNumber, startColumn: target.column,
+            endLineNumber: target.lineNumber, endColumn: target.column,
+          });
+        });
+        feedback.append(button);
+      }
       badge("feedbackKind", { none: "", busy: "processing…", ok: "OK", error: "errors" }[kind], kind);
       break;
     }

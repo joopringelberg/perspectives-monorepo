@@ -94,3 +94,13 @@ test("feedback classification", () => {
   assert.equal(classifyFeedback("OK. Model compiled"), "ok");
   assert.equal(classifyFeedback("(ParserError) line 3 ..."), "error");
 });
+
+test("all ArcFeedback values are retained, and clearing feedback removes them", async () => {
+  const errors = ["(UnknownRole) line 3, column 5", "(UnknownProperty) line 8, column 7"];
+  const f = fakeProxy({ ArcFeedback: errors });
+  const s = new ManifestSession(f.proxy, params());
+  await s.subscribe(() => {}, () => {});
+  assert.equal(s.state.ArcFeedback, errors.join("\n"));
+  f.receivers[externalProperty(params(), "ArcFeedback")]([]);
+  assert.equal(s.state.ArcFeedback, undefined);
+});

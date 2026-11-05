@@ -11,7 +11,8 @@ body { display: flex; flex-direction: column; }
 .error { background: #ffc9c9; }
 #notice { padding: .5em .8em; background: #ffe0e0; border-bottom: 1px solid #e99; white-space: pre-wrap; }
 #notice.info { background: #eef4ff; border-color: #9bd; }
-#workspace { flex: 1; min-height: 0; display: flex; }
+#panes { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+#workspace { flex: 1; min-height: 0; display: flex; overflow: hidden; }
 #editor { flex: 1; min-width: 0; }
 #membersPanel { width: 18em; overflow: auto; border-left: 1px solid #ccc; padding: 0 .6em; font-size: 13px; }
 #membersPanel[hidden] { display: none; }
@@ -21,6 +22,13 @@ body { display: flex; flex-direction: column; }
 #membersList button { background: none; border: none; padding: 0; color: #0645ad; cursor: pointer; font: inherit; }
 #membersList button:disabled { color: #777; cursor: default; }
 #membersList .origin { color: #777; font-size: 12px; }
-#feedbackPanel { height: 22%; overflow: auto; border-top: 1px solid #ccc; padding: 0 .8em; }
+#feedbackSplitter { flex: 0 0 6px; background: #eee; border-top: 1px solid #ccc; box-sizing: border-box; cursor: row-resize; touch-action: none; }
+#feedbackSplitter:hover, #feedbackSplitter:focus-visible { background: #9bd; outline: 2px solid #0645ad; outline-offset: -2px; }
+#panes.resizing { cursor: row-resize; user-select: none; }
+#panes.resizing #workspace { pointer-events: none; }
+#feedbackPanel { flex: 0 0 22%; min-height: 0; overflow: auto; box-sizing: border-box; padding: 0 .8em; }
 #feedbackPanel h2 { font-size: 14px; margin: .4em 0; }
 #feedback { margin: 0; white-space: pre-wrap; font-size: 12px; }
+#feedback button { display: block; width: 100%; text-align: left; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; color: #0645ad; background: none; border: 0; padding: 0; cursor: pointer; }
+#feedback button:hover { text-decoration: underline; }
+#feedback button:focus-visible { outline: 2px solid #0645ad; outline-offset: -2px; }

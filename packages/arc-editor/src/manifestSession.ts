@@ -39,7 +39,10 @@ export class ManifestSession {
         this.params.manifest,
         externalProperty(this.params, prop),
         this.params.externalRoleType,
-        values => { this.state = { ...this.state, [prop]: values[0] }; onChange(prop, this.state); },
+        values => {
+          this.state = { ...this.state, [prop]: prop === "ArcFeedback" && values.length ? values.join("\n") : values[0] };
+          onChange(prop, this.state);
+        },
         false,
         e => onError(prop, e))
         .then(u => { this.unsubscribers.push(u); })
