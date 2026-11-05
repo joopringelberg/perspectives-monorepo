@@ -6,6 +6,16 @@ check of the editor's resolved macOS keybindings. This is the standalone ARC
 editor, not VS Code: VS Code workbench shortcuts are not automatically available.
 The inventory includes the explicitly enabled cursor undo/redo and command palette.
 
+## Selection editing
+
+| Operation | macOS | Windows / Linux |
+|---|---|---|
+| Toggle `--` line comments on selected lines (or the current line) | Cmd+/ | Ctrl+/ |
+| Indent selected lines by two spaces | Tab | Tab |
+| Outdent selected lines | Shift+Tab | Shift+Tab |
+
+Comment commands are also available from the F1 command palette.
+
 On macOS, Alt means Option. Function keys may require Fn, and the browser or OS
 can intercept a shortcut before Monaco receives it. Chords separated by a comma
 are pressed in sequence. Unless stated otherwise, the editor must have focus.
@@ -15,6 +25,8 @@ are pressed in sequence. Unless stated otherwise, the editor must have focus.
 | Movement | macOS | Windows / Linux |
 |---|---|---|
 | Character left/right; visual line up/down | Arrow keys | Arrow keys |
+| Previous/next word | Option+Left/Right | Ctrl+Left/Right |
+| Select to previous/next word | Shift+Option+Left/Right | Ctrl+Shift+Left/Right |
 | Additional single-step bindings | Ctrl+B/F (left/right), Ctrl+P/N (up/down) | None |
 | First non-whitespace column / start of line (Home behaviour) | Home or Cmd+Left | Home |
 | End of line | End or Cmd+Right | End |
@@ -53,7 +65,7 @@ Scrolling is separate from moving the cursor:
 | Close references peek / Find / diagnostic widget | Escape | Escape |
 | Next/previous live diagnostic in the current file | Option+F8 / Option+Shift+F8 | Alt+F8 / Alt+Shift+F8 |
 | Next/previous live diagnostic, including other loaded models | F8 / Shift+F8 | F8 / Shift+F8 |
-| ARC jump-history back/forward | Option+Left / Option+Right | Alt+Left / Alt+Right |
+| ARC jump-history back/forward | Cmd+Option+Left / Cmd+Option+Right | Alt+Left / Alt+Right |
 
 Definition/reference navigation requires an available PDR language server.
 Cmd/Ctrl+click also follows definitions. The definition-to-side chord
@@ -97,7 +109,6 @@ The editor uses `editor.api` plus selected contributions, not Monaco's full
 
 | Feature | Monaco default macOS shortcut | Monaco default Windows / Linux shortcut | What is missing |
 |---|---|---|---|
-| Previous/next word, including Shift selection variants | Option+Left/Right | Ctrl+Left/Right | `wordOperations` |
 | Previous/next word part (camelCase/subword), including Shift variants | Ctrl+Option+Left/Right | No default binding | `wordPartOperations` |
 | Jump to matching bracket | Cmd+Shift+Backslash | Ctrl+Shift+Backslash | `bracketMatching` |
 | Go to line/column input | Ctrl+G | Ctrl+G | `standaloneGotoLineQuickAccess` |
@@ -106,9 +117,10 @@ The editor uses `editor.api` plus selected contributions, not Monaco's full
 | Next/previous highlighted symbol occurrence | F7 / Shift+F7 | F7 / Shift+F7 | `wordHighlighter`; an ARC document-highlight provider is needed for semantic highlighting |
 | Add cursor above/below, select next occurrence | Cmd+Option+Up/Down; Cmd+D | Ctrl+Alt+Up/Down; Ctrl+D (Linux add-cursor: Alt+Shift+Up/Down) | `multicursor` |
 
-**Important conflict:** Option+Left/Right currently belongs to ARC Back/Forward
-on macOS. Enabling standard word movement requires choosing different history
-shortcuts or otherwise resolving that conflict, not just importing the module.
+On macOS, ARC Back/Forward uses Cmd+Option+Left/Right so that Option+Left/Right
+remains available for standard word movement. The enabled `wordOperations`
+contribution also registers standard word deletion: Option+Backspace/Delete on
+macOS, Ctrl+Backspace/Delete on Windows/Linux.
 
 Go to/peek **declaration**, **type definition**, and **implementation** are
 registered by the already-loaded symbol-navigation contribution, but are

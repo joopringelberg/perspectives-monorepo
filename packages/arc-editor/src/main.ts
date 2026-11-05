@@ -10,6 +10,8 @@ import "monaco-editor/esm/vs/editor/contrib/folding/browser/folding";
 import "monaco-editor/esm/vs/editor/contrib/find/browser/findController";
 import "monaco-editor/esm/vs/editor/contrib/suggest/browser/suggestController";
 import "monaco-editor/esm/vs/editor/contrib/cursorUndo/browser/cursorUndo";
+import "monaco-editor/esm/vs/editor/contrib/comment/browser/comment";
+import "monaco-editor/esm/vs/editor/contrib/wordOperations/browser/wordOperations";
 import "monaco-editor/esm/vs/editor/standalone/browser/quickAccess/standaloneCommandsQuickAccess";
 import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import { configurePDRproxy, PDRproxy, SharedWorkerChannelPromise } from "perspectives-proxy";
@@ -166,8 +168,12 @@ function goForward() {
 
 $("back").addEventListener("click", goBack);
 $("forward").addEventListener("click", goForward);
-editor.addCommand(monaco.KeyMod.Alt | monaco.KeyCode.LeftArrow, goBack);
-editor.addCommand(monaco.KeyMod.Alt | monaco.KeyCode.RightArrow, goForward);
+const isMacintosh = navigator.userAgent.includes("Macintosh");
+const historyModifiers = monaco.KeyMod.Alt | (isMacintosh ? monaco.KeyMod.CtrlCmd : 0);
+editor.addCommand(historyModifiers | monaco.KeyCode.LeftArrow, goBack);
+editor.addCommand(historyModifiers | monaco.KeyCode.RightArrow, goForward);
+$("back").title = `Back (${isMacintosh ? "Cmd+Option" : "Alt"}+Left)`;
+$("forward").title = `Forward (${isMacintosh ? "Cmd+Option" : "Alt"}+Right)`;
 
 /** LSP locations as Monaco locations; sources of installed models are loaded on demand. */
 async function toMonacoLocations(locations: LspLocation[]): Promise<monaco.languages.Location[]> {

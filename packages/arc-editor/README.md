@@ -70,7 +70,7 @@ The mitigations:
 - `perspectives/perspectivesOn {textDocument, position}`: `{target, kind, users}`: one entry per perspective, in every open document, of a user role on the role or property under the cursor (a perspective on a role, or a perspective whose `props`/`view` cover the property; `props` without a list covers all properties of the object). Each `location` is the start of that perspective. The editor exposes this as the context menu actions *Show User Roles With a Perspective on Role* and *... on Property*, listed in the side panel.
 - `perspectives/modelSource {uri}`: returns the ARC source of an installed model for `perspectives-model:<model uri>` locations. The editor shows that source read-only.
 
-Every jump (to a definition, a reference, a member or a positioned feedback message) is recorded in a navigation history. Use the Back/Forward buttons or Alt+Left/Alt+Right to move through it.
+Every jump (to a definition, a reference, a member or a positioned feedback message) is recorded in a navigation history. Use the Back/Forward buttons, Cmd+Option+Left/Right on macOS, or Alt+Left/Right on Windows/Linux to move through it.
 
 **Limitations.**
 - The whole file is re-parsed and re-compiled on every (debounced) change.
@@ -88,6 +88,9 @@ Every jump (to a definition, a reference, a member or a positioned feedback mess
 - **Navigation shortcuts:** see the [inventory of active shortcuts and unloaded Monaco navigation features](navigation-shortcuts.md), including macOS/Windows/Linux differences and navigation-history limitations.
 - **Cursor undo/redo:** Cmd/Ctrl+U undoes the last cursor movement; Cmd/Ctrl+R redoes it while the editor text has focus. This is separate from Back/Forward jump history and resets when the text changes or another model is opened.
 - **Command palette:** press F1 while the editor has focus to search and run available editor commands, including commands without keyboard shortcuts.
+- **Line comments:** Cmd/Ctrl+/ toggles `--` comments on selected lines, or the current line if nothing is selected.
+- **Indent/outdent:** Tab indents selected lines by two spaces; Shift+Tab outdents them.
+- **Word movement:** Option+Left/Right on macOS (Ctrl+Left/Right on Windows/Linux) moves by word; add Shift to extend the selection. The word-operations contribution also enables standard word deletion with Option+Backspace/Delete on macOS (Ctrl+Backspace/Delete on Windows/Linux).
 
 ## Limitations
 

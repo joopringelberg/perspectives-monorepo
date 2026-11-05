@@ -49,6 +49,7 @@
 		"files.associations": {
 			"*.purs": "purescript"
 		},
+		"conventionalCommits.lineBreak": "\\n",
 		"conventionalCommits.scopes": [
 			"accessibility",
 			"core",
