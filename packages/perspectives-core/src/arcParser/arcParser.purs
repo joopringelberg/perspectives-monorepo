@@ -1706,10 +1706,10 @@ tableFormE = withPos do
   -- Like with the filledBy clause, we assume Enumerated and repair that later.
   perspective <- pure (ExplicitRole ctxt (ENR $ EnumeratedRoleType $ roleName) pos)
   -- Markdown right above the table (inside the accordion on the master part).
-  table <- TableE <$> option Nil (reserved "markdown" *> nestedBlock markdownE) <*> tableFormFields perspective
+  table <- TableE <$> option Nil (reserved "markdown" *> nestedBlock markdownE) <*> tableFormFields perspective false
   reserved "detail"
   -- Markdown right above the form (in the detail part).
-  form <- FormE <$> option Nil (reserved "markdown" *> nestedBlock markdownE) <*> tableFormFields perspective
+  form <- FormE <$> option Nil (reserved "markdown" *> nestedBlock markdownE) <*> tableFormFields perspective true
   pure $ TableFormE markdownAboveTableForm table form
 
 tabE :: IP TabE
@@ -1860,8 +1860,10 @@ fillPropertyValueE = do
   end <- getPosition
   pure { propertyName, valuesQuery, start, end }
 
-tableFormFields :: RoleIdentification -> IP WidgetCommonFields
-tableFormFields perspective = do
+-- | When `isDetail` is true, `fillfrom` and `typeaheadfillfrom` are rejected: only the master table
+-- | offers fillers, so these clauses would silently have no effect in the detail form.
+tableFormFields :: RoleIdentification -> Boolean -> IP WidgetCommonFields
+tableFormFields perspective isDetail = do
   start <- getPosition
   title <- optionMaybe token.stringLiteral
   isIndented' <- isIndented
@@ -1870,6 +1872,17 @@ tableFormFields perspective = do
     if isIndented'
     -- Set the reference position to the indented position following 'master' or 'detail'.
     then withPos do
+      if isDetail then do
+        fillClausePos <- getPosition
+        -- Consume the keyword (rather than using lookAhead) so the failure counts as consuming
+        -- input and is not swallowed by backtracking in enclosing blocks.
+        mFillClause <- optionMaybe ((reserved "fillfrom" *> pure "fillfrom") <|> (reserved "typeaheadfillfrom" *> pure "typeaheadfillfrom"))
+        case mFillClause of
+          Just keyword -> failWithPosition
+            ("`" <> keyword <> "` is not allowed in the `detail` part of a table-form item; move it to the `master` part (directly after an optional `markdown`, before `with`/`without`). Note that a clause at the same indentation as `detail` belongs to `detail`. ")
+            (arcPosition2Position fillClausePos)
+          Nothing -> pure unit
+      else pure unit
       mFillFrom <- optionMaybe (reserved "fillfrom" *> step)
       mTypeAheadFillFromRole <- optionMaybe (reserved "typeaheadfillfrom" *> arcIdentifier)
       -- Parse at most one selector: either `with …` or `without …`.

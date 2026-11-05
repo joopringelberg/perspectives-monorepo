@@ -118,6 +118,7 @@ domain model://perspectives.domains#Introduction@1.0
               markdown <### Introducees
                         These are the persons that have been introduced to each other by you.
                         >
+              fillfrom sys:TheWorld >> PerspectivesUsers >> binder sys:SocialEnvironment$Persons
               with props (LastName)
             detail
         what

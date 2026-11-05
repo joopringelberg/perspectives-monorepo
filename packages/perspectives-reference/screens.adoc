@@ -70,7 +70,7 @@ A table-form item describes a role with a master (table) and a detail (form) vie
     [only (<RoleVerb>{, <RoleVerb>}*)]
     [no roleverbs]
   detail
-    [same sub-clauses as master]
+    [same sub-clauses as master, except fillfrom and typeaheadfillfrom]
 ----
 
 The `master` section configures the table (list view); `detail` configures the form (single-item view). Both sections support:
@@ -81,10 +81,10 @@ The `master` section configures the table (list view); `detail` configures the f
 * `only (...)` — restricts available role-level operations.
 * `no roleverbs` — hides all role-level buttons.
 * `markdown <...>` — inserts a static or computed markdown block above the table or form.
-* `fillfrom <expression>` — determines (through a query expression) which candidates are offered when filling new role instances; it does not create fillers automatically.
-* `typeaheadfillfrom <RoleName>` — uses the named role as candidate source and renders a typeahead picker.
+* `fillfrom <expression>` — determines (through a query expression) which candidates are offered when filling new role instances; it does not create fillers automatically. Allowed in `master` only.
+* `typeaheadfillfrom <RoleName>` — uses the named role as candidate source and renders a typeahead picker. Allowed in `master` only.
 
-Example:
+Fillers are offered in the table only, so the compiler rejects `fillfrom` and `typeaheadfillfrom` in the `detail` part. Mind the indentation: a clause written at the same indentation as the keyword `detail` (rather than under `master`) belongs to `detail`, too.
 [source, arc]
 ----
 screen
@@ -447,7 +447,7 @@ When refining for a master-detail screen, we can combine both refinements:
 [[keyword-typeaheadfillfrom]]
 ==== `typeaheadfillfrom` versus `fillfrom`
 
-Within `master`, `fillfrom` and `typeaheadfillfrom` both determine which roles can fill a relational role:
+Within `master`, `fillfrom` and `typeaheadfillfrom` both determine which roles can fill a relational role (they are not allowed in `detail`):
 
 * `fillfrom <expression>` uses a query expression.
 * `typeaheadfillfrom <RoleName>` uses a role name and typeahead filtering.
