@@ -55,6 +55,7 @@ export default function pageHostingPDRPort(pdr) {
             console.log("Pageworker: sending port to controller");
             navigator.serviceWorker.controller.postMessage({ messageType: "relayPort", port: channel.port2 }, [channel.port2]);
             portTransferred = true;
+            navigator.serviceWorker.removeEventListener("controllerchange", handleControllerChange);
           } else {
             console.log("Pageworker: no controller available yet");
           }
@@ -62,16 +63,18 @@ export default function pageHostingPDRPort(pdr) {
      
       // Always use the active worker from the existing registration
       let serviceWorker = registration.active;
+      function handleControllerChange() {
+        console.log("Pageworker: controller change detected, sending port");
+        sendPortToController();
+      }
+
+      navigator.serviceWorker.addEventListener("controllerchange", handleControllerChange);
+
       if (serviceWorker) {
         console.log("Pageworker: using existing service worker");
         sendPortToController();
       } else {
         console.log("Pageworker: waiting for service worker to activate");
-        // Wait for the service worker to be ready
-        navigator.serviceWorker.addEventListener("controllerchange", () => {
-          console.log("Pageworker: controller change detected, sending port");
-          sendPortToController();
-        });
       }
       // Listen to messages coming in from the serviceWorker. The serviceWorker is the central hub that passes messages
       // between the page hosting the PDR and the other pages.
