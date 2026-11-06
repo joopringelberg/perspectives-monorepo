@@ -167,6 +167,14 @@ export default class TableControls extends PerspectivesComponent<TableControlsPr
     return !perspective.isCalculated && perspective.roleKind == "ContextRole" && perspective.verbs.includes("CreateAndFill");
   }
 
+  // Mirrors the PDR, which authorises filling with either Fill or CreateAndFill.
+  mayFill()
+  {
+    const perspective = this.props.perspective;
+    const allVerbs = perspective.verbs.concat(perspective.roleInstances[this.props.selectedroleinstance]?.objectStateBasedRoleVerbs || []);
+    return !perspective.isCalculated && (allVerbs.includes("Fill") || allVerbs.includes("CreateAndFill"));
+  }
+
   render ()
   {
     const component = this;
@@ -175,8 +183,10 @@ export default class TableControls extends PerspectivesComponent<TableControlsPr
     const instance = instances[component.props.selectedroleinstance];
     const mayCreateContext = component.mayCreateContext()
     const mayCreateRoleInstance = component.mayCreateInstance();
+    const mayPasteFiller = component.mayFill() && instance && !instance.filler;
     if  ( mayCreateContext || 
           mayCreateRoleInstance ||
+          mayPasteFiller ||
           Object.keys( actions ).length > 0 && Object.keys(instances).length > 0 ||
           instance && instance.publicUrl
         )
@@ -196,7 +206,7 @@ export default class TableControls extends PerspectivesComponent<TableControlsPr
                   : null
                 }
                 {
-                  (mayCreateContext || mayCreateRoleInstance) && instance && !instance.filler ?
+                  mayPasteFiller ?
                   <AppContext.Consumer>
                   { appcontext => <TablePasteRole 
                     systemexternalrole={appcontext.systemExternalRole}

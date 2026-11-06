@@ -307,7 +307,7 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
   {
   if (!this.props.isOpen) return [];
     const roleInstanceWithProps = this.props.perspective.roleInstances[this.props.roleinstance];
-    if ((this.mayCreateContext() || this.mayCreateInstance()) && roleInstanceWithProps && !roleInstanceWithProps.filler)
+    if (this.mayFill() && roleInstanceWithProps && !roleInstanceWithProps.filler)
     {
       const items: JSX.Element[] = [];
       if (this.state.providedTypeCompatible)
@@ -364,7 +364,7 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
   {
   if (!this.props.isOpen) return [];
     const roleInstanceWithProps = this.props.perspective.roleInstances[this.props.roleinstance];
-    if ((this.mayCreateContext() || this.mayCreateInstance()) && roleInstanceWithProps && roleInstanceWithProps.filler)
+    if (this.mayFill() && roleInstanceWithProps && roleInstanceWithProps.filler)
     {
       const items: JSX.Element[] = [];
       if (this.state.providedTypeCompatible)
@@ -428,6 +428,14 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
             }}
           );
       });
+  }
+
+  // Mirrors the PDR, which authorises filling with either Fill or CreateAndFill.
+  mayFill()
+  {
+    const perspective = this.props.perspective;
+    const allVerbs = perspective.verbs.concat(perspective.roleInstances[this.props.roleinstance]?.objectStateBasedRoleVerbs || []);
+    return !perspective.isCalculated && (allVerbs.includes("Fill") || allVerbs.includes("CreateAndFill"));
   }
 
   mayCreateInstance()
