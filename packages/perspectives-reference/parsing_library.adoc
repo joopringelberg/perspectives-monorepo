@@ -54,6 +54,8 @@ callEffect pars:ApplyImmediately( ModelUri, ArcSource, BasedOnVersion )
 
 Parses and compiles the Arc source text and uploads the resulting model to the repository. The compiled model is neither cached nor stored locally. If the source is invalid, nothing happens.
 
+When the version already exists in the repository, its translation table and other attachments (such as help conversations) are kept. When the version is new, its translation table is copied from `basedOnVersion`, so translations carry over to the new version. Without a `basedOnVersion`, the version starts with an empty translation table.
+
 [cols="1,1,4"]
 |===
 |Parameter/Result |Type | Explanation

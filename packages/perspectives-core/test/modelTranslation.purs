@@ -50,7 +50,11 @@ import Effect (Effect)
 import Effect.Aff (Aff)
 import Effect.Class (liftEffect)
 import Effect.Exception (error, message)
-import Foreign.Object (empty, fromFoldable, keys, lookup, singleton, values)
+import Foreign (Foreign, unsafeFromForeign, unsafeToForeign)
+import Foreign.Object (empty, fromFoldable, keys, lookup, singleton, union, values)
+import Data.MediaType (MediaType(..))
+import Perspectives.DomeinCache (AttachmentFiles)
+import Perspectives.Extern.Parsing (combineUploadAttachments)
 import Perspectives.CoreTypes (TranslationTable(..), Translations(..))
 import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord)
 import Perspectives.ModelTranslation (augmentModelTranslation, generateFirstTranslation, generateTranslationTable, parseTranslation_pass1, qualifyModelTranslation, translateTypeString, translationOf, writeTranslationYaml)
@@ -466,6 +470,48 @@ theSuite = suite "Perspectives.ModelTranslation" do
       let direct = generateTranslationTable mt
       equal (tableKeys direct) (tableKeys table)
       assert "The table is not empty" (not $ null $ tableKeys table)
+
+  suite "Attachments uploaded with a compiled model" do
+    let
+      att :: String -> Tuple MediaType (Maybe Foreign)
+      att v = Tuple (MediaType "application/json") (Just $ unsafeToForeign v)
+
+      valueOf :: String -> AttachmentFiles -> Maybe String
+      valueOf name files = lookup name files >>= \(Tuple _ mf) -> unsafeFromForeign <$> mf
+
+      regenerated = fromFoldable
+        [ Tuple "storedQueries.json" (att "new queries")
+        , Tuple "stableIdMapping.json" (att "new mapping")
+        , Tuple "modelDependencies.json" (att "new dependencies")
+        ]
+      defaults = singleton "translationtable.json" (att "empty table")
+
+    test "A re-upload keeps the translation table and other attachments, but not stale compilation results" do
+      let
+        retained = fromFoldable
+          [ Tuple "translationtable.json" (att "existing table")
+          , Tuple "conversations.json" (att "existing conversations")
+          , Tuple "storedQueries.json" (att "stale queries")
+          , Tuple "stableIdMapping.json" (att "stale mapping")
+          ]
+        result = combineUploadAttachments { regenerated, retained, defaults }
+      equal (Just "existing table") (valueOf "translationtable.json" result)
+      equal (Just "existing conversations") (valueOf "conversations.json" result)
+      equal (Just "new queries") (valueOf "storedQueries.json" result)
+      equal (Just "new mapping") (valueOf "stableIdMapping.json" result)
+      equal (Just "new dependencies") (valueOf "modelDependencies.json" result)
+
+    test "A first upload without a table to keep or copy gets an empty translation table" do
+      let result = combineUploadAttachments { regenerated, retained: empty, defaults }
+      equal (Just "empty table") (valueOf "translationtable.json" result)
+      equal [ "modelDependencies.json", "stableIdMapping.json", "storedQueries.json", "translationtable.json" ] (sort $ keys result)
+
+    test "A table copied from the version this version is based on replaces an empty table" do
+      let
+        seeded = singleton "translationtable.json" (att "table of previous version")
+        retained = singleton "translationtable.json" (att "empty table")
+        result = combineUploadAttachments { regenerated, retained: seeded `union` retained, defaults }
+      equal (Just "table of previous version") (valueOf "translationtable.json" result)
 
   suite "Runtime lookup" do
     test "translationOf and translateTypeString" do

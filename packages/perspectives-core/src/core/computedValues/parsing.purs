@@ -29,13 +29,14 @@ import Prelude
 import Control.Monad.Error.Class (catchError, throwError, try)
 import Control.Monad.State (StateT, execStateT, get, put)
 import Control.Monad.Trans.Class (lift)
-import Data.Array (head)
+import Data.Array (elem, head)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.FoldableWithIndex (forWithIndex_)
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), maybe)
 import Data.MediaType (MediaType(..))
 import Data.Traversable (traverse)
+import Data.TraversableWithIndex (traverseWithIndex)
 import Data.Tuple (Tuple(..))
 import Decacheable (decache)
 import Effect.Aff (error)
@@ -43,10 +44,10 @@ import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
 import Effect.Class.Console (log)
 import Foreign (Foreign, unsafeToForeign)
-import Foreign.Object (Object, empty, insert)
+import Foreign.Object (Object, empty, filterKeys, fromFoldable, insert, isEmpty, lookup, singleton, union)
 import Main.RecompileBasicModels (UninterpretedDomeinFile(..), recompileModelsAtUrl)
 import Partial.Unsafe (unsafePartial)
-import Perspectives.CoreTypes (type (~~>), MonadPerspectives, MonadPerspectivesTransaction, mkLibEffect1, mkLibEffect2, mkLibEffect3, mkLibFunc1, mkLibFunc2, mkLibFunc3, (##>), (##>>))
+import Perspectives.CoreTypes (type (~~>), MonadPerspectives, MonadPerspectivesTransaction, TranslationTable(..), mkLibEffect1, mkLibEffect2, mkLibEffect3, mkLibFunc1, mkLibFunc2, mkLibFunc3, (##>), (##>>))
 import Perspectives.Couchdb (DeleteCouchdbDocument(..), DocWithAttachmentInfo)
 import Perspectives.Couchdb.Revision (Revision_, changeRevision)
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
@@ -55,6 +56,7 @@ import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.Error.Boundaries (handleExternalFunctionError, handleExternalStatementError)
 import Perspectives.Error.Pretty (renderMultiplePerspectivesErrors, renderPerspectivesError)
 import Perspectives.ErrorLogging (logPerspectivesError, warnModeller)
+import Perspectives.Logging (warnModel)
 import Perspectives.Extern.Couchdb (createVersionedModelManifestDependency, retrieveModelFromLocalStore, updateModel)
 import Perspectives.Extern.Files (getPFileTextValue)
 import Perspectives.External.HiddenFunctionCache (HiddenFunctionDescription)
@@ -176,7 +178,7 @@ uploadToRepository modelUri_ arcSource_ basedOnVersion_ versionedModelManifest =
                     logPerspectivesError $ Custom ("uploadToRepository: " <> rendered)
                   -- Here we will have a tuple of the DomeinFile and an instance of StoredQueries plus the updated mapping.
                   Right (Tuple df@(DomeinFile { id, namespace }) (Tuple invertedQueries mapping')) -> do
-                    void $ uploadToRepository_ split df invertedQueries mapping' (Just versionedModelManifest)
+                    void $ uploadToRepository_ split df invertedQueries mapping' mbasedOnVersion (Just versionedModelManifest)
         _, _, _ -> logPerspectivesError $ Custom ("uploadToRepository lacks arguments")
     )
     >>= handleExternalStatementError "model://perspectives.domains#Parsing$UploadToRepository"
@@ -184,14 +186,31 @@ uploadToRepository modelUri_ arcSource_ basedOnVersion_ versionedModelManifest =
 type URL = String
 
 -- | As uploadToRepository, but provide the DomeinFile as argument.
--- | Adds an empty TranslationTable if the DomeinFile did not yet exist in the Repository.
+-- | The attachments that follow from compilation (stored queries, stable id mapping, model dependencies) are replaced.
+-- | Other attachments are handled as follows:
+-- |   * when the DomeinFile already exists in the repository (a new build of the same version), its other
+-- |     attachments (such as translationtable.json and conversations.json) are preserved;
+-- |   * when the version has no translation table with entries (a new version, or one whose table was emptied),
+-- |     the table is copied from the version this version is based on (if given and available),
+-- |     so that existing translations carry over (they are keyed by Stable identifiers, which are shared across versions);
+-- |   * otherwise, an empty translation table is attached.
+-- | Writing the document itself removes all its attachments, so they are read before the document is written.
 -- TODO: retrieve the mapping sidecar from the repository in this function, save its updated value to the repository here too.
-uploadToRepository_ :: { repositoryUrl :: String, documentName :: String } -> DomeinFile Sidecar.Stable -> StoredQueries -> Sidecar.StableIdMapping -> Maybe RoleInstance -> MonadPerspectivesTransaction Unit
-uploadToRepository_ splitName (DomeinFile df) invertedQueries mapping versionedModelManifest = do
-  -- Get the attachment info
-  attachments <- lift $ defaultAttachments empty
+uploadToRepository_ :: { repositoryUrl :: String, documentName :: String } -> DomeinFile Sidecar.Stable -> StoredQueries -> Sidecar.StableIdMapping -> Maybe ModelUriString -> Maybe RoleInstance -> MonadPerspectivesTransaction Unit
+uploadToRepository_ splitName (DomeinFile df) invertedQueries mapping mbasedOnVersion versionedModelManifest = do
   -- Get the revision (if any) from the remote database.
   (mVersion :: Maybe String) <- lift $ retrieveDocumentVersion splitName.repositoryUrl splitName.documentName
+  retained <- lift case mVersion of
+    Just _ -> retainedAttachments splitName.repositoryUrl splitName.documentName
+    Nothing -> pure empty
+  -- A version without translations (new, or emptied by an earlier upload) starts from the translations of the version it is based on.
+  hasTranslations <- lift $ hasTranslationTable retained
+  seeded <- lift
+    if hasTranslations then pure empty
+    else maybe (pure empty) seededAttachments mbasedOnVersion
+  regenerated <- lift regeneratedAttachments
+  defaults <- lift defaultAttachments
+  let attachments = combineUploadAttachments { regenerated, retained: seeded `union` retained, defaults }
   -- The _id of df will be a versionless identifier. If we don't set it to the versioned name, the document
   -- will be stored under the versionless name.
   (newRev :: Revision_) <- lift $ addDocument splitName.repositoryUrl (changeRevision mVersion (DomeinFile df { _id = splitName.documentName })) splitName.documentName
@@ -203,35 +222,46 @@ uploadToRepository_ splitName (DomeinFile df) invertedQueries mapping versionedM
     _, _ -> pure unit
 
   where
-  -- Default attachments are built from the mapping and inverted queries that are passed in as arguments, 
-  -- and an empty translation table.
-  defaultAttachments :: AttachmentFiles -> MonadPerspectives AttachmentFiles
-  defaultAttachments attachments = do
-    -- Add an empty translations file.
-    translationsFile <- liftEffect $ unsafeCoerce toFile "translationtable.json" "application/json" (unsafeToForeign $ writeJSON MT.emptyTranslationTable)
+  -- Attachments built from the mapping, the inverted queries and the model dependencies that result from compilation.
+  regeneratedAttachments :: MonadPerspectives AttachmentFiles
+  regeneratedAttachments = do
     dependenciesFile <- liftEffect $ toFile "modelDependencies.json" "application/json" (unsafeToForeign $ writeJSON df.modelDependencies)
-    -- Add a skeleton stableIdMapping sidecar.
     mappingFile <- liftEffect $ toFile "stableIdMapping.json" "application/json" (unsafeToForeign $ writeJSON mapping)
     queryFile <- liftEffect $ toFile "storedQueries.json" "application/json" (unsafeToForeign $ writeJSON invertedQueries)
-    pure $ insert
-      "modelDependencies.json"
-      (Tuple (MediaType "application/json") (Just $ unsafeCoerce dependenciesFile))
-      ( insert
-          "stableIdMapping.json"
-          (Tuple (MediaType "application/json") (Just $ unsafeCoerce mappingFile))
-          ( insert
-              "translationtable.json"
-              (Tuple (MediaType "application/json") (Just $ unsafeCoerce translationsFile))
-              ( insert
-                  "storedQueries.json"
-                  ( Tuple
-                      (MediaType "application/json")
-                      (Just $ unsafeCoerce queryFile)
-                  )
-                  attachments
-              )
-          )
-      )
+    pure $ fromFoldable
+      [ Tuple "modelDependencies.json" (Tuple (MediaType "application/json") (Just $ unsafeCoerce dependenciesFile))
+      , Tuple "stableIdMapping.json" (Tuple (MediaType "application/json") (Just $ unsafeCoerce mappingFile))
+      , Tuple "storedQueries.json" (Tuple (MediaType "application/json") (Just $ unsafeCoerce queryFile))
+      ]
+
+  -- An empty translation table, used when there is no table to preserve or to seed from.
+  defaultAttachments :: MonadPerspectives AttachmentFiles
+  defaultAttachments = do
+    translationsFile <- liftEffect $ toFile translationTableAttachment "application/json" (unsafeToForeign $ writeJSON MT.emptyTranslationTable)
+    pure $ singleton translationTableAttachment (Tuple (MediaType "application/json") (Just $ unsafeCoerce translationsFile))
+
+  -- The attachments of the existing repository document that are not regenerated by compilation.
+  retainedAttachments :: URL -> String -> MonadPerspectives AttachmentFiles
+  retainedAttachments documentUrl documentName = do
+    (mdoc :: Maybe AttachmentStubs) <- tryGetDocument_ documentUrl documentName
+    case mdoc >>= _._attachments of
+      Nothing -> pure empty
+      Just stubs -> traverseWithIndex
+        (\attName { content_type } -> Tuple (MediaType content_type) <$> getAttachment documentUrl documentName attName)
+        (filterKeys (not <<< isRegeneratedAttachment) stubs)
+
+  -- The translation table of the version this version is based on. Failing to read it is not fatal:
+  -- the new version then starts with an empty table.
+  seededAttachments :: ModelUriString -> MonadPerspectives AttachmentFiles
+  seededAttachments basedOnVersion = do
+    let { repositoryUrl, documentName } = unsafePartial modelUri2ModelUrl basedOnVersion
+    mtable <- catchError (getAttachment repositoryUrl documentName translationTableAttachment)
+      \e -> do
+        warnModel ("uploadToRepository: could not copy the translation table of " <> basedOnVersion <> ": " <> show e)
+        pure Nothing
+    pure case mtable of
+      Nothing -> empty
+      Just table -> singleton translationTableAttachment (Tuple (MediaType "application/json") (Just table))
 
   -- As each attachment that we add will bump the document version, we have to catch it and use it on the
   -- next attachment.
@@ -251,6 +281,31 @@ uploadToRepository_ splitName (DomeinFile df) invertedQueries mapping versionedM
     (newRev :: Revision_) <- get
     theFile <- liftEffect $ toFile "storedQueries.json" "application/json" (unsafeToForeign $ writeJSON invertedQueries)
     lift $ void $ addAttachment documentUrl documentName newRev "storedQueries.json" theFile (MediaType "application/json")
+
+-- | True if the attachments hold a translation table with at least one entry.
+hasTranslationTable :: AttachmentFiles -> MonadPerspectives Boolean
+hasTranslationTable attachments = case lookup translationTableAttachment attachments of
+  Just (Tuple _ (Just blob)) -> do
+    text <- liftAff $ fromBlob blob
+    pure case readJSON text of
+      Right (TranslationTable table) -> not $ isEmpty table
+      Left _ -> false
+  _ -> pure false
+
+-- | Only the attachment stubs of a document; all other members are ignored when reading.
+type AttachmentStubs = { _attachments :: Maybe (Object { content_type :: String }) }
+
+translationTableAttachment :: String
+translationTableAttachment = "translationtable.json"
+
+-- | Attachments that are recomputed whenever a model is compiled; their previous versions must not be preserved.
+isRegeneratedAttachment :: String -> Boolean
+isRegeneratedAttachment = flip elem [ "storedQueries.json", "stableIdMapping.json", "modelDependencies.json" ]
+
+-- | The attachments to upload with a compiled model. The results of compilation take precedence over
+-- | retained (or seeded) attachments, which in turn take precedence over the defaults.
+combineUploadAttachments :: { regenerated :: AttachmentFiles, retained :: AttachmentFiles, defaults :: AttachmentFiles } -> AttachmentFiles
+combineUploadAttachments { regenerated, retained, defaults } = regenerated `union` (filterKeys (not <<< isRegeneratedAttachment) retained `union` defaults)
 
 -- | Remove the DomeinFile from the repository.
 -- | ModelUriString should be versioned (e.g. model://perspectives.domains#System@1.0).

@@ -68,7 +68,7 @@ uploadToRepository dfId@(ModelUri domeinFileName) = do
     case mdf of
       Left err -> logPerspectivesError $ DomeinFileErrorBoundary "uploadToRepository" (show err)
       -- Notice that we  supply an empty array instead of the actually compiled InvertedQueries!
-      Right df -> void $ runMonadPerspectivesTransaction $ uploadToRepository_ (unsafePartial modelUri2ModelUrl domeinFileName) df [] emptyStableIdMapping Nothing
+      Right df -> void $ runMonadPerspectivesTransaction $ uploadToRepository_ (unsafePartial modelUri2ModelUrl domeinFileName) df [] emptyStableIdMapping Nothing Nothing
   else logPerspectivesError $ DomeinFileErrorBoundary "uploadToRepository" ("This modelURI is not well-formed: " <> domeinFileName)
 
 theSuite :: Free TestF Unit
