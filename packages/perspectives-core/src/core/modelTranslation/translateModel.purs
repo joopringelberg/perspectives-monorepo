@@ -38,14 +38,14 @@ import Data.Foldable (for_)
 import Data.FoldableWithIndex (forWithIndex_)
 import Data.FunctorWithIndex (mapWithIndex)
 import Data.Interpolate (i)
-import Data.Maybe (Maybe(..), fromJust, isJust, isNothing, maybe)
+import Data.Int (fromNumber)
+import Data.Maybe (Maybe(..), fromJust, isJust, maybe)
 import Data.Newtype (unwrap)
-import Data.Nullable (Nullable, notNull, null, toMaybe) as NULL
+import Data.Nullable (Nullable, notNull, toMaybe, toNullable) as NULL
 import Data.Set (toUnfoldable) as SET
-import Data.String (Pattern(..), Replacement(..), replaceAll, stripPrefix, stripSuffix)
-import Data.String.Regex (match)
-import Data.String.Regex (match, replace) as Regex
-import Data.String.Regex.Flags (global, noFlags)
+import Data.String (Pattern(..), Replacement(..), joinWith, replaceAll, split, stripPrefix)
+import Data.String.Regex (test) as Regex
+import Data.String.Regex.Flags (noFlags)
 import Data.String.Regex.Unsafe (unsafeRegex)
 import Data.Traversable (for)
 import Data.TraversableWithIndex (forWithIndex)
@@ -53,6 +53,8 @@ import Data.Tuple (Tuple(..))
 import Effect (Effect)
 import Effect.Aff (Aff, message)
 import Effect.Exception (Error, error)
+import Foreign (Foreign, isArray, isNull, typeOf, unsafeFromForeign, unsafeToForeign)
+import Foreign.Object (filter) as OBJ
 import Foreign.Object (Object, empty, filterKeys, fromFoldable, insert, isEmpty, keys, lookup, mapWithKey, singleton, toUnfoldable, union, values)
 import IDBKeyVal (idbGet)
 import Partial.Unsafe (unsafePartial)
@@ -78,7 +80,7 @@ import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), 
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable, Stable)
 import Perspectives.Sidecar.StableIdMapping (StableIdMapping)
 import Purescript.YAML (load)
-import Simple.JSON (read_)
+import Simple.JSON (read_, writeJSON)
 
 -------------------------------------------------------------------------------
 ---- YAML FILE PARSE REPRESENTATION
@@ -108,7 +110,7 @@ newtype ContextTranslation_ = ContextTranslation_
   }
 
 newtype IndexedContextNameTranslation_ = IndexedContextNameTranslation_
-  { name :: String
+  { name :: Foreign
   , translations :: Translations_
   }
 
@@ -134,7 +136,9 @@ newtype ActionsPerStateTranslation_ = ActionsPerStateTranslation_ (Object Action
 -- Keys are action identifiers as they occur in the model.
 newtype ActionsTranslation_ = ActionsTranslation_ (Object { translations :: Translations_ })
 
-newtype Translations_ = Translations_ (Object (NULL.Nullable String))
+-- Values are whatever the YAML parser produced: usually strings, but a modeller may write
+-- an unquoted number or boolean, or leave a value empty (null).
+newtype Translations_ = Translations_ (Object Foreign)
 
 -- The keys are generated numbers and are of no interest.
 -- The original texts are stored under the key 'orig'.
@@ -147,6 +151,30 @@ newtype Markdowns_ = Markdowns_ (Object { translations :: Translations_ })
 
 newtype Titles_ = Titles_ (Object { translations :: Translations_ })
 
+-- | True for a YAML mapping (a non-null, non-array JavaScript object).
+isMapping :: Foreign -> Boolean
+isMapping f = typeOf f == "object" && not (isNull f) && not (isArray f)
+
+-- | The object itself if it is a mapping, the empty object otherwise (e.g. for an empty YAML block).
+objectOrEmpty :: forall a. Object a -> Object a
+objectOrEmpty obj = if isMapping (unsafeToForeign obj) then obj else empty
+
+-- | Only the entries that are themselves mappings. Protects against empty or malformed entries in hand-edited files.
+objectEntries :: forall a. Object a -> Object a
+objectEntries obj = OBJ.filter (isMapping <<< unsafeToForeign) (objectOrEmpty obj)
+
+-- | Interpret a YAML scalar as a string. An unquoted number or boolean is converted to its textual form.
+scalarToString :: Foreign -> Maybe String
+scalarToString f = case typeOf f of
+  "string" -> Just (unsafeFromForeign f)
+  "boolean" -> Just (if unsafeFromForeign f then "true" else "false")
+  "number" ->
+    let
+      n = unsafeFromForeign f :: Number
+    in
+      Just $ maybe (show n) show (fromNumber n)
+  _ -> Nothing
+
 -------------------------------------------------------------------------------
 ---- CLASS REHYDRATE
 -------------------------------------------------------------------------------
@@ -156,49 +184,32 @@ class (Translation modeltranslation) <= Rehydrate fromyaml modeltranslation | fr
 
 instance Rehydrate Translations_ Translations where
   hydrate (Translations_ obj) = Translations $ fromFoldable $ catMaybes
-    ( (toUnfoldable obj) <#> \(Tuple language ntranslation) -> case NULL.toMaybe ntranslation of
-        Just translation -> Just (Tuple language translation)
-        _ -> Nothing
+    ( (toUnfoldable (objectOrEmpty obj)) <#> \(Tuple language value) -> Tuple language <$> scalarToString value
     )
 
+-- The keys are the index numbers we have generated. They are of no interest.
+-- Entries without an original text cannot be matched against the model and are skipped.
 instance Rehydrate Notifications_ NotificationsTranslation where
-  hydrate (Notifications_ obj) = NotificationsTranslation $ fromFoldable $ (values obj) <#>
-    ( \{ translations } ->
-        let
-          -- keys are the index numbers we have generated. They are of no interest.
-          Translations t' = hydrate translations
-          orig = unsafePartial fromJust $ lookup "orig" t'
-        in
-          Tuple orig (Translations t')
-    )
+  hydrate (Notifications_ obj) = NotificationsTranslation $ hydrateOriginals identity obj
 
 instance Rehydrate Titles_ TitlesTranslation where
-  hydrate (Titles_ obj) = TitlesTranslation $ fromFoldable $ (values obj) <#>
-    ( \{ translations } ->
-        let
-          -- keys are the index numbers we have generated. They are of no interest.
-          Translations t' = hydrate translations
-          orig = unsafePartial fromJust $ lookup "orig" t'
-        in
-          Tuple orig (Translations t')
-    )
+  hydrate (Titles_ obj) = TitlesTranslation $ hydrateOriginals identity obj
 
 instance Rehydrate Markdowns_ MarkdownsTranslation where
-  hydrate (Markdowns_ obj) = MarkdownsTranslation $ fromFoldable $
-    ( values obj <#>
-        ( \{ translations } ->
-            let
-              Translations t' = hydrate translations
-              -- Remove the space trailing newlines here. They are not part of the original text.
-              orig = replaceAll (Pattern "\n ") (Replacement "\n") $ unsafePartial fromJust $ lookup "orig" t'
-            in
-              Tuple orig (Translations (insert "orig" orig t'))
-        )
-    )
+  hydrate (Markdowns_ obj) = MarkdownsTranslation $ hydrateOriginals normaliseFoldedMarkdown obj
+
+-- | Re-index a block of numbered entries by their original text (the `orig` translation).
+hydrateOriginals :: (String -> String) -> Object { translations :: Translations_ } -> Object Translations
+hydrateOriginals normalise obj = fromFoldable $ catMaybes $ values (objectEntries obj) <#> \{ translations } ->
+  let
+    Translations t = hydrate translations
+    t' = normalise <$> t
+  in
+    (\orig -> Tuple orig (Translations t')) <$> lookup "orig" t'
 
 instance Rehydrate ActionsTranslation_ ActionsTranslation where
   -- Do away with the extra "translations" layer.
-  hydrate (ActionsTranslation_ obj) = ActionsTranslation (obj <#> _.translations >>> hydrate)
+  hydrate (ActionsTranslation_ obj) = ActionsTranslation (objectEntries obj <#> _.translations >>> hydrate)
 
 instance Rehydrate RoleTranslation_ RoleTranslation where
   hydrate (RoleTranslation_ { translations, properties, actions, markdowns, notifications, titles }) =
@@ -206,12 +217,12 @@ instance Rehydrate RoleTranslation_ RoleTranslation where
     where
     properties' = case NULL.toMaybe properties of
       Nothing -> PropertiesTranslation empty
-      Just (PropertiesTranslation_ obj) -> PropertiesTranslation (obj <#> _.translations >>> hydrate)
+      Just (PropertiesTranslation_ obj) -> PropertiesTranslation (objectEntries obj <#> _.translations >>> hydrate)
     actions' = case NULL.toMaybe actions of
       Nothing -> ActionsPerStateTranslation empty
       -- Keys are the string representations of StateSpecs.
       -- Values are Object ActionsTranslation, where keys are local action names.
-      Just (ActionsPerStateTranslation_ acts) -> ActionsPerStateTranslation (hydrate <$> acts)
+      Just (ActionsPerStateTranslation_ acts) -> ActionsPerStateTranslation (hydrate <$> objectEntries acts)
     translations' = hydrate translations
     notifications' = case NULL.toMaybe notifications of
       Nothing -> NotificationsTranslation empty
@@ -239,22 +250,22 @@ instance Rehydrate ContextTranslation_ ContextTranslation where
         Just e@(RoleTranslation_ _) -> (hydrate e)
       users' = case NULL.toMaybe users of
         Nothing -> RolesTranslation empty
-        Just (RolesTranslation_ u) -> RolesTranslation (map hydrate u)
+        Just (RolesTranslation_ u) -> RolesTranslation (map hydrate (objectEntries u))
       things' = case NULL.toMaybe things of
         Nothing -> RolesTranslation empty
-        Just (RolesTranslation_ t) -> RolesTranslation (map hydrate t)
+        Just (RolesTranslation_ t) -> RolesTranslation (map hydrate (objectEntries t))
       contextroles' = case NULL.toMaybe contextroles of
         Nothing -> RolesTranslation empty
-        Just (RolesTranslation_ t) -> RolesTranslation (map hydrate t)
+        Just (RolesTranslation_ t) -> RolesTranslation (map hydrate (objectEntries t))
       contexts' = case NULL.toMaybe contexts of
         Nothing -> ContextsTranslation empty
-        Just (ContextsTranslation_ t) -> ContextsTranslation (map hydrate t)
+        Just (ContextsTranslation_ t) -> ContextsTranslation (map hydrate (objectEntries t))
       notifications' = case NULL.toMaybe notifications of
         Nothing -> NotificationsTranslation empty
         Just n@(Notifications_ _) -> hydrate n
       indexedName' = case NULL.toMaybe indexedName of
         Nothing -> Nothing
-        Just (IndexedContextNameTranslation_ i) -> Just $ IndexedContextNameTranslation { name: IndexedContext i.name, translations: hydrate i.translations }
+        Just (IndexedContextNameTranslation_ i) -> scalarToString i.name <#> \name -> IndexedContextNameTranslation { name: IndexedContext name, translations: hydrate i.translations }
     in
       ContextTranslation
         { translations: translations'
@@ -278,10 +289,10 @@ instance Rehydrate ModelTranslation_ ModelTranslation where
         Just v -> v
       contexts' = case NULL.toMaybe contexts of
         Nothing -> ContextsTranslation empty
-        Just (ContextsTranslation_ t) -> ContextsTranslation (map hydrate t)
+        Just (ContextsTranslation_ t) -> ContextsTranslation (map hydrate (objectEntries t))
       roles' = case NULL.toMaybe roles of
         Nothing -> RolesTranslation empty
-        Just (RolesTranslation_ t) -> RolesTranslation (map hydrate t)
+        Just (RolesTranslation_ t) -> RolesTranslation (map hydrate (objectEntries t))
     in
       ModelTranslation { namespace: namespace', version: version', contexts: Just contexts', roles: Just roles' }
 
@@ -294,10 +305,12 @@ instance Rehydrate ModelTranslation_ ModelTranslation where
 -------------------------------------------------------------------------------
 generateFirstTranslation :: DomeinFile Stable -> ModelTranslation
 generateFirstTranslation (DomeinFile dr) = flip runReader dr do
-  toplevelContexts <- pure $ filterKeys isDefinedAtTopLevel dr.contexts
+  -- Nested contexts are translated as part of their enclosing context (see translateContext).
+  -- The domain context itself is not part of the translation; its roles are listed under `roles`.
+  toplevelContexts <- pure $ filterKeys (\c -> c /= unwrap dr.id && isDefinedAtTopLevel c) dr.contexts
   contexts <-
     if isEmpty toplevelContexts then pure Nothing
-    else Just <<< ContextsTranslation <$> (for (filterKeys (not <<< eq (unwrap dr.id)) dr.contexts) translateContext)
+    else Just <<< ContextsTranslation <$> (for toplevelContexts translateContext)
   eroles <- for (filterKeys isDefinedAtTopLevel dr.enumeratedRoles)
     (translateRole <<< E)
   croles <- for (filterKeys isDefinedAtTopLevel dr.calculatedRoles)
@@ -307,8 +320,9 @@ generateFirstTranslation (DomeinFile dr) = flip runReader dr do
   version <- pure $ unsafePartial fromJust $ domeinFileVersion dr._id
   pure $ ModelTranslation { namespace: unwrap dr.id, contexts, roles, version }
   where
+  -- Excludes the external role of the domain context, but not roles whose local name merely ends in "External".
   isDefinedAtTopLevel :: String -> Boolean
-  isDefinedAtTopLevel s = unwrap dr.id == typeUri2typeNameSpace_ s && (isNothing $ Regex.match (unsafeRegex "External$" noFlags) s)
+  isDefinedAtTopLevel s = unwrap dr.id == typeUri2typeNameSpace_ s && s /= buitenRol (unwrap dr.id)
 
 translateContext :: Context -> Reader (DomeinFileRecord Stable) ContextTranslation
 translateContext (Context { id: contextId, gebruikerRol, contextRol, rolInContext, nestedContexts, indexedContext }) = do
@@ -326,7 +340,7 @@ translateContext (Context { id: contextId, gebruikerRol, contextRol, rolInContex
     pure $ NotificationsTranslation
       ( execWriter $ for_ states
           ( \(State { stateFulObject, notifyOnEntry, notifyOnExit }) -> case stateFulObject of
-              Cnt c | c == contextId -> for_ (EM.values notifyOnEntry) translateNotification
+              Cnt c | c == contextId -> translateNotifications notifyOnEntry notifyOnExit
               _ -> pure unit
           )
       )
@@ -349,8 +363,16 @@ translateContext (Context { id: contextId, gebruikerRol, contextRol, rolInContex
     (filter (\rt -> (roletype2string rt) `startsWithSegments` (unwrap contextId)) roles)
     (\rt -> (lookupRoleType rt >>= translateRole >>= pure <<< Tuple (roletype2string rt)))
 
+-- | Notifications on entry and on exit of a state are both compiled with translationOf at runtime,
+-- | so both must be offered for translation.
+translateNotifications :: EncodableMap RoleType Notification -> EncodableMap RoleType Notification -> Writer (Object Translations) Unit
+translateNotifications onEntry onExit = do
+  for_ (EM.values onEntry) translateNotification
+  for_ (EM.values onExit) translateNotification
+
+-- | The same sentence may occur several times in a model; such occurrences share a single entry
+-- | (and thus a single translation), as the Writer monoid merges equal keys.
 translateNotification :: Notification -> Writer (Object Translations) Unit
--- TODO. Hier ontstaan verdubbelingen als dezelfde sentence meerdere keren in een model voorkomt.
 translateNotification (ContextNotification { sentence }) = tell $ singleton (_.sentence $ unwrap sentence) (Translations empty)
 translateNotification (RoleNotification { sentence }) = tell $ singleton (_.sentence $ unwrap sentence) (Translations empty)
 
@@ -382,8 +404,8 @@ translateRole (E (EnumeratedRole rec)) = do
     pure $ NotificationsTranslation
       ( execWriter $ for_ states
           ( \(State { stateFulObject, notifyOnEntry, notifyOnExit }) -> case stateFulObject of
-              Orole r | r == rec.id -> for_ (EM.values notifyOnEntry) translateNotification
-              Srole r | r == rec.id -> for_ (EM.values notifyOnEntry) translateNotification
+              Orole r | r == rec.id -> translateNotifications notifyOnEntry notifyOnExit
+              Srole r | r == rec.id -> translateNotifications notifyOnEntry notifyOnExit
               _ -> pure unit
           )
       )
@@ -472,16 +494,24 @@ class Translation a where
 instance Translation Translations where
   qualify _ a = a
   writeKeys _ = pure unit
-  writeYaml indent trans = do
-    tell (i indent "translations" colonNl)
-    translations' <- case addDefaultLanguages trans of
-      (Translations translations) -> pure $ object2array translations
-    void $ for translations'
-      \(Tuple lang translation) -> do
-        -- We write the translations in quotes if the modeller has indicated with a pipe symbol (|) that it is necessary.
-        -- Some characters such as ':' and parentheses will otherwise be seen as delimiters by the yaml parser.
-        tell (i indent tab lang colonSpace translation nl)
+  writeYaml indent trans = writeTranslationsYaml quoteForYaml indent trans
   addTranslations _ t = t
+
+-- | Write a `translations` block, encoding each value with the given function.
+-- | Languages that have no translation yet receive a "MISSING <lang>" placeholder.
+writeTranslationsYaml :: (String -> String) -> String -> Translations -> Writer String Unit
+writeTranslationsYaml encode indent trans = do
+  tell (i indent "translations" colonNl)
+  translations' <- case addDefaultLanguages trans of
+    (Translations translations) -> pure $ object2array translations
+  void $ for translations'
+    \(Tuple lang translation) -> tell (i indent tab lang colonSpace (encode translation) nl)
+
+-- | Encode a string as a YAML double-quoted scalar. JSON string syntax is a subset of YAML's
+-- | double-quoted style, so this preserves every character (':', '#', '{', quotes, backslashes,
+-- | leading '-' or '*', strings that look like numbers or booleans, etc.).
+quoteForYaml :: String -> String
+quoteForYaml = writeJSON
 
 instance Translation NotificationsTranslation where
   qualify _ n = n
@@ -537,7 +567,7 @@ instance Translation MarkdownsTranslation where
             \original (Translations translations) -> do
               nr <- get
               lift $ tell (i indent tab nr colonNl)
-              lift $ writeYaml (indent <> tab <> tab) (addDefaultLanguages (Translations $ insert "orig" (escapeMarkdownForYaml (indent <> tab <> tab <> tab <> tab) original) (escapeMarkdownForYaml (indent <> tab <> tab <> tab <> tab) <$> translations)))
+              lift $ writeTranslationsYaml (escapeMarkdownForYaml (indent <> tab <> tab <> tab <> tab)) (indent <> tab <> tab) (Translations $ insert "orig" original translations)
               modify ((+) 1)
         )
         0
@@ -554,35 +584,34 @@ addDefaultLanguages trans = addLanguage "en" $ addLanguage "nl" trans
     if isJust $ lookup lang translations then t
     else Translations $ insert lang ("MISSING " <> lang) translations
 
--- Markdown is parsed from ARC to a string containing newlines (\n) and double quotes ("). The ARC indentation has been thrown out.
--- In Yaml we need proper indentation for multiline Markdown texts. Also, it needs to be enclosed in double quotes or otherwise 
--- newlines will not be interpreted correctly. Finally, we must escape double quotes because otherwise the enclosing double quotes will get broken.
--- Enclose in double quotes
--- insert THE TEXT "\n" right before each newline \n and let the newline itself follow by indentation (for the next line): "dit staat ervoor\nen dit erachter"  becomes "dit staat ervoor\\n\n      en dit erachter" 
--- escape a double quote: \" becomes \\"
+-- | Markdown is parsed from ARC to a string containing newlines (\n). The ARC indentation has been removed.
+-- | To keep multi-line texts readable for the modeller, we write them as a YAML double-quoted scalar
+-- | that spans several lines:
+-- |   * each newline is written as the escape sequence `\n`, followed by a real line break and indentation;
+-- |   * backslashes and double quotes are escaped;
+-- |   * a space or tab at the start of a line is escaped (`\ ` or `\t`), as YAML would otherwise strip it.
+-- | On reading, YAML folds each real line break into a single space. The parser removes that space again
+-- | (see `normaliseFoldedMarkdown`), so that the text read equals the original text exactly.
+-- | E.g. "A\n  * b" is written as:
+-- |   "A\n
+-- |   \  * b"
 escapeMarkdownForYaml :: String -> String -> String
-escapeMarkdownForYaml indent' s = "\"" <> (replaceAll (Pattern "\"") (Replacement "\\\"") (replaceAll (Pattern "\n") (Replacement $ "\\n\n" <> indent') s)) <> "\""
+escapeMarkdownForYaml indent' s = "\"" <> joinWith ("\\n\n" <> indent') (escapeLine <$> split (Pattern "\n") s) <> "\""
+  where
+  escapeLine :: String -> String
+  escapeLine line =
+    let
+      escaped = replaceAll (Pattern "\"") (Replacement "\\\"") (replaceAll (Pattern "\\") (Replacement "\\\\") line)
+    in
+      case stripPrefix (Pattern " ") escaped of
+        Just rest -> "\\ " <> rest
+        Nothing -> case stripPrefix (Pattern "\t") escaped of
+          Just rest -> "\\t" <> rest
+          Nothing -> escaped
 
--- The inverse operation of escapeMarkdownForYaml. 
--- Now notice that we perform this on the parsed YAML, that has removed the actual newlines (yaml considers them to be irrelevant in values)
--- However, the text will still contain the \\n that we inserted, but it will show up as \n which is fine.
--- Consequently, we do not handle newlines!
--- Remove enclosing double quotes;
--- Remove the backslash before a double quote.
--- The end result should be the same as the input for escapeMarkdownForYaml (that is, the string given by the ARC parser).
-unEscapeMarkdownForYaml :: String -> String
-unEscapeMarkdownForYaml s =
-  let
-    unIndented = Regex.replace (unsafeRegex "\\n\\s+" global) "\n" s
-    unEnclosed = case stripSuffix (Pattern "\"") unIndented of
-      Nothing -> case stripPrefix (Pattern "\"") unIndented of
-        Nothing -> unIndented
-        Just s' -> s'
-      Just withoutEndQuotes -> case stripPrefix (Pattern "\"") withoutEndQuotes of
-        Nothing -> withoutEndQuotes
-        Just s' -> s'
-  in
-    replaceAll (Pattern "\\\"") (Replacement "\"") unEnclosed
+-- | Undo the space that YAML inserts when folding the line breaks written by `escapeMarkdownForYaml`.
+normaliseFoldedMarkdown :: String -> String
+normaliseFoldedMarkdown = replaceAll (Pattern "\n ") (Replacement "\n")
 
 instance Translation PropertiesTranslation where
   qualify namespace (PropertiesTranslation propsAndTranslations) = PropertiesTranslation $ qualifyObjectKeys namespace propsAndTranslations
@@ -717,16 +746,18 @@ instance Translation ContextTranslation where
     case indexedName of
       Nothing -> pure unit
       Just i -> writeYaml indent i
+    -- The translation of the external role itself is that of the context, so we do not write it.
     case external of
-      RoleTranslation { properties, actions, notifications: enotes, markdowns } -> case properties, actions, enotes of
-        PropertiesTranslation properties', ActionsPerStateTranslation actions', NotificationsTranslation notifications' ->
-          if isEmpty properties' && isEmpty actions' && isEmpty notifications' then pure unit
+      RoleTranslation { properties, actions, notifications: enotes, markdowns, titles } -> case properties, actions, enotes, markdowns, titles of
+        PropertiesTranslation properties', ActionsPerStateTranslation actions', NotificationsTranslation notifications', MarkdownsTranslation markdowns', TitlesTranslation titles' ->
+          if isEmpty properties' && isEmpty actions' && isEmpty notifications' && isEmpty markdowns' && isEmpty titles' then pure unit
           else do
             tell (i indent "external" colonNl)
             writeYaml (indent <> tab) enotes
             writeYaml (indent <> tab) properties
             writeYaml (indent <> tab) actions
             writeYaml (indent <> tab) markdowns
+            writeYaml (indent <> tab) titles
     writeYaml indent notifications
     case users of
       RolesTranslation users' ->
@@ -832,10 +863,10 @@ instance Translation ModelTranslation where
   writeYaml indent (ModelTranslation { namespace, contexts, roles, version }) = do
     tell (namespace <> colonNl)
     tell (i tab "version" colonSpace "\"" version "\"" nl)
-    for_ contexts \contexts' -> do
+    for_ contexts \contexts'@(ContextsTranslation cs) -> unless (isEmpty cs) do
       tell (i tab "contexts" colonNl)
       writeYaml (tab <> tab) contexts'
-    for_ roles \roles' -> do
+    for_ roles \roles'@(RolesTranslation rs) -> unless (isEmpty rs) do
       tell (i tab "roles" colonNl)
       writeYaml (tab <> tab) roles'
   addTranslations table (ModelTranslation { namespace, contexts, roles, version }) = ModelTranslation
@@ -908,28 +939,41 @@ emptyTranslationTable = TranslationTable empty
 -------------------------------------------------------------------------------
 ---- PARSE YAML TO TRANSLATION
 -------------------------------------------------------------------------------
+-- | Parse a YAML translation file into a ModelTranslation whose keys are local names
+-- | (qualify them with `qualifyModelTranslation` or `parseTranslation_pass2`).
+-- | The file must be a mapping with a single key (the model namespace) whose value holds
+-- | `version` and optionally `contexts` and `roles`.
 parseTranslation_pass1 :: String -> Effect (Either Error ModelTranslation)
 parseTranslation_pass1 source = do
-  parseResult :: Either Error ParsedYaml <- load source
-  modelTranslation :: Either Error ModelTranslation <- pure (map (hydrate <<< toModelTranslation_) parseResult)
-  case modelTranslation of
-    Left e -> pure $ Left (error $ "Could not parse the translation file: " <> message e)
-    Right modelTranslation' -> pure $ Right $ modelTranslation'
+  parseResult :: Either Error Foreign <- load source
+  pure case parseResult of
+    Left e -> Left (error $ "Could not parse the translation file: " <> message e)
+    Right yaml -> case toModelTranslation_ yaml of
+      Nothing -> Left (error "Could not parse the translation file: expected a mapping from the model namespace to its version, contexts and roles.")
+      Just mt -> Right (hydrate mt)
   where
-  toModelTranslation_ :: ParsedYaml -> ModelTranslation_
-  toModelTranslation_ yaml = case head $ keys yaml of
-    Just namespace ->
-      let
-        { version, contexts, roles } = unsafePartial fromJust $ lookup namespace yaml
-      in
-        ModelTranslation_ { namespace: NULL.notNull namespace, version: version, contexts, roles }
-    Nothing -> ModelTranslation_ { namespace: NULL.notNull "IllegalYaml", version: NULL.null, contexts: NULL.null, roles: NULL.null }
+  toModelTranslation_ :: Foreign -> Maybe ModelTranslation_
+  toModelTranslation_ yaml =
+    if isMapping yaml then do
+      let (topLevel :: Object Foreign) = unsafeFromForeign yaml
+      namespace <- head $ keys topLevel
+      body <- lookup namespace topLevel
+      if isMapping body then
+        let
+          (fields :: Object Foreign) = unsafeFromForeign body
+        in
+          Just $ ModelTranslation_
+            { namespace: NULL.notNull namespace
+            , version: NULL.toNullable (lookup "version" fields >>= scalarToString)
+            , contexts: NULL.toNullable (unsafeFromForeign <$> lookup "contexts" fields)
+            , roles: NULL.toNullable (unsafeFromForeign <$> lookup "roles" fields)
+            }
+      else Nothing
+    else Nothing
 
 parseTranslation_pass2 :: ModelTranslation -> ModelUri Readable -> MonadPerspectives ModelTranslation
 parseTranslation_pass2 m@(ModelTranslation modelTranslation) (ModelUri someFqn) =
   fromReadableModelTranslation (qualifyModelTranslation (ModelTranslation modelTranslation { namespace = typeUri2typeNameSpace_ someFqn }))
-
-type ParsedYaml = Object { contexts :: NULL.Nullable ContextsTranslation_, roles :: NULL.Nullable RolesTranslation_, version :: NULL.Nullable String }
 
 -------------------------------------------------------------------------------
 ---- ADD TRANSLATIONS
@@ -941,6 +985,10 @@ augmentModelTranslation = addTranslations
 -------------------------------------------------------------------------------
 ---- RUNTIME TRANSLATION FUNCTIONS
 -------------------------------------------------------------------------------
+-- | Look up the translation of `text` (a qualified type name or an original text) in the
+-- | translation table of `domain` (an unversioned model URI), for the current language.
+-- | Falls back to `text` itself if there is no table, no entry, no translation for the language,
+-- | or if the translation is still a "MISSING <lang>" placeholder.
 translationOf :: String -> String -> MonadPerspectives String
 translationOf domain text = do
   language <- getCurrentLanguage
@@ -951,9 +999,13 @@ translationOf domain text = do
       Nothing -> pure text
       Just (Translations translations) -> case lookup language translations of
         Nothing -> pure text
-        Just translation -> case match (unsafeRegex "MISSING" noFlags) translation of
-          Just _ -> pure text
-          Nothing -> pure translation
+        Just translation ->
+          if isMissingPlaceholder translation then pure text
+          else pure translation
+
+-- | The placeholder written for languages that have not been translated yet (see addDefaultLanguages).
+isMissingPlaceholder :: String -> Boolean
+isMissingPlaceholder = Regex.test (unsafeRegex "^MISSING [A-Za-z_-]+$" noFlags)
 
 translateTypeString :: String -> MonadPerspectives String
 translateTypeString typeName = case typeUri2ModelUri typeName of

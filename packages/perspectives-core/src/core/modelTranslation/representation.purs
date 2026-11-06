@@ -30,7 +30,7 @@ import Prelude
 
 import Data.Maybe (Maybe)
 import Data.Newtype (class Newtype)
-import Foreign.Object (Object, empty, union)
+import Foreign.Object (Object, empty, union, unionWith)
 import Perspectives.CoreTypes (Translations)
 import Perspectives.Representation.TypeIdentifiers (IndexedContext)
 import Simple.JSON (class ReadForeign, class WriteForeign, readImpl, write)
@@ -80,8 +80,14 @@ newtype ActionsPerStateTranslation = ActionsPerStateTranslation (Object ActionsT
 
 derive newtype instance WriteForeign ActionsPerStateTranslation
 derive newtype instance ReadForeign ActionsPerStateTranslation
+
+-- | Merges the actions of states that occur in both operands. A user role typically has actions
+-- | in the same state from several perspectives (and from its context actions); a shallow union
+-- | would keep only the actions of the first operand.
 instance Semigroup ActionsPerStateTranslation where
-  append (ActionsPerStateTranslation a1) (ActionsPerStateTranslation a2) = ActionsPerStateTranslation (a1 `union` a2)
+  append (ActionsPerStateTranslation a1) (ActionsPerStateTranslation a2) = ActionsPerStateTranslation (unionWith mergeActions a1 a2)
+    where
+    mergeActions (ActionsTranslation x) (ActionsTranslation y) = ActionsTranslation (x `union` y)
 
 instance Monoid ActionsPerStateTranslation where
   mempty = ActionsPerStateTranslation empty

@@ -44,6 +44,7 @@ This index provides an overview of the technical documentation in `packages/pers
 | [ARC Phase-One Parser Architecture Assessment](arc-parser-phase-one-assessment.md) | Evidence-based assessment and staged proposal for rationalising ARC parsing while preserving the phase-one AST contracts. |
 | [Type Comparison](type-comparison.md) | How types are represented (ADT, ExpandedADT, CNF), normalised, and compared throughout the PDR. Covers `equalsOrSpecialises`, `leastCommonSuperType`, role-class hierarchy, and the role of Phase Three in populating comparison tables. |
 | [Stable ID Mapping](stable-id-mapping.md) | How stable type identifiers are preserved across ARC model refactors using a `stableIdMapping.json` sidecar stored alongside the DomeinFile. Covers the alias mechanism, snapshot heuristics, and where in the compilation pipeline the mapping is applied. |
+| [Model Translation](model-translation.md) | How type names, action names, notifications, screen titles and markdown are translated: the `ModelTranslation` structure, the YAML file the modeller edits (local names, qualified by block structure), the flat `translationtable.json` lookup table, the `Parsing` library workflow in CouchdbManagement, and runtime lookup with `translationOf`. Includes known limitations and the regression tests. |
 
 ### Screen Widgets & Language Extensions
 
@@ -61,6 +62,7 @@ The table below lists every PureScript module that is referenced in at least one
 | Module | Discussed in |
 |---|---|
 | `Perspectives.AMQP.IncomingPost` | [Context Serialisation for a Peer](context-serialisation-for-peer.md), [Transaction Execution Process](transaction-execution.md) |
+| `Perspectives.Assignment.SentenceCompiler` | [Model Translation](model-translation.md) |
 | `Perspectives.Assignment.Update` | [Installation Initialization](installation-initialization.md) |
 | `Perspectives.Checking.PerspectivesTypeChecker` | [Type Comparison](type-comparison.md) |
 | `Perspectives.CollectAffectedContexts` | [Query Inversion](query-inversion.md), [Role-Binding Query Analysis](role-binding-query-analysis.md) |
@@ -71,15 +73,21 @@ The table below lists every PureScript module that is referenced in at least one
 | `Perspectives.Conversations.Parser` | [Conversation Text Format and Parser](conversation-text-format.md) |
 | `Perspectives.Conversations.Renderer` | [Conversation Text Format and Parser](conversation-text-format.md) |
 | `Perspectives.Deltas` | [Transaction Distribution to Peers](transaction-distribution.md) |
+| `Perspectives.DomeinCache` | [Model Translation](model-translation.md) |
 | `Perspectives.ErrorLogging` | [PDR → Frontend Messaging](pdr-messaging.md) |
+| `Perspectives.Extern.Parsing` | [Model Translation](model-translation.md) |
+| `Perspectives.HumanReadableType` | [Model Translation](model-translation.md) |
 | `Perspectives.Logging` | [Structured Logging](structured-logging.md) |
 | `Perspectives.External.HiddenFunctionCache` | [The Query Subsystem](query-subsystem.md) |
-| `Perspectives.Identifiers` | [Model URI resolution](model-uri-resolution.md) |
+| `Perspectives.Identifiers` | [Model URI resolution](model-uri-resolution.md), [Model Translation](model-translation.md) |
 | `Perspectives.Inspector.InspectableResources` | [PDR Client Data Structures](pdr-client-data-structures.md) |
 | `Perspectives.Instances.Me` | [Installation Initialization](installation-initialization.md) |
 | `Perspectives.Instances.ObjectGetters` | [Type Comparison](type-comparison.md) |
 | `Perspectives.Instances.SerialiseAsJson` | [Context Serialisation for a Peer](context-serialisation-for-peer.md) |
 | `Perspectives.InvertedQuery` | [Query Inversion](query-inversion.md) |
+| `Perspectives.ModelTranslation` | [Model Translation](model-translation.md) |
+| `Perspectives.ModelTranslation.Normalize` | [Model Translation](model-translation.md) |
+| `Perspectives.ModelTranslation.Representation` | [Model Translation](model-translation.md) |
 | `Perspectives.ObjectGetterLookup` | [The Query Subsystem](query-subsystem.md) |
 | `Perspectives.Parsing.Arc.Expression` | [The Query Subsystem](query-subsystem.md) |
 | `Perspectives.Parsing.Arc.Expression.AST` | [The Query Subsystem](query-subsystem.md) |
@@ -89,7 +97,7 @@ The table below lists every PureScript module that is referenced in at least one
 | `Perspectives.Persistence.API` | [Database Backend Options](database-backend-options.md) |
 | `Perspectives.Persistence.PendingTransactionStore` | [Delta Ordering and Conflict Resolution](delta-ordering.md) |
 | `Perspectives.Persistence.ResourceVersionStore` | [Delta Ordering and Conflict Resolution](delta-ordering.md) |
-| `Perspectives.PerspectivesState` | [PDR → Frontend Messaging](pdr-messaging.md), [Structured Logging](structured-logging.md) |
+| `Perspectives.PerspectivesState` | [PDR → Frontend Messaging](pdr-messaging.md), [Structured Logging](structured-logging.md), [Model Translation](model-translation.md) |
 | `Perspectives.Query.ExpressionCompiler` | [The Query Subsystem](query-subsystem.md) |
 | `Perspectives.Query.Interpreter` | [The Query Subsystem](query-subsystem.md) |
 | `Perspectives.Query.Interpreter.Dependencies` | [The Query Subsystem](query-subsystem.md) |
@@ -120,4 +128,4 @@ The table below lists every PureScript module that is referenced in at least one
 | `Perspectives.Parsing.Arc` | [Typeahead Screen Widgets](typeahead-screen-widgets.md) |
 | `Perspectives.Parsing.Arc.PhaseThree.Screens` | [Typeahead Screen Widgets](typeahead-screen-widgets.md) |
 | `Perspectives.Parsing.Arc.NormalizeTypeNames` | [Typeahead Screen Widgets](typeahead-screen-widgets.md) |
-| `Perspectives.TypePersistence.ScreenContextualisation` | [Typeahead Screen Widgets](typeahead-screen-widgets.md) |
+| `Perspectives.TypePersistence.ScreenContextualisation` | [Typeahead Screen Widgets](typeahead-screen-widgets.md), [Model Translation](model-translation.md) |

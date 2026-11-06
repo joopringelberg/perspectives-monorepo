@@ -1446,7 +1446,7 @@ uploadOldTranslation modelUris _ = do
                 mRev
                 "translationtable.json"
                 theFile
-                (MediaType "text/json")
+                (MediaType "application/json")
               infoInstall ("Successfully uploaded old translation table for model URI: " <> modelUri)
             \err -> warnInstall ("Failed to upload old translation table for model URI: " <> modelUri <> " with error: " <> show err)
 

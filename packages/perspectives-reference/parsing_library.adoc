@@ -167,7 +167,7 @@ callExternal pars:GetTranslationYaml( ModelTranslationJson ) returns String
 
 `ParseYamlTranslation( <pfile> ) returns String`
 
-Parses a YAML translation file (stored as a `File` property value) and returns a JSON-serialised `ModelTranslation`. This is the inverse of `GetTranslationYaml`: it converts the human-edited YAML back to the internal JSON format.
+Parses a YAML translation file (stored as a `File` property value) and returns a JSON-serialised `ModelTranslation`. This is the inverse of `GetTranslationYaml`: it converts the human-edited YAML back to the internal JSON format. Unquoted numbers and booleans are read as text, and entries without an original text (`orig`) are ignored. If the file is not a valid translation file, the modeller receives a warning and the result is empty.
 
 [cols="1,1,4"]
 |===

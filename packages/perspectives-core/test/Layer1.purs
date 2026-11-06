@@ -63,6 +63,7 @@ import Test.VersionedDeltas (theSuite) as VD
 
 -- Comprehensive unit tests for ExpandedADT, CNF, and ADT (with real assertions)
 import Test.Perspectives.Representation.AbstractDataTypeTests (theSuite) as ADTTESTS
+import Test.ModelTranslation (theSuite) as MTR
 
 -- ARC parser phases 1–3 — use runP / runPhaseTwo' / runPhaseThree' but only
 -- perform in-memory AST transformations; no database access
@@ -98,6 +99,7 @@ main = runTest do
   TPA2.theSuite -- Phase 2 — declarations, qualification and type representation
   TPA3.theSuite -- Phase 3 — compiled queries, perspectives and type normalisation
   QDC.theSuite -- Query description compilation
+  MTR.theSuite -- Model translation: YAML <-> ModelTranslation <-> TranslationTable
 
   -- Read a file from the file-system, but otherwise pure (no MonadPerspectives / no HTTP)
   TPAM.theSuite -- ARC model parser (parses .arc files from the model/

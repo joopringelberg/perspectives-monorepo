@@ -375,22 +375,25 @@ getTranslationYaml modelTranslation_ _ = case head modelTranslation_ of
 --   lift $ lift (Value <$> MT.writeReadableTranslationYaml mapping m)
 
 -- | From a YAML string, generate a (serialised) ModelTranslation.
+-- | The YAML holds local names; they are qualified with the readable namespace of the model and then
+-- | mapped to Stable identifiers. The model (namespace and version) is taken from the YAML itself.
+-- | A YAML file that cannot be parsed is reported to the modeller; the result is then empty.
 parseYamlTranslation :: Array String -> (RoleInstance ~~> Value)
-parseYamlTranslation pfile_ _ = ArrayT case head pfile_ of
-  Nothing -> pure []
+parseYamlTranslation pfile_ _ = case head pfile_ of
+  Nothing -> ArrayT $ pure []
   Just pfile -> do
-    mYaml <- lift $ getPFileTextValue pfile
+    mYaml <- lift $ lift $ getPFileTextValue pfile
     case mYaml of
-      Nothing -> pure $ []
+      Nothing -> ArrayT $ pure []
       Just yaml -> do
         translation' <- liftEffect $ MT.parseTranslation_pass1 yaml
         case translation' of
-          Left e -> throwError e
+          Left e -> handleExternalFunctionError "model://perspectives.domains#Parsing$ParseYamlTranslation" (Left e)
           Right (ModelTranslation translation) -> do
             let (versionedModelUri :: Sidecar.ModelUri Sidecar.Stable) = Sidecar.ModelUri (translation.namespace <> "@" <> translation.version)
             -- Notice we need to provide the Readable ModelUri to pass2.
-            translation'' <- lift $ withRepositoryModel versionedModelUri (\(DomeinFile { namespace }) -> MT.parseTranslation_pass2 (ModelTranslation translation) namespace)
-            pure $ [ Value $ writeJSON translation'' ]
+            translation'' <- lift $ lift $ withRepositoryModel versionedModelUri (\(DomeinFile { namespace }) -> MT.parseTranslation_pass2 (ModelTranslation translation) namespace)
+            pure $ Value $ writeJSON translation''
 
 withRepositoryModel :: forall a. Sidecar.ModelUri Sidecar.Stable -> (DomeinFile Sidecar.Stable -> MonadPerspectives a) -> MonadPerspectives a
 withRepositoryModel (Sidecar.ModelUri versionedModelName) thunk = do
@@ -402,15 +405,17 @@ withRepositoryModel (Sidecar.ModelUri versionedModelName) thunk = do
   -- Add the pair ModelUri Readable - ModelUri Stable to the mapping in PerspectivesState.
   currentMapping <- getModelUris
   setModelUri namespace id
-  result <- thunk dfile
-  -- Restore the original cache state.
+  result <- try (thunk dfile)
+  -- Restore the original cache state, also when the thunk failed.
   setModelUris currentMapping
   case mcurrentVersionOfDomeinFile of
     -- We had nothing in cache, so remove from cache again.
     Nothing -> decache id
     -- Restore the original cached version.
     Just currentVersionOfDomeinFile -> void $ cacheEntity id currentVersionOfDomeinFile
-  pure result
+  case result of
+    Left e -> throwError e
+    Right r -> pure r
 
 -- | From a PString that holds a ModelTranslation, generate the table and upload to the repository.
 -- | The ModelUriString should be versioned (e.g. model://perspectives.domains#System@1.0).
@@ -436,7 +441,7 @@ generateTranslationTable translation_ modelUri_ _ = case head translation_, head
           mRev
           "translationtable.json"
           theFile
-          (MediaType "text/json")
+          (MediaType "application/json")
 
 -- | Generate a TCP configuration (a JSON query plan) from the DomeinFile identified by the
 -- | versioned model URI. The TCP uses this plan to create SQL views that materialise all
