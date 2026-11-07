@@ -1,0 +1,99 @@
+model://perspectives.domains#u3zg3zitqc:
+  version: "2.0"
+  contexts:
+    ModelTestGroupApp:
+      translations:
+        nl: "Model testgroepen App"
+        en: "Model test groups App"
+      indexedName:
+        name: model://perspectives.domains#ModelTestGroups$MyTestGroupApp
+        translations:
+          nl: "Mijn testgroepen"
+          en: "My test groups"
+      users:
+        Manager:
+          translations:
+            nl: "Beheerder"
+            en: "Manager"
+          actions:
+            model://perspectives.domains#ModelTestGroups$ModelTestGroupApp:
+              CreateModelTestGroup:
+                translations:
+                  nl: "Maak model testgroep aan"
+                  en: "Create model test group"
+      contextroles:
+        IncomingModelTestGroups:
+          translations:
+            nl: "Ontvangen model testgroepen"
+            en: "Received model test groups"
+        ModelTestGroups:
+          translations:
+            nl: "Model testgroepen"
+            en: "Model test groups"
+    ModelTestGroup:
+      translations:
+        nl: "Model testgroep"
+        en: "Model test group"
+      users:
+        Participants:
+          translations:
+            nl: "Deelnemers"
+            en: "Participants"
+          properties:
+            UpdateModel:
+              translations:
+                nl: "Werk model bij"
+                en: "Update model"
+          markdowns:
+            0:
+              translations:
+                orig: "### The developer can update your installation\n
+                  By participating in this model group, you grant the developer the right\n
+                  to update the model in your installation at his discretion."
+                nl: "### De ontwikkelaar kan uw installatie bijwerken\n
+                  Door deel te nemen aan deze model testgroep geeft u de ontwikkelaar het recht\n
+                  om het model in uw installatie naar eigen inzicht bij te werken."
+                en: "### The developer can update your installation\n
+                  By participating in this model group, you grant the developer the right\n
+                  to update the model in your installation at his discretion."
+        Developer:
+          translations:
+            nl: "Ontwikkelaar"
+            en: "Developer"
+          actions:
+            model://perspectives.domains#ModelTestGroups$ModelTestGroup$Developer:
+              UpdateParticipantsModel:
+                translations:
+                  nl: "Werk model deelnemers bij"
+                  en: "Update participants model"
+              ResetParticipantState:
+                translations:
+                  nl: "Reset deelnemerstoestand"
+                  en: "Reset participant state"
+              CreateModel:
+                translations:
+                  nl: "Maak model aan"
+                  en: "Create model"
+          markdowns:
+            0:
+              translations:
+                orig: "### Manage your model test group\n
+                  * Add participants on the left.\n
+                  * [[action: CreateModel|Create a model role first]]\n
+                  * Then copy a Versions instance in a ModelManifest and fill the new Model role with it.\n
+                  Update the model in your participants installation with the context action [[action: UpdateParticipantsModel| Update model]]."
+                nl: "### Beheer uw model testgroep\n
+                  * Voeg deelnemers toe aan de linkerkant.\n
+                  * [[action: CreateModel|Maak eerst een model rol aan]]\n
+                  * Kopieer vervolgens een Versions instantie in een ModelManifest en vul de nieuwe Model rol ermee.\n
+                  Werk het model in de installatie van uw deelnemers bij met de context actie [[action: UpdateParticipantsModel| Werk model bij]]."
+                en: "### Manage your model test group\n
+                  * Add participants on the left.\n
+                  * [[action: CreateModel|Create a model role first]]\n
+                  * Then copy a Versions instance in a ModelManifest and fill the new Model role with it.\n
+                  Update the model in your participants installation with the context action [[action: UpdateParticipantsModel| Update model]]."
+      things:
+        Model:
+          translations:
+            nl: "Model"
+            en: "Model"

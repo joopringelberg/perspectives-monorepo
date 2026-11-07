@@ -44,26 +44,26 @@ domain model://perspectives.domains#ModelTestGroups@2.0
       perspective on ModelTestGroups
         only (CreateAndFill, RemoveContext)
         props (Name) verbs (Consult, SetPropertyValue)
+      perspective on ModelTestGroups >> binding >> context >> Developer
+        only (Create, Fill)
+      perspective on IncomingModelTestGroups 
+        props (Name)
+
+      action CreateModelTestGroup
+        letA
+          group <- create context ModelTestGroup bound to ModelTestGroups
+        in
+          bind me to Developer in group >> binding >> context
 
     context ModelTestGroups (relational) filledBy ModelTestGroup
 
-  case ModelTestGroup
-    on entry
-      do for Initializer
-        bind me to Developer
-    state AddToApp = (exists Developer) and not exists extern >> binder ModelTestGroups
-      on entry
-        do for Initializer
-          bind extern to ModelTestGroups in mtg:MyTestGroupApp
+    context IncomingModelTestGroups = filter callExternal cdb:RoleInstances( "model://perspectives.domains#ModelTestGroups$ModelTestGroupApp$External" ) returns mtg:ModelTestGroup$External
+      with not (binder ModelTestGroups >> context >>= first) == mtg:MyTestGroupApp
 
+
+  case ModelTestGroup
     external
       aspect sys:RoleWithName
-    
-    user Initializer = me
-      perspective on Developer
-        only (Create, Fill)
-      perspective on extern >> binder ModelTestGroups
-        only (Create, Fill)
     
     user Developer filledBy (sys:TheWorld$PerspectivesUsers + sys:SocialEnvironment$Persons)
       perspective on Participants
@@ -76,6 +76,9 @@ domain model://perspectives.domains#ModelTestGroups@2.0
       
       action UpdateParticipantsModel
         UpdateModel = true for Participants
+      
+      action ResetParticipantState 
+        UpdateModel = false for Participants
 
       action CreateModel
         create role Model
@@ -100,7 +103,7 @@ domain model://perspectives.domains#ModelTestGroups@2.0
         where
           Model
             master
-              only (Fill)
+              only (Fill, Remove)
             detail
 
     user Participants (relational) filledBy (sys:TheWorld$PerspectivesUsers + sys:SocialEnvironment$Persons)
@@ -109,10 +112,17 @@ domain model://perspectives.domains#ModelTestGroups@2.0
         on entry
           do for Participants
             runRoleAction UpdateModel for Visitor on (context >> Model >> binding) in (context >> Model >> binding >> context)
-            UpdateModel = false
+            once settled
+              UpdateModel = false
       
+      perspective on External
+        props (Name) verbs (Consult)
+        
+      perspective on extern >> binder ModelTestGroups
+        only (Create, Fill) 
+
       perspective on Model
-        props (VersionedLocalModelName) verbs (Consult)
+        props (ModelURIReadable, LastChangeDT) verbs (Consult)
 
       perspective on Participants
         selfonly
