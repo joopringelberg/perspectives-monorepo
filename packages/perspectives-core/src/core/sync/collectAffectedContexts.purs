@@ -647,6 +647,10 @@ addDeltasForPerspectiveObjects filled = do
         cwus <- handleBackwardQuery filled iq
         -- Then take the properties of the query and, for the users computed, apply computeProperties in order to add filled role deltas and property deltas.
         us <- pure (filter (\(Tuple context users) -> not $ null users) cwus)
+        let users = concat (snd <$> us)
+        if not null users then traceUsersWithPerspective iq users $
+          "have a perspective on role instance " <> unwrap filled' <> " that has just been filled."
+        else pure unit
         if null us then pure unit
         -- This function serialises dependencies from the interpretation result to deltas and adds them to the transaction for the users.
         else computeProperties [ (singletonPath (R filled')) ] statesPerProperty us

@@ -356,7 +356,9 @@ serialiseDependency users mpreviousDependency currentDependency = do
 
   case mpreviousDependency, currentDependency of
     Just first@(R roleId1), (R roleId2) -> do
-      if isInPublicScheme (unwrap roleId1) || isInPublicScheme (unwrap roleId2) then pure unit
+      -- A binding between two public roles is part of the public resources themselves. But a private role
+      -- filled with a public role has its own (private) binding delta that the peer cannot fetch elsewhere.
+      if isInPublicScheme (unwrap roleId1) && isInPublicScheme (unwrap roleId2) then pure unit
       -- Composing dependency paths may repeat the role at their shared boundary.
       -- Preserve a genuine self-binding delta, but do not warn when this is only path overlap.
       else if roleId1 == roleId2 then void $ lift $ addBindingDelta roleId1 roleId2
