@@ -1190,6 +1190,7 @@ domain model://perspectives.domains#CouchdbManagement@12.4
               -- Even though we set LastChangeDT, state ProcessArc is not exited.
               LastChangeDT = callExternal sensor:ReadSensor( "clock", "now" ) returns DateTime
               MustUpload = true
+              GenerateYaml = false for context >> Translation
 
       state AfterSuccesfulParse = (ArcFeedback matches regexp "^OK") and MustUpload and (IsTheOnlyVersion or (exists context >> BasedOnVersion))
         -- NOTE. This state triggers GenerateYaml.
