@@ -188,7 +188,7 @@ callExternal pars:ParseYamlTranslation( TranslationYamlFile ) returns String
 
 `GenerateTranslationTable( <modelTranslation>, <modelUri> )`
 
-Generates a translation lookup table from a `ModelTranslation` and uploads it as an attachment (`translationtable.json`) to the DomeinFile in the repository. The table is used at runtime to look up translated strings.
+Generates a translation lookup table from a `ModelTranslation` and uploads it as an attachment (`translationtable.json`) to the DomeinFile in the repository. The table is used at runtime to look up translated strings. If the translation cannot be read or the upload fails, the modeller receives a warning. Installations use the new table only after they have installed a new build of the model.
 
 [cols="1,1,4"]
 |===

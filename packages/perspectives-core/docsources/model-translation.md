@@ -154,7 +154,20 @@ If the version still has no translation table with entries (no `BasedOnVersion`,
 
 As a result, the YAML regenerated after an upload (state `GenerateYaml`) contains all types of the new model. Types that existed before keep their translations. New types have `MISSING` placeholders. Types that were removed from the model disappear from the YAML and, once the table has been rebuilt, from the table.
 
-### 3.2 Generating from a DomeinFile (`generateFirstTranslation`)
+### 3.2 Feedback to the modeller
+
+When the YAML file cannot be turned into a table, the Author receives a `TranslationTableNotUpdated` warning. It uses the warnings mechanism described in [PDR → Frontend Messaging](pdr-messaging.md): it is delivered with the next API response and appears in MyContexts' user messaging panel. The warning names the file or the versioned model; its error detail gives the cause:
+
+| Raised by | Cause |
+|---|---|
+| `ParseYamlTranslation` | The file cannot be read as text (e.g. an unexpected MIME type). |
+| `ParseYamlTranslation` | The file is not valid YAML. The detail is the parser message, which includes the line and column and a snippet of the file. A typical cause is a missing closing double quote in a hand-edited value. |
+| `ParseYamlTranslation` | The model named in the file (its first line, plus `version`) cannot be retrieved from the repository or processed. |
+| `GenerateTranslationTable` | The model translation cannot be decoded, or uploading the table to the repository fails. |
+
+When `ParseYamlTranslation` fails it returns nothing, and `GenerateTranslationTable` then does nothing. That second case is only logged, so the problem is reported once. A successful upload produces no message. Remember that installations only see a new table after they have reinstalled the model (see section 4.1).
+
+### 3.3 Generating from a DomeinFile (`generateFirstTranslation`)
 
 The model is traversed as follows:
 
@@ -168,7 +181,7 @@ The model is traversed as follows:
 
 Views and states are not translated. The runtime uses their `readableName` instead (see `HumanReadableType` below).
 
-### 3.3 Writing YAML (`writeTranslationYaml`, `writeReadableTranslationYaml`)
+### 3.4 Writing YAML (`writeTranslationYaml`, `writeReadableTranslationYaml`)
 
 - Every value under `translations` is written as a **double-quoted YAML scalar**, using JSON string syntax (`quoteForYaml`). This preserves texts that YAML would otherwise misread, for example `Note: …`, `Leaving # now`, `{Name} joined`, `- item`, `true`, `123`, or backslashes.
 - **Markdown texts** are written as multi-line double-quoted scalars, so that the modeller can read them (`escapeMarkdownForYaml`):
@@ -181,7 +194,7 @@ Views and states are not translated. The runtime uses their `readableName` inste
 - `writeReadableTranslationYaml` first converts the Stable keys to Readable ones (`toReadableModelTranslation`), so that the modeller sees the names used in the ARC source. The namespace stays Stable.
 - Blocks without content (no properties, no actions, an external role with nothing to translate, …) are omitted.
 
-### 3.4 Parsing YAML (`parseTranslation_pass1`, `parseTranslation_pass2`)
+### 3.5 Parsing YAML (`parseTranslation_pass1`, `parseTranslation_pass2`)
 
 Pass 1 uses `js-yaml` (via `Purescript.YAML.load`) and converts the result into the "underscore" types (`ModelTranslation_`, `ContextTranslation_`, …). In those types, absent blocks are `Nullable`. `hydrate` (class `Rehydrate`) then converts them into a `ModelTranslation`. Because the file is edited by hand, parsing is lenient:
 
@@ -193,7 +206,7 @@ Pass 1 uses `js-yaml` (via `Purescript.YAML.load`) and converts the result into 
 
 Pass 2 (`parseTranslation_pass2`) qualifies all names with the *readable* namespace of the model (`qualifyModelTranslation`). It then maps the keys to Stable identifiers with `fromReadableModelTranslation`. That conversion uses the Stable/Readable mapping of the model, which `withRepositoryModel` (in `parsing.purs`) provides by temporarily caching the repository version of the DomeinFile. Action keys are mapped by searching the role (and its perspectives) for an `Action` whose `readable` name equals the qualified readable action name.
 
-### 3.5 Augmenting (`augmentModelTranslation`)
+### 3.6 Augmenting (`augmentModelTranslation`)
 
 `augmentModelTranslation table mt` copies existing translations into a freshly generated `ModelTranslation`. Type names, properties, actions, titles and indexed names are matched exactly by key. Notifications and markdown texts are matched with `fuzzyLookup` (`fuzzysort`, score ≥ 0.9), so that a translation survives small edits of the original text. The `orig` text written to the YAML file is always the current text.
 
@@ -203,7 +216,7 @@ Pass 2 (`parseTranslation_pass2`) qualifies all names with the *readable* namesp
 
 ### 4.1 Loading
 
-`fetchTranslations` (in `domeinCache.purs`) reads `translationtable.json` from the local models database when a model is retrieved into the cache. It stores the table in `PerspectivesState.translations`, keyed by the unversioned Stable model URI. If the table cannot be parsed, the modeller is warned and the model is shown untranslated. When a model is updated or removed, its table is removed from the state (`removeTranslationTable`) and fetched again on the next use.
+`fetchTranslations` (in `domeinCache.purs`) reads `translationtable.json` from the local models database when a model is retrieved into the cache. It stores the table in `PerspectivesState.translations`, keyed by the unversioned Stable model URI. If the table cannot be parsed, a warning is logged (not shown to the user) and the model is shown untranslated. When a model is updated or removed, its table is removed from the state (`removeTranslationTable`) and fetched again on the next use.
 
 ### 4.2 Lookup
 

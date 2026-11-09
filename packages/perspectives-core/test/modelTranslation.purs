@@ -42,6 +42,10 @@ import Prelude
 import Control.Monad.Error.Class (throwError, try)
 import Control.Monad.Free (Free)
 import Data.Array (concat, elem, length, null, sort)
+import Data.String (Pattern(..), contains)
+import Data.String.Regex (test) as Regex
+import Data.String.Regex.Flags (noFlags)
+import Data.String.Regex.Unsafe (unsafeRegex)
 import Data.Either (Either(..), isLeft)
 import Data.Foldable (for_)
 import Data.Maybe (Maybe(..), isJust)
@@ -407,6 +411,27 @@ theSuite = suite "Perspectives.ModelTranslation" do
       case r of
         Left e -> assert ("Parsing crashed: " <> message e) false
         Right table -> equal (Just "Met origineel") (lookupTranslation "With original" "nl" table)
+
+    test "A YAML syntax error is reported with its line, column and a snippet" do
+      -- The closing quote of the orig text is missing, as in a hand-edited file.
+      parsed <- liftEffect $ parseTranslation_pass1
+        """model://example.org#TestTranslation:
+  version: "1.0"
+  roles:
+    Admin:
+      markdowns:
+        0:
+          translations:
+            orig: "### Heading\n
+              Text without closing quote
+            nl: "### Kop\n
+              Tekst."
+"""
+      case parsed of
+        Right _ -> assert "Expected a parse error" false
+        Left e -> do
+          assert ("Expected a (line:column) position in: " <> message e) (Regex.test (unsafeRegex "\\(\\d+:\\d+\\)" noFlags) (message e))
+          assert ("Expected a source snippet in: " <> message e) (contains (Pattern "Tekst.") (message e))
 
     test "An empty or non-mapping file is reported as an error, not a crash" do
       for_ [ "", "just a scalar", "- a\n- list" ] \yaml -> do

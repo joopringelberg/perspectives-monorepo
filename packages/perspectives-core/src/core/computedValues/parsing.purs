@@ -30,24 +30,24 @@ import Control.Monad.Error.Class (catchError, throwError, try)
 import Control.Monad.State (StateT, execStateT, get, put)
 import Control.Monad.Trans.Class (lift)
 import Data.Array (elem, head)
-import Data.Either (Either(..))
+import Data.Either (Either(..), either)
 import Data.Foldable (for_)
 import Data.FoldableWithIndex (forWithIndex_)
 import Data.Maybe (Maybe(..), maybe)
+import Data.Newtype (unwrap)
 import Data.MediaType (MediaType(..))
 import Data.Traversable (traverse)
 import Data.TraversableWithIndex (traverseWithIndex)
 import Data.Tuple (Tuple(..))
 import Decacheable (decache)
-import Effect.Aff (error)
+import Effect.Aff (error, message)
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
-import Effect.Class.Console (log)
 import Foreign (Foreign, unsafeToForeign)
 import Foreign.Object (Object, empty, filterKeys, fromFoldable, insert, isEmpty, lookup, singleton, union)
 import Main.RecompileBasicModels (UninterpretedDomeinFile(..), recompileModelsAtUrl)
 import Partial.Unsafe (unsafePartial)
-import Perspectives.CoreTypes (type (~~>), MonadPerspectives, MonadPerspectivesTransaction, TranslationTable(..), mkLibEffect1, mkLibEffect2, mkLibEffect3, mkLibFunc1, mkLibFunc2, mkLibFunc3, (##>), (##>>))
+import Perspectives.CoreTypes (type (~~>), MonadPerspectives, MonadPerspectivesQuery, MonadPerspectivesTransaction, TranslationTable(..), mkLibEffect1, mkLibEffect2, mkLibEffect3, mkLibFunc1, mkLibFunc2, mkLibFunc3, (##>), (##>>))
 import Perspectives.Couchdb (DeleteCouchdbDocument(..), DocWithAttachmentInfo)
 import Perspectives.Couchdb.Revision (Revision_, changeRevision)
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
@@ -55,10 +55,11 @@ import Perspectives.DomeinCache (AttachmentFiles, lookupStableModelUri_)
 import Perspectives.DomeinFile (DomeinFile(..))
 import Perspectives.Error.Boundaries (handleExternalFunctionError, handleExternalStatementError)
 import Perspectives.Error.Pretty (renderMultiplePerspectivesErrors, renderPerspectivesError)
-import Perspectives.ErrorLogging (logPerspectivesError, warnModeller)
+import Perspectives.ErrorLogging (logPerspectivesError, warnModeller, warnModellerWithError)
 import Perspectives.Logging (warnModel)
 import Perspectives.Extern.Couchdb (createVersionedModelManifestDependency, retrieveModelFromLocalStore, updateModel)
 import Perspectives.Extern.Files (getPFileTextValue)
+import Perspectives.Instances.Values (parsePerspectivesFile)
 import Perspectives.External.HiddenFunctionCache (HiddenFunctionDescription)
 import Perspectives.Identifiers (ModelUriString, isModelUri, modelUri2LocalName, modelUri2ModelUrl, unversionedModelUri)
 import Perspectives.Instances.ObjectGetters (context)
@@ -432,23 +433,36 @@ getTranslationYaml modelTranslation_ _ = case head modelTranslation_ of
 -- | From a YAML string, generate a (serialised) ModelTranslation.
 -- | The YAML holds local names; they are qualified with the readable namespace of the model and then
 -- | mapped to Stable identifiers. The model (namespace and version) is taken from the YAML itself.
--- | A YAML file that cannot be parsed is reported to the modeller; the result is then empty.
+-- | If the file cannot be processed, the modeller receives a TranslationTableNotUpdated warning
+-- | (on the next API response, see docsources/pdr-messaging.md) and the result is empty.
 parseYamlTranslation :: Array String -> (RoleInstance ~~> Value)
 parseYamlTranslation pfile_ _ = case head pfile_ of
   Nothing -> ArrayT $ pure []
   Just pfile -> do
+    let fileName = either (const "the translation file") _.fileName (parsePerspectivesFile pfile)
     mYaml <- lift $ lift $ getPFileTextValue pfile
     case mYaml of
-      Nothing -> ArrayT $ pure []
+      Nothing -> notProcessed fileName "The file could not be read as text. Upload it as a YAML file (MIME type text/yaml)."
       Just yaml -> do
         translation' <- liftEffect $ MT.parseTranslation_pass1 yaml
         case translation' of
-          Left e -> handleExternalFunctionError "model://perspectives.domains#Parsing$ParseYamlTranslation" (Left e)
+          Left e -> notProcessed fileName (message e)
           Right (ModelTranslation translation) -> do
             let (versionedModelUri :: Sidecar.ModelUri Sidecar.Stable) = Sidecar.ModelUri (translation.namespace <> "@" <> translation.version)
             -- Notice we need to provide the Readable ModelUri to pass2.
-            translation'' <- lift $ lift $ withRepositoryModel versionedModelUri (\(DomeinFile { namespace }) -> MT.parseTranslation_pass2 (ModelTranslation translation) namespace)
-            pure $ Value $ writeJSON translation''
+            r <- lift $ lift $ try $ withRepositoryModel versionedModelUri (\(DomeinFile { namespace }) -> MT.parseTranslation_pass2 (ModelTranslation translation) namespace)
+            case r of
+              Left e -> notProcessed fileName
+                ( "The model named in the file (" <> unwrap versionedModelUri
+                    <> ", taken from its first line and its version) could not be retrieved from the repository or processed: "
+                    <> message e
+                )
+              Right translation'' -> pure $ Value $ writeJSON translation''
+  where
+  notProcessed :: String -> String -> MonadPerspectivesQuery Value
+  notProcessed fileName err = ArrayT do
+    lift $ warnModellerWithError (TranslationTableNotUpdated fileName) err
+    pure []
 
 withRepositoryModel :: forall a. Sidecar.ModelUri Sidecar.Stable -> (DomeinFile Sidecar.Stable -> MonadPerspectives a) -> MonadPerspectives a
 withRepositoryModel (Sidecar.ModelUri versionedModelName) thunk = do
@@ -481,22 +495,25 @@ generateTranslationTable translation_ modelUri_ _ = case head translation_, head
   _, Nothing -> handleExternalStatementError "model://perspectives.domains#Parsing$GenerateTranslationTable"
     (Left (error "A Versioned model name should be provided. (e.g. model://perspectives.domains#System@1.0)"))
   Just modelTranslationString, Just modelUri -> case readJSON modelTranslationString of
-    -- Fail silently
-    Left e -> log ("generateTranslationTable: " <> show e)
+    Left e -> lift $ warnModellerWithError (TranslationTableNotUpdated modelUri) ("The model translation could not be read: " <> show e)
     -- Generate the table and upload as attachment to the repository DomeinFile.
     Right (modelTranslation :: ModelTranslation) -> case (unsafePartial modelUri2ModelUrl modelUri) of
       { repositoryUrl, documentName } -> do
         table <- pure (MT.generateTranslationTable modelTranslation)
         theFile <- liftEffect $ toFile "translationtable.json" "application/json" (unsafeToForeign $ writeJSON table)
-        mRev <- lift $ retrieveDocumentVersion repositoryUrl documentName
-        -- Ignore the new revision. We do not have a local representation of the remote DomeinFile.
-        void $ lift $ addAttachment
-          repositoryUrl
-          documentName
-          mRev
-          "translationtable.json"
-          theFile
-          (MediaType "application/json")
+        r <- lift $ try do
+          mRev <- retrieveDocumentVersion repositoryUrl documentName
+          -- Ignore the new revision. We do not have a local representation of the remote DomeinFile.
+          void $ addAttachment
+            repositoryUrl
+            documentName
+            mRev
+            "translationtable.json"
+            theFile
+            (MediaType "application/json")
+        case r of
+          Left e -> lift $ warnModellerWithError (TranslationTableNotUpdated modelUri) ("Uploading the translation table to the repository failed: " <> message e)
+          Right _ -> pure unit
 
 -- | Generate a TCP configuration (a JSON query plan) from the DomeinFile identified by the
 -- | versioned model URI. The TCP uses this plan to create SQL views that materialise all
