@@ -71,7 +71,10 @@ Explanation:
 8. The `local-identifier` is a unique identifier for the role within its lexical context. It should start with a captital. See the definition of `segment` in the <<lexical_structure,Lexical Structure>> section for more details.
 9. `identifier` is also taken from the section on <<lexical_structure,Lexical Structure>>.
 
+[[keyword-aspect]]
 This restriction on context types from which to take role types only makes sense with the knowledge that a role type from one context can be added to another context. Such a role is called an <<keyword-aspect,aspect role>>. An example: a generic role Driver will make sense in the context of a Vehicle. We can then add that role as an aspect role to the contexts Lorry, Taxi, and so on (and these will themselves be specialisations of Vehicle - where the specialising is done by adding Vehicle as an aspect!). The aspect role is a role that is added to the context, but it is not declared in that context. If we want to fill another role with just Taxi Drivers, we can use the syntax `filledBy Driver in Taxi`. This means that the role must be filled by instances of type Driver that are attached to (context) instances of type Taxi.
+
+When a user role takes another user role as an aspect, it also inherits that aspect's perspectives. These are contextualised to applicable object roles in the current context. If the user role already declares a perspective on the same object role, the local and inherited property permissions are combined: a local permission on `P` and an inherited permission on `Q` give access to both properties, each with its own verbs and state conditions. The local declaration extends rather than overrides the inherited permissions; see <<perspectives-aspects,Perspectives inherited from aspects>>.
 
 ==== Role Attributes
 [cols="1,4", options="header"]
@@ -172,4 +175,3 @@ public <RoleName> (default)* at <expression-with-stringvalue> = <expression-with
 ```
 
 In other words, the location where the resources for the public perspective are stored, results from an expression and so can be calculated. A public user role can be default, too.
-

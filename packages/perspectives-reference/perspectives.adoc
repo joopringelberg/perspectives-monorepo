@@ -5,6 +5,11 @@
 [[keyword-perspective]]
 A _perspective_ defines what a user role can see and do with respect to other roles and their properties. Every perspective has a _subject_ (the user role that holds the perspective) and an _object_ (the role being observed). Perspectives are declared inside role declarations or inside <<concept-state,state declarations>>.
 
+[[perspectives-aspects]]
+=== Perspectives inherited from aspects
+
+A user role also has the perspectives of its <<keyword-aspect,role aspects>>, contextualised to the roles in its own context. If a locally declared perspective has an object role that equals or specialises the object role of an aspect's perspective, the aspect's role verbs, property permissions and actions are added to the local perspective rather than replacing it. For example, if the local perspective grants `Consult` and `SetPropertyValue` on property `P`, and the aspect's perspective grants `Consult` on property `Q`, the resulting perspective grants access to both `P` and `Q`, with those respective verbs. Permissions retain their original state conditions, so a state-dependent permission on `Q` is available only when its condition applies. Omitting a property or verb from the local declaration does not revoke a permission inherited from an aspect.
+
 [[perspectives-declaration]]
 === Declaration syntax
 
