@@ -933,10 +933,8 @@ perspectiveOf = try $ withPos do
     -- We cannot establish, at this point, whether the string that identifies the role we carry out the effect for
     -- is calculated or enumerated. Hence we arbitrarily choose enumerated and fix it in PhaseThree.
     setSubject (ExplicitRole ctxt (ENR $ EnumeratedRoleType subject) pos)
-    perspectiveSubject <- getSubject
-    object <- getObject
-    parts <- concat <$> nestedBlock perspectivePart
-    pure $ singleton (PP (PerspectivePosition { subject: perspectiveSubject, object, start: roleIdentificationStart perspectiveSubject })) <> parts
+    -- No object is in scope here (it is set by a nested `perspective on`, which records its own PerspectivePosition).
+    concat <$> nestedBlock perspectivePart
 
 roleIdentificationStart :: RoleIdentification -> ArcPosition
 roleIdentificationStart (ExplicitRole _ _ position) = position

@@ -6,3 +6,4 @@ packages/perspectives-core/scripts/docs.ndjson
 packages/perspectives-core/performance-report.json
 remotedevelopment/remoteconfigs
 localdevelopment/rabbitmqCredentials.txt
+temp
