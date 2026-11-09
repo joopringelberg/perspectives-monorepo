@@ -30,7 +30,7 @@ import Data.Either (Either(..))
 import Data.Foldable (foldl)
 import Data.Int (toNumber)
 import Data.JSDate (toISOString)
-import Data.List (List(..), concat, filter, find, intercalate, many, null, singleton, some, (:))
+import Data.List (List(..), concat, elem, filter, find, intercalate, many, null, singleton, some, (:))
 import Data.List.NonEmpty (toList) as LNE
 import Data.Maybe (Maybe(..), maybe)
 import Data.Newtype (unwrap)
@@ -39,7 +39,7 @@ import Data.String.CodeUnits (fromCharArray)
 import Data.String.Regex (Regex)
 import Data.String.Regex.Flags (noFlags)
 import Data.String.Regex.Unsafe (unsafeRegex)
-import Data.Tuple (Tuple(..))
+import Data.Tuple (Tuple(..), fst, snd)
 import Data.Unit (Unit, unit)
 import Effect.Class (liftEffect)
 import Parsing (fail, failWithPosition)
@@ -1759,7 +1759,10 @@ whenE = do
   pure $ WhenE condition context elements
 
 widgetCommonFields :: IP WidgetCommonFields
-widgetCommonFields = do
+widgetCommonFields = widgetCommonFieldsFor false
+
+widgetCommonFieldsFor :: Boolean -> IP WidgetCommonFields
+widgetCommonFieldsFor isForm = do
   start <- getPosition
   title <- optionMaybe token.stringLiteral
   pos <- getPosition
@@ -1768,65 +1771,7 @@ widgetCommonFields = do
   -- We cannot know, at this point, whether the role is Calculated or Enumerated.
   -- Like with the filledBy clause, we assume Enumerated and repair that later.
   perspective <- pure (ExplicitRole ctxt (ENR $ EnumeratedRoleType $ roleName) pos)
-  isIndented' <- isIndented
-  protectObject do
-    setObject perspective
-    if isIndented' then withPos do
-      mFillFrom <- optionMaybe (reserved "fillfrom" *> step)
-      -- Parse at most one selector: either `with …` or `without …`.
-      mSelection <- optionMaybe
-        ( (Right <$> (reserved "with" *> withPropertiesAndPositions))
-            <|>
-              (Left <$> (reserved "without" *> withoutProperties))
-        )
-      let
-        withProps = case mSelection of
-          Just (Right { selection }) -> Just selection
-          _ -> Nothing
-        withPropsPositions = case mSelection of
-          Just (Right { properties }) -> properties
-          _ -> Nil
-        withoutProps = case mSelection of
-          Just (Left p) -> Just p
-          _ -> Nothing
-      fillPropertyValues <- many (checkIndent *> fillPropertyValueE)
-      -- The default of parser propertyVerbs has propertyVerbs = Universal and propsOrView = AllProperties!
-      (withoutVerbs :: (List PropertyVerbE)) <- (many $ checkIndent *> propertyVerbs)
-      mroleVerbs <- optionMaybe roleVerbs
-      fieldConstraints <- option Nil (reserved "fields" *> nestedBlock fieldConstraintE)
-      end <- getPosition
-      pure
-        { title
-        , perspective
-        , fillFrom: mFillFrom
-        , typeAheadFillFromRole: Nothing
-        , fillPropertyValues
-        , withProps
-        , withPropsPositions
-        , withoutProps
-        , withoutVerbs
-        , roleVerbs: _.roleVerbs <<< unwrap <$> mroleVerbs
-        , fieldConstraints
-        , start
-        , end
-        }
-    else do
-      end <- getPosition
-      pure
-        { title
-        , perspective
-        , fillFrom: Nothing
-        , typeAheadFillFromRole: Nothing
-        , fillPropertyValues: Nil
-        , withProps: Nothing
-        , withPropsPositions: Nil
-        , withoutProps: Nothing
-        , withoutVerbs: Nil
-        , roleVerbs: Nothing
-        , fieldConstraints: Nil
-        , start
-        , end
-        }
+  widgetFieldsBody perspective start title false isForm
 
 -- | Parses a single field constraint entry: a property name followed by optional
 -- | minLines and maxLines sub-constraints.
@@ -1866,13 +1811,23 @@ tableFormFields :: RoleIdentification -> Boolean -> IP WidgetCommonFields
 tableFormFields perspective isDetail = do
   start <- getPosition
   title <- optionMaybe token.stringLiteral
+  widgetFieldsBody perspective start title true isDetail
+
+-- Form display options may occur between any of the ordinary widget clauses.
+formOptions :: Boolean -> IP (List String)
+formOptions false = pure Nil
+formOptions true = many (checkIndent *> (reserved' "norolecard" <|> reserved' "noidentifier"))
+
+widgetFieldsBody :: RoleIdentification -> ArcPosition -> Maybe String -> Boolean -> Boolean -> IP WidgetCommonFields
+widgetFieldsBody perspective start title isTableForm isForm = do
   isIndented' <- isIndented
   protectObject do
     setObject perspective
     if isIndented'
     -- Set the reference position to the indented position following 'master' or 'detail'.
     then withPos do
-      if isDetail then do
+      optionsBefore <- formOptions isForm
+      if isTableForm && isForm then do
         fillClausePos <- getPosition
         -- Consume the keyword (rather than using lookAhead) so the failure counts as consuming
         -- input and is not swallowed by backtracking in enclosing blocks.
@@ -1884,7 +1839,9 @@ tableFormFields perspective isDetail = do
           Nothing -> pure unit
       else pure unit
       mFillFrom <- optionMaybe (reserved "fillfrom" *> step)
-      mTypeAheadFillFromRole <- optionMaybe (reserved "typeaheadfillfrom" *> arcIdentifier)
+      optionsAfterFill <- formOptions isForm
+      mTypeAheadFillFromRole <- if isTableForm then optionMaybe (reserved "typeaheadfillfrom" *> arcIdentifier) else pure Nothing
+      optionsAfterTypeAhead <- formOptions isForm
       -- Parse at most one selector: either `with …` or `without …`.
       mSelection <- optionMaybe
         ( (Right <$> (reserved "with" *> withPropertiesAndPositions))
@@ -1901,15 +1858,26 @@ tableFormFields perspective isDetail = do
         withoutProps = case mSelection of
           Just (Left p) -> Just p
           _ -> Nothing
-      fillPropertyValues <- many (checkIndent *> fillPropertyValueE)
+      optionsAfterSelection <- formOptions isForm
+      fillPropertyEntries <- many (checkIndent *> (Tuple <$> fillPropertyValueE <*> formOptions isForm))
+      let fillPropertyValues = fst <$> fillPropertyEntries
       -- The default of parser propertyVerbs has propertyVerbs = Universal and propsOrView = AllProperties!
       -- entireBlock expects the same indentation, i.e. the position taken up after parsing the optional 'without' clause.
       -- This may be outdented! 
       -- Because propertyVerbs always succeeds, we must explicitly check the indentation.
-      (withoutVerbs :: (List PropertyVerbE)) <- (many $ checkIndent *> propertyVerbs)
+      verbEntries <- many (checkIndent *> (Tuple <$> propertyVerbs <*> formOptions isForm))
+      let withoutVerbs = fst <$> verbEntries
       mroleVerbs <- optionMaybe roleVerbs
+      optionsAfterVerbs <- formOptions isForm
       fieldConstraints <- option Nil (reserved "fields" *> nestedBlock fieldConstraintE)
+      optionsAfterFields <- formOptions isForm
       end <- getPosition
+      let
+        options = optionsBefore <> optionsAfterFill <> optionsAfterTypeAhead <> optionsAfterSelection
+          <> concat (snd <$> fillPropertyEntries)
+          <> concat (snd <$> verbEntries)
+          <> optionsAfterVerbs
+          <> optionsAfterFields
       pure
         { title
         , perspective
@@ -1922,6 +1890,8 @@ tableFormFields perspective isDetail = do
         , withoutVerbs
         , roleVerbs: _.roleVerbs <<< unwrap <$> mroleVerbs
         , fieldConstraints
+        , noRoleCard: elem "norolecard" options
+        , noIdentifier: elem "noidentifier" options
         , start
         , end
         }
@@ -1939,12 +1909,14 @@ tableFormFields perspective isDetail = do
         , withoutVerbs: Nil
         , roleVerbs: Nothing
         , fieldConstraints: Nil
+        , noRoleCard: false
+        , noIdentifier: false
         , start
         , end
         }
 
 formE :: IP FormE
-formE = FormE <$> option Nil (reserved "markdown" *> nestedBlock markdownE) <*> widgetCommonFields
+formE = FormE <$> option Nil (reserved "markdown" *> nestedBlock markdownE) <*> widgetCommonFieldsFor true
 
 tableE :: IP TableE
 tableE = TableE <$> option Nil (reserved "markdown" *> nestedBlock markdownE) <*> widgetCommonFields
@@ -1953,7 +1925,7 @@ typeAheadFillerE :: IP TypeAheadFillerE
 typeAheadFillerE = TypeAheadFillerE <$> widgetCommonFields
 
 typeAheadFormE :: IP TypeAheadFormE
-typeAheadFormE = TypeAheadFormE <$> widgetCommonFields
+typeAheadFormE = TypeAheadFormE <$> widgetCommonFieldsFor true
 
 markdownE :: IP MarkDownE
 markdownE = do

@@ -322,7 +322,7 @@ handleScreens screenEs = do
             otherwise -> throwError $ NotUniquelyIdentifyingPropertyType start' (endOfName start' prop) (ENP $ EnumeratedPropertyType prop) candidates
 
   widgetCommonFields :: RoleType -> AST.WidgetCommonFields -> ThreeValuedLogic -> PhaseThree WidgetCommonFieldsDef
-  widgetCommonFields subjectRoleType { title: title', perspective, fillFrom, typeAheadFillFromRole, fillPropertyValues, withProps, withPropsPositions, withoutProps, withoutVerbs, roleVerbs, fieldConstraints: fieldConstraints', start: start', end: end' } isFunctionalWidget = do
+  widgetCommonFields subjectRoleType { title: title', perspective, fillFrom, typeAheadFillFromRole, fillPropertyValues, withProps, withPropsPositions, withoutProps, withoutVerbs, roleVerbs, fieldConstraints: fieldConstraints', noRoleCard, noIdentifier, start: start', end: end' } isFunctionalWidget = do
     -- From a RoleIdentification that represents the object,
     -- find the relevant Perspective.
     -- A ScreenElement can only be defined for a named Enumerated or Calculated Role. This means that `perspective` is constructed with the
@@ -439,6 +439,8 @@ handleScreens screenEs = do
           , roleVerbs: maybe Nothing (Just <<< roleVerbList2Verbs) roleVerbs
           , userRole: subjectRoleType
           , fieldConstraints: compiledFieldConstraints
+          , noRoleCard: Just noRoleCard
+          , noIdentifier: Just noIdentifier
           }
 
     where

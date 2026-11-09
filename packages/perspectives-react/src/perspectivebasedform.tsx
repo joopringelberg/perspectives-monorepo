@@ -278,7 +278,7 @@ export default class PerspectiveBasedForm extends PerspectivesComponent<Perspect
     // Just show the form controls.
     if (Object.keys( component.props.perspective.properties).length === 0 && component.props.perspective.roleType)
     {
-      return <Controls/>;
+      return component.props.showControls ? <Controls/> : null;
     }
     else
     {

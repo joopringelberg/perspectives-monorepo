@@ -299,6 +299,7 @@ export default class ScreenDefinitionInterpreter extends PerspectivesComponent<S
             candidates={typeAheadFormDef.candidates}
             title={typeAheadFormDef.widgetCommonFields.title}
             fieldConstraints={typeAheadFormDef.widgetCommonFields.fieldConstraints}
+            suppressIdentifyingProperty={typeAheadFormDef.widgetCommonFields.noIdentifier}
           />
           </div>
         );
@@ -348,7 +349,8 @@ export default class ScreenDefinitionInterpreter extends PerspectivesComponent<S
       <PerspectiveBasedForm
         perspective={perspective}
         cardtitle={ perspective.identifyingProperty }
-        showControls={true}
+        showControls={!widgetCommonFields.noRoleCard}
+        suppressIdentifyingProperty={widgetCommonFields.noIdentifier}
         fieldConstraints={widgetCommonFields.fieldConstraints}
         />);
   }
@@ -488,5 +490,3 @@ export default class ScreenDefinitionInterpreter extends PerspectivesComponent<S
     }
   }
 }
-
-

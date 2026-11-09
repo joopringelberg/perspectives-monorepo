@@ -4,17 +4,22 @@ import Prelude
 
 import Control.Alt ((<|>))
 import Control.Monad.Free (Free)
+import Data.Array as Array
 import Data.Either (Either(..))
 import Data.List (List(..), filter, head, length, (:))
+import Data.Foldable (foldMap, for_)
+import Data.Tuple (Tuple(..))
 import Data.Maybe (Maybe(..))
 import Effect.Aff (Aff)
+import Effect (Effect)
 import Parsing (ParseError(..), Position(..), fail)
 import Parsing.Combinators (try)
+import Parsing.Indent.Monadic (withPos)
 import Parsing.String (char, eof)
-import Perspectives.Parsing.Arc (contextRoleE, domain, thingRoleE, userRoleE)
-import Perspectives.Parsing.Arc.AST (ContextE, ContextPart(..), FormE(..), FreeFormScreenE(..), RoleE(..), RoleIdentification(..), RolePart(..), RowE(..), ScreenE(..), ScreenElement(..), TabE(..), TableE(..), TableFormE(..), TableFormOrWhenE(..), TableFormSectionE(..), WhoWhatWhereScreenE(..), PropsOrView(..), StateSpecification(..))
+import Perspectives.Parsing.Arc (contextRoleE, domain, formE, tableE, tableFormE, thingRoleE, typeAheadFormE, userRoleE)
+import Perspectives.Parsing.Arc.AST (ContextE, ContextPart(..), FormE(..), FreeFormScreenE(..), RoleE(..), RoleIdentification(..), RolePart(..), RowE(..), ScreenE(..), ScreenElement(..), TabE(..), TableE(..), TableFormE(..), TableFormOrWhenE(..), TableFormSectionE(..), TypeAheadFormE(..), WhoWhatWhereScreenE(..), PropsOrView(..), StateSpecification(..))
 import Perspectives.Parsing.Arc.Expression.AST (BinaryStep(..), FilledByAttribute(..), Operator(..), SimpleStep(..), Step(..), TypeCombination(..))
-import Perspectives.Parsing.Arc.IndentParser (getArcParserState, getCurrentContext, getCurrentState, inSubContext, protectObject, runIndentParser, setObject, withArcParserState, withEntireBlock)
+import Perspectives.Parsing.Arc.IndentParser (getArcParserState, getCurrentContext, getCurrentState, inSubContext, protectObject, runIndentParser, setObject, setSubject, withArcParserState, withEntireBlock)
 import Perspectives.Parsing.Arc.Position (ArcPosition(..))
 import Perspectives.Representation.ExplicitSet (ExplicitSet(..))
 import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedRoleType(..), RoleType(..))
@@ -22,6 +27,7 @@ import Perspectives.Representation.Verbs (PropertyVerb(..))
 import Test.Parsing.ArcAstSelectors (ensureOnEntry, ensurePerspectiveOn, ensurePropertyVerbSetForPropsOrView, ensurePropertyVerbsForPropsOrView, ensureStateInRole, ensureUserRole, failure, isNotified, isStateWithContext, isStateWithExplicitRole_)
 import Test.Unit (TestF, suite, test)
 import Test.Unit.Assert (assert)
+import Test.Unit.Main (runTest)
 
 -- | Supplementary phase-one regressions not covered by Arc.Syntax.
 theSuite :: Free TestF Unit
@@ -242,7 +248,9 @@ theSuite = suite "Perspectives.Parsing.Arc regressions" do
           <> "      tab \"Overview\" default\n"
           <> "        row\n"
           <> "          form External\n"
+          <> "            norolecard\n"
           <> "            fillproperty Name from ReferenceValues >> Value\n"
+          <> "            noidentifier\n"
           <> "      tab \"Tasks\"\n"
           <> "        row\n"
           <> "          table Task\n"
@@ -266,7 +274,83 @@ theSuite = suite "Perspectives.Parsing.Arc regressions" do
           ( map _.propertyName table.fillPropertyValues == ("Status" : Nil) &&
               map (isReferenceValuesQuery <<< _.valuesQuery) table.fillPropertyValues == (true : Nil)
           )
+        assert "Display options stay on the form, not its sibling table"
+          (form.noRoleCard && form.noIdentifier && not table.noRoleCard && not table.noIdentifier)
       _ -> failure "Expected two tabs containing a form and a table"
+
+  test "Form display options can appear at any clause boundary" do
+    let
+      clauses =
+        [ "fillfrom Candidates"
+        , "with props (Name)"
+        , "fillproperty Name from ReferenceValues >> Value"
+        , "fillproperty Remarks from ReferenceValues >> Value"
+        , "props (Name) verbs (Consult)"
+        , "props (Remarks) verbs (Consult)"
+        , "no roleverbs"
+        , "fields\n    Name\n      minLines = 2"
+        ]
+    for_ [ 0, 1, 2, 3, 4, 5, 6, 7, 8 ] \position -> do
+      let
+        source = "External\n" <> buildClauses position clauses
+      result <- runIndentParser source (setSubject testSubject *> withPos formE <* eof)
+      case result of
+        Right (FormE _ fields) -> do
+          assert "Expected both form options" (fields.noRoleCard && fields.noIdentifier)
+          assert "Expected both fillproperty clauses" (length fields.fillPropertyValues == 2)
+          assert "Expected both property-verb clauses" (length fields.withoutVerbs == 2)
+          assert "Expected the field constraint" (length fields.fieldConstraints == 1)
+        Left err -> failure (show err)
+
+  test "Form display options default to false and work independently" do
+    for_ [ Tuple "" (Tuple false false), Tuple "  norolecard\n" (Tuple true false), Tuple "  noidentifier\n" (Tuple false true) ] \(Tuple body (Tuple noRoleCard noIdentifier)) -> do
+      result <- runIndentParser ("External\n" <> body) (withPos formE <* eof)
+      case result of
+        Right (FormE _ fields) ->
+          assert "Expected the requested options only" (fields.noRoleCard == noRoleCard && fields.noIdentifier == noIdentifier)
+        Left err -> failure (show err)
+
+  test "Master-detail forms accept display options without changing the table" do
+    result <- runIndentParser
+      "External master\n  with props (Name)\ndetail\n  noidentifier\n  with props (Name)\n  norolecard\n"
+      (setSubject testSubject *> withPos tableFormE <* eof)
+    case result of
+      Right (TableFormE _ (TableE _ table) (FormE _ form)) -> do
+        assert "Expected both options on the detail form" (form.noRoleCard && form.noIdentifier)
+        assert "Expected neither option on the master table" (not table.noRoleCard && not table.noIdentifier)
+      Left err -> failure (show err)
+
+  test "Form display options are rejected on tables and at deeper indentation" do
+    for_ [ "External\n  norolecard\n", "External\n  noidentifier\n" ] \source -> do
+      result <- runIndentParser source (withPos tableE <* eof)
+      case result of
+        Left _ -> pure unit
+        Right _ -> failure "Expected tables to reject form display options"
+    result <- runIndentParser "External\n  norolecard\n    noidentifier\n" (withPos formE <* eof)
+    case result of
+      Left _ -> pure unit
+      Right _ -> failure "Expected form options at deeper indentation to be rejected"
+
+  test "Typeahead forms retain identifier suppression" do
+    result <- runIndentParser "Candidates\n  noidentifier\n" (withPos typeAheadFormE <* eof)
+    case result of
+      Right (TypeAheadFormE fields) ->
+        assert "Expected identifier suppression without changing the controls option" (fields.noIdentifier && not fields.noRoleCard)
+      Left err -> failure (show err)
+
+main :: Effect Unit
+main = runTest theSuite
+
+testSubject :: RoleIdentification
+testSubject = ExplicitRole (ContextType "") (ENR $ EnumeratedRoleType "Editor")
+  (ArcPosition { line: 1, column: 1 })
+
+buildClauses :: Int -> Array String -> String
+buildClauses position clauses =
+  foldMap identity (Array.mapWithIndex (\index clause -> (if index == position then options else "") <> "  " <> clause <> "\n") clauses)
+    <> if position == Array.length clauses then options else ""
+  where
+  options = "  norolecard\n  noidentifier\n"
 
 parseDomain :: String -> Aff ContextE
 parseDomain source = runIndentParser source domain >>= case _ of

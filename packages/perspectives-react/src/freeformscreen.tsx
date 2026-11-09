@@ -256,6 +256,7 @@ export class FreeFormScreen extends PerspectivesComponent<FreeFormProps, FreeFor
             candidates={typeAheadFormDef.candidates}
             title={typeAheadFormDef.widgetCommonFields.title}
             fieldConstraints={typeAheadFormDef.widgetCommonFields.fieldConstraints}
+            suppressIdentifyingProperty={typeAheadFormDef.widgetCommonFields.noIdentifier}
           />
           </div>
         );
@@ -430,7 +431,8 @@ export function buildForm(form : FormElementDef, showControls : boolean = true, 
       <PerspectiveBasedForm
         perspective={perspective}
         cardtitle={ perspective.identifyingProperty }
-        showControls={showControls}
+        showControls={showControls && !form.widgetCommonFields.noRoleCard}
+        suppressIdentifyingProperty={form.widgetCommonFields.noIdentifier}
         roleinstance={roleInstance}
         fieldConstraints={form.widgetCommonFields.fieldConstraints}
         />

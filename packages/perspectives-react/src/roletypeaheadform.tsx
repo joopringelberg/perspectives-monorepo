@@ -47,6 +47,7 @@ interface RoleTypeAheadFormProps {
   candidates: FilterValueEntry[];
   title?: string;
   fieldConstraints?: any[];
+  suppressIdentifyingProperty?: boolean;
 }
 
 interface RoleTypeAheadFormState {
@@ -268,6 +269,7 @@ export default class RoleTypeAheadForm extends PerspectivesComponent<RoleTypeAhe
               roleinstance={selectedRoleId}
               cardtitle={selectedPerspective.identifyingProperty}
               showControls={false}
+              suppressIdentifyingProperty={component.props.suppressIdentifyingProperty}
               fieldConstraints={fieldConstraints}
             />
           </div>
@@ -276,4 +278,3 @@ export default class RoleTypeAheadForm extends PerspectivesComponent<RoleTypeAhe
     );
   }
 }
-

@@ -210,6 +210,8 @@ table Tasks
 [source]
 ----
 form <RoleName>
+  [norolecard]
+  [noidentifier]
   [fillfrom <expression>]
   [with props (<PropertyName>{, <PropertyName>}*)]
   [without props (<PropertyName>{, <PropertyName>}*)]
@@ -224,11 +226,21 @@ form <RoleName>
 
 Displays the (first) instance of `<RoleName>` as an editable form. The same sub-clauses as `table` are available.
 
+[[keyword-norolecard]]
+`norolecard` hides the entire bottom controls bar, including the role card, actions, and create/paste controls. It also applies when the form has no properties.
+
+[[keyword-noidentifier]]
+`noidentifier` hides the field for the perspective's identifying property (the readable-name property, or the role identifier used as a fallback). It does not remove that property from the perspective or change permissions.
+
+Both keywords are standalone clauses at the first indentation level inside the form. They may appear before, between, or after the other clauses; the ordering rules for those other clauses remain unchanged. By default, controls and the identifying field are shown. The keywords also apply to the `detail` section of a master-detail item. `typeaheadform` supports them too, though its controls bar is already hidden by default.
+
 Example:
-[source, arc]
+[source, perspectivesarc]
 ----
 form extern
+  norolecard
   without props (InternalId)
+  noidentifier
 ----
 
 [[keyword-typeaheadform]]

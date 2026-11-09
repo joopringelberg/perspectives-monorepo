@@ -243,6 +243,8 @@ perspectDef = LanguageDef
       , "row"
       , "column"
       , "form"
+      , "norolecard"
+      , "noidentifier"
       , "markdown"
       , "when"
       , "table"

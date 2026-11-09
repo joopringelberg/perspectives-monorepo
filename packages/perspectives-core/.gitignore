@@ -48,3 +48,5 @@ idb-keyval-store.json
 
 # Ignore PDR snapshots used to speed up test:modelfiles
 /test/pdr-snapshot/
+
+src/model/modellen van Cor/**

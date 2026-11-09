@@ -274,6 +274,8 @@ export type TypeAheadFillerElementDef = {
 export type TypeAheadFormWidgetFields = {
   title?: string;
   fieldConstraints?: FieldDisplayConstraint[];
+  noRoleCard?: boolean;
+  noIdentifier?: boolean;
 };
 
 export type TypeAheadFormElementDef = {
@@ -287,6 +289,8 @@ export type WidgetCommonFields = {
   title: string;
   perspective: Perspective;
   fieldConstraints?: FieldDisplayConstraint[];
+  noRoleCard?: boolean;
+  noIdentifier?: boolean;
   typeAheadFillFromCandidates?: FilterValueEntry[];
 };
 

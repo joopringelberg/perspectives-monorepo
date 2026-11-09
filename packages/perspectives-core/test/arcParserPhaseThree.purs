@@ -3,7 +3,7 @@ module Test.Parsing.Arc.PhaseThree where
 import Prelude
 
 import Control.Monad.Free (Free)
-import Data.Array (elemIndex, filter, head, length, uncons)
+import Data.Array (elemIndex, filter, fromFoldable, head, length, uncons)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.List (List(..))
@@ -20,6 +20,7 @@ import Node.FS.Aff (readTextFile)
 import Node.Path as Path
 import Parsing (ParseError)
 import Perspectives.CoreTypes (MonadPerspectives)
+import Perspectives.Data.EncodableMap as EM
 import Perspectives.DomeinCache (removeDomeinFileFromCache, storeDomeinFileInCache)
 import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord, defaultDomeinFileRecord)
 import Perspectives.External.CoreModules (addAllExternalFunctions)
@@ -47,6 +48,10 @@ import Perspectives.Representation.Perspective (Perspective(..), PropertyVerbs(.
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
 import Perspectives.Representation.QueryFunction (QueryFunction(..)) as QF
 import Perspectives.Representation.Range (Range(..))
+import Perspectives.Representation.ScreenDefinition (ScreenDefinition(..), WhoWhatWhereScreenDef(..), Who(..), TableFormOrWhenDef(..), TableFormDef(..), FormDef(..))
+import Simple.JSON as JSON
+import Record as Record
+import Type.Proxy (Proxy(..))
 import Perspectives.Representation.Class.PersistentType (getEnumeratedRole)
 import Perspectives.Representation.Class.Role (completeDeclaredType, completeExpandedType, declaredType, expandUnexpandedLeaves, toConjunctiveNormalForm_)
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleKind(UserRole), RoleType(..), StateIdentifier(..), propertytype2string)
@@ -171,6 +176,8 @@ inheritedScreenPropertiesSuite = suite "Inherited screen properties" do
           <> property
           <> ")\n"
           <> "            detail\n"
+          <> "              norolecard\n"
+          <> "              noidentifier\n"
           <> "        what\n"
           <> "          row\n"
           <> "            markdown <Repository>\n"
@@ -215,14 +222,34 @@ inheritedScreenPropertiesSuite = suite "Inherited screen properties" do
                           , enumeratedRoles = insert chatAspect (defaultEnumeratedRole chatAspect "Chat" UserRole systemModel arcParserStartPosition) empty
                           }
                       )
-                    Tuple screenResult _ <- runPhaseTwo_' (handleScreens state.screens) screenDF empty empty Nil
+                    Tuple screenResult screenState <- runPhaseTwo_' (handleScreens state.screens) screenDF empty empty Nil
                     warnings <- getWarnings
-                    pure $ Tuple screenResult warnings
+                    pure $ Tuple (map (\_ -> screenState.dfr.screens) screenResult) warnings
                   case screenResult of
                     Left err -> assert (show err) false
-                    Right _ -> do
+                    Right screens -> do
                       let relevant = filter (contains (Pattern "does not have a perspective that includes") <<< _.message) warnings
                       assert ("Unexpected screen warnings: " <> show relevant) (length relevant == expectedWarnings)
+                      case head (fromFoldable $ EM.values screens) of
+                        Just screen@(ScreenDefinition { whoWhatWhereScreen: Just (WhoWhatWhereScreenDef { who: Who { userRoles } }) }) -> do
+                          case head userRoles of
+                            Just (PlainTableFormDef (TableFormDef { form: FormDef { widgetCommonFields } })) -> do
+                              assert "Compiled detail forms retain both display options"
+                                (widgetCommonFields.noRoleCard == Just true && widgetCommonFields.noIdentifier == Just true)
+                              let
+                                legacyFields = Record.delete (Proxy :: Proxy "noRoleCard")
+                                  (Record.delete (Proxy :: Proxy "noIdentifier") widgetCommonFields)
+                                legacyJSON = JSON.writeJSON { tag: "FormDef", markdown: ([] :: Array String), widgetCommonFields: legacyFields }
+                              case JSON.readJSON legacyJSON of
+                                Right (FormDef { widgetCommonFields: decodedFields }) ->
+                                  assert "Older compiled forms retain the default display behavior"
+                                    (decodedFields.noRoleCard == Nothing && decodedFields.noIdentifier == Nothing)
+                                Left err -> assert (show err) false
+                            _ -> assert "Expected a compiled master-detail item" false
+                          case JSON.readJSON (JSON.writeJSON screen) of
+                            Right decoded -> assert "Screen serialization preserves form display options" (decoded == screen)
+                            Left err -> assert (show err) false
+                        _ -> assert "Expected a compiled who/what/where screen" false
 
 main :: Effect Unit
 main = runTest inheritedScreenPropertiesSuite

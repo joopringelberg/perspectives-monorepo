@@ -550,6 +550,8 @@ type WidgetCommonFields =
   , roleVerbs :: Maybe RoleVerbList
   -- Per-property display constraints (minLines, maxLines for textareas)
   , fieldConstraints :: List FieldConstraintE
+  , noRoleCard :: Boolean
+  , noIdentifier :: Boolean
   , start :: ArcPosition
   , end :: ArcPosition
   }

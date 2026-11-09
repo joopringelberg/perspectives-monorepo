@@ -167,6 +167,9 @@ type WidgetCommonFieldsDefWithoutPerspective f =
   , userRole :: RoleType
   -- Per-property display constraints (minLines, maxLines for textareas)
   , fieldConstraints :: Maybe (Array FieldConstraintDef)
+  -- Optional for compatibility with previously compiled screen definitions.
+  , noRoleCard :: Maybe Boolean
+  , noIdentifier :: Maybe Boolean
   | f
   }
 
@@ -606,12 +609,14 @@ derive instance ordScreenKey :: Ord ScreenKey
 
 type ScreenMap = EncodableMap ScreenKey ScreenDefinition
 
--- | Serialise just the title, perspective and fieldConstraints fields, for the client side.
+-- | Serialise widget display fields for the client side.
 writeWidgetCommonFields :: WidgetCommonFieldsDef -> Foreign
-writeWidgetCommonFields { title, perspective, fieldConstraints } = write
+writeWidgetCommonFields { title, perspective, fieldConstraints, noRoleCard, noIdentifier } = write
   { title: write title
   , perspective: write perspective
   , fieldConstraints: write fieldConstraints
+  , noRoleCard: write noRoleCard
+  , noIdentifier: write noIdentifier
   }
 
 -------------------------------------------------------------------------------

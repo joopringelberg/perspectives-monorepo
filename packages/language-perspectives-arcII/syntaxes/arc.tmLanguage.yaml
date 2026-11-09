@@ -205,6 +205,9 @@ patterns:
     match: \b(String|Number|Boolean|DateTime)\b
     
   ## ROLEVERBS
+  - name: keyword.operator.arc
+    match: \b(norolecard|noidentifier)\b
+
   - name: entity.name.label.roleverb.arc
     match: \b(RemoveContextLocally|RemoveContext|RemoveFiller|Remove|DeleteContext|Delete|CreateAndFill|Create|Fill|Unbind|Move)\b
 
