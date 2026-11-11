@@ -76,6 +76,20 @@ These initialization deltas join the current transaction and are addressed throu
 the new filler chain. Binding removal and roles scheduled for removal do not
 initialize a new peer.
 
+Initialization also follows the roles transitively filled by the changed role.
+If the peer newly fills U, and U already fills V, V's perspectives are serialized
+as well, in V's context. The same applies to further filled roles and branches,
+including user roles reached through non-user roles. Only user roles contribute
+perspective serializations; non-user roles are traversed, not granted perspectives.
+All these deltas join the same transaction and reach the same peer through their
+current filler chains. Each role's perspectives still limit which data is sent.
+
+On local-to-remote replacement, transitively filled roles may also retain cached
+local-user flags. These flags are cleared before selecting alternative local roles
+and serializing perspectives, so they cannot suppress the new peer's initialization.
+The existing alternative-role selection also updates their contexts' `me`,
+preferences, and `Me` subscriptions.
+
 ---
 
 ## 2. Customising per destination: `transactieForEachUser`

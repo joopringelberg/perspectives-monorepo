@@ -82,7 +82,7 @@ import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..)
 import Perspectives.Instances.AutoRemoveWithFiller (emptyRolesToRemove)
 import Perspectives.Instances.Clipboard (allItemsOnClipboard)
 import Perspectives.Instances.Me (getMyType, isMe)
-import Perspectives.Instances.ObjectGetters (allRoleBinders, binding, binding_, context, contextType, contextType_, getUnlinkedRoleInstances, roleType_)
+import Perspectives.Instances.ObjectGetters (allRoleBinders, binding, binding_, context, contextType, contextType_, getRecursivelyAllFilledRoles, getUnlinkedRoleInstances, roleType_)
 import Perspectives.Logging (logWhen)
 import Perspectives.Names (findIndexedContextName, findIndexedRoleName, removeIndexedContext, removeIndexedRole)
 import Perspectives.Persistence.DeltaStore (getDeltasForResource, storeDeltaFromSignedDelta)
@@ -741,13 +741,22 @@ setFirstBindingWithMode mode filled filler msignedDelta = (lift $ try $ getPersp
 -- | it needs a binding!
 -- | The fictive serialization user (def:#serializationuser) is excluded: it is never a real peer
 -- | and should never receive context serialisations.
+-- | Also initialise every user role transitively filled by this role, through any role kind.
 handleNewPeer :: RoleInstance -> MonadPerspectivesTransaction Unit
-handleNewPeer roleInstance = (lift $ try $ getPerspectRol roleInstance) >>=
-  handlePerspectRolError "handleNewPeer"
-    \(PerspectRol { context, pspType }) -> do
+handleNewPeer roleInstance = do
+  me <- lift $ isMe roleInstance
+  if me || unwrap roleInstance == "def:#serializationuser" then pure unit
+  else do
+    allFilleds <- lift $ cons roleInstance <$> getRecursivelyAllFilledRoles roleInstance
+    roles <- lift $ catMaybes <$> for (nub allFilleds) \rid ->
+      try (getPerspectRol rid) >>= handlePerspectRolError' "handleNewPeer" Nothing (pure <<< Just)
+    -- Clear all inherited local flags before choosing alternatives or filtering recipients.
+    for_ roles \role ->
+      if rol_isMe role then roleIsNotMe (unwrap role).id else pure unit
+    for_ roles \role@(PerspectRol { id, context, pspType }) -> do
+      if rol_isMe role then lookForAlternativeMe id context else pure unit
       (EnumeratedRole { kindOfRole }) <- lift $ getEnumeratedRole pspType
-      me <- lift $ isMe roleInstance
-      if kindOfRole == UserRole && not me && unwrap roleInstance /= "def:#serializationuser" then (context `serialisedAsDeltasFor` roleInstance) newPeer
+      if kindOfRole == UserRole && unwrap id /= "def:#serializationuser" then (context `serialisedAsDeltasFor` id) newPeer
       else pure unit
 
 -- | PERSISTENCE of binding role and old binding, through the call to `changeRoleBinding`.

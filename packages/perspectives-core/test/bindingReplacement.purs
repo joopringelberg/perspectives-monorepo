@@ -40,7 +40,7 @@ import Perspectives.DomeinFile (DomeinFile(..), defaultDomeinFileRecord)
 import Perspectives.Identifiers (typeUri2ModelUri)
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..))
 import Perspectives.Instances.Me (getMyType, isMe)
-import Perspectives.Instances.ObjectGetters (getMe)
+import Perspectives.Instances.ObjectGetters (getMe, roleType_)
 import Perspectives.ModelDependencies (perspectivesUsers, perspectivesUsersPublicKey, perspectivesUsersTransportPublicKey)
 import Perspectives.Parsing.Arc.Position (ArcPosition(..))
 import Perspectives.Persistence.DeltaStore (storeDeltaFromSignedDelta)
@@ -61,7 +61,7 @@ import Perspectives.Representation.Range (Range(..))
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleKind(..), RoleType(..), StateIdentifier(..), roletype2string)
 import Perspectives.Representation.Verbs (PropertyVerb(..))
-import Perspectives.RoleAssignment (lookForAlternativeMe)
+import Perspectives.RoleAssignment (filledNoLongerPointsTo, filledPointsTo, fillerPointsTo, lookForAlternativeMe)
 import Perspectives.RunPerspectives (runPerspectivesWithoutCouchdb)
 import Perspectives.RunMonadPerspectivesTransaction (phase2)
 import Perspectives.SaveUserData (FillBindingMode(..), changeRoleBinding, setBindingWithMode)
@@ -106,6 +106,43 @@ theSuite = suite "User-role filler replacement" do
           Just (TransactionForPeer { deltas }) ->
             liftAff $ assert "Initialization must not be addressed through the old filler"
               (not $ elem visiblePropertyDelta deltas)
+
+  for_ [ Nothing, Just oldRemotePeer, Just localPeer ] \oldFiller ->
+    test ("initializes all transitively filled user roles after binding " <> show oldFiller) $
+      withFixture (maybe oldRemotePeer identity oldFiller) [] [] do
+        let locallyFilled = oldFiller == Just localPeer
+        second <- addFilledContext "second" userType userId locallyFilled
+        third <- addFilledContext "third" userType second.role locallyFilled
+        branch <- addFilledContext "branch" userType userId locallyFilled
+        case oldFiller of
+          Nothing -> do
+            lift $ filledNoLongerPointsTo userId oldRemotePeer
+            void $ setBindingWithMode FillWithProvidedType userId newRemotePeer (Just firstBindingDelta)
+          Just previous -> replaceAndApply previous
+        checkRecursiveInitialization [ second, third, branch ]
+
+  test "initializes user roles reached through a non-user role" $
+    withFixture oldRemotePeer [] [] do
+      bridge <- addFilledContext "bridge" bridgeType userId false
+      downstream <- addFilledContext "downstream" userType bridge.role false
+      lift $ filledNoLongerPointsTo userId oldRemotePeer
+      void $ setBindingWithMode FillWithProvidedType userId newRemotePeer (Just firstBindingDelta)
+      checkRecursiveInitialization [ downstream ]
+
+  test "does not initialize transitively filled roles for the local peer" $
+    withFixture oldRemotePeer [] [] do
+      second <- addFilledContext "second" userType userId false
+      void $ addFilledContext "third" userType second.role false
+      changeRoleBinding userId (Just localPeer)
+      Transaction { deltas } <- AA.get
+      liftAff $ assert "Local participation must not generate remote initialization" (null deltas)
+
+  test "uses the filled role's own type and supplies its minimal self-perspective" $
+    withFixture oldRemotePeer [] [] do
+      downstream <- addFilledContext "other-user" otherUserType userId false
+      lift $ filledNoLongerPointsTo userId oldRemotePeer
+      void $ setBindingWithMode FillWithProvidedType userId newRemotePeer (Just firstBindingDelta)
+      checkRecursiveInitialization [ downstream ]
 
   test "retains another genuinely local instance of the same role type" $
     withFixture localPeer [ remoteAlternativeId, localAlternativeId ] [] do
@@ -247,6 +284,138 @@ captureResults results = case _ of
   ResultWithWarnings _ values _ -> Ref.modify_ (_ <> [ values ]) results
   ErrorWithWarnings _ message _ -> Exception.throw message
 
+type FilledContext =
+  { role :: RoleInstance
+  , context :: ContextInstance
+  , expected :: Array SignedDelta
+  , excluded :: Array SignedDelta
+  }
+
+addFilledContext :: String -> EnumeratedRoleType -> RoleInstance -> Boolean -> MonadPerspectivesTransaction FilledContext
+addFilledContext name subjectType filler locallyFilled = do
+  let
+    cid = ContextInstance $ "def:#" <> name
+    rid = RoleInstance $ "def:#" <> name <> "-user"
+    visible = RoleInstance $ "def:#" <> name <> "-visible"
+    hidden = RoleInstance $ "def:#" <> name <> "-hidden"
+    external = RoleInstance $ unwrap cid <> "$External"
+    roleIsLocal = locallyFilled && subjectType == userType
+    constructContext = signed
+      { resourceKey: unwrap cid
+      , resourceVersion: 1
+      , deltaType: "ConstructEmptyContext"
+      , id: cid
+      , contextType
+      , subject: ENR userType
+      }
+    constructRole role roleType = signed
+      { resourceKey: unwrap role
+      , resourceVersion: 1
+      , deltaType: "ConstructEmptyRole"
+      , roleInstance: role
+      , id: cid
+      , contextType
+      , roleType
+      , subject: ENR userType
+      }
+    linkExternal = signed
+      { resourceKey: unwrap external
+      , resourceVersion: 2
+      , deltaType: "AddExternalRole"
+      , contextInstance: cid
+      , contextType
+      , roleInstance: external
+      , roleType: externalType
+      , subject: ENR userType
+      }
+    propertyDelta = signed
+      { resourceKey: unwrap visible <> "#" <> unwrap visibleProperty
+      , resourceVersion: 1
+      , deltaType: "SetProperty"
+      , id: visible
+      , roleType: visibleType
+      , property: visibleProperty
+      , values: [ Value name ]
+      , subject: ENR userType
+      }
+  lift do
+    void $ cacheEntity cid $ PerspectContext defaultContextRecord
+      { id = cid
+      , pspType = contextType
+      , buitenRol = external
+      , me = if roleIsLocal then Just rid else Nothing
+      , preferredUserRoleType = if roleIsLocal then Just (ENR subjectType) else Nothing
+      , rolInContext = Object.fromFoldable
+          [ Tuple (unwrap subjectType) [ rid ]
+          , Tuple (unwrap visibleType) [ visible ]
+          , Tuple (unwrap hiddenType) [ hidden ]
+          ]
+      }
+    for_ [ Tuple rid subjectType, Tuple visible visibleType, Tuple hidden hiddenType, Tuple external externalType ] \(Tuple role rt) ->
+      void $ cacheEntity role $ PerspectRol defaultRolRecord
+        { id = role
+        , context = cid
+        , pspType = rt
+        , isMe = role == rid && roleIsLocal
+        , properties = if role == visible then Object.singleton (unwrap visibleProperty) [ Value name ] else Object.empty
+        }
+    filledPointsTo rid filler
+    fillerPointsTo filler rid
+  fillerType <- lift $ roleType_ filler
+  let
+    bindingDelta = signed
+      { resourceKey: unwrap rid <> "#binding"
+      , resourceVersion: 1
+      , deltaType: "SetFirstBinding"
+      , filled: rid
+      , filledType: subjectType
+      , filler: Just filler
+      , fillerType: Just fillerType
+      , oldFiller: Nothing :: Maybe RoleInstance
+      , oldFillerType: Nothing :: Maybe EnumeratedRoleType
+      , subject: ENR userType
+      }
+    constructionDeltas =
+      [ constructContext
+      , constructRole rid subjectType
+      , constructRole external externalType
+      , linkExternal
+      , bindingDelta
+      ]
+    visibleDeltas = [ constructRole visible visibleType, propertyDelta ]
+    hiddenDelta = constructRole hidden hiddenType
+    expected = constructionDeltas <> if subjectType == userType then visibleDeltas else []
+    excluded = [ hiddenDelta ] <> if subjectType == userType then [] else visibleDeltas
+  lift $ for_ (constructionDeltas <> visibleDeltas <> [ hiddenDelta ]) storeDeltaFromSignedDelta
+  pure { role: rid, context: cid, expected, excluded }
+
+checkRecursiveInitialization :: Array FilledContext -> MonadPerspectivesTransaction Unit
+checkRecursiveInitialization contexts = do
+  transaction <- AA.get
+  destinations <- lift $ transactieForEachUser transaction
+  let recipient = PerspectivesUser "def:#remote-new"
+  case Map.lookup (Peer (unschemePerspectivesUser recipient) recipient) destinations of
+    Nothing -> liftAff $ assert "The new peer must receive a transaction" false
+    Just (TransactionForPeer { deltas }) ->
+      for_ contexts \filled -> do
+        liftAff do
+          for_ filled.expected \delta ->
+            assert ("Missing recursive initialization delta: " <> show delta) (elem delta deltas)
+          for_ filled.excluded \delta ->
+            assert "Recursive initialization must respect each role's perspectives" (not $ elem delta deltas)
+        local <- lift $ isMe filled.role
+        PerspectContext ctxt <- lift $ getPerspectContext filled.context
+        liftAff $ equal false local
+        liftAff $ equal Nothing ctxt.me
+        liftAff $ equal Nothing ctxt.preferredUserRoleType
+  let previousRecipient = PerspectivesUser "def:#remote-old"
+  case Map.lookup (Peer (unschemePerspectivesUser previousRecipient) previousRecipient) destinations of
+    Nothing -> pure unit
+    Just (TransactionForPeer { deltas }) ->
+      liftAff $ for_ contexts \filled ->
+        for_ filled.expected \delta ->
+          assert "Recursive initialization must not be sent to the old peer" (not $ elem delta deltas)
+
 replaceAndApply :: RoleInstance -> MonadPerspectivesTransaction Unit
 replaceAndApply oldFiller = do
   void $ setBindingWithMode FillWithProvidedType userId newRemotePeer (Just $ replacementDelta oldFiller)
@@ -361,6 +530,7 @@ installModel = do
             (\r -> r { properties = [ ENP visibleProperty ] })
             (role visibleType RoleInContext)
         , Tuple (unwrap hiddenType) (role hiddenType RoleInContext)
+        , Tuple (unwrap bridgeType) (role bridgeType RoleInContext)
         , Tuple (unwrap externalType) (role externalType ExternalRole)
         ]
     , enumeratedProperties = Object.singleton (unwrap visibleProperty) $
@@ -452,6 +622,20 @@ replacementDelta oldFiller = signed
   , subject: ENR userType
   }
 
+firstBindingDelta :: SignedDelta
+firstBindingDelta = signed
+  { resourceKey: unwrap userId <> "#binding"
+  , resourceVersion: 1
+  , deltaType: "SetFirstBinding"
+  , filled: userId
+  , filledType: userType
+  , filler: Just newRemotePeer
+  , fillerType: Just $ EnumeratedRoleType perspectivesUsers
+  , oldFiller: Nothing :: Maybe RoleInstance
+  , oldFillerType: Nothing :: Maybe EnumeratedRoleType
+  , subject: ENR userType
+  }
+
 visiblePropertyDelta :: SignedDelta
 visiblePropertyDelta = signed
   { resourceKey: unwrap visibleId <> "#" <> unwrap visibleProperty
@@ -487,6 +671,9 @@ visibleProperty = EnumeratedPropertyType $ unwrap visibleType <> "$Value"
 
 hiddenType :: EnumeratedRoleType
 hiddenType = EnumeratedRoleType $ unwrap contextType <> "$Hidden"
+
+bridgeType :: EnumeratedRoleType
+bridgeType = EnumeratedRoleType $ unwrap contextType <> "$Bridge"
 
 externalType :: EnumeratedRoleType
 externalType = EnumeratedRoleType $ unwrap contextType <> "$External"

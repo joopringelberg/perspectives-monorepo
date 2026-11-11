@@ -28,6 +28,9 @@ replacement, local-user bookkeeping, binding/role removal, and no-op replacement
 It also verifies that invalid preferred role types are cleared, valid enumerated
 and calculated preferences are retained, and live `Me` subscriptions receive
 updated role-instance and role-type results at transaction finalization.
+Recursive initialization checks cover first fill and replacement, multiple levels
+and branches in other contexts, non-user intermediate roles, perspective filtering,
+recipient routing, and clearing inherited local-user flags.
 
 ```bash
 pnpm exec spago build --offline

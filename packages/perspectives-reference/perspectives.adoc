@@ -5,6 +5,8 @@
 [[keyword-perspective]]
 A _perspective_ defines what a user role can see and do with respect to other roles and their properties. Every perspective has a _subject_ (the user role that holds the perspective) and an _object_ (the role being observed). Perspectives are declared inside role declarations or inside <<concept-state,state declarations>>.
 
+When a peer newly fills a user role, the runtime synchronises the contexts, roles and property values accessible through that role's perspectives. This also applies when replacing the previous filler. If that role already fills other user roles, their perspectives are synchronised recursively too, in their respective contexts, including through intermediate non-user roles. Each user role's own perspectives determine the data sent; a binding alone does not grant additional access to unrelated data.
+
 [[perspectives-aspects]]
 === Perspectives inherited from aspects
 
