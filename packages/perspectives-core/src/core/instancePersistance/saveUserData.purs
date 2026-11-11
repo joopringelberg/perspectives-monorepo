@@ -876,11 +876,6 @@ changeRoleBinding filledId mNewFiller = (lift $ try $ getPerspectRol filledId) >
             -- lift (newFiller `fillerPointsTo` filledId)
             if isInPublicScheme (unwrap newFiller) && not isInPublicScheme (unwrap filledId) then pure unit
             else lift (newFiller `fillerPointsTo` filledId)
-            -- SYNCHRONISATION
-            -- Ensure that the new binding is published for public roles,
-            -- just as setFirstBinding does.
-            handleNewPeer filledId
-            void $ addDeltasForPerspectiveObjects filledId
 
       else pure unit
 
@@ -918,3 +913,10 @@ changeRoleBinding filledId mNewFiller = (lift $ try $ getPerspectRol filledId) >
             if newFillerIsMe then roleIsMe filledId (rol_context filled) -- Set isMe of the role and set the role to Me of the context.
             else pure unit
           else pure unit
+
+      -- Synchronisation filters local users, so first clear any stale isMe flag.
+      case mNewFiller of
+        Just _ | not roleWillBeRemoved -> do
+          handleNewPeer filledId
+          void $ addDeltasForPerspectiveObjects filledId
+        _ -> pure unit

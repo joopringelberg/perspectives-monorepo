@@ -46,6 +46,28 @@ data TransactionDestination
 
 `addDelta` filters out the local user (`notIsMe`) before computing destinations. `transactieForEachUser` also never sends a delta back to its own author.
 
+### Replacing a user-role filler
+
+A replacement initializes the new peer just like a first-time fill. The replacement
+delta is recorded first; the deferred `RoleUnbinding` assignment then updates both
+binding links through `changeRoleBinding`.
+
+Before calling `handleNewPeer` and `addDeltasForPerspectiveObjects`,
+`changeRoleBinding` updates the local role's `isMe` flag and the context's `me`.
+This order is essential when handing a locally occupied role to a remote peer:
+both `handleNewPeer` and `addDelta` would otherwise exclude the new recipient
+because of the outgoing user's stale `isMe` flag.
+
+An alternative `me` must actually represent the local user and must not be the
+outgoing role. Selection first tries the current/preferred role type, then other
+local user-role types; if no alternative exists, the context's `me` is cleared.
+
+For a non-local user role, `handleNewPeer` serializes the role type's perspectives
+with `newPeer = true`, including a minimal self-perspective when none is modelled.
+These initialization deltas join the current transaction and are addressed through
+the new filler chain. Binding removal and roles scheduled for removal do not
+initialize a new peer.
+
 ---
 
 ## 2. Customising per destination: `transactieForEachUser`

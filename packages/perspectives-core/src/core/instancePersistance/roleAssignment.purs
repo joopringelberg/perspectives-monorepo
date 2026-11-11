@@ -21,6 +21,7 @@
 -- END LICENSE
 module Perspectives.RoleAssignment where
 
+import Control.Alt ((<|>))
 import Control.Monad.Error.Class (try)
 import Control.Monad.State (lift)
 import Data.Maybe (Maybe(..))
@@ -31,17 +32,17 @@ import Perspectives.Deltas (addCorrelationIdentifiersToTransactie)
 import Perspectives.DependencyTracking.Dependency (findMeRequests)
 import Perspectives.Error.Boundaries (handlePerspectContextError, handlePerspectRolError, handlePerspectRolError')
 import Perspectives.InstanceRepresentation (PerspectRol)
-import Perspectives.Instances.Me (getMyType)
+import Perspectives.Instances.Combinators as Combinators
+import Perspectives.Instances.Me (getAllMyRoleTypes, getMeInRoleAndContext, getMyType)
 import Perspectives.Instances.ObjectGetters (contextType)
 import Perspectives.Persistent (getPerspectContext, getPerspectRol)
-import Perspectives.Query.UnsafeCompiler (getRoleInstances)
 import Perspectives.Representation.Class.PersistentType (getEnumeratedRole)
 import Perspectives.Representation.Class.Role (isUnlinked, kindOfRole)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance)
 import Perspectives.Representation.TypeIdentifiers (RoleKind(..))
-import Prelude (Unit, bind, discard, pure, unit, ($), (>>=), (==), (||))
+import Prelude (Unit, bind, discard, pure, unit, ($), (/=), (>=>), (>>=), (==), (||))
 
--- | In the context of the roleInstance, find the role that is me and set its isMe to true.
+-- | Find another role that actually represents the local user and set its isMe to true.
 -- | Set the me of the context to that role.
 -- | If not found, set me of the context to Nothing.
 -- | Invariant: roleId was the previous value of me of contextId at the time of calling.
@@ -49,14 +50,14 @@ lookForAlternativeMe :: RoleInstance -> ContextInstance -> MonadPerspectivesTran
 lookForAlternativeMe roleId contextId = (lift $ try $ getPerspectContext contextId) >>=
   handlePerspectContextError "lookForAlternativeMe"
     \ctxt -> do
-      mmyType <- lift (contextId ##> getMyType)
-      case mmyType of
+      let
+        otherMe userTypes = Combinators.filter
+          (userTypes >=> \rt -> getMeInRoleAndContext rt contextId)
+          (\candidate -> pure $ candidate /= roleId)
+      mme <- lift (contextId ##> \cid -> otherMe getMyType cid <|> otherMe getAllMyRoleTypes cid)
+      case mme of
         Nothing -> lift $ cacheAndSave contextId (changeContext_me ctxt Nothing)
-        Just myType -> do
-          mme <- lift (contextId ##> getRoleInstances myType)
-          case mme of
-            Nothing -> lift $ cacheAndSave contextId (changeContext_me ctxt Nothing)
-            Just me -> roleIsMe me contextId
+        Just me -> roleIsMe me contextId
 
 -- | Set isMe of the roleInstance to false.
 roleIsNotMe :: RoleInstance -> MonadPerspectivesTransaction Unit

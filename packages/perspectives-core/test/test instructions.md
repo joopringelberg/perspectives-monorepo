@@ -19,6 +19,21 @@ cd packages/perspectives-core
 pnpm exec spago test --main Test.Main
 ```
 
+### User-role filler replacement
+
+The focused `Test.BindingReplacement` suite uses synthetic models and in-memory
+PouchDB, without a broker or remote model repository. It checks initialization
+deltas and their destinations after local-to-remote and remote-to-remote
+replacement, local-user bookkeeping, binding/role removal, and no-op replacement.
+
+```bash
+pnpm exec spago build --offline
+ROLLUP_INPUT=./output/Test.BindingReplacement/index.js \
+ROLLUP_OUTPUT=./dist/test.bindingReplacement.node.js \
+pnpm exec rollup -c rollup.node.config.js
+node dist/test.bindingReplacement.node.js
+```
+
 ---
 
 ## Broker-service lifecycle tests
