@@ -37,7 +37,7 @@ means the coverage is not already exercised by the three current layer runners.
 | `test:modelDependencies` | Dependency installation/resolution against the locally served model repository. | Keep as an opt-in repository integration test. |
 | `test:compileModelsFromFile` | Compiles ARC files from disk through the PDR model-loading flow. | Keep; place with model-loading/persistence integration (Layer 2 if its environment supports it, otherwise a dedicated model integration group). |
 | `test:stableIds` | Recompilation and persistence of stable-ID mappings; Layer 1's sidecar tests cover a different, lower-level path. | Keep with model persistence integration (Layer 2 or a dedicated model group). |
-| `test:snapshotLifecycle` | Snapshot publication and reboot prerequisites. | Keep in a dedicated restart/snapshot integration group; it is not a fast Layer 3 test. |
+| `test:snapshotLifecycle` | Snapshot publication and reboot prerequisites. | Keep in a dedicated restart/snapshot integration group; it is not a fast Layer 3 test. For repeated snapshot runs, use fresh processes because in-memory databases survive PDR shutdown. |
 | `test:rebootUniverse` | Universe reboot against the local service setup. | Keep as an explicit destructive/environmental test, not a default layer. |
 | `test:rebootDatabase` | Big-bang database creation and publication. | Keep as a separately gated destructive/environmental test. |
 | `test:rebootUniverseDanger` | Runs the same `Test.RebootUniverse` entry point as `test:rebootUniverse`, without its local-routing guard. | Remove; the guarded command already exists. |
