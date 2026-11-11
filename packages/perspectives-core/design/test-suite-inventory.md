@@ -12,7 +12,7 @@ run as part of this inventory.
 | Runner | Current coverage | Assessment |
 |---|---|---|
 | `pnpm run test:layer1` | ARC parsing and compilation, ADT/type operations, query-description compilation, model translation, and focused pure or in-memory regressions. | Keep as the fast default suite. |
-| `pnpm run test:layer2` | Currently runs persistence recovery and model-patch suites. `Test.LoadArc` is imported but commented out; context/role, query, and transaction suites are also commented out. | Keep as the persistence integration layer; verify its runtime prerequisites before calling it green. The comments in `Layer2.purs` still describe an unfinished memory-adapter migration. |
+| `pnpm run test:layer2` | Currently runs persistence recovery and model-patch suites. `Test.LoadArc` is imported but commented out; context/role, query, and transaction suites are also commented out. | Keep as the persistence integration layer; verify its runtime before calling it green. `persistenceAPI.node.js` already registers the in-memory PouchDB adapter, so the migration TODOs in `Layer2.purs` are stale. |
 | `pnpm run test:layer3` | Constructive and destructive synchronization, model-compilation regression, query-step, single-PDR destructive, transaction-execution (compile-from-source configuration), run-action, and scaffold tests. | Keep for full-PDR regressions. A local in-process transport test is distinct from the real-broker tests below. |
 
 `spago build` compiled the test modules too, including modules that are not
