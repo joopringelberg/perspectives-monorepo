@@ -59,8 +59,16 @@ both `handleNewPeer` and `addDelta` would otherwise exclude the new recipient
 because of the outgoing user's stale `isMe` flag.
 
 An alternative `me` must actually represent the local user and must not be the
-outgoing role. Selection first tries the current/preferred role type, then other
-local user-role types; if no alternative exists, the context's `me` is cleared.
+outgoing role. A preferred user role type is retained only if it still computes a
+local participant other than the outgoing role; otherwise the preference is
+cleared. This applies to enumerated and calculated preferences alike. Selection
+then tries the current/remaining preferred role type, followed by other local
+user-role types; if no alternative exists, the context's `me` is cleared.
+
+Both preference changes and clearing `me` use the shared setters that schedule
+`Me` subscriptions for refresh. Subscribers therefore receive the alternative
+role instance and type, or empty results when no local participation remains.
+The context itself is not automatically removed.
 
 For a non-local user role, `handleNewPeer` serializes the role type's perspectives
 with `newPeer = true`, including a minimal self-perspective when none is modelled.

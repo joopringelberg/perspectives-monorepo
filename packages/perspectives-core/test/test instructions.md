@@ -25,6 +25,9 @@ The focused `Test.BindingReplacement` suite uses synthetic models and in-memory
 PouchDB, without a broker or remote model repository. It checks initialization
 deltas and their destinations after local-to-remote and remote-to-remote
 replacement, local-user bookkeeping, binding/role removal, and no-op replacement.
+It also verifies that invalid preferred role types are cleared, valid enumerated
+and calculated preferences are retained, and live `Me` subscriptions receive
+updated role-instance and role-type results at transaction finalization.
 
 ```bash
 pnpm exec spago build --offline

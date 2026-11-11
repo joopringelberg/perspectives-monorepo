@@ -25,8 +25,8 @@ import Control.Alt ((<|>))
 import Control.Monad.Error.Class (try)
 import Control.Monad.State (lift)
 import Data.Maybe (Maybe(..))
-import Perspectives.Assignment.Update (cacheAndSave)
-import Perspectives.ContextAndRole (addRol_gevuldeRollen, changeContext_me, changeRol_binding, changeRol_isMe, removeRol_binding, removeRol_gevuldeRollen, rol_context, rol_pspType)
+import Perspectives.Assignment.Update (cacheAndSave, setMe, setPreferredUserRoleType)
+import Perspectives.ContextAndRole (addRol_gevuldeRollen, changeContext_me, changeRol_binding, changeRol_isMe, context_preferredUserRoleType, removeRol_binding, removeRol_gevuldeRollen, rol_context, rol_pspType)
 import Perspectives.CoreTypes (MonadPerspectivesTransaction, MonadPerspectives, (##>), (##>>))
 import Perspectives.Deltas (addCorrelationIdentifiersToTransactie)
 import Perspectives.DependencyTracking.Dependency (findMeRequests)
@@ -40,23 +40,31 @@ import Perspectives.Representation.Class.PersistentType (getEnumeratedRole)
 import Perspectives.Representation.Class.Role (isUnlinked, kindOfRole)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance)
 import Perspectives.Representation.TypeIdentifiers (RoleKind(..))
-import Prelude (Unit, bind, discard, pure, unit, ($), (/=), (>=>), (>>=), (==), (||))
+import Prelude (Unit, bind, discard, pure, unit, void, ($), (/=), (>=>), (>>=), (==), (||))
 
 -- | Find another role that actually represents the local user and set its isMe to true.
 -- | Set the me of the context to that role.
 -- | If not found, set me of the context to Nothing.
+-- | Clear a preferred user role type that no longer has a local participant.
 -- | Invariant: roleId was the previous value of me of contextId at the time of calling.
 lookForAlternativeMe :: RoleInstance -> ContextInstance -> MonadPerspectivesTransaction Unit
 lookForAlternativeMe roleId contextId = (lift $ try $ getPerspectContext contextId) >>=
   handlePerspectContextError "lookForAlternativeMe"
     \ctxt -> do
       let
-        otherMe userTypes = Combinators.filter
-          (userTypes >=> \rt -> getMeInRoleAndContext rt contextId)
+        otherMeOfType rt = Combinators.filter (getMeInRoleAndContext rt)
           (\candidate -> pure $ candidate /= roleId)
+        otherMe userTypes = userTypes >=> \rt -> otherMeOfType rt contextId
+      case context_preferredUserRoleType ctxt of
+        Nothing -> pure unit
+        Just preferred -> do
+          mpreferred <- lift (contextId ##> otherMeOfType preferred)
+          case mpreferred of
+            Nothing -> void $ setPreferredUserRoleType contextId []
+            Just _ -> pure unit
       mme <- lift (contextId ##> \cid -> otherMe getMyType cid <|> otherMe getAllMyRoleTypes cid)
       case mme of
-        Nothing -> lift $ cacheAndSave contextId (changeContext_me ctxt Nothing)
+        Nothing -> setMe contextId Nothing
         Just me -> roleIsMe me contextId
 
 -- | Set isMe of the roleInstance to false.

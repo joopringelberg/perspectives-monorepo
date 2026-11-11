@@ -9,12 +9,14 @@ module Test.BindingReplacement where
 import Prelude
 
 import Control.Monad.AvarMonadAsk as AA
+import Control.Monad.Error.Class (throwError, try)
 import Control.Monad.Reader (runReaderT)
 import Control.Monad.Trans.Class (lift)
-import Data.Array (elem, null)
+import Data.Array (elem, length, null, singleton)
+import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.Map as Map
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), maybe)
 import Data.Newtype (over, unwrap)
 import Data.Tuple (Tuple(..))
 import Effect (Effect)
@@ -22,25 +24,32 @@ import Effect.Aff (Aff)
 import Effect.Aff.AVar (new)
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
+import Effect.Exception as Exception
+import Effect.Ref as Ref
 import Foreign.Object as Object
+import Perspectives.ApiTypes (ApiEffect, ResponseWithWarnings(..))
+import Perspectives.Assignment.Update (setPreferredUserRoleType)
 import Perspectives.ContextAndRole (defaultContextRecord, defaultRolRecord)
-import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction)
+import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction, (##>))
 import Perspectives.Cuid2 (cuid2)
 import Perspectives.Data.EncodableMap as EM
 import Perspectives.Deltas (transactieForEachUser)
+import Perspectives.DependencyTracking.Dependency (registerSupportedEffect, unregisterSupportedEffect)
 import Perspectives.DomeinCache (storeDomeinFileInCache)
 import Perspectives.DomeinFile (DomeinFile(..), defaultDomeinFileRecord)
 import Perspectives.Identifiers (typeUri2ModelUri)
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..))
-import Perspectives.Instances.Me (isMe)
+import Perspectives.Instances.Me (getMyType, isMe)
+import Perspectives.Instances.ObjectGetters (getMe)
 import Perspectives.ModelDependencies (perspectivesUsers, perspectivesUsersPublicKey, perspectivesUsersTransportPublicKey)
 import Perspectives.Parsing.Arc.Position (ArcPosition(..))
 import Perspectives.Persistence.DeltaStore (storeDeltaFromSignedDelta)
 import Perspectives.Persistent (getPerspectContext)
-import Perspectives.Query.QueryTypes (Domain(..), QueryFunctionDescription(..))
+import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..))
 import Perspectives.Query.QueryTypes (RoleInContext(..)) as QT
 import Perspectives.Representation.ADT (ADT(..))
 import Perspectives.Representation.Class.Cacheable (cacheEntity)
+import Perspectives.Representation.CalculatedRole (CalculatedRole(..), defaultCalculatedRole)
 import Perspectives.Representation.Context (Context(..), ContextKind(..), defaultContext)
 import Perspectives.Representation.EnumeratedProperty (defaultEnumeratedProperty)
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..), defaultEnumeratedRole)
@@ -50,10 +59,11 @@ import Perspectives.Representation.Perspective (Perspective(..), PropertyVerbs(.
 import Perspectives.Representation.QueryFunction (QueryFunction(..))
 import Perspectives.Representation.Range (Range(..))
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
-import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleKind(..), RoleType(..), StateIdentifier(..))
+import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleKind(..), RoleType(..), StateIdentifier(..), roletype2string)
 import Perspectives.Representation.Verbs (PropertyVerb(..))
 import Perspectives.RoleAssignment (lookForAlternativeMe)
 import Perspectives.RunPerspectives (runPerspectivesWithoutCouchdb)
+import Perspectives.RunMonadPerspectivesTransaction (phase2)
 import Perspectives.SaveUserData (FillBindingMode(..), changeRoleBinding, setBindingWithMode)
 import Perspectives.ScheduledAssignment (ScheduledAssignment(..))
 import Perspectives.SetupUser (setupInvertedQueryDatabase)
@@ -102,6 +112,7 @@ theSuite = suite "User-role filler replacement" do
       replaceAndApply localPeer
       PerspectContext context <- lift $ getPerspectContext contextId
       liftAff $ equal (Just localAlternativeId) context.me
+      liftAff $ equal (Just $ ENR userType) context.preferredUserRoleType
       local <- lift $ isMe userId
       liftAff $ equal false local
 
@@ -110,6 +121,9 @@ theSuite = suite "User-role filler replacement" do
       replaceAndApply localPeer
       PerspectContext context <- lift $ getPerspectContext contextId
       liftAff $ equal (Just otherLocalId) context.me
+      liftAff $ equal Nothing context.preferredUserRoleType
+      myType <- lift (contextId ##> getMyType)
+      liftAff $ equal (Just $ ENR otherUserType) myType
       local <- lift $ isMe userId
       liftAff $ equal false local
 
@@ -129,6 +143,9 @@ theSuite = suite "User-role filler replacement" do
       Transaction { deltas } <- AA.get
       liftAff $ equal false local
       liftAff $ equal Nothing context.me
+      liftAff $ equal Nothing context.preferredUserRoleType
+      myType <- lift (contextId ##> getMyType)
+      liftAff $ equal Nothing myType
       liftAff $ assert "Unbinding must not initialize a peer" (null deltas)
 
   test "a role scheduled for removal is not selected as its own alternative" $
@@ -138,6 +155,7 @@ theSuite = suite "User-role filler replacement" do
       PerspectContext context <- lift $ getPerspectContext contextId
       Transaction { deltas } <- AA.get
       liftAff $ equal Nothing context.me
+      liftAff $ equal Nothing context.preferredUserRoleType
       liftAff $ assert "A removed role must not initialize a peer" (null deltas)
 
   test "alternative selection does not promote an unrelated remote instance" $
@@ -156,6 +174,78 @@ theSuite = suite "User-role filler replacement" do
       liftAff $ equal true local
       liftAff $ assert "A no-op must not schedule a binding change" (null scheduledAssignments)
       liftAff $ assert "A no-op must not initialize a peer" (null deltas)
+
+  for_ [ Nothing, Just $ ENR userType ] \preference ->
+    test ("refreshes Me subscriptions after losing the last role with preference " <> show preference) $
+      withFixture localPeer [] [] do
+        void $ setPreferredUserRoleType contextId (maybe [] singleton preference)
+        checkMeSubscriptions Nothing Nothing (changeRoleBinding userId Nothing)
+
+  test "refreshes Me subscriptions after falling back to another user-role type" $
+    withFixture localPeer [] [ otherLocalId ] do
+      checkMeSubscriptions (Just otherLocalId) (Just $ ENR otherUserType)
+        (changeRoleBinding userId Nothing)
+
+  test "preserves a valid preference when another non-preferred role is lost" $
+    withFixture localPeer [] [ otherLocalId ] do
+      void $ setPreferredUserRoleType contextId [ ENR otherUserType ]
+      checkMeSubscriptions (Just otherLocalId) (Just $ ENR otherUserType)
+        (changeRoleBinding userId Nothing)
+      PerspectContext context <- lift $ getPerspectContext contextId
+      liftAff $ equal (Just $ ENR otherUserType) context.preferredUserRoleType
+
+  test "preserves a calculated preference that still computes a local alternative" $
+    withFixture localPeer [ localAlternativeId ] [] do
+      void $ setPreferredUserRoleType contextId [ CR calculatedUserType ]
+      checkMeSubscriptions (Just localAlternativeId) (Just $ CR calculatedUserType)
+        (changeRoleBinding userId Nothing)
+      PerspectContext context <- lift $ getPerspectContext contextId
+      liftAff $ equal (Just $ CR calculatedUserType) context.preferredUserRoleType
+
+  test "clears a calculated preference that no longer computes a local participant" $
+    withFixture localPeer [] [] do
+      void $ setPreferredUserRoleType contextId [ CR calculatedUserType ]
+      checkMeSubscriptions Nothing Nothing (changeRoleBinding userId Nothing)
+      PerspectContext context <- lift $ getPerspectContext contextId
+      liftAff $ equal Nothing context.preferredUserRoleType
+
+checkMeSubscriptions
+  :: Maybe RoleInstance
+  -> Maybe RoleType
+  -> MonadPerspectivesTransaction Unit
+  -> MonadPerspectivesTransaction Unit
+checkMeSubscriptions expectedMe expectedType action = do
+  meResults <- liftEffect $ Ref.new []
+  typeResults <- liftEffect $ Ref.new []
+  result <- try do
+    lift $ registerSupportedEffect 1001 (captureResults meResults) getMe contextId false
+    lift $ registerSupportedEffect 1002 (captureResults typeResults)
+      (map (Value <<< roletype2string) <<< getMyType)
+      contextId
+      false
+    initialMeResults <- liftEffect $ Ref.read meResults
+    initialTypeResults <- liftEffect $ Ref.read typeResults
+    liftAff $ equal [ [ unwrap userId ] ] initialMeResults
+    liftAff $ equal 1 (length initialTypeResults)
+    action
+    Transaction { correlationIdentifiers } <- AA.get
+    liftAff $ assert "The Me-instance subscription must be scheduled for refresh" (elem 1001 correlationIdentifiers)
+    liftAff $ assert "The Me-type subscription must be scheduled for refresh" (elem 1002 correlationIdentifiers)
+    phase2 true (ENR userType) unit
+    actualMeResults <- liftEffect $ Ref.read meResults
+    actualTypeResults <- liftEffect $ Ref.read typeResults
+    liftAff $ equal (initialMeResults <> [ maybe [] (singleton <<< unwrap) expectedMe ]) actualMeResults
+    liftAff $ equal (initialTypeResults <> [ maybe [] (singleton <<< roletype2string) expectedType ]) actualTypeResults
+  lift $ unregisterSupportedEffect 1001
+  lift $ unregisterSupportedEffect 1002
+  case result of
+    Left err -> throwError err
+    Right _ -> pure unit
+
+captureResults :: Ref.Ref (Array (Array String)) -> ApiEffect
+captureResults results = case _ of
+  ResultWithWarnings _ values _ -> Ref.modify_ (_ <> [ values ]) results
+  ErrorWithWarnings _ message _ -> Exception.throw message
 
 replaceAndApply :: RoleInstance -> MonadPerspectivesTransaction Unit
 replaceAndApply oldFiller = do
@@ -260,7 +350,7 @@ installModel = do
     { id = ModelUri model
     , namespace = ModelUri model
     , contexts = Object.singleton (unwrap contextType) $ over Context
-        (\c -> c { gebruikerRol = [ ENR userType, ENR otherUserType ] })
+        (\c -> c { gebruikerRol = [ ENR userType, ENR otherUserType, CR calculatedUserType ] })
         modelContext
     , enumeratedRoles = Object.fromFoldable
         [ Tuple (unwrap userType) $ over EnumeratedRole
@@ -275,6 +365,15 @@ installModel = do
         ]
     , enumeratedProperties = Object.singleton (unwrap visibleProperty) $
         defaultEnumeratedProperty (unwrap visibleProperty) "Value" (unwrap visibleType) PString origin
+    , calculatedRoles = Object.singleton (unwrap calculatedUserType) $ over CalculatedRole
+        ( \r -> r
+            { calculation = Q $ SQD (CDOM $ ST contextType) (RolGetter $ ENR userType)
+                (RDOM $ ST $ QT.RoleInContext { context: contextType, role: userType })
+                False
+                False
+            }
+        )
+        (defaultCalculatedRole (unwrap calculatedUserType) "CalculatedUser" UserRole (unwrap contextType) origin)
     }
   case typeUri2ModelUri perspectivesUsers of
     Nothing -> liftAff $ assert "The peer role must have a model URI" false
@@ -376,6 +475,9 @@ userType = EnumeratedRoleType $ unwrap contextType <> "$User"
 
 otherUserType :: EnumeratedRoleType
 otherUserType = EnumeratedRoleType $ unwrap contextType <> "$OtherUser"
+
+calculatedUserType :: CalculatedRoleType
+calculatedUserType = CalculatedRoleType $ unwrap contextType <> "$CalculatedUser"
 
 visibleType :: EnumeratedRoleType
 visibleType = EnumeratedRoleType $ unwrap contextType <> "$Visible"
