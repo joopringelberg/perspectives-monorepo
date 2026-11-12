@@ -7,7 +7,7 @@ PureScript project and its test modules successfully in this checkout, but that
 does not execute their assertions. The service-dependent runners below were not
 run as part of this inventory.
 
-## Current layer coverage
+## Current layer coverage 
 
 | Runner | Current coverage | Assessment |
 |---|---|---|

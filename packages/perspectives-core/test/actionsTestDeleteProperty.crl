@@ -1,8 +1,0 @@
-UserData
-
-import model:Test as tst
-
-tst:TestCaseDeleteProp usr:MyTestCase
-	$Self -> model:System$Me
-	$ARole8 => ()
-		$Prop1 = "aap","noot"
