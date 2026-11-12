@@ -24,7 +24,7 @@ module Perspectives.Parsing.Arc.PhaseThree.StoreInvertedQueries where
 
 import Control.Monad.Except (lift)
 import Control.Monad.Reader (ReaderT, ask)
-import Data.Array (concat, elem, fromFoldable, head, union)
+import Data.Array (concat, elem, filter, foldr, fromFoldable, head, null, snoc, uncons, union)
 import Data.Foldable (for_)
 import Data.Map (Map, empty, singleton, toUnfoldable, values) as Map
 import Data.Maybe (Maybe(..), fromJust, maybe)
@@ -40,7 +40,7 @@ import Perspectives.InvertedQueryKey (serializeInvertedQueryKey)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseTwo', addStorableInvertedQuery, getsDF, lift2, throwError)
 import Perspectives.Parsing.Arc.Position (ArcPosition)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
-import Perspectives.Query.Kinked (invert)
+import Perspectives.Query.Kinked (AnchoredQueryWithAKink, InvertedStep, PropertyAnchor(..), composeInvertedSteps, invert)
 import Perspectives.Query.QueryTypes (Domain(..), QueryFunctionDescription(..), Range, RoleInContext(..), addTermOnRight, domain, domain2roleInContext, isRoleDomain, makeComposition, mandatory, range, roleInContext2Role)
 import Perspectives.Representation.ADT (allLeavesInADT)
 import Perspectives.Representation.Class.PersistentType (getCalculatedProperty, getEnumeratedProperty)
@@ -52,7 +52,7 @@ import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunctio
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..), bool2threeValued)
 import Perspectives.Representation.TypeIdentifiers (PropertyType(..), RoleType(..), StateIdentifier)
 import Perspectives.Utilities (prettyPrint)
-import Prelude (Unit, bind, discard, flip, pure, show, unit, ($), (<$>), (<>), (==), (>=>), (<*>))
+import Prelude (Unit, bind, discard, flip, not, pure, show, unit, ($), (<$>), (<>), (==), (/=), (<<<), (>=>), (<*>))
 
 type WithModificationSummary = ReaderT ModificationSummary (PhaseTwo' MonadPerspectives)
 
@@ -66,6 +66,57 @@ storeInvertedQuery
   -> Maybe ArcPosition
   -> WithModificationSummary Unit
 storeInvertedQuery qwk users roleStates statesPerProperty selfOnly authorOnly perspectiveStartPosition = storeInvertedQuery' qwk users roleStates statesPerProperty selfOnly authorOnly perspectiveStartPosition Nothing Nothing
+
+storeAnchoredInvertedQuery
+  :: AnchoredQueryWithAKink
+  -> Array RoleType
+  -> Array StateIdentifier
+  -> Map.Map PropertyType (Array StateIdentifier)
+  -> Boolean
+  -> Boolean
+  -> Maybe ArcPosition
+  -> WithModificationSummary Unit
+storeAnchoredInvertedQuery { query, steps } users roleStates statesPerProperty selfOnly authorOnly perspectiveStartPosition = do
+  let
+    -- Dependency changes must remain detectable when a result filter becomes false.
+    dependencyQuery = case head steps of
+      Just { propertyAnchor: Dependency } -> ZQ
+        (composeInvertedSteps $ filter (\step -> step.propertyAnchor /= ResultFilter) steps)
+        (forwards query)
+      _ -> query
+  storeInvertedQuery dependencyQuery users roleStates statesPerProperty selfOnly authorOnly perspectiveStartPosition
+  case query of
+    ZQ (Just _) Nothing -> storeAnchors [] steps
+    _ -> pure unit
+  where
+  storeAnchors :: Array InvertedStep -> Array InvertedStep -> WithModificationSummary Unit
+  storeAnchors filters remaining = case uncons remaining of
+    Nothing -> pure unit
+    Just { head: step, tail } -> case step.propertyAnchor of
+      PerspectiveResult -> case composeInvertedSteps remaining of
+        Nothing -> lift $ throwError $ Custom "A property anchor must have a backwards path."
+        Just backward -> do
+          if not $ null filters then
+            storeInvertedQuery'
+              (ZQ (Just backward) Nothing)
+              users
+              (roleStates `union` (concat $ fromFoldable $ Map.values statesPerProperty))
+              statesPerProperty
+              selfOnly
+              authorOnly
+              perspectiveStartPosition
+              (composeInvertedSteps filters)
+              Nothing
+          else pure unit
+          unsafePartial $ storePropertyPerspectiveQueries step.query
+            (ZQ (Just $ foldr (makeComposition <<< _.query) backward filters) Nothing)
+            users
+            statesPerProperty
+            selfOnly
+            authorOnly
+            perspectiveStartPosition
+      ResultFilter -> storeAnchors (snoc filters step) tail
+      Dependency -> storeAnchors filters tail
 
 -- | Modifies the DomeinFile in PhaseTwoState.
 storeInvertedQuery'
@@ -480,17 +531,6 @@ setPathForStep qfd@(SQD dom qf ran fun man) qWithAK users states statesPerProper
 
     _ -> lift $ throwError $ Custom "setPathForStep: there should be no other cases. This is a system programming error."
 
-  -- For any inversion step whose domain is a role domain and that has no remaining
-  -- forward path, also store calculated-property perspective queries.
-  storePropertyPerspectiveQueries
-    qfd
-    qWithAK
-    users
-    statesPerProperty
-    selfOnly
-    authorOnly
-    perspectiveStartPosition
-
 setPathForStep (MQD _ qf _ _ _ _) qWithAK users states statesPerProperty selfOnly authorOnly perspectiveStartPosition mfilter mCalcUserRoleType =
   case qf of
     -- ExternalCoreRoleGetter is the inversion of a role individual step, such as sys:Me,
@@ -516,10 +556,9 @@ setPathForStep (MQD _ qf _ _ _ _) qWithAK users states statesPerProperty selfOnl
     QF.ExternalCoreContextGetter f -> pure unit
     _ -> lift $ throwError $ Custom $ "setPathForStep: uncovered case:" <> show qf <> " in MQD. This is a system programming error."
 
--- | When an inversion step starts from a role domain and has no remaining forward
--- | path, the perspective-object query has reached its destination role. In that
--- | case, also index calculated-property queries so updates in their underlying
--- | enumerated properties can trigger affected-user detection.
+-- | Called only at a compiler-tagged result anchor, with the result filters restored.
+-- | Criterion dependencies retain the perspective's properties for synchronization,
+-- | but must never be used as starting points for property expansion.
 storePropertyPerspectiveQueries
   :: Partial
   => QueryFunctionDescription
@@ -644,6 +683,8 @@ preprendToCriterium
   -> QueryFunctionDescription
   -> QueryWithAKink
 preprendToCriterium q@(ZQ backward forward) createExtraStep filter = case filter of
+  BQD _ (BinaryCombinator ComposeF) left right _ _ _ ->
+    preprendToCriterium (preprendToCriterium q createExtraStep right) createExtraStep left
   (UQD dom FilterF criterium ran fun man) -> case backward of
     -- backward is just the filter with its criterium augmented by an initial extra step.
     Nothing -> ZQ (Just $ (UQD dom FilterF (makeComposition (createExtraStep dom ran man) criterium) ran fun man)) forward

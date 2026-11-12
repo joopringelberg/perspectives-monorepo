@@ -24,7 +24,7 @@ This index provides an overview of the technical documentation in `packages/pers
 | Document | Description |
 |---|---|
 | [The Query Subsystem](query-subsystem.md) | End-to-end technical overview of the query pipeline: parsing an ARC expression into an AST, compiling it to a typed `QueryFunctionDescription`, evaluating it at runtime via the interpreter, and registering computed values in the external-function cache. Also covers three-valued logic and assumption tracking. |
-| [Query Inversion](query-inversion.md) | The compile-time transformation that turns every forward query into one or more *inverted* queries. Inverted queries allow the runtime to answer "given that data item X changed, which running queries are affected and which users must be notified?" without re-evaluating the world. |
+| [Query Inversion](query-inversion.md) | The compile-time transformation that turns every forward query into one or more *inverted* queries. Covers compiler-only property-anchor provenance, the distinction between perspective results and filter dependencies, and filtered/unfiltered triggers for visibility changes. Inverted queries identify affected queries and users without re-evaluating the world. |
 | [Role-Binding Query Analysis](role-binding-query-analysis.md) | A focused walkthrough of the binding-related runtime path in `Perspectives.CollectAffectedContexts`, including how `RTFillerKey` and `RTFilledKey` queries are applied and why the `Invitation$Inviter` → `Invitee` case likely points to stored-query data rather than an obvious runtime mismatch. |
 
 ### Transaction & Delta System

@@ -217,7 +217,7 @@ modelSources =
   , { modelUri: "model://joopringelberg.nl#UninstallTarget@1.0", filePath: "src/model/uninstallTarget@1.0.arc" }
 
   -- Modellen van Cor, gegenereerd door copilot
-  -- { modelUri: "model://corbaars.nl#Stadskamer@2.0", filePath: "src/model/modellen van Cor/Stadskamer.arc" }
+  , { modelUri: "model://joopringelberg.nl#StadskamerCor@2.0", filePath: "src/model/modellen van Cor/Stadskamer.arc" }
   -- , { modelUri: "model://corbaars.nl#Equans@1.0", filePath: "src/model/modellen van Cor/Equans.arc" }
   ]
 

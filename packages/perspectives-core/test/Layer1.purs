@@ -76,6 +76,7 @@ import Test.Parsing.Arc.IndexedRootPerspectives (theSuite) as IRP
 
 -- Query description compiler — uses an in-memory DomeinFile cache; no CouchDB
 import Test.Query.DescriptionCompiler (theSuite) as QDC
+import Test.Query.PropertyAnchors (theSuite) as QPA
 
 main :: Effect Unit
 main = runTest do
@@ -99,6 +100,7 @@ main = runTest do
   TPA2.theSuite -- Phase 2 — declarations, qualification and type representation
   TPA3.theSuite -- Phase 3 — compiled queries, perspectives and type normalisation
   QDC.theSuite -- Query description compilation
+  QPA.theSuite
   MTR.theSuite -- Model translation: YAML <-> ModelTranslation <-> TranslationTable
 
   -- Read a file from the file-system, but otherwise pure (no MonadPerspectives / no HTTP)

@@ -19,6 +19,21 @@ run as part of this inventory.
 reachable from these three runners. A successful build is therefore not
 evidence that a suite is included in a runner or that its tests pass.
 
+### Perspective property-anchor regressions
+
+Layer 1 includes `Test.Query.PropertyAnchors`. It checks that filter criteria
+remain indexed as dependencies, while property expansion starts only at the
+perspective result. The compiler-only markers distinguish result anchors,
+result filters, and dependencies even when their role types coincide; they
+are not serialized in stored queries.
+
+The suite covers inherited properties, nested filters, navigation after a
+filter, and `filledBy` criteria. It also executes compiled property paths across
+false-to-true-to-false visibility changes: property-update paths respect the
+filter, while criterion dependencies remain reachable when it becomes false.
+The model-file compilation corpus includes Stadskamer as the full-model
+regression for the original participant-name compilation failure.
+
 ## Standalone registered test runners
 
 All PureScript entry points in this table compiled under `spago build`. “Unique”
