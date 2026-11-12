@@ -99,3 +99,223 @@ standalone tests were run directly with Node:
 
 For command definitions and runner membership, see `package.json` and
 `test/Layer1.purs`, `test/Layer2.purs`, `test/Layer3.purs`, and `test/Main.purs`.
+
+## Files with no direct reference from the inventoried suites
+
+The lists below are a static reference check against the suite modules and
+standalone tests listed above, including the Layer 2 suites documented as
+disabled. A listed file has no direct filename/path reference from those tests;
+this is a purge-review list, **not** a recommendation to delete. ARC `use`
+dependencies, model URIs resolved at runtime, and files inside snapshots are
+not fully resolved by this check. Some candidate fixtures may also be used by
+older test modules that are not included in the inventory.
+
+### `test/`
+
+These 16 PureScript test modules are not reached from an inventoried suite or
+runner:
+
+```text
+test/Channel.purs
+test/abstractDataType.purs
+test/combinators.purs
+test/conversations/parser.purs
+test/conversations/parserMain.purs
+test/conversations/renderer.purs
+test/couchdbExternalFunctions.purs
+test/domeinFileEncoding.purs
+test/invertFunctionDescription.purs
+test/monoid.purs
+test/prettyPrint.purs
+test/rabbitmq.purs
+test/setAffectedContextCalculations.purs
+test/transferFile.purs
+test/typeLevelObjectGetters.purs
+test/sync/SetPropertyGetProperty.purs
+```
+
+These 47 non-PureScript test-directory files have no direct reference from the
+inventoried suites:
+
+```text
+test/actionsTestAddProperty.crl
+test/actionsTestBind.crl
+test/actionsTestBind_.crl
+test/actionsTestDeleteProperty.crl
+test/actionsTestRemoveProperty.crl
+test/actionsTestSetProperty.crl
+test/actionsTestUnbind.crl
+test/actionsTestUnbindQualified.crl
+test/actionsTestUnbind_.crl
+test/actionsTestcase1.crl
+test/actionsTestcase2.crl
+test/actionsTestcase3.arc
+test/actionsTestcase3.crl
+test/arcsyntax.arc
+test/chatInitiator.crl
+test/chatInvitation.crl
+test/combinators.arc
+test/combinators.crl
+test/contextAndRole.crl
+test/contextAndRole2.crl
+test/contextRoleParser.arc
+test/contextRoleParser.crl
+test/inversion.arc
+test/invertedQueryTest.arc
+test/log
+test/log.txt
+test/logging-instructions.md
+test/onContextDelta_context.crl
+test/onContextDelta_role.crl
+test/onPropertyDelta.crl
+test/onRoleDelta_binder.crl
+test/onRoleDelta_binding.crl
+test/parsetest1.arc
+test/perspectivesSysteem.crl
+test/publicRoleTypeAssertion.arc
+test/queries.crl
+test/roleTest.arc
+test/runMonadPerspectivesTransaction.arc
+test/serialisedAsDeltas.arc
+test/setAffectedContextCalculations.arc
+test/test instructions.md
+test/test1.json
+test/test2.arc
+test/test2.json
+test/testCaseInCouchdb.crl
+test/userCor.crl
+test/userJoop.crl
+```
+
+`test/patches/README.md` is documentation, referenced only by a comment in the
+snapshot setup tool; it is not a test input.
+
+`test/domeinFileEncoding.js` is the FFI companion of the unreferenced
+`Test.DomeinFile.Encoding` module. The two native test files and their fixtures
+are not candidates: they are run by `test:lsp` and
+`test:performance:collector`. `test/createUniverseSnapshot.purs` and its JS
+companion are setup tooling rather than tests; `createUniverseSnapshot.js`
+imports the patch ARC files. The broker-signup test also imports patch files,
+and `Test.ModelPatches` uses `test/patches/ScaffoldPatchTest.arc`, so the patch
+ARC files are retained as tool/test inputs rather than classified as
+unreferenced.
+
+### `src/model/`
+
+These 107 files have no direct file-path or local-model-loader-name reference
+from the inventoried test suites:
+
+```text
+src/model/BodiesWithAccounts@5.0.arc
+src/model/BrokerContract.smcat
+src/model/BrokerContract.svg
+src/model/BrokerServices.arc
+src/model/BrokerServices@6.1.arc
+src/model/FirstApp.arc
+src/model/JoopsApp.arc
+src/model/ModelTestGroups@2.0.arc
+src/model/RouteVanDeVraag.arc
+src/model/Simple.arc
+src/model/TestActionNameInMarkdown.arc
+src/model/TestActionPerspectives.arc
+src/model/adressbook@1.0.arc
+src/model/be-pattern.arc
+src/model/birthdayChatGPT.arc
+src/model/competition.arc
+src/model/couchdb@4.0.arc
+src/model/couchdbManagement.arc
+src/model/couchdbManagement@12.2.arc
+src/model/disconnect.arc
+src/model/expressionEvaluator.arc
+src/model/files@3.0.arc
+src/model/helpLib@1.0.arc
+src/model/italie.arc
+src/model/json example.arc
+src/model/menus.arc
+src/model/minimalmodel.arc
+src/model/modelManagement.arc
+src/model/parsing@3.0.arc
+src/model/perspectivesSysteem@6.1.arc
+src/model/perspectivesSysteem@6.2.arc
+src/model/perspectivesSysteem@6.3.arc
+src/model/rebootUniverse@1.0.arc
+src/model/sensor@3.0.arc
+src/model/serialise@3.0.arc
+src/model/shoppinglist overdrachtsbestand.arc
+src/model/shoppinglist.arc
+src/model/smallestModel.arc
+src/model/stadskamers.arc
+src/model/test.arc
+src/model/testAliases.arc
+src/model/testBindingen.arc
+src/model/testDeltaOrdering@1.0.arc
+src/model/testDoubleBindingRestriction.arc
+src/model/testDuration@1.0.arc
+src/model/testFields@1.0.arc
+src/model/testFilledByRestrictions@1.0.arc
+src/model/testFilter.arc
+src/model/testMarkDown.arc
+src/model/testPersonal.arc
+src/model/testPropertyFillFrom.arc
+src/model/testPublicRole.arc
+src/model/testQueries.arc
+src/model/testStateEntryAndExit@1.0.arc
+src/model/testSynchronisation@1.0.arc
+src/model/testTypeName.arc
+src/model/testTypeahead@1.0.arc
+src/model/testWhen@1.0.arc
+src/model/testcdb.arc
+src/model/testcor.arc
+src/model/testcor2.arc
+src/model/testimported.arc
+src/model/testimporter.arc
+src/model/testsidecar.arc
+src/model/testUpload@1.0.txt
+src/model/twoPlayerBoardGame.arc
+src/model/utilities@3.0.arc
+src/model/voorbeeldOverdracht.arc
+src/model/witcoin.arc
+src/model/patches/2501/BodiesWithAccounts.arc
+src/model/patches/2501/BrokerServices.arc
+src/model/patches/2501/couchdbManagement.arc
+src/model/patches/2501/disconnect.arc
+src/model/patches/2501/hypertext.arc
+src/model/patches/2501/introduction.arc
+src/model/patches/2504/couchdbManagement.arc
+src/model/patches/3061/italie.arc
+src/model/patches/3_3_6/perspectivesSysteem@6.3.arc
+src/model/translations/model___joopringelberg.nl#Stadskamers@1.0.yaml
+src/model/translations/model___joopringelberg.nl#TestDeltaOrdering@1.0.yaml
+src/model/translations/model___joopringelberg.nl#TestDuration@1.0.yaml
+src/model/translations/model___joopringelberg.nl#TestWhen@1.0.yaml
+src/model/translations/model___joopringelberg.nl#njr2ff2ose@1.0.yaml
+src/model/translations/model___perspectives.domains#BrokeServices@6.0.yaml
+src/model/translations/model___perspectives.domains#BrokerServices@6.1.yaml
+src/model/translations/model___perspectives.domains#BrokerServices@7.0.yaml
+src/model/translations/model___perspectives.domains#CouchdbManagement@12.0.yaml
+src/model/translations/model___perspectives.domains#CouchdbManagement@12.2.yaml
+src/model/translations/model___perspectives.domains#CouchdbManagement@12.4.yaml
+src/model/translations/model___perspectives.domains#Disconnect@1.1.yaml
+src/model/translations/model___perspectives.domains#HelpProject@3.0.yaml
+src/model/translations/model___perspectives.domains#HyperContext@1.0.yaml
+src/model/translations/model___perspectives.domains#ModelTestGroups@2.0.yaml
+src/model/translations/model___perspectives.domains#RepositoryRegistry@1.0.yaml
+src/model/translations/model___perspectives.domains#SharedFileServices@2.0.yaml
+src/model/translations/model___perspectives.domains#System@6.2.yaml
+src/model/translations/model___perspectives.domains#System@6.3.yaml
+src/model/translations/model___perspectives.domains#System@7.0.yaml
+src/model/translations/model___perspectives.domains#introduction@1.0.yaml
+src/model/translations/model___perspectives.domains#kxrm2cilp9@1.1.yaml
+src/model/translations/model___perspectives.domains#tiodn6tcyc@6.0.yaml
+src/model/translations/model___perspectives.domains#tiodn6tcyc@6.1.yaml
+src/model/translations/model___perspectives.domains#zjuzxbqpgc@6.1.yaml
+src/model/translations/translation_of_model___perspectives.domains#BodiesWithAccounts@4.0.yaml
+src/model/translations/translation_of_model___perspectives.domains#Introduction@2.0.yaml
+src/model/translations/translation_of_model___perspectives.domains#SharedFileServices@3.0.yaml
+src/model/translations/translation_of_model___perspectives.domains#SimpleChat@1.0.yaml
+```
+
+The direct-reference counts are based on the inventory's source paths and
+loader calls, not on all runtime dependencies. In particular, do not treat a
+model in this list as safe to remove until its ARC `use` dependencies, model
+publication/build inputs, and any non-test consumers have been checked.
