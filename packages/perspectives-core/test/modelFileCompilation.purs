@@ -198,26 +198,26 @@ dependencyFirstOrder sources = go [] sources
 -- also appears in extraModels, so each source URI is listed once.
 modelSources :: Array ModelSource
 modelSources =
-  [ { modelUri: "model://perspectives.domains#System@7.0", filePath: "src/model/perspectivesSysteem@7.0.arc" }
-  , { modelUri: "model://perspectives.domains#RabbitMQ@2.0", filePath: "src/model/rabbitMQ@2.0.arc" }
-  , { modelUri: "model://perspectives.domains#BrokerServices@7.0", filePath: "src/model/BrokerServices@7.0.arc" }
-  , { modelUri: "model://perspectives.domains#HyperContext@1.0", filePath: "src/model/hypertext@1.0.arc" }
-  , { modelUri: "model://perspectives.domains#Introduction@1.0", filePath: "src/model/introduction@1.0.arc" }
-  , { modelUri: "model://perspectives.domains#HelpProject@3.0", filePath: "src/model/helpProject@3.0.arc" }
-  , { modelUri: "model://perspectives.domains#Disconnect@1.1", filePath: "src/model/disconnect@1.1.arc" }
-  , { modelUri: "model://perspectives.domains#RepositoryRegistry@1.0", filePath: "src/model/repositoryRegistry@1.0.arc" }
-  , { modelUri: "model://perspectives.domains#SharedFileServices@4.0", filePath: "src/model/sharedFileStorage@4.0.arc" }
-  , { modelUri: "model://joopringelberg.nl#SynchronisationTestModel@2.0", filePath: "src/model/testSynchronisation@2.0.arc" }
-  , { modelUri: "model://joopringelberg.nl#TwoPDRDestructiveTests@1.0", filePath: "src/model/twoPDRDestructiveTests@1.0.arc" }
-  , { modelUri: "model://joopringelberg.nl#StateTestModel@1.0", filePath: "src/model/testState@1.0.arc" }
-  , { modelUri: "model://joopringelberg.nl#SinglePDRDestructiveTests@2.0", filePath: "src/model/singlePDRDestructiveTests@2.0.arc" }
-  , { modelUri: "model://joopringelberg.nl#TransactionExecutionTests@1.0", filePath: "src/model/transactionExecutionTests@1.0.arc" }
-  , { modelUri: "model://joopringelberg.nl#AMQPtestModel@1.0", filePath: "src/model/AMQPtestModel@1.0.arc" }
-  , { modelUri: "model://joopringelberg.nl#AMQPtestSetup@1.0", filePath: "src/model/AMQPtestSetup@1.0.arc" }
-  , { modelUri: "model://joopringelberg.nl#UninstallTarget@1.0", filePath: "src/model/uninstallTarget@1.0.arc" }
+  [ { modelUri: "model://perspectives.domains#System@7.0", filePath: "src/model/systemmodels/perspectivesSysteem@7.0.arc" }
+  , { modelUri: "model://perspectives.domains#RabbitMQ@2.0", filePath: "src/model/systemmodels/rabbitMQ@2.0.arc" }
+  , { modelUri: "model://perspectives.domains#BrokerServices@7.0", filePath: "src/model/systemmodels/BrokerServices@7.0.arc" }
+  , { modelUri: "model://perspectives.domains#HyperContext@1.0", filePath: "src/model/systemmodels/hypertext@1.0.arc" }
+  , { modelUri: "model://perspectives.domains#Introduction@1.0", filePath: "src/model/systemmodels/introduction@1.0.arc" }
+  , { modelUri: "model://perspectives.domains#HelpProject@3.0", filePath: "src/model/systemmodels/helpProject@3.0.arc" }
+  , { modelUri: "model://perspectives.domains#Disconnect@1.1", filePath: "src/model/systemmodels/disconnect@1.1.arc" }
+  , { modelUri: "model://perspectives.domains#RepositoryRegistry@1.0", filePath: "src/model/systemmodels/repositoryRegistry@1.0.arc" }
+  , { modelUri: "model://perspectives.domains#SharedFileServices@4.0", filePath: "src/model/systemmodels/sharedFileStorage@4.0.arc" }
+  , { modelUri: "model://joopringelberg.nl#SynchronisationTestModel@2.0", filePath: "src/model/testmodels/testSynchronisation@2.0.arc" }
+  , { modelUri: "model://joopringelberg.nl#TwoPDRDestructiveTests@1.0", filePath: "src/model/testmodels/twoPDRDestructiveTests@1.0.arc" }
+  , { modelUri: "model://joopringelberg.nl#StateTestModel@1.0", filePath: "src/model/testmodels/testState@1.0.arc" }
+  , { modelUri: "model://joopringelberg.nl#SinglePDRDestructiveTests@2.0", filePath: "src/model/testmodels/singlePDRDestructiveTests@2.0.arc" }
+  , { modelUri: "model://joopringelberg.nl#TransactionExecutionTests@1.0", filePath: "src/model/testmodels/transactionExecutionTests@1.0.arc" }
+  , { modelUri: "model://joopringelberg.nl#AMQPtestModel@1.0", filePath: "src/model/testmodels/AMQPtestModel@1.0.arc" }
+  , { modelUri: "model://joopringelberg.nl#AMQPtestSetup@1.0", filePath: "src/model/testmodels/AMQPtestSetup@1.0.arc" }
+  , { modelUri: "model://joopringelberg.nl#UninstallTarget@1.0", filePath: "src/model/testmodels/uninstallTarget@1.0.arc" }
 
   -- Modellen van Cor, gegenereerd door copilot
-  -- { modelUri: "model://corbaars.nl#Stadskamer@2.0", filePath: "src/model/modellen van Cor/Stadskamer.arc" }
+  , { modelUri: "model://joopringelberg.nl#StadskamerCor@2.0", filePath: "src/model/modellen van Cor/Stadskamer.arc" }
   -- , { modelUri: "model://corbaars.nl#Equans@1.0", filePath: "src/model/modellen van Cor/Equans.arc" }
   ]
 

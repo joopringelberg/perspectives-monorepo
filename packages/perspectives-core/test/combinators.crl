@@ -1,7 +1,0 @@
-UserData
-
-import model:Combinators as tst
-
-tst:TestCase usr:MyTestCase
-  $SomeRole => ()
-  $AnotherRole -> $SomeRole(1)

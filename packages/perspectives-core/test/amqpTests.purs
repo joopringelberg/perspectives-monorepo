@@ -82,7 +82,7 @@ synchronisationTestModelConfiguration =
   , snapshotDirBob: "test/pdr-snapshot/universe/bob"
   , testModel
   , testModelLoadMethod: CompileModelFromSource
-      { sourcePath: "src/model/AMQPtestModel@1.0.arc"
+      { sourcePath: "src/model/testmodels/AMQPtestModel@1.0.arc"
       , modelUriReadable: "model://joopringelberg.nl#AMQPtestModel@1.0"
       , basedOnVersion: Nothing
       }
@@ -90,7 +90,7 @@ synchronisationTestModelConfiguration =
   , modelPatches:
       [
         { modelUriReadable: "model://perspectives.domains#CouchdbManagement"
-        , sourcePath: "src/model/couchdbManagement@12.4.arc"
+        , sourcePath: "src/model/systemmodels/couchdbManagement@12.4.arc"
         }
       --   { modelUriReadable: "model://perspectives.domains#BrokerServices"
       --   , sourcePath: "test/patches/BrokerServices@7.0.arc"

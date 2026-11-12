@@ -1,0 +1,110 @@
+-- BEGIN LICENSE
+-- Perspectives Distributed Runtime
+-- SPDX-FileCopyrightText: 2019 Joop Ringelberg (joopringelberg@gmail.com), Cor Baars
+-- SPDX-License-Identifier: GPL-3.0-or-later
+--
+-- This program is free software: you can redistribute it and/or modify
+-- it under the terms of the GNU General Public License as published by
+-- the Free Software Foundation, either version 3 of the License, or
+-- (at your option) any later version.
+--
+-- This program is distributed in the hope that it will be useful,
+-- but WITHOUT ANY WARRANTY; without even the implied warranty of
+-- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+-- GNU General Public License for more details.
+--
+-- You should have received a copy of the GNU General Public License
+-- along with this program.  If not, see <https://www.gnu.org/licenses/>.
+--
+-- Full text of this license can be found in the LICENSE directory in the
+-- projects root.
+
+-- END LICENSE
+
+-- | Layer 1 test entry point — pure PureScript unit tests.
+-- |
+-- | These suites require NO external dependencies: no CouchDB, no RabbitMQ, no
+-- | network, no browser. They run via the package.json script:
+-- |
+-- |   pnpm run test:layer1
+-- |
+-- | The suites included here are classified as Layer 1 because either:
+-- |   (a) they are fully pure (no MonadPerspectives, no IO beyond the file-system),
+-- |   (b) they use runP but only exercise in-memory computations (ADT algebra,
+-- |       ARC parsing, phase-2/3 transformations, in-memory DomeinFile cache),
+-- |       which do not trigger any PouchDB or HTTP call.
+-- |
+-- | Layer 2 (integration tests with in-memory PouchDB) and Layer 3 (sync tests
+-- | with a stubbed AMQP transport) are in Layer2.purs and Layer3.purs respectively.
+
+module Test.Layer1 where
+
+import Prelude
+
+import Effect (Effect)
+import Test.Unit.Main (runTest)
+
+-- Pure parser (no MonadPerspectives at all)
+import Test.Parsing.Arc.Expression (theSuite) as TPAE
+import Test.Parsing.Arc.ActionStages (theSuite) as AS
+import Test.Parsing.Arc.ConditionalTabs (theSuite) as CT
+import Test.ObsoleteRepresentationCleanup (theSuite) as ORC
+
+-- Pure ArrayT combinator tests (no MonadPerspectives)
+import Test.ArrayT (theSuite) as ARRT
+import Test.AMQP.IncomingPost (theSuite) as AIP
+import Test.Error.Pretty (theSuite) as TEP
+import Test.Query.ComparisonOperators (theSuite) as TQCO
+import Test.SidecarUniqueTypeNames (theSuite) as SUTN
+import Test.Persistence.Authentication (theSuite) as PA
+import Test.VariableBindings (theSuite) as VB
+import Test.TransactionQueue (theSuite) as TQ
+import Test.VersionedDeltas (theSuite) as VD
+
+-- Comprehensive unit tests for ExpandedADT, CNF, and ADT (with real assertions)
+import Test.Perspectives.Representation.AbstractDataTypeTests (theSuite) as ADTTESTS
+import Test.FocussedAliasTests.ModelTranslation (theSuite) as MTR
+
+-- ARC parser phases 1–3 — use runP / runPhaseTwo' / runPhaseThree' but only
+-- perform in-memory AST transformations; no database access
+import Test.Parsing.Arc (theSuite) as TPA
+import Test.Parsing.Arc.Syntax (theSuite) as TPAS
+import Test.Parsing.Arc.PhaseTwo (theSuite) as TPA2
+import Test.Parsing.Arc.PhaseThree (theSuite) as TPA3
+import Test.Parsing.Arc.Model (theSuite) as TPAM
+import Test.Parsing.Arc.IndexedRootPerspectives (theSuite) as IRP
+
+-- Query description compiler — uses an in-memory DomeinFile cache; no CouchDB
+import Test.Query.DescriptionCompiler (theSuite) as QDC
+import Test.Query.PropertyAnchors (theSuite) as QPA
+
+main :: Effect Unit
+main = runTest do
+  -- ── Truly pure (no MonadPerspectives / no IO) ──────────────────────────────
+  TPAE.theSuite -- ARC expression parser
+  AS.theSuite -- Plain and letA action settlement stages
+  CT.theSuite
+  ARRT.theSuite -- ArrayT combinators
+  AIP.theSuite -- Incoming-post status message formatting
+  TEP.theSuite -- Error pretty-printing helpers
+  TQCO.theSuite -- Typed query comparison operators
+  SUTN.theSuite -- Stable ID mapping regression tests
+  ORC.theSuite -- Serialization regression for obsolete representation members
+  PA.theSuite
+  VB.theSuite -- Variable bindings are private to a fiber
+  TQ.theSuite
+  VD.theSuite
+  IRP.theSuite
+  TPAS.theSuite -- Phase 1 — comprehensive non-expression syntax tests
+  TPA.theSuite -- Supplementary phase-one regressions
+  TPA2.theSuite -- Phase 2 — declarations, qualification and type representation
+  TPA3.theSuite -- Phase 3 — compiled queries, perspectives and type normalisation
+  QDC.theSuite -- Query description compilation
+  QPA.theSuite
+  MTR.theSuite -- Model translation: YAML <-> ModelTranslation <-> TranslationTable
+
+  -- Read a file from the file-system, but otherwise pure (no MonadPerspectives / no HTTP)
+  TPAM.theSuite -- ARC model parser (parses .arc files from the model/
+
+  -- ── Pure ADT algebra (runP wraps in-memory computations only) ──────────────
+  ADTTESTS.theSuite -- ExpandedADT / CNF / ADT unit tests (with assertions)

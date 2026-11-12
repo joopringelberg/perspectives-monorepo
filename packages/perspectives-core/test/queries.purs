@@ -18,7 +18,7 @@ testDirectory :: String
 testDirectory = "test"
 
 modelDirectory :: String
-modelDirectory = "src/model"
+modelDirectory = "src/model/systemmodels"
 
 theSuite :: Free TestF Unit
 theSuite = suite "Queries" do

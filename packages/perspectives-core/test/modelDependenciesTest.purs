@@ -67,13 +67,13 @@ rebootUniverseCompileTestModelConfiguration =
     , testModelLoadMethods =
         [ CompileModelFromSource
             { modelUri: repositoryToolsTestModel
-            , sourcePath: "src/model/repositoryTools@1.0.arc"
+            , sourcePath: "src/model/testmodels/repositoryTools@1.0.arc"
             , modelUriReadable: "model://joopringelberg.nl#RepositoryTools@1.0"
             , basedOnVersion: Nothing
             }
         , CompileModelFromSource
             { modelUri: modelDependenciesTestModel
-            , sourcePath: "src/model/modelDependenciesTest@1.0.arc"
+            , sourcePath: "src/model/testmodels/modelDependenciesTest@1.0.arc"
             , modelUriReadable: "model://joopringelberg.nl#TestModelDependencies@1.0"
             , basedOnVersion: Nothing
             }

@@ -29,7 +29,7 @@ testDirectory :: String
 testDirectory = "test"
 
 modelDirectory :: String
-modelDirectory = "src/model"
+modelDirectory = "src/model/systemmodels"
 
 -- Edit persistenceAPI.js first by declaring Pouchdb like this:
 -- var PouchDB = require('pouchdb');
@@ -229,7 +229,7 @@ theSuite = suite "Perspectives.Representation.Class.Role" do
           liftAff $ assert "Filler1 may fill Test5$Role1" (filler1ExpandedADT `equalsOrSpecialises` test5Role1RestrictionExpandedADT)
 
   testSkip "bindingOfADT" $ runP do
-    loadModels "src/model" 
+    loadModels "src/model/systemmodels"
       [ "couchdb"
       , "serialise"
       , "sensor"
@@ -278,7 +278,7 @@ theSuite = suite "Perspectives.Representation.Class.Role" do
         _, _ -> liftAff $ assert "Test6Role1 and Filler2 should each have a filledBy clause!" false
 
   testSkip "all models" $ runP do
-    loadModels "src/model" 
+    loadModels "src/model/systemmodels"
       [ "couchdb"
       , "serialise"
       , "sensor"
@@ -295,7 +295,7 @@ theSuite = suite "Perspectives.Representation.Class.Role" do
       , "simpleChat"
       ] 
   testSkip "DNF" $ runP do
-    loadModels "src/model" 
+    loadModels "src/model/systemmodels"
       [ "couchdb"
       , "serialise"
       , "sensor"
@@ -317,7 +317,7 @@ theSuite = suite "Perspectives.Representation.Class.Role" do
       getEnumeratedRole (EnumeratedRoleType socialEnvironmentPersons) >>= completeExpandedType >>= pure <<< toConjunctiveNormalForm >>= showDNF "DNF Persons"
 
   test "Type comparison" $ runP do
-    loadModels "src/model" 
+    loadModels "src/model/systemmodels"
       [ "couchdb"
       , "serialise"
       , "sensor"
@@ -356,4 +356,3 @@ showDNF m dnf = do
   log (m <> ": ")
   log $ prettyPrint dnf
   log "\n"
-

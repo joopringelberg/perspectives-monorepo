@@ -9,7 +9,7 @@ import Data.Either (Either(..))
 import Effect (Effect)
 import Effect.Aff (attempt, launchAff_)
 import Effect.Class (liftEffect)
-import Test.DestructiveSynchronisationTests (synchronisationTestModelConfiguration)
+import Test.FocussedAliasTests.DestructiveSynchronisationTests (synchronisationTestModelConfiguration)
 import Test.Layer3Scaffold (getMeasuredSynchronisationResults, performanceSnapshotsAvailable)
 import Test.PerformanceMeasurements (amqpMode, configureScenarios, measurementHooks, publishFailure, publishResults)
 

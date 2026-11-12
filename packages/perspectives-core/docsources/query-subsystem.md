@@ -804,20 +804,42 @@ The cardinality flags `functional` and `mandatory` use three-valued logic (`True
 Filter handling for affected-query detection is intentionally split over two stages:
 
 1. **Inversion stage** (`queryWithAKink.purs`):
-   - `invert_` for `FilterF` appends the filter step to inverted criterium paths (filter appears in the backwards part, not as a forwards step).
+   - For origin-independent criteria, `invert_` for `FilterF` appends the filter step to matching inverted criterion paths (filter appears in the backwards part, not as a forwards step).
+   - Origin-dependent criteria retain separate operand inversions without persisting a filter that closes over lexical `origin`.
    - In the `ComposeF` branch, `hasFilter` changes candidate generation: when the right side starts with a filter-shape, only comprehension variants are kept.
+   - `invertWithAnchors` retains compiler-only `InvertedStep` provenance:
+     `PerspectiveResult`, `ResultFilter`, or `Dependency`. Criterion steps are
+     dependencies, even when they visit the same role type as the result.
+     Input-preserving filters retain the source anchor; subsequent navigation
+     moves it to the new result. The ordinary `invert` API returns only the
+     folded `QueryWithAKink` descriptions.
 
 2. **Storage rewrite stage** (`storeInvertedQueries.purs`):
-   - `storeInvertedQuery'` recognises the pattern where a filter sits between inverted criterium and source.
-   - For **regular perspective queries** (`mCalcUserRoleType = Nothing`) it stores two semantic variants:
-     - **Unfiltered trigger variant** (filter dropped): detects changes even when the filter has become false (loss of visibility).
-     - **Filtered trigger variant** (filter reintroduced through recursive call with `mfilter = Just filter`): detects changes where the filter becomes true (gain of visibility).
+   - **Regular perspective queries** enter through `storeAnchoredInvertedQuery`.
+     It removes tagged result filters from dependency inversions so they remain
+     reachable when a filter becomes false. For complete inversions it separately
+     reconstructs the result-anchor path with its filters restored, retaining
+     filtered source triggers for visibility gain.
+   - Additional property inversions are generated only at `PerspectiveResult`
+     anchors. A role-domain inversion with no remaining forward part can still
+     be a criterion dependency; those two conditions do not establish that it
+     bears the perspective's properties. `setPathForStep` therefore no longer
+     calls `storePropertyPerspectiveQueries` automatically.
+   - Dependency queries retain `statesPerProperty` for synchronization; that map
+     is not an instruction to read those properties from the dependency role.
+   - The lower-level `storeInvertedQuery'` still recognises the pattern where a
+     filter sits between inverted criterion and source. State queries retain
+     their ordinary `invert` / `storeInvertedQuery` entry path.
    - For **calculated-user detection queries** (`mCalcUserRoleType = Just _`) it stores a single filter-preserving variant:
      - `backward = filter >> source`
      - `forward = filter`
      This is required so runtime can recognise role instances (not property values) when discovering newly accessible calculated users.
 
 So, semantically, filters are **not** globally "applied" or globally "ignored" in inverted queries. Instead, the subsystem deliberately uses both filtered and unfiltered variants (regular case), while keeping strict filter evaluation in the calculated-user case.
+
+The provenance is discarded before persistence: neither `InvertedQuery` nor
+`storedQueries.json` has a new field. Recompile affected models after rebuilding
+the runtime to regenerate the corrected indexes.
 
 #### Why this split exists
 
@@ -835,10 +857,15 @@ Therefore the design balances both transition directions explicitly.
 
 `preprendToCriterium` addresses this by inserting an extra compensating step at the front of the filter criterium, then prepending that modified filter to the rewritten backwards path. In effect, the filter is evaluated against the intended semantic object even after the inversion path has been structurally transformed.
 
+For a composition of collected result filters, it applies the compensation to
+each filter recursively.
+
 Used at:
 - `FilledF` storage path
 - `FillerF` storage path
 - `RolGetter (ENR ...)` storage path
 - `GetRoleInstancesForContextFromDatabaseF` storage path
 
-Companion deep-dive: see `docsources/query-inversion.md` for the full compile-time/runtime trace and key-category alignment.
+Companion deep-dive: see [Query Inversion](query-inversion.md#141-property-indexing-at-perspective-result-anchors)
+for the property-anchor invariant, the Stadskamer example, and regression coverage,
+as well as the full compile-time/runtime trace and key-category alignment.

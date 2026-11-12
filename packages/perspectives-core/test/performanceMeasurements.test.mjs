@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test, mock } from "node:test";
 import { statistics, aggregate, normalizeRounds, normalizeTrials } from "../scripts/performance-statistics.mjs";
-import * as collector from "./PerformanceMeasurements.js";
+import * as collector from "./layertests/PerformanceMeasurements.js";
 import * as profiler from "../src/core/performance.js";
 
 function captureReport(run, publish = true) {
@@ -245,7 +245,7 @@ test("all workers failing before a manifest produce an explicit unknown-scenario
 });
 
 test("existing scaffold entrypoints remain uninstrumented and measurements require process isolation", async () => {
-  const scaffold = await readFile(new URL("./Layer3Scaffold.purs", import.meta.url), "utf8");
+  const scaffold = await readFile(new URL("./layertests/Layer3Scaffold.purs", import.meta.url), "utf8");
   assert.match(scaffold, /getSynchronisationResults = getSynchronisationResultsInternal Nothing withTwoPDRsCached true/);
   assert.match(scaffold, /credentials <- requireAMQPAdministratorCredentials cfg\s+getSynchronisationResultsInternal Nothing \(withTwoPDRsCachedNoBus credentials\) false cacheRef cfg/);
   assert.match(scaffold, /executeModelTest = executeModelTestInternal Nothing/);

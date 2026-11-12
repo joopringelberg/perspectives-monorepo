@@ -29,11 +29,10 @@ import Data.Foldable (for_)
 import Data.Map (Map) as Map
 import Data.Maybe (Maybe)
 import Perspectives.CoreTypes (MonadPerspectives)
-import Perspectives.InvertedQuery (QueryWithAKink(..))
 import Perspectives.Parsing.Arc.Position (ArcPosition)
-import Perspectives.Parsing.Arc.PhaseThree.StoreInvertedQueries (storeInvertedQuery)
+import Perspectives.Parsing.Arc.PhaseThree.StoreInvertedQueries (storeAnchoredInvertedQuery, storeInvertedQuery)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseTwo')
-import Perspectives.Query.Kinked (invert)
+import Perspectives.Query.Kinked (invert, invertWithAnchors)
 import Perspectives.Query.QueryTypes (QueryFunctionDescription)
 import Perspectives.Representation.Perspective (ModificationSummary)
 import Perspectives.Representation.TypeIdentifiers (PropertyType, RoleType, StateIdentifier)
@@ -55,10 +54,9 @@ setInvertedQueries
   -> WithModificationSummary Unit
 setInvertedQueries users statesPerProperty roleStates qfd selfOnly authorOnly perspectiveStartPosition = do
   -- log ("setInvertedQueries:" <> "\n users =" <> show users <> "\n states = " <> show roleStates <> "\n statesPerProperty = " <> showTree statesPerProperty <> "\n qfd = " <> show qfd)
-  (zqs :: (Array QueryWithAKink)) <- lift $ invert qfd
-
-  if null users
-  -- This is a state query. The property access is part of the inversion.
-  then for_ zqs \qwk -> storeInvertedQuery qwk users roleStates statesPerProperty selfOnly authorOnly perspectiveStartPosition
-  -- This is a perspective query. Access to properties is not included in the inverted query; it is just the perspective object.
-  else for_ zqs \qwk@(ZQ backward forward) -> storeInvertedQuery qwk users roleStates statesPerProperty selfOnly authorOnly perspectiveStartPosition
+  if null users then do
+    zqs <- lift $ invert qfd
+    for_ zqs \qwk -> storeInvertedQuery qwk users roleStates statesPerProperty selfOnly authorOnly perspectiveStartPosition
+  else do
+    zqs <- lift $ invertWithAnchors qfd
+    for_ zqs \qwk -> storeAnchoredInvertedQuery qwk users roleStates statesPerProperty selfOnly authorOnly perspectiveStartPosition

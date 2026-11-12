@@ -483,7 +483,7 @@ testModel :: String
 testModel = "model://joopringelberg.nl#bssu4gc7kx@1.0"
 
 testModelSource :: String
-testModelSource = "src/model/brokerServiceSignupTests@1.0.arc"
+testModelSource = "src/model/testmodels/brokerServiceSignupTests@1.0.arc"
 
 -- As used in this test, we should use the unversioned uri!
 testModelReadable :: String

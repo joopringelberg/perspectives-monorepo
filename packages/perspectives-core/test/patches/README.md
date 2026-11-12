@@ -42,24 +42,24 @@ are relative to [`src/model`](../../src/model).
 
 | Model | Source | Installation |
 |---|---|---|
-| System@7.0 | `perspectivesSysteem@7.0.arc` | `setupUser` |
-| RepositoryRegistry@1.0 | `repositoryRegistry@1.0.arc` | `setupUser` and `extraModels` |
-| BodiesWithAccounts@5.0 | `BodiesWithAccounts@5.0.arc` | Dependency |
-| Couchdb@4.0 | `couchdb@4.0.arc` | Dependency |
-| CouchdbManagement@12.4 | `couchdbManagement@12.4.arc` | Dependency |
-| Files@3.0 | `files@3.0.arc` | Dependency |
-| HelpLib@1.0 | `helpLib@1.0.arc` | Dependency |
-| Parsing@3.0 | `parsing@3.0.arc` | Dependency |
-| Sensor@3.0 | `sensor@3.0.arc` | Dependency |
-| Serialise@3.0 | `serialise@3.0.arc` | Dependency |
-| Utilities@3.0 | `utilities@3.0.arc` | Dependency |
-| RabbitMQ@2.0 | `rabbitMQ@2.0.arc` | `extraModels` |
-| BrokerServices@7.0 | `BrokerServices@7.0.arc` | `extraModels` |
-| HyperContext@1.0 | `hypertext@1.0.arc` | `extraModels` |
-| Introduction@1.0 | `introduction@1.0.arc` | `extraModels` |
-| HelpProject@3.0 | `helpProject@3.0.arc` | `extraModels` |
-| Disconnect@1.1 | `disconnect@1.1.arc` | `extraModels` |
-| SharedFileServices@4.0 | `sharedFileStorage@4.0.arc` | `extraModels` |
+| System@7.0 | `systemmodels/perspectivesSysteem@7.0.arc` | `setupUser` |
+| RepositoryRegistry@1.0 | `systemmodels/repositoryRegistry@1.0.arc` | `setupUser` and `extraModels` |
+| BodiesWithAccounts@5.0 | `systemmodels/BodiesWithAccounts@5.0.arc` | Dependency |
+| Couchdb@4.0 | `systemmodels/couchdb@4.0.arc` | Dependency |
+| CouchdbManagement@12.4 | `systemmodels/couchdbManagement@12.4.arc` | Dependency |
+| Files@3.0 | `systemmodels/files@3.0.arc` | Dependency |
+| HelpLib@1.0 | `systemmodels/helpLib@1.0.arc` | Dependency |
+| Parsing@3.0 | `systemmodels/parsing@3.0.arc` | Dependency |
+| Sensor@3.0 | `systemmodels/sensor@3.0.arc` | Dependency |
+| Serialise@3.0 | `systemmodels/serialise@3.0.arc` | Dependency |
+| Utilities@3.0 | `systemmodels/utilities@3.0.arc` | Dependency |
+| RabbitMQ@2.0 | `systemmodels/rabbitMQ@2.0.arc` | `extraModels` |
+| BrokerServices@7.0 | `systemmodels/BrokerServices@7.0.arc` | `extraModels` |
+| HyperContext@1.0 | `systemmodels/hypertext@1.0.arc` | `extraModels` |
+| Introduction@1.0 | `systemmodels/introduction@1.0.arc` | `extraModels` |
+| HelpProject@3.0 | `systemmodels/helpProject@3.0.arc` | `extraModels` |
+| Disconnect@1.1 | `systemmodels/disconnect@1.1.arc` | `extraModels` |
+| SharedFileServices@4.0 | `systemmodels/sharedFileStorage@4.0.arc` | `extraModels` |
 
 ### joopringelberg.nl (8 models)
 
@@ -67,17 +67,18 @@ All eight are explicitly listed in `extraModels`.
 
 | Model | Source |
 |---|---|
-| SynchronisationTestModel@2.0 | `testSynchronisation@2.0.arc` |
-| TwoPDRDestructiveTests@1.0 | `twoPDRDestructiveTests@1.0.arc` |
-| StateTestModel@1.0 | `testState@1.0.arc` |
-| SinglePDRDestructiveTests@2.0 | `singlePDRDestructiveTests@2.0.arc` |
-| TransactionExecutionTests@1.0 | `transactionExecutionTests@1.0.arc` |
-| AMQPtestModel@1.0 | `AMQPtestModel@1.0.arc` |
-| AMQPtestSetup@1.0 | `AMQPtestSetup@1.0.arc` |
-| UninstallTarget@1.0 | `uninstallTarget@1.0.arc` |
+| SynchronisationTestModel@2.0 | `testmodels/testSynchronisation@2.0.arc` |
+| TwoPDRDestructiveTests@1.0 | `testmodels/twoPDRDestructiveTests@1.0.arc` |
+| StateTestModel@1.0 | `testmodels/testState@1.0.arc` |
+| SinglePDRDestructiveTests@2.0 | `testmodels/singlePDRDestructiveTests@2.0.arc` |
+| TransactionExecutionTests@1.0 | `testmodels/transactionExecutionTests@1.0.arc` |
+| AMQPtestModel@1.0 | `testmodels/AMQPtestModel@1.0.arc` |
+| AMQPtestSetup@1.0 | `testmodels/AMQPtestSetup@1.0.arc` |
+| UninstallTarget@1.0 | `testmodels/uninstallTarget@1.0.arc` |
 
 RebootUniverse@2.0 and RepositoryTools@1.0 are commented out in the builder and
-are compiled separately during reboot. TestModelDependencies@1.0 is also
+are compiled separately during reboot from `src/model/testmodels`.
+TestModelDependencies@1.0 is also
 commented out. BrokerServiceSignupTests@1.0 changed after the baseline but is
 not installed by this builder or present in the existing snapshot, so it is
 not part of this patch set.
@@ -103,7 +104,8 @@ list, with a matching JavaScript FFI import.
 The Oct 21 changes occurred at 20:45 and 20:50 CEST, **after** the snapshot;
 filtering only by calendar day would miss them.
 
-All model patches with a same-named counterpart in `src/model` are kept
+All model patches with a same-named counterpart in `src/model/systemmodels` or
+`src/model/testmodels` are kept
 byte-for-byte identical to it. RepositoryRegistry@1.0 is already current and
 remains disabled in the snapshot patch configuration: it has no post-baseline
 source changes. `ScaffoldPatchTest.arc` is a standalone test fixture, has no

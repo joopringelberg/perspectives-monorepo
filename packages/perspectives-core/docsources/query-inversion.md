@@ -81,7 +81,17 @@ Note that `users` is set to `[ roleType ]` — the role type (Enumerated or Calc
 - `roleStates` — states in which the perspective itself is active
 - `qfd` — the `QueryFunctionDescription` of the perspective object
 
-It calls `invert qfd` (from `queryWithAKink.purs`) to produce all possible `QueryWithAKink` values, then for each one calls `storeInvertedQuery`.
+The entry path depends on the purpose of the query:
+
+- **State queries** (`users = []`) use `invert qfd`, followed by
+  `storeInvertedQuery`.
+- **Perspective queries** use `invertWithAnchors qfd`, followed by
+  `storeAnchoredInvertedQuery`. This preserves compiler-only provenance until
+  dependency queries and property queries have been indexed separately.
+
+The distinction matters for filters: a role consulted by a criterion is a
+dependency of the perspective, but is not necessarily the role whose properties
+the perspective exposes.
 
 ### 1.3 The Core Algorithm: `invert` (module `Perspectives.Query.Kinked`)
 
@@ -117,7 +127,8 @@ The final entry (backwards goes all the way to the start, forwards is Nothing) i
 
 #### Internal Representation: `QueryWithAKink_`
 
-Internally, during inversion, the backwards part is represented as an array of separate steps. Each candidate also carries an `InversionTarget`:
+Internally, during inversion, the backwards part is represented as an array of
+annotated steps. Each candidate also carries an `InversionTarget`:
 
 ```purescript
 data InversionTarget
@@ -125,8 +136,15 @@ data InversionTarget
   | QueryOrigin
   | IndependentResource
 
+data PropertyAnchor = PerspectiveResult | ResultFilter | Dependency
+
+type InvertedStep =
+  { query :: QueryFunctionDescription
+  , propertyAnchor :: PropertyAnchor
+  }
+
 data QueryWithAKink_ = ZQ_
-  (Array QueryFunctionDescription)
+  (Array InvertedStep)
   (Maybe QueryFunctionDescription)
   InversionTarget
 ```
@@ -140,10 +158,49 @@ data QueryWithAKink_ = ZQ_
 This distinction cannot be recovered reliably from domains alone. The filter input and query
 origin may have the same domain while still requiring different composition behaviour.
 
-The metadata exists only while `invert_` constructs and combines candidates. The public `invert`
-function discards it while folding the backwards-step array into the right-associative
-`QueryWithAKink` composition. Consequently, `InversionTarget` is not part of stored inverted
-queries and requires no persistence or runtime format change.
+`InversionTarget` is discarded when candidates are converted to public results.
+Property-anchor provenance has a separate purpose:
+
+| Marker | Meaning during perspective indexing |
+|---|---|
+| `PerspectiveResult` | The step starts at the result from which perspective properties may be read. |
+| `ResultFilter` | A filter selecting that result; storage may bypass it for dependency detection or restore it on result paths. |
+| `Dependency` | A step contributing to the query, but not a starting point for expanding the perspective's properties. |
+
+These are independent distinctions: `InversionTarget` describes where an inverted
+candidate returns, whereas `PropertyAnchor` identifies which backwards steps may
+anchor property access.
+
+`invertWithAnchors` returns the folded query together with its annotated steps:
+
+```purescript
+type AnchoredQueryWithAKink =
+  { query :: QueryWithAKink
+  , steps :: Array InvertedStep
+  }
+```
+
+The ordinary `invert` function returns only each record's `query` field. Perspective
+storage retains `steps` long enough to index property anchors and then discards
+them too. Neither kind of metadata is serialized in `InvertedQuery` or
+`storedQueries.json`; no persistence or runtime format change is required.
+
+#### Propagating Property Anchors
+
+Inverting a `FilterF` marks its criterion steps as `Dependency`, including any
+nested criterion paths. A filter appended to a matching criterion inversion is
+marked `ResultFilter`. The source's result anchor remains distinct from those
+criterion steps.
+
+Composition preserves an earlier source anchor only when the right-hand query
+preserves its input. `preservesInput` recognises filters, identity steps,
+compositions of input-preserving steps, and their `WithFrame` wrappers. Navigation
+after a filter therefore moves the anchor to the new result rather than treating
+the filtered intermediate role as the final property-bearing object.
+
+This provenance must not be reconstructed from type equality: two different
+paths can visit the same role type without identifying the same perspective
+object.
 
 #### Inverting Individual Steps: `invertFunction` (module `Perspectives.Query.Inversion`)
 
@@ -192,15 +249,32 @@ For `FilledF` and `FillerF` steps, the first backwards step is **dropped** from 
 
 For `RolGetter (ENR role)` steps, the first backwards step is also dropped, and a compensating `context` step is prepended to the forwards part.
 
-### 1.4.1 Additional Indexing for Calculated Properties in Perspectives
+### 1.4.1 Property Indexing at Perspective Result Anchors
 
-After handling the primary inversion step, `setPathForStep` always calls
-`storePropertyPerspectiveQueries`.
+`storeAnchoredInvertedQuery` separates dependency storage from property expansion.
+For a complete perspective-object inversion, it walks the annotated backwards
+steps, collects `ResultFilter` steps, skips `Dependency` steps, and locates the
+`PerspectiveResult` anchor.
 
-This helper adds an extra mechanism for perspective properties when:
+At that anchor it reconstructs the source-side inversion, with the collected
+result filters restored, and calls `storePropertyPerspectiveQueries`. The helper
+still requires a role domain and no remaining forward path, but **those two
+conditions alone are not proof that a role is the perspective object**.
+`setPathForStep` no longer invokes this helper automatically.
 
-- `domain qfd` is a role domain (the inversion step starts from a role), and
-- `forwards qWithAK` is `Nothing` (the perspective-object inversion is complete).
+For example, consider this excerpt from Stadskamer:
+
+```arc
+context Attendees (relational) filledBy Dossier
+context OwnAttendees = filter Attendees >> binding with context >> Dossier$Ambassador filledBy sys:Me
+```
+
+`OwnAttendees` returns `Dossier$External` instances. The perspective can read
+`ParticipantName` there. `Dossier$Ambassador` and the user involved in the binding
+test are criterion dependencies; the compiler must not search their filler
+chains for `ParticipantName`. Such a search could otherwise reach
+`sys:TheWorld$PerspectivesUsers` and incorrectly raise
+`expandPropertyQuery: no filler restriction found`.
 
 For each property in `statesPerProperty`:
 
@@ -223,6 +297,16 @@ For each property in `statesPerProperty`:
 So besides the regular inversion of the perspective-object query, Phase 3 also stores
 extra property-triggered inversions for calculated (and certain non-local enumerated)
 perspective properties.
+
+Dependency queries retain `statesPerProperty`: it tells synchronization which
+properties belong to the perspective, including when a result becomes visible.
+Retaining that map does **not** make a dependency a valid property anchor.
+
+An actually unreachable property at a genuine result anchor still raises the
+compiler error. The diagnostic reports that no filler restriction was found and
+converts context, role, and property identifiers to their Readable names through
+`toReadable`, rather than displaying opaque stable IDs. The fix is not a catch,
+a silent skip of failed expansions, or a new filler restriction on system users.
 
 ### 1.4.2 Filter semantics: detection-oriented vs selection-oriented behaviour
 
@@ -285,24 +369,38 @@ evaluated in its proper lexical context, where `origin` has the intended value.
 
 #### Storage-time rewrite behaviour
 
-For origin-independent criteria, `storeInvertedQuery'` recognises the backward shape:
+For ordinary perspective queries, `storeAnchoredInvertedQuery` uses provenance
+before the lower-level storage rewrites:
+
+1. If the first step is a `Dependency`, remove steps tagged `ResultFilter` from
+   the dependency inversion before storing it. This keeps the trigger reachable
+   when the result filter becomes false, even when several criterion steps
+   precede the filter.
+2. For a complete inversion, locate the `PerspectiveResult` anchor independently
+   of the dependency prefix. Re-index its source-side path with the collected
+   result filters supplied as `mfilter`, so visibility gain still has a filtered
+   trigger.
+3. Expand perspective properties only at that result anchor, with the result
+   filters restored on the property path.
+
+This does not depend on a particular criterion-path length or on the criterion
+having a different role type from the result.
+
+The lower-level `storeInvertedQuery'` also recognises the backward shape:
 
 - `{first source step} << filter << {last criterium step}`
 
-two different policies are applied.
+For regular queries (`mCalcUserRoleType = Nothing`), this existing rewrite stores
+an unfiltered dependency variant and a filtered source variant. State queries
+continue through the ordinary `invert` / `storeInvertedQuery` entry path.
 
-1. **Regular perspective queries** (`mCalcUserRoleType = Nothing`):
-   - Store an **unfiltered** variant (filter dropped) so transitions to filter-false
-     still trigger affected-user processing.
-   - Store an additional **filtered** variant (recursive call with `mfilter = Just filter`)
-     so transitions to filter-true also trigger precisely.
+**Calculated-user detection queries** (`mCalcUserRoleType = Just _`) keep their
+separate storage policy:
 
-2. **Calculated-user detection queries** (`mCalcUserRoleType = Just _`):
-   - Store a filter-preserving description:
-     - backward = `filter >> source`
-     - forward = `filter`
-   - Do **not** store the second recursive variant. This avoids runtime shape errors
-     where property values would be treated as role instances.
+- backward = `filter >> source`
+- forward = `filter`
+- No second recursive variant is stored. This avoids runtime shape errors where
+  property values would be treated as role instances.
 
 Semantically, this means origin-independent filters are both preserved and bypassed, depending on
 the purpose of the stored query. Origin-dependent filters never reach this storage rewrite: only
@@ -319,6 +417,9 @@ anchored to the correct runtime object.
 of the filter criterium and then prepending that modified filter to the rewritten
 backward. So the filter is evaluated on the intended semantic object despite structural
 rewrites of the inversion path.
+
+When several result filters have been collected, `preprendToCriterium` handles
+their composition recursively, compensating each filter's criterion.
 
 #### Practical outcome
 
@@ -342,6 +443,32 @@ rewrites of the inversion path.
 3. An AddModel-shaped query with a navigated source retains inversions for both compared
   properties, makes every state inversion return the state context, and stores no runtime
   `FilterF` for the origin-dependent criterion.
+
+[Property-anchor regressions](../test/layertests/propertyAnchors.purs)
+(`Test.Query.PropertyAnchors`) run in Layer 1 and additionally cover:
+
+- Criterion paths whose role type is the same as the result's role type.
+- Direct and filler-inherited perspective properties, nested filters, and
+  navigation after a filter.
+- `filledBy` criteria without trying to read participant names from user roles.
+- Retention of dependency indexes and their perspective-property maps.
+- Execution of compiled property paths across false-to-true-to-false visibility
+  changes: property-update paths respect the filter, while criterion dependency
+  paths remain reachable when it is false.
+- Continued errors for unreachable properties at genuine result anchors.
+
+Run these with `pnpm run test:layer1` from `packages/perspectives-core`. These tests
+check compiler output and compiled query execution; they are not full
+peer-to-peer delta-delivery tests.
+
+The [model-file compilation corpus](../test/modelFileCompilation.purs) includes
+Stadskamer as the full-model regression for the original failure. Run it with
+`pnpm run test:compileModelsFromFile`, using that runner's PDR snapshot
+prerequisites.
+
+After rebuilding the runtime, recompile affected models to regenerate their
+stored query indexes. Existing `storedQueries.json` attachments do not acquire
+the corrected paths merely by loading the new runtime.
 
 Each stored inverted query is a `StorableInvertedQuery`:
 
@@ -521,10 +648,13 @@ ARC model compilation (Phase 3)
   └── invertPerspectiveObjects
         └── for each EnumeratedRole / CalculatedRole perspective:
               └── setInvertedQueries
-                    └── invert (Kinked module)       -- produces Array QueryWithAKink
+                    └── invertWithAnchors             -- query + annotated backwards steps
                           └── invertFunction          -- inverts individual steps
-                    └── storeInvertedQuery            -- examines first backwards step
-                          └── addStorableInvertedQuery -- stored in CouchDB (storedQueries.json)
+                    └── storeAnchoredInvertedQuery
+                          ├── storeInvertedQuery      -- dependency triggers
+                          └── result-anchor indexing  -- filtered source + property paths
+                                └── storeInvertedQuery
+                    └── addStorableInvertedQuery       -- stored in CouchDB (storedQueries.json)
 
 Runtime (on data mutation)
   └── usersWithPerspectiveOnRoleInstance / usersWithPerspectiveOnRoleBinding / aisInPropertyDelta

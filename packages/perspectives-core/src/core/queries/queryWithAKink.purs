@@ -62,7 +62,32 @@ data InversionTarget
   | QueryOrigin
   | IndependentResource
 
-data QueryWithAKink_ = ZQ_ (Array QueryFunctionDescription) (Maybe QueryFunctionDescription) InversionTarget
+type InvertedStep =
+  { query :: QueryFunctionDescription
+  , propertyAnchor :: PropertyAnchor
+  }
+
+data QueryWithAKink_ = ZQ_ (Array InvertedStep) (Maybe QueryFunctionDescription) InversionTarget
+
+data PropertyAnchor = PerspectiveResult | ResultFilter | Dependency
+
+derive instance eqPropertyAnchor :: Eq PropertyAnchor
+derive instance genericPropertyAnchor :: Generic PropertyAnchor _
+
+instance showPropertyAnchor :: Show PropertyAnchor where
+  show = genericShow
+
+-- | Compiler-only provenance, discarded before persisting an inverted query.
+type AnchoredQueryWithAKink =
+  { query :: QueryWithAKink
+  , steps :: Array InvertedStep
+  }
+
+anchor :: QueryFunctionDescription -> InvertedStep
+anchor query = { query, propertyAnchor: PerspectiveResult }
+
+dependency :: InvertedStep -> InvertedStep
+dependency step = step { propertyAnchor = Dependency }
 
 -- | Reasons why inversion of a query branch is blocked.
 -- | Keep this extensible: more semantic blockers can be added over time.
@@ -85,7 +110,7 @@ instance showQueryWithAKink_ :: Show QueryWithAKink_ where
   show = genericShow
 
 instance prettyPrintQueryWithAKink_ :: PrettyPrint QueryWithAKink_ where
-  prettyPrint' tab (ZQ_ qfds mqfd target) = "QueryWithAKink_ " <> show target <> "\n[" <> (intercalate (",\n" <> tab) (prettyPrint' (tab <> "  ") <$> qfds) <> "]\n" <> prettyPrint' (tab <> "  ") mqfd)
+  prettyPrint' tab (ZQ_ qfds mqfd target) = "QueryWithAKink_ " <> show target <> "\n[" <> (intercalate (",\n" <> tab) (prettyPrint' (tab <> "  ") <<< _.query <$> qfds) <> "]\n" <> prettyPrint' (tab <> "  ") mqfd)
 
 --------------------------------------------------------------------------------------------------------------
 ---- COMPLETEINVERSIONS
@@ -113,21 +138,30 @@ completeInversions = invert >=> pure <<< catMaybes <<< map f
 -- | As the domain of the original query can be either a ContextType, or an EnumeratedRoleType, the range of the
 -- | inverted parts can be a ContextType or an EnumeratedRoleType, too.
 -- |
--- | FILTERS and LET (WithFrame)
--- | Filters are completely ignored in the code below. On the type level, this does not matter as unfiltered queries
--- | have the same type as filtered versions. Runtime, things will have impact on performance and sometimes on
--- | semantics. See the text Filtering Inverted Queries.docx.
+-- | Filter dependencies are inverted separately from their result anchors. Storage uses
+-- | this provenance to index visibility changes without expanding properties on a criterion.
 -- | INVARIANT: All QueryWithAKink instances will have a backwards part.
 invert :: QueryFunctionDescription -> PhaseThree (Array QueryWithAKink)
-invert = invert_ >=> pure <<< _.candidates >=> pure <<< catMaybes <<< map h
+invert = invertWithAnchors >=> pure <<< map _.query
+
+invertWithAnchors :: QueryFunctionDescription -> PhaseThree (Array AnchoredQueryWithAKink)
+invertWithAnchors = invert_ >=> pure <<< _.candidates >=> pure <<< catMaybes <<< map h
   where
-  h :: QueryWithAKink_ -> Maybe QueryWithAKink
-  h (ZQ_ steps q _) = case unsnoc steps of
+  h :: QueryWithAKink_ -> Maybe AnchoredQueryWithAKink
+  h (ZQ_ steps q _) = case composeInvertedSteps steps of
     -- Remove candidates without a backwards part.
     Nothing -> Nothing
     -- Creates a right-associative composition that preserves the order in steps.
     -- Notice that the steps in the backwards part are in reverse order of the original query, already. So we do not need to reverse them again.
-    Just { init, last } -> Just $ ZQ (Just $ foldr makeComposition last init) q
+    Just backward -> Just
+      { query: ZQ (Just backward) q
+      , steps
+      }
+
+composeInvertedSteps :: Array InvertedStep -> Maybe QueryFunctionDescription
+composeInvertedSteps steps = case unsnoc steps of
+  Nothing -> Nothing
+  Just { init, last } -> Just $ foldr (makeComposition <<< _.query) last.query init
 
 -- | The QueryFunctionDescriptions in the Array of each QueryWithAKink_
 -- | are inversed wrt the orinal query.
@@ -140,8 +174,8 @@ invert_ (MQD dom (ExternalCoreRoleGetter f) args ran _ _) = do
     (SQD _dom (Constant _ _) _ _ _) -> pure $ SQD ran (ContextTypeConstant ctype) ContextKind True True
     _ -> pure qfd
   case f of
-    "model://perspectives.domains#Couchdb$PendingInvitations" -> pure $ unblocked [ ZQ_ [ SQD ran (ContextIndividual (ContextInstance mySystem)) dom True True ] Nothing IndependentResource ]
-    _ -> pure $ unblocked [ ZQ_ [ MQD ran (ExternalCoreContextGetter "model://perspectives.domains#Couchdb$ContextInstances") args' dom Unknown Unknown ] Nothing IndependentResource ]
+    "model://perspectives.domains#Couchdb$PendingInvitations" -> pure $ unblocked [ ZQ_ [ anchor $ SQD ran (ContextIndividual (ContextInstance mySystem)) dom True True ] Nothing IndependentResource ]
+    _ -> pure $ unblocked [ ZQ_ [ anchor $ MQD ran (ExternalCoreContextGetter "model://perspectives.domains#Couchdb$ContextInstances") args' dom Unknown Unknown ] Nothing IndependentResource ]
 
 invert_ (MQD _ _ args _ _ _) = do
   outcomes <- traverse invert_ args
@@ -205,8 +239,8 @@ invert_ q@(BQD dom (BinaryCombinator ComposeF) l r _ f m) = case l of
               sourceCandidates <- append comprehension <$> for lefts
                 -- Add the original right part of the composition as the forward part of the qinked query.
                 \(ZQ_ bw fw target) -> case fw of
-                  Nothing -> pure $ ZQ_ bw (Just r) target
-                  Just fw' -> pure $ ZQ_ bw (Just $ makeComposition fw' r) target
+                  Nothing -> pure $ ZQ_ (sourceSteps bw) (Just r) target
+                  Just fw' -> pure $ ZQ_ (sourceSteps bw) (Just $ makeComposition fw' r) target
               pure $ sourceCandidates <> originCandidates
           pure
             { candidates
@@ -226,7 +260,7 @@ invert_ q@(BQD dom (BinaryCombinator ComposeF) l r _ f m) = case l of
     --   -- may be combined with any inversion of right.
     --   Nothing, _ -> true
     --   _, _ -> false
-    guard $ case range <$> (last right_inverted_steps), domain <$> head left_inverted_steps of
+    guard $ case (range <<< _.query) <$> (last right_inverted_steps), (domain <<< _.query) <$> head left_inverted_steps of
       -- We had `equalsOrGeneralizesDomain` instead of `eq`. This runs into two implementation problems:
       --  a. we need `equalsOrGeneralisesRoleInContext`, which is a Monadic function. That seriously complicates the comprehension.
       --  b. we then need that operation on CDOM (ADT ContextType), which we do not yet have and requires a lot of work.
@@ -240,9 +274,12 @@ invert_ q@(BQD dom (BinaryCombinator ComposeF) l r _ f m) = case l of
     -- Remember we have right-associativity: s1 >> (s2 >> s3).
     -- So when right has multiple steps, we receive them from the recursive call in reverse order: [s3, s2].
     -- We must then add the left step to the end of those steps: [s3, s2] <> [s1].
-    pure $ ZQ_ (right_inverted_steps <> left_inverted_steps)
+    pure $ ZQ_ (right_inverted_steps <> sourceSteps left_inverted_steps)
       (mLeft_forward `composeOverMaybe` mRight_forward)
       leftTarget
+
+  sourceSteps :: Array InvertedStep -> Array InvertedStep
+  sourceSteps steps = if preservesInput r then steps else dependency <$> steps
 
   hasFilter :: QueryFunctionDescription -> Boolean
   hasFilter qfd = case qfd of
@@ -253,7 +290,7 @@ invert_ q@(BQD dom (BinaryCombinator ComposeF) l r _ f m) = case l of
   independentFilterCandidate :: QueryWithAKink_ -> Boolean
   independentFilterCandidate (ZQ_ steps _ target) =
     target == QueryOrigin
-      && not (foldl (\found step -> found || isFilter step) false steps)
+      && not (foldl (\found step -> found || isFilter step.query) false steps)
 
   isFilter :: QueryFunctionDescription -> Boolean
   isFilter (UQD _ FilterF _ _ _ _) = true
@@ -295,11 +332,13 @@ invert_ (UQD _ WithFrame qfd _ _ _) = do
 -- Notice that the filter never ends up in the forward part.
 invert_ filter@(UQD filterDomain FilterF criterium _ _ _) = do
   outcome <- invert_ criterium
-  let criterionDependsOnOrigin = foldl hasOriginTarget false outcome.candidates
+  let
+    criterionDependsOnOrigin = foldl hasOriginTarget false outcome.candidates
+    dependencies = markDependencies <$> outcome.candidates
   pure
     { candidates:
-        if criterionDependsOnOrigin then outcome.candidates
-        else addFilter <$> outcome.candidates
+        if criterionDependsOnOrigin then dependencies
+        else addFilter <$> dependencies
     , blockingTags: outcome.blockingTags
     , hardBlocked: outcome.hardBlocked
     }
@@ -309,7 +348,7 @@ invert_ filter@(UQD filterDomain FilterF criterium _ _ _) = do
   addFilter :: QueryWithAKink_ -> QueryWithAKink_
   addFilter candidate@(ZQ_ steps forward target) = case target, last steps of
     QueryOrigin, _ -> candidate
-    _, Just step | range step == filterDomain -> ZQ_ (snoc steps filter) forward target
+    _, Just step | range step.query == filterDomain -> ZQ_ (snoc steps { query: filter, propertyAnchor: ResultFilter }) forward target
     _, _ -> candidate
 
   hasOriginTarget :: Boolean -> QueryWithAKink_ -> Boolean
@@ -323,7 +362,7 @@ invert_ (SQD _ (DataTypeGetter MeF) _ _ _) = pure $ blocked BlockedByContextless
 invert_ (SQD dom (Constant _ _) ran _ _) = pure $ unblocked []
 
 invert_ (SQD dom (RolGetter rt) ran _ _) = case rt of
-  ENR _ -> pure $ unblocked [ ZQ_ [ (SQD ran (DataTypeGetter ContextF) dom True True) ] Nothing FilterInput ]
+  ENR _ -> pure $ unblocked [ ZQ_ [ anchor $ SQD ran (DataTypeGetter ContextF) dom True True ] Nothing FilterInput ]
   CR r -> (lift2 $ (getRole >=> getCalculation) rt) >>= invert_
 
 invert_ (SQD dom (PropertyGetter (CP prop)) ran _ _) = (lift2 $ (getCalculatedProperty >=> calculation) prop) >>= invert_
@@ -333,7 +372,7 @@ invert_ (SQD dom (DataTypeGetter CountF) ran _ _) = pure $ unblocked []
 -- Treat a variable by looking up its definition (a QueryFunctionDescription), inverting it and inserting it.
 invert_ q@(SQD dom (VariableLookup varName) _ _ _) = do
   if varName == "origin" then
-    pure $ unblocked [ ZQ_ [ SQD (range q) (DataTypeGetter IdentityF) dom True True ] Nothing QueryOrigin ]
+    pure $ unblocked [ ZQ_ [ anchor $ SQD (range q) (DataTypeGetter IdentityF) dom True True ] Nothing QueryOrigin ]
   else do
     varExpr <- lookupVariableBinding varName
     case varExpr of
@@ -348,7 +387,7 @@ invert_ qfd@(SQD dom@(RDOM roleAdt) f@(PropertyGetter prop@(ENP _)) ran fun man)
     minvertedF <- invertFunction dom f ran
     case minvertedF of
       Nothing -> pure $ unblocked []
-      Just invertedF -> pure $ unblocked [ ZQ_ [ (SQD ran invertedF dom True True) ] Nothing FilterInput ]
+      Just invertedF -> pure $ unblocked [ ZQ_ [ anchor $ SQD ran invertedF dom True True ] Nothing FilterInput ]
   else (expandPropertyQuery roleAdt readableProp) >>= invert_
 
   where
@@ -379,7 +418,9 @@ invert_ qfd@(SQD dom@(RDOM roleAdt) f@(PropertyGetter prop@(ENP _)) ran fun man)
             pathsToProperty <- traverse (flip expandPropertyQuery readableProp) terms
             unsafePartial case uncons pathsToProperty of
               Just { head, tail } -> foldM makeIntersection head tail
-          _ -> throwError (Custom $ "expandPropertyQuery: no binding found for ADT " <> show adt <> " and property " <> show prop <> ".")
+          _ -> do
+            readableAdt <- lift2 $ toReadable adt
+            throwError (Custom $ "expandPropertyQuery: no filler restriction found for ADT " <> show readableAdt <> " and property " <> show readableProp <> ".")
 
   makeUnion :: QueryFunctionDescription -> QueryFunctionDescription -> PhaseThree QueryFunctionDescription
   makeUnion f1 f2 = case sumOfDomains (range f1) (range f2) of
@@ -404,7 +445,7 @@ invert_ (SQD dom (RoleIndividual rid) ran fun man) = do
       ctxt <- pure $ unsafePartial $ fromJust (head $ allLeavesInADT adt)
       pure $ unblocked
         [ ZQ_
-            [ MQD ran (ExternalCoreContextGetter "model://perspectives.domains#Couchdb$ContextInstances")
+            [ anchor $ MQD ran (ExternalCoreContextGetter "model://perspectives.domains#Couchdb$ContextInstances")
                 [ SQD dom (ContextTypeConstant ctxt) ContextKind True True ]
                 dom
                 Unknown
@@ -417,7 +458,7 @@ invert_ (SQD dom (RoleIndividual rid) ran fun man) = do
       rl <- pure $ roleInContext2Role $ unsafePartial $ fromJust (head $ allLeavesInADT adt)
       pure $ unblocked
         [ ZQ_
-            [ MQD ran (ExternalCoreRoleGetter "model://perspectives.domains#Couchdb$RoleInstances")
+            [ anchor $ MQD ran (ExternalCoreRoleGetter "model://perspectives.domains#Couchdb$RoleInstances")
                 [ SQD dom (RoleTypeConstant $ ENR rl) RoleKind True True ]
                 dom
                 Unknown
@@ -435,7 +476,7 @@ invert_ (SQD dom (ContextIndividual rid) ran fun man) = do
       ctxt <- pure $ unsafePartial $ fromJust $ head $ allLeavesInADT adt
       pure $ unblocked
         [ ZQ_
-            [ MQD ran (ExternalCoreContextGetter "model://perspectives.domains#Couchdb$ContextInstances")
+            [ anchor $ MQD ran (ExternalCoreContextGetter "model://perspectives.domains#Couchdb$ContextInstances")
                 [ SQD dom (ContextTypeConstant ctxt) ContextKind True True ]
                 dom
                 Unknown
@@ -448,7 +489,7 @@ invert_ (SQD dom (ContextIndividual rid) ran fun man) = do
       rl <- pure $ roleInContext2Role $ unsafePartial $ fromJust $ head $ allLeavesInADT adt
       pure $ unblocked
         [ ZQ_
-            [ MQD ran (ExternalCoreRoleGetter "model://perspectives.domains#Couchdb$RoleInstances")
+            [ anchor $ MQD ran (ExternalCoreRoleGetter "model://perspectives.domains#Couchdb$RoleInstances")
                 [ SQD dom (RoleTypeConstant $ ENR rl) RoleKind True True ]
                 dom
                 Unknown
@@ -463,7 +504,7 @@ invert_ (SQD dom f ran _ _) = do
   (minvertedF :: Maybe QueryFunction) <- invertFunction dom f ran
   case minvertedF of
     Nothing -> pure $ unblocked []
-    Just invertedF -> pure $ unblocked [ ZQ_ [ (SQD ran invertedF dom (queryFunctionIsFunctional invertedF) (queryFunctionIsMandatory f)) ] Nothing FilterInput ]
+    Just invertedF -> pure $ unblocked [ ZQ_ [ anchor $ SQD ran invertedF dom (queryFunctionIsFunctional invertedF) (queryFunctionIsMandatory f) ] Nothing FilterInput ]
 
 -- Catchall.
 invert_ q = throwError (Custom $ "Missing case in invert for: " <> prettyPrint q)
@@ -514,3 +555,13 @@ startsWithOrigin (BQD _ (BinaryCombinator ComposeF) left _ _ _ _) = startsWithOr
 startsWithOrigin (UQD _ _ nested _ _ _) = startsWithOrigin nested
 startsWithOrigin _ = false
 
+markDependencies :: QueryWithAKink_ -> QueryWithAKink_
+markDependencies (ZQ_ steps forward target) = ZQ_ (dependency <$> steps) forward target
+
+-- | Only identity-preserving steps can keep an earlier role as a property anchor.
+preservesInput :: QueryFunctionDescription -> Boolean
+preservesInput (UQD _ FilterF _ _ _ _) = true
+preservesInput (SQD _ (DataTypeGetter IdentityF) _ _ _) = true
+preservesInput (BQD _ (BinaryCombinator ComposeF) left right _ _ _) = preservesInput left && preservesInput right
+preservesInput (UQD _ WithFrame query _ _ _) = preservesInput query
+preservesInput _ = false

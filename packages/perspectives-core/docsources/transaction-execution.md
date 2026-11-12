@@ -499,7 +499,7 @@ type PouchdbContext f =
 - `scheduleSettledTransaction` (`once settled` time facets and later `letA` stages) captures `currentcontext`, `currentactor` and `notifieduser` (`contextVariableNames`) in addition to the `letA` variable names; `runSettledTransaction` (Main.purs) and `runSettledEntryAwaitingSettlement` rebind them in a new frame.
 - `after`, repeating (`Forever`) and `RepeatFor` time facets capture the same names and wrap the transaction with `withCapturedBindings`, which rebinds them in a new frame when the transaction eventually runs.
 
-See `Perspectives.Persistence.Types` (`PouchdbContext`, `runMonadPouchdbWithState`, `variableBindingsRef`), `Perspectives.PerspectivesState` (the variable binding functions), `Perspectives.CompileTimeFacets` (`contextVariableNames`, `captureBindings`, `withCapturedBindings`), and the regression tests in `test/variableBindings.purs` (part of `pnpm run test:layer1`).
+See `Perspectives.Persistence.Types` (`PouchdbContext`, `runMonadPouchdbWithState`, `variableBindingsRef`), `Perspectives.PerspectivesState` (the variable binding functions), `Perspectives.CompileTimeFacets` (`contextVariableNames`, `captureBindings`, `withCapturedBindings`), and the regression tests in `test/layertests/variableBindings.purs` (part of `pnpm run test:layer1`).
 
 ## Transaction performance experiments
 
