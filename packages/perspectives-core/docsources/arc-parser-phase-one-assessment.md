@@ -101,7 +101,7 @@ precedence, and `step` repeated this until structural equality reached a fixed
 point. Parentheses prevented a rotation through the `parenthesised` marker.
 
 This implements precedence, and existing tests verify representative additive
-precedence and parenthesised grouping (`test/expressionParser.purs:255-335`).
+precedence and parenthesised grouping (`test/layertests/expressionParser.purs:255-335`).
 It is not evidence that the present semantics are wrong. It is also not a
 conventional, self-evident operator table: multiplication is level 6 and
 division level 5; `and` and `or` share level 2; equal-precedence chains remain

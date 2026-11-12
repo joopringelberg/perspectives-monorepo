@@ -444,7 +444,7 @@ their composition recursively, compensating each filter's criterion.
   properties, makes every state inversion return the state context, and stores no runtime
   `FilterF` for the origin-dependent criterion.
 
-[Property-anchor regressions](../test/propertyAnchors.purs)
+[Property-anchor regressions](../test/layertests/propertyAnchors.purs)
 (`Test.Query.PropertyAnchors`) run in Layer 1 and additionally cover:
 
 - Criterion paths whose role type is the same as the result's role type.

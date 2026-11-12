@@ -117,4 +117,10 @@ standalone tests were run directly with Node:
    database-info and transaction-queue tests, and fix the LSP test fixture.
 
 For command definitions and runner membership, see `package.json` and
-`test/Layer1.purs`, `test/Layer2.purs`, `test/Layer3.purs`, and `test/Main.purs`.
+`test/layertests/Layer1.purs`, `test/layertests/Layer2.purs`,
+`test/layertests/Layer3.purs`, and `test/Main.purs`.
+
+The layer entry points and their transitive dependencies previously at the root
+of `test` live in `test/layertests`, together with their JavaScript FFI files.
+Their PureScript module names and package scripts are unchanged. Dependencies
+already in other test subdirectories remain in those directories.

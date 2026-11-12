@@ -89,7 +89,7 @@ After synchronisation, `PDR-B.getProperty(rolId, propType)` returns
 | `incomingPost` | `src/core/amqpTransport/incomingPost.purs` | Uses factory (not hard-coded) |
 | `Test.Sync.TestUtils` | `test/sync/TestUtils.purs` | Two-PDR test scaffold |
 | `Test.Sync.SetPropertyGetProperty` | `test/sync/SetPropertyGetProperty.purs` | First sync test |
-| `Test.Layer3` | `test/Layer3.purs` | Entry point for `pnpm run test:layer3` |
+| `Test.Layer3` | `test/layertests/Layer3.purs` | Entry point for `pnpm run test:layer3` |
 
 ---
 
@@ -343,7 +343,7 @@ Once all steps above are complete:
 | `src/core/amqpTransport/stompStub.purs` | New | PureScript FFI bindings for the stub |
 | `test/sync/TestUtils.purs` | New | Two-PDR test scaffold |
 | `test/sync/SetPropertyGetProperty.purs` | New | First sync test (skipped until prerequisites land) |
-| `test/Layer3.purs` | Modified | References `SetPropertyGetProperty.theSuite` |
+| `test/layertests/Layer3.purs` | Modified | References `SetPropertyGetProperty.theSuite` |
 | `design/layer3-sync-tests.md` | New | This document |
 
 ---

@@ -422,7 +422,7 @@ These scripts directly test the two conflicting design goals.
 
 **Path exercised:** Step 1.9 (`cdb:RemoveModelFromLocalStore` as an `ExecuteDestructiveEffect`), phase-1 re-run for the removal of the model root context and the model's indexed resources, step 2.5 (`modelsToBeRemoved` survives postponed state evaluations) and step 2.6 (removal of the model and the resources it contributed).
 
-**Model setup:** `case T27` in `transactionExecutionTests@1.0.arc`. The target model `uninstallTarget@1.0.arc` creates an indexed context (filling a new `StartContexts` instance) and an indexed role. Its model root context has no `on exit`, so it does not clean up these resources itself. The test harness (`test/transactionExecutionTests.purs`) compiles and installs the target from source, under the Stable model URI `model://joopringelberg.nl#ms9lflili1@1.0`, before it loads the test model.
+**Model setup:** `case T27` in `transactionExecutionTests@1.0.arc`. The target model `uninstallTarget@1.0.arc` creates an indexed context (filling a new `StartContexts` instance) and an indexed role. Its model root context has no `on exit`, so it does not clean up these resources itself. The test harness (`test/layertests/transactionExecutionTests.purs`) compiles and installs the target from source, under the Stable model URI `model://joopringelberg.nl#ms9lflili1@1.0`, before it loads the test model.
 
 **Initial state:** The target model is installed.
 
