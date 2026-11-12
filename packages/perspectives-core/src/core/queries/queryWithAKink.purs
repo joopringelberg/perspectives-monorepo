@@ -418,7 +418,9 @@ invert_ qfd@(SQD dom@(RDOM roleAdt) f@(PropertyGetter prop@(ENP _)) ran fun man)
             pathsToProperty <- traverse (flip expandPropertyQuery readableProp) terms
             unsafePartial case uncons pathsToProperty of
               Just { head, tail } -> foldM makeIntersection head tail
-          _ -> throwError (Custom $ "expandPropertyQuery: no binding found for ADT " <> show adt <> " and property " <> show prop <> ".")
+          _ -> do
+            readableAdt <- lift2 $ toReadable adt
+            throwError (Custom $ "expandPropertyQuery: no filler restriction found for ADT " <> show readableAdt <> " and property " <> show readableProp <> ".")
 
   makeUnion :: QueryFunctionDescription -> QueryFunctionDescription -> PhaseThree QueryFunctionDescription
   makeUnion f1 f2 = case sumOfDomains (range f1) (range f2) of

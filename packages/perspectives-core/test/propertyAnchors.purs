@@ -27,7 +27,7 @@ import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.Maybe (Maybe(..), isJust)
 import Data.Newtype (unwrap)
-import Data.String (Pattern(..), contains, joinWith)
+import Data.String (joinWith)
 import Data.Traversable (for)
 import Data.Tuple (Tuple(..))
 import Effect (Effect)
@@ -46,11 +46,16 @@ import Perspectives.Parsing.Arc.IndentParser (runIndentParser)
 import Perspectives.Parsing.Arc.PhaseThree (phaseThree)
 import Perspectives.Parsing.Arc.PhaseTwo (traverseDomain)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (runPhaseTwo', toStableDomeinFile)
+import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Query.Kinked (AnchoredQueryWithAKink, PropertyAnchor(..), invert, invertWithAnchors)
 import Perspectives.Query.QueryTypes (Domain(..), QueryFunctionDescription(..), RoleInContext(..), domain, makeComposition)
 import Perspectives.Query.UnsafeCompiler (compileFunction)
 import Perspectives.Representation.ADT (ADT(..))
 import Perspectives.Representation.Class.Cacheable (cacheEntity)
+import Perspectives.Representation.Class.PersistentType (cacheInDomeinFile, getContext, getEnumeratedProperty, getEnumeratedRole)
+import Perspectives.Representation.Context (Context(..))
+import Perspectives.Representation.EnumeratedProperty (EnumeratedProperty(..))
+import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..))
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
 import Perspectives.Representation.Range (Range(..))
@@ -171,22 +176,35 @@ theSuite = suite "Perspective property anchors" do
       equal [ [], [ unwrap meetingId ], [] ] (map _.names results)
       equal [ [ unwrap meetingId ], [ unwrap meetingId ], [ unwrap meetingId ] ] (map _.dependencies results)
 
-  test "An unreachable property at a genuine result anchor still raises an error" $
-    withCompiledModel "Attendees >> binding" \dfr _ -> do
-      let
-        invalidQuery = SQD
-          (RDOM (UET (RoleInContext { context: ContextType modelName, role: role "Person" })))
-          (PropertyGetter (ENP (property "Dossier$External$ParticipantName")))
-          (VDOM PString Nothing)
-          True
-          False
-      Tuple result _ <- runP do
-        void $ storeDomeinFileInCache (ModelUri modelName) (toStableDomeinFile $ DomeinFile dfr)
-        runPhaseTwo' (invert invalidQuery)
-      case result of
-        Left errors -> assert "The compiler still reports unreachable properties"
-          (contains (Pattern "expandPropertyQuery: no binding found") (show errors))
-        Right _ -> assert "Invalid property access must not be silently skipped" false
+  for_
+    [ { name: "readable names", context: ContextType modelName, role: role "Person", property: property "Dossier$External$ParticipantName" }
+    , { name: "stable IDs", context: ContextType (modelName <> "$context-id"), role: role "role-id", property: property "property-id" }
+    ]
+    \input -> test ("An unreachable property reports its filler restriction with readable type names from " <> input.name) $
+      withCompiledModel "Attendees >> binding" \dfr _ -> do
+        let
+          readableAdt = UET (RoleInContext { context: ContextType modelName, role: role "Person" })
+          readableProp = ENP (property "Dossier$External$ParticipantName")
+          invalidQuery = SQD
+            (RDOM (UET (RoleInContext { context: input.context, role: input.role })))
+            (PropertyGetter (ENP input.property))
+            (VDOM PString Nothing)
+            True
+            False
+        Tuple result _ <- runP do
+          void $ storeDomeinFileInCache (ModelUri modelName) (toStableDomeinFile $ DomeinFile dfr)
+          Context context <- getContext (ContextType modelName)
+          EnumeratedRole person <- getEnumeratedRole (role "Person")
+          EnumeratedProperty participantName <- getEnumeratedProperty (property "Dossier$External$ParticipantName")
+          cacheInDomeinFile input.context (Context context { id = input.context })
+          cacheInDomeinFile input.role (EnumeratedRole person { id = input.role, context = input.context })
+          cacheInDomeinFile input.property (EnumeratedProperty participantName { id = input.property })
+          runPhaseTwo' (invert invalidQuery)
+        case result of
+          Left errors -> equal
+            [ Custom $ "expandPropertyQuery: no filler restriction found for ADT " <> show readableAdt <> " and property " <> show readableProp <> "." ]
+            errors
+          Right _ -> assert "Invalid property access must not be silently skipped" false
 
 withInversions :: QueryFunctionDescription -> (Array AnchoredQueryWithAKink -> Test) -> Test
 withInversions query assertions = do

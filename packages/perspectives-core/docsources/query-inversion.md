@@ -274,7 +274,7 @@ context OwnAttendees = filter Attendees >> binding with context >> Dossier$Ambas
 test are criterion dependencies; the compiler must not search their filler
 chains for `ParticipantName`. Such a search could otherwise reach
 `sys:TheWorld$PerspectivesUsers` and incorrectly raise
-`expandPropertyQuery: no binding found`.
+`expandPropertyQuery: no filler restriction found`.
 
 For each property in `statesPerProperty`:
 
@@ -303,8 +303,10 @@ properties belong to the perspective, including when a result becomes visible.
 Retaining that map does **not** make a dependency a valid property anchor.
 
 An actually unreachable property at a genuine result anchor still raises the
-compiler error. The fix is not a catch, a silent skip of failed expansions, or a
-new filler restriction on system users.
+compiler error. The diagnostic reports that no filler restriction was found and
+converts context, role, and property identifiers to their Readable names through
+`toReadable`, rather than displaying opaque stable IDs. The fix is not a catch,
+a silent skip of failed expansions, or a new filler restriction on system users.
 
 ### 1.4.2 Filter semantics: detection-oriented vs selection-oriented behaviour
 
