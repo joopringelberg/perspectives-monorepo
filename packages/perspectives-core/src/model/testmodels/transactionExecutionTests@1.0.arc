@@ -1129,7 +1129,7 @@ domain model://joopringelberg.nl#TransactionExecutionTests@1.0
   ------------------------------------------------------------------------------
   ---- T27 — Remove a model
   ---- The test harness compiles and installs model://joopringelberg.nl#UninstallTarget@1.0
-  ---- (src/model/uninstallTarget@1.0.arc) under the Stable model URI model://joopringelberg.nl#ms9lflili1@1.0,
+  ---- (src/model/testmodels/uninstallTarget@1.0.arc) under the Stable model URI model://joopringelberg.nl#ms9lflili1@1.0,
   ---- before it loads this model. The target has an indexed context (filling an instance of StartContexts)
   ---- and an indexed role, and does not clean these up itself.
   ---- Removing its instance of ModelsInUse (what the end user does to remove a model) should remove exactly one

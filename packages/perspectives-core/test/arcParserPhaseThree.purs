@@ -1149,7 +1149,7 @@ type FileName = String
 fileTestOnly :: TestName -> FileName -> TestSuite
 fileTestOnly testName fileName =
   testOnly testName do
-    modelDirectory <- pure "/Users/joopringelberg/Code/perspectives-core/src/model"
+    modelDirectory <- pure "src/model/systemmodels"
     modelText <- readTextFile ENC.UTF8 (Path.concat [ modelDirectory, fileName ])
     (r :: Either ParseError ContextE) <- runIndentParser modelText ARC.domain
     case r of

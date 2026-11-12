@@ -11,23 +11,12 @@ import Test.Parsing.Arc.PhaseTwo (theSuite) as TPA2
 import Test.Parsing.Arc.PhaseThree as TPA3
 import Test.Parsing.Arc.Expression as TPAE
 import Test.Query.DescriptionCompiler as QDC
-import Test.Representation.ADT as ADT
 import Test.LoadArc as LARC
 import Test.ContextAndRole as CAR
-import Test.Query.Inversion as INV
-import Test.Parsing.Arc.PhaseThree.SetAffectedContextCalculations as SACC
-import Test.Combinators as COMB
-import Test.Extern.Couchdb as CDB
-import Test.Types.ObjectGetters as TTO
 import Test.Queries as QR
-import Test.Sync.Channel as CHA
 import Test.ArrayT as ARRT
 import Test.Sync.HandleTransaction as HTA
-import Test.Utilities as UT
-import Test.DomeinFile.Encoding as DFE
-import Test.RabbitMQ as RB
 import Test.Class.Role as ROLE
-
 
 main :: Effect Unit
 main = runTest do

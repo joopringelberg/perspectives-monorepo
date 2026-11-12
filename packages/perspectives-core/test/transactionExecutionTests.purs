@@ -64,7 +64,7 @@ transactionExecutionCompileTestModelConfiguration =
         [ uninstallTargetLoadMethod
         , CompileModelFromSource
             { modelUri: transactionExecutionTestModel
-            , sourcePath: "src/model/transactionExecutionTests@1.0.arc"
+            , sourcePath: "src/model/testmodels/transactionExecutionTests@1.0.arc"
             , modelUriReadable: "model://joopringelberg.nl#TransactionExecutionTests@1.0"
             , basedOnVersion: Nothing
             }
@@ -76,7 +76,7 @@ transactionExecutionCompileTestModelConfiguration =
 uninstallTargetLoadMethod :: TestModelLoadMethod
 uninstallTargetLoadMethod = CompileModelFromSource
   { modelUri: "model://joopringelberg.nl#ms9lflili1@1.0"
-  , sourcePath: "src/model/uninstallTarget@1.0.arc"
+  , sourcePath: "src/model/testmodels/uninstallTarget@1.0.arc"
   , modelUriReadable: "model://joopringelberg.nl#UninstallTarget@1.0"
   , basedOnVersion: Nothing
   }

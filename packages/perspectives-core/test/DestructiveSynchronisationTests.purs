@@ -82,7 +82,7 @@ synchronisationTestModelConfiguration =
   , snapshotDirBob: "test/pdr-snapshot/newdeltas/bob"
   , testModel
   , testModelLoadMethod: CompileModelFromSource
-      { sourcePath: "src/model/twoPDRDestructiveTests@1.0.arc"
+      { sourcePath: "src/model/testmodels/twoPDRDestructiveTests@1.0.arc"
       , modelUriReadable: "model://joopringelberg.nl#TwoPDRDestructiveTests@1.0"
       , basedOnVersion: Nothing
       }

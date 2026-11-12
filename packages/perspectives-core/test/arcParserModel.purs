@@ -27,7 +27,7 @@ testDirectory :: String
 testDirectory = "test"
 
 modelDirectory :: String
-modelDirectory = "../perspectives-core/src/model/"
+modelDirectory = "src/model/testmodels"
 
 theSuite :: Free TestF Unit
 theSuite = suite "Perspectives.Parsing.Arc.Model" do

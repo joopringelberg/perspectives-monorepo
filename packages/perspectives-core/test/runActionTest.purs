@@ -87,7 +87,7 @@ runActionCompileTestModelConfiguration =
     , testModelLoadMethods =
         [ CompileModelFromSource
             { modelUri: runActionTestModel
-            , sourcePath: "src/model/testRunAction@1.0.arc"
+            , sourcePath: "src/model/testmodels/testRunAction@1.0.arc"
             , modelUriReadable: "model://joopringelberg.nl#TestRunAction@1.0"
             , basedOnVersion: Nothing
             }

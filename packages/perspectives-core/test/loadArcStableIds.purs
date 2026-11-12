@@ -43,7 +43,7 @@ import Test.Unit.Main (runTest)
 main :: Effect Unit
 main = runTest $ suite "Compile-and-store stable IDs" do
   test "Recompilation reuses installed and explicitly supplied mappings" do
-    source <- readTextFile UTF8 "src/model/repositoryTools@1.0.arc"
+    source <- readTextFile UTF8 "src/model/testmodels/repositoryTools@1.0.arc"
     bracket
       (startPDRInstanceFromSnapshot (testPouchdbUser "alice") defaultRuntimeOptions Nothing noBus "test/pdr-snapshot/rebootedUniverse/alice")
       (\pdr -> pdr.shutdown)
@@ -75,7 +75,7 @@ main = runTest $ suite "Compile-and-store stable IDs" do
               assert "The existing active state still has a definition" (isJust $ Object.lookup stateId dfr.states)
 
   test "Recompilation replaces queries that reference a removed state" do
-    source <- readTextFile UTF8 "src/model/AMQPtestModel@1.0.arc"
+    source <- readTextFile UTF8 "src/model/testmodels/AMQPtestModel@1.0.arc"
     bracket
       (startPDRInstanceFromSnapshot (testPouchdbUser "alice") defaultRuntimeOptions Nothing noBus "test/pdr-snapshot/universe/alice")
       (\pdr -> pdr.shutdown)

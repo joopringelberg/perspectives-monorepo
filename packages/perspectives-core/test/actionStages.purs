@@ -125,7 +125,7 @@ theSuite = suite "Action settlement stages" do
           _ -> assert "Expected the existing single-stage automatic effect representation" false
 
   test "repository upload settles before updating build and generating translations" do
-    source <- readTextFile UTF8 "src/model/couchdbManagement@12.4.arc"
+    source <- readTextFile UTF8 "src/model/systemmodels/couchdbManagement@12.4.arc"
     parsed <- runIndentParser source (domain <* eof)
     case parsed of
       Left err -> assert (show err) false
@@ -139,7 +139,7 @@ theSuite = suite "Action settlement stages" do
             )
             (automaticEffects root)
 
-  for_ [ "src/model/couchdbManagement@12.4.arc" ] \path ->
+  for_ [ "src/model/systemmodels/couchdbManagement@12.4.arc" ] \path ->
     test (path <> " copies server coordinates to the created server context") do
       source <- readTextFile UTF8 path
       parsed <- runIndentParser source (domain <* eof)
@@ -149,13 +149,13 @@ theSuite = suite "Action settlement stages" do
           equal 1 (length (filter copiesServerCoordinates (automaticEffects root)))
 
   test "received Couchdb servers do not trigger local admin provisioning" do
-    source <- readTextFile UTF8 "src/model/couchdbManagement@12.4.arc"
+    source <- readTextFile UTF8 "src/model/systemmodels/couchdbManagement@12.4.arc"
     assert "NoAdmin must require locally entered admin credentials" $
       contains
         (Pattern "state NoAdmin = (exists binding) and (exists AdminPassword) and (exists AdminUserName)")
         source
 
-  for_ [ "src/model/couchdbManagement@12.4.arc" ] \path ->
+  for_ [ "src/model/systemmodels/couchdbManagement@12.4.arc" ] \path ->
     test (path <> " keeps repository admin rights after setting AuthorizedDomain") do
       source <- readTextFile UTF8 path
       roleSource <- case split (Pattern "    user Admin filledBy CouchdbServer$Admin\n") source of
@@ -203,7 +203,7 @@ theSuite = suite "Action settlement stages" do
         _ -> assert "Expected repository admin role" false
 
   test "Big Bang settles server and repositories before running their consumers" do
-    source <- readTextFile UTF8 "src/model/rebootUniverse@2.0.arc"
+    source <- readTextFile UTF8 "src/model/testmodels/rebootUniverse@2.0.arc"
     parsed <- runIndentParser source (domain <* eof)
     case parsed of
       Left err -> assert (show err) false
@@ -213,7 +213,7 @@ theSuite = suite "Action settlement stages" do
         _ -> assert "Expected the staged Big Bang context action" false
 
   test "bespoke database settles owner, creation and publication before signaling completion" do
-    source <- readTextFile UTF8 "src/model/repositoryTools@1.0.arc"
+    source <- readTextFile UTF8 "src/model/testmodels/repositoryTools@1.0.arc"
     parsed <- runIndentParser source (domain <* eof)
     case parsed of
       Left err -> assert (show err) false
@@ -228,7 +228,7 @@ theSuite = suite "Action settlement stages" do
         _ -> assert "Expected the staged bespoke database action" false
 
   test "browser preparation installs AMQPtestSetup before reporting success" do
-    source <- readTextFile UTF8 "src/model/rebootUniverse@2.0.arc"
+    source <- readTextFile UTF8 "src/model/testmodels/rebootUniverse@2.0.arc"
     parsed <- runIndentParser source (domain <* eof)
     case parsed of
       Left err -> assert (show err) false
