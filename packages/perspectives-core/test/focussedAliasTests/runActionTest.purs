@@ -20,7 +20,7 @@
 -- projects root.
 -- END LICENSE
 
-module Test.RunAction where
+module Test.FocussedAliasTests.RunAction where
 
 import Prelude
 

@@ -21,7 +21,7 @@
 
 -- END LICENSE
 
-module Test.SinglePDRDestructiveTests
+module Test.FocussedAliasTests.SinglePDRDestructiveTests
   ( main
   , singlePDRDestructiveSuite
   , singlePDRDestructiveTestModelConfiguration

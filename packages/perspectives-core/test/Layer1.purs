@@ -63,7 +63,7 @@ import Test.VersionedDeltas (theSuite) as VD
 
 -- Comprehensive unit tests for ExpandedADT, CNF, and ADT (with real assertions)
 import Test.Perspectives.Representation.AbstractDataTypeTests (theSuite) as ADTTESTS
-import Test.ModelTranslation (theSuite) as MTR
+import Test.FocussedAliasTests.ModelTranslation (theSuite) as MTR
 
 -- ARC parser phases 1–3 — use runP / runPhaseTwo' / runPhaseThree' but only
 -- perform in-memory AST transformations; no database access

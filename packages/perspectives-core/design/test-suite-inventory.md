@@ -38,6 +38,10 @@ regression for the original participant-name compilation failure.
 
 All PureScript entry points in this table compiled under `spago build`. “Unique”
 means the coverage is not already exercised by the three current layer runners.
+The focused alias entry modules for `test:modelTranslation`, `test:runAction`,
+`test:destructive`, `test:destructiveSync`, and `test:transaction:compile` are
+under `test/focussedAliasTests/`; the shared suite modules are also imported by
+the layer runners where applicable.
 
 | Command | Coverage beyond layers | Recommendation |
 |---|---|---|

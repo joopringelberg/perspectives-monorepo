@@ -1,4 +1,4 @@
-module Test.TransactionExecutionTestsCompile where
+module Test.FocussedAliasTests.TransactionExecutionTestsCompile where
 
 import Prelude
 

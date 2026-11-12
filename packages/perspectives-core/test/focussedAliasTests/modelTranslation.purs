@@ -35,7 +35,7 @@
 -- |
 -- | See docsources/model-translation.md.
 
-module Test.ModelTranslation where
+module Test.FocussedAliasTests.ModelTranslation where
 
 import Prelude
 

@@ -21,7 +21,7 @@
 
 -- END LICENSE
 
-module Test.DestructiveSynchronisationTests
+module Test.FocussedAliasTests.DestructiveSynchronisationTests
   ( getSynchronisationResults
   , main
   , synchronisationSuite
