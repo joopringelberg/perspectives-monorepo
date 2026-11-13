@@ -22,9 +22,9 @@ module Test.Query.PropertyAnchors where
 import Prelude
 
 import Control.Monad.Error.Class (throwError)
-import Data.Array (any, concat, drop, filter, head, nub, null)
+import Data.Array (any, concat, drop, filter, head, length, nub, null)
 import Data.Either (Either(..))
-import Data.Foldable (for_)
+import Data.Foldable (all, for_)
 import Data.Maybe (Maybe(..), isJust)
 import Data.Newtype (unwrap)
 import Data.String (joinWith)
@@ -33,11 +33,15 @@ import Data.Tuple (Tuple(..))
 import Effect (Effect)
 import Effect.Exception (error)
 import Foreign.Object as Object
-import Perspectives.ContextAndRole (addRol_gevuldeRollen, defaultContextRecord, defaultRolRecord)
-import Perspectives.CoreTypes (MonadPerspectives, (##=))
+import Perspective.InvertedQuery.Indices (runtimeIndexForFilledQueries', runtimeIndexForFillerQueries')
+import Perspectives.ArrayUnions (ArrayUnions(..))
+import Perspectives.ContextAndRole (addRol_gevuldeRollen, defaultContextRecord, defaultRolRecord, removeRol_gevuldeRollen)
+import Perspectives.CoreTypes (MonadPerspectives, runMonadPerspectivesQuery, (##=))
 import Perspectives.Data.EncodableMap as EM
+import Perspectives.DependencyTracking.Dependency (findFilledRoleRequests, registerDependency, toAssumption)
 import Perspectives.DomeinCache (storeDomeinFileInCache)
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..))
+import Perspectives.Instances.ObjectGetters (getFilledRoles)
 import Perspectives.InvertedQuery (InvertedQuery(..), QueryWithAKink(..), startsWithFilter)
 import Perspectives.InvertedQuery.Storable (StoredQueries)
 import Perspectives.InvertedQueryKey (RunTimeInvertedQueryKey(..), deserializeInvertedQueryKey)
@@ -175,6 +179,91 @@ theSuite = suite "Perspective property anchors" do
           pure { names, dependencies }
       equal [ [], [ unwrap meetingId ], [] ] (map _.names results)
       equal [ [ unwrap meetingId ], [ unwrap meetingId ], [ unwrap meetingId ] ] (map _.dependencies results)
+
+  test "Binder lookup includes every role and context specialising the requested aspects" $
+    withCompiledModel "Attendees >> binding" \dfr _ -> do
+      result <- runP do
+        void $ storeDomeinFileInCache (ModelUri modelName) (toStableDomeinFile $ DomeinFile dfr)
+        let
+          baseContext = ContextType (modelName <> "$Meeting")
+          childContext = ContextType (modelName <> "$ChildMeeting")
+          baseRole = role "Meeting$Attendees"
+          firstRole = role "First"
+          secondRole = role "Second"
+          firstId = RoleInstance "binder-first"
+          secondId = RoleInstance "binder-second"
+          thirdId = RoleInstance "binder-third"
+          aspect = RoleInContext { context: baseContext, role: baseRole }
+        Context context <- getContext baseContext
+        EnumeratedRole prototype <- getEnumeratedRole baseRole
+        cacheInDomeinFile childContext (Context context { id = childContext, contextAspects = [ baseContext ] })
+        cacheInDomeinFile firstRole (EnumeratedRole prototype { id = firstRole, roleAspects = [ aspect ] })
+        cacheInDomeinFile secondRole (EnumeratedRole prototype { id = secondRole, roleAspects = [ aspect ] })
+        let emptyFiller = PerspectRol defaultRolRecord { id = dossierId }
+        void $ cacheEntity dossierId emptyFiller
+        Tuple empty assumptions <- runMonadPerspectivesQuery dossierId (getFilledRoles baseContext baseRole)
+        for_ (unwrap assumptions) \assumption -> registerDependency 42 (toAssumption assumption)
+        first <- addRol_gevuldeRollen emptyFiller baseContext firstRole firstId
+        second <- addRol_gevuldeRollen first baseContext secondRole secondId
+        third <- addRol_gevuldeRollen second childContext secondRole thirdId
+        let PerspectRol saved = third
+        let
+          stale = Object.insert (modelName <> "$MissingContext")
+            (Object.singleton (modelName <> "$MissingRole") [ RoleInstance "stale" ])
+            saved.filledRoles
+        void $ cacheEntity dossierId (PerspectRol saved { filledRoles = stale, roleAliases = Object.empty, contextAliases = Object.empty })
+        Tuple both _ <- runMonadPerspectivesQuery dossierId (getFilledRoles baseContext baseRole)
+        binder <- compileFunction (SQD itemDomain (FilledF baseRole baseContext) itemDomain False False)
+        compiled <- unwrap dossierId ##= binder
+        firstRequests <- findFilledRoleRequests dossierId baseContext firstRole
+        secondRequests <- findFilledRoleRequests dossierId childContext secondRole
+        ArrayUnions filledKeys <- runtimeIndexForFilledQueries' secondRole childContext
+        ArrayUnions fillerKeys <- runtimeIndexForFillerQueries' secondRole childContext
+        let missingContext = ContextType (modelName <> "$MissingContext")
+        cacheInDomeinFile childContext (Context context { id = childContext, contextAspects = [ baseContext, missingContext ] })
+        ArrayUnions missingContextKeys <- runtimeIndexForFilledQueries' secondRole childContext
+        cacheInDomeinFile secondRole
+          (EnumeratedRole prototype { id = secondRole, roleAspects = [ aspect, RoleInContext { context: missingContext, role: role "MissingRole" } ] })
+        requestsWithMissingAspect <- findFilledRoleRequests dossierId childContext secondRole
+        Tuple withMissingAspect _ <- runMonadPerspectivesQuery dossierId (getFilledRoles baseContext baseRole)
+        cacheInDomeinFile childContext (Context context { id = childContext, contextAspects = [ baseContext ] })
+        cacheInDomeinFile secondRole (EnumeratedRole prototype { id = secondRole, roleAspects = [ aspect ] })
+        void $ cacheEntity dossierId (removeRol_gevuldeRollen third baseContext secondRole secondId)
+        Tuple remaining _ <- runMonadPerspectivesQuery dossierId (getFilledRoles baseContext baseRole)
+        pure { empty, both, compiled, withMissingAspect, remaining, firstRequests, secondRequests, requestsWithMissingAspect, filledKeys, fillerKeys, missingContextKeys, firstId, secondId, thirdId, baseRole, baseContext }
+      equal [] result.empty
+      assert "Both concrete types are returned even with legacy aliases" $
+        all (\id -> any (_ == id) result.both) [ result.firstId, result.secondId, result.thirdId ] && length result.both == 3
+      assert "The compiled binder returns the same results" $
+        all (\id -> any (_ == unwrap id) result.compiled) [ result.firstId, result.secondId, result.thirdId ] && length result.compiled == 3
+      assert "Unavailable unrelated aspects do not hide matching roles" $
+        all (\id -> any (_ == id) result.withMissingAspect) [ result.firstId, result.secondId, result.thirdId ] && length result.withMissingAspect == 3
+      assert "Removing one binding preserves the others" $
+        all (\id -> any (_ == id) result.remaining) [ result.firstId, result.thirdId ] && length result.remaining == 2
+      equal [ 42 ] result.firstRequests
+      equal [ 42 ] result.secondRequests
+      equal [ 42 ] result.requestsWithMissingAspect
+      assert "Binding changes index the filled role and context aspects" $
+        any
+          ( case _ of
+              RTFilledKey { filledRole_destination, filledContext_destination } -> filledRole_destination == result.baseRole && filledContext_destination == result.baseContext
+              _ -> false
+          )
+          result.filledKeys
+      assert "Unavailable context aspects do not prevent indexing available aspects" $
+        any
+          ( case _ of
+              RTFilledKey { filledRole_destination, filledContext_destination } -> filledRole_destination == result.baseRole && filledContext_destination == result.baseContext
+              _ -> false
+          )
+          result.missingContextKeys
+      assert "Binding changes index the inverse filled role and context aspects" $
+        any
+          ( case _ of
+              RTFillerKey { filledRole_origin, filledContext_origin } -> filledRole_origin == result.baseRole && filledContext_origin == result.baseContext
+              _ -> false
+          )
+          result.fillerKeys
 
   for_
     [ { name: "readable names", context: ContextType modelName, role: role "Person", property: property "Dossier$External$ParticipantName" }

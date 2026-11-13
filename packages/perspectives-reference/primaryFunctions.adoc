@@ -1,7 +1,7 @@
 [[keyword-binder]]
 === binding and binder
 anchor:keyword-binding[]
-The `binding` and `binder` keywords are used to traverse the link connecting role instances. `binding` refers to the role instance that fills the current role, while `binder` refers to a role instance that is filled by the current role. However, as roles can be filled by multiple other roles, `binder` can return multiple role instances. `binder` must be used with a role type to narrow the results to instances of that specific role type.
+The `binding` and `binder` keywords are used to traverse the link connecting role instances. `binding` refers to the role instance that fills the current role, while `binder` refers to a role instance that is filled by the current role. However, as roles can be filled by multiple other roles, `binder` can return multiple role instances. `binder` must be used with a role type to narrow the results to instances of that role type, including instances whose role type has it as an aspect. The filled role's context must also match the specified context type, or the role type's declared context when none is specified, including context specialisations.
 
 [source,perspectivesarc]
 ----

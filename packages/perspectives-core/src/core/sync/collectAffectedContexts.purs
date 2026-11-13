@@ -421,8 +421,8 @@ usersWithPerspectiveOnRoleBinding' :: RoleInstance -> RoleInstance -> Maybe Role
 usersWithPerspectiveOnRoleBinding' filled filler moldFiller deltaType runForwards = do
   filledType <- lift (filled ##>> OG.roleType)
   fillerType <- lift (filler ##>> OG.roleType)
-  filledContextType <- lift $ enumeratedRoleContextType filledType
-  fillerContextType <- lift $ enumeratedRoleContextType fillerType
+  filledContextType <- lift (filled ##>> (OG.context >=> OG.contextType))
+  fillerContextType <- lift (filler ##>> (OG.context >=> OG.contextType))
   -- `storeInvertedQueries` removes the first backward binding step before persisting
   -- both `RTFillerKey` and `RTFilledKey` queries.  Runtime therefore starts from the
   -- role instances carried by the RoleBindingDelta itself and only evaluates the
@@ -864,14 +864,11 @@ createDeltasFromAssumption users (Filler roleInstance) = do
 -- FilledRolesAssumption fillerId filledContextType filledType
 createDeltasFromAssumption users (FilledRolesAssumption fillerId filledContextType filledType) = do
   filledRoles <- lift (fillerId ##= getFilledRoles filledContextType filledType)
-  case head filledRoles of
-    Nothing -> pure unit
-    Just someFilled -> (lift $ tryGetPerspectEntiteit someFilled) >>=
-      ( case _ of
-          -- This means that the context of the filler is public.
-          Nothing -> pure unit
-          Just (PerspectRol { context: filledContext }) -> magic filledContext filledRoles filledType users
-      )
+  for_ filledRoles \filled -> (lift $ tryGetPerspectEntiteit filled) >>=
+    ( case _ of
+        Nothing -> pure unit
+        Just (PerspectRol { context: filledContext }) -> magic filledContext [ filled ] filledType users
+    )
   -- Query DeltaStore for binding deltas of filled roles.
   for_ filledRoles \filledId -> do
     bindingDeltas <- lift $ getDeltasForResource (unwrap filledId <> "#binding")

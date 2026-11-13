@@ -288,11 +288,10 @@ perspectivesUsersRole_ r = do
 getFilledRoles :: ContextType -> EnumeratedRoleType -> (RoleInstance ~~> RoleInstance)
 getFilledRoles filledContextType filledType fillerId = ArrayT $ (lift $ try $ getPerspectRol fillerId) >>=
   handlePerspectRolError' "getFilledRoles" []
-    \(filler :: IP.PerspectRol) -> case rol_gevuldeRol filler filledContextType filledType of
-      { context: ct, role, instances } -> do
-        -- FilledRolesAssumption RoleInstance ContextType EnumeratedRoleType
-        tell $ ArrayWithoutDoubles [ FilledRolesAssumption fillerId ct role ]
-        pure instances
+    \(filler :: IP.PerspectRol) -> do
+      { instances } <- lift $ rol_gevuldeRol filler filledContextType filledType
+      tell $ ArrayWithoutDoubles [ FilledRolesAssumption fillerId filledContextType filledType ]
+      pure instances
 
 getRecursivelyFilledRoles' :: ContextType -> EnumeratedRoleType -> (RoleInstance ~~> RoleInstance)
 getRecursivelyFilledRoles' filledContextType filledType fillerId = ArrayT do

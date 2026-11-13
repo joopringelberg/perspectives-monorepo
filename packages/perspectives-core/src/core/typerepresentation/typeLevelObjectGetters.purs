@@ -27,6 +27,7 @@ import Control.Monad.State (StateT, execStateT, get, put)
 import Control.Monad.Trans.Class (lift)
 import Control.Plus (map, (<|>), empty)
 import Data.Array (concat, cons, elemIndex, filter, filterA, findIndex, foldM, foldl, foldr, fromFoldable, null, singleton)
+import Data.Either (Either(..))
 import Data.FoldableWithIndex (foldWithIndexM)
 import Data.List (List, foldM, foldl) as LIST
 import Data.Map (Map, empty, lookup, insert, keys, unionWith, values) as Map
@@ -314,6 +315,20 @@ aspectsOfContext = ArrayT <<< (getPerspectType >=> pure <<< contextAspects)
 
 contextAspectsClosure :: ContextType ~~~> ContextType
 contextAspectsClosure = closure_ aspectsOfContext
+
+availableRoleAspectsClosure :: EnumeratedRoleType ~~~> EnumeratedRoleType
+availableRoleAspectsClosure = closure_ (availableAspects aspectsOfRole)
+
+availableContextAspectsClosure :: ContextType ~~~> ContextType
+availableContextAspectsClosure = closure_ (availableAspects aspectsOfContext)
+
+-- | Preserve available branches when an unrelated aspect's model has been removed.
+availableAspects :: forall a. (a -> ArrayT MP a) -> a -> ArrayT MP a
+availableAspects aspects typeId = ArrayT do
+  result <- try $ runArrayT (aspects typeId)
+  pure $ case result of
+    Left _ -> []
+    Right types -> types
 
 roleTypeAspectsClosure :: RoleType ~~~> RoleType
 roleTypeAspectsClosure (ENR r) = ENR <$> roleAspectsClosure r

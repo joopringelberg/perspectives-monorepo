@@ -123,7 +123,9 @@ theSuite = suite "ContextAndRole" do
     liftAff $ assert "removeRol_binding fails" ((rol_binding role6 == Nothing))
 
     role7 <- addRol_gevuldeRollen role6 (ContextType "model:ContextAndRole$TestCase") (EnumeratedRoleType "model:ContextAndRole$TestCase$SomeRole") (RoleInstance "blabla")
-    liftAff $ assert "addRol_gevuldeRollen fails" (((_.instances $ rol_gevuldeRol role7 (ContextType "model:ContextAndRole$TestCase") (EnumeratedRoleType "model:ContextAndRole$TestCase$SomeRole")) == [ (RoleInstance "blabla") ]))
+    filled7 <- rol_gevuldeRol role7 (ContextType "model:ContextAndRole$TestCase") (EnumeratedRoleType "model:ContextAndRole$TestCase$SomeRole")
+    liftAff $ assert "addRol_gevuldeRollen fails" (filled7.instances == [ (RoleInstance "blabla") ])
 
     role8 <- pure $ removeRol_gevuldeRollen role7 (ContextType "model:ContextAndRole$TestCase") (EnumeratedRoleType "model:ContextAndRole$TestCase$SomeRole") (RoleInstance "blabla")
-    liftAff $ assert "removeRol_gevuldeRollen fails" (((_.instances $ rol_gevuldeRol role8 (ContextType "model:ContextAndRole$TestCase") (EnumeratedRoleType "model:ContextAndRole$TestCase$SomeRole")) == []))
+    filled8 <- rol_gevuldeRol role8 (ContextType "model:ContextAndRole$TestCase") (EnumeratedRoleType "model:ContextAndRole$TestCase$SomeRole")
+    liftAff $ assert "removeRol_gevuldeRollen fails" (filled8.instances == [])
