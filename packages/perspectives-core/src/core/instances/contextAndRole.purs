@@ -22,8 +22,10 @@
 
 module Perspectives.ContextAndRole where
 
-import Data.Array (cons, foldl, null)
+import Control.Monad.Error.Class (try)
+import Data.Array (concat, cons, elem, foldl, nub, null)
 import Data.Array (delete, difference, elemIndex, snoc, union) as Arr
+import Data.Either (Either(..))
 import Data.Foldable (maximum)
 import Data.Int (floor, fromString, toNumber)
 import Data.Lens (Lens', Traversal', _Just, over, set, view)
@@ -35,8 +37,9 @@ import Data.Newtype (unwrap, over) as NT
 import Data.Number (ln10, log)
 import Data.Ord (Ordering, compare)
 import Data.String (Pattern(..), lastIndexOf, splitAt)
+import Data.Traversable (for)
 import Data.Tuple (Tuple(..))
-import Foreign.Object (Object, delete, empty, insert, lookup, singleton)
+import Foreign.Object (Object, delete, empty, insert, keys, lookup, singleton)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (MonadPerspectives, MP, (###=))
 import Perspectives.Identifiers (Namespace, typeUri2typeNameSpace)
@@ -47,7 +50,7 @@ import Perspectives.Representation.Context (Context(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value)
 import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), RoleType, StateIdentifier)
 import Perspectives.Types.ObjectGetters (contextAspectsClosure, roleAspectsClosure)
-import Prelude (bind, flip, identity, pure, show, ($), (+), (/), (<#>), (<$>), (<<<), (<>))
+import Prelude (bind, flip, identity, pure, show, ($), (+), (/), (<#>), (<$>), (<<<), (<>), (==))
 import Type.Proxy (Proxy(..))
 
 -- CONTEXT
@@ -286,17 +289,24 @@ rol_gevuldeRollen (PerspectRol { filledRoles }) = filledRoles
 setRol_gevuldeRollen :: PerspectRol -> Object (Object (Array RoleInstance)) -> PerspectRol
 setRol_gevuldeRollen (PerspectRol r) grollen = PerspectRol (r { filledRoles = grollen })
 
-rol_gevuldeRol :: PerspectRol -> ContextType -> EnumeratedRoleType -> { context :: ContextType, role :: EnumeratedRoleType, instances :: Array RoleInstance }
-rol_gevuldeRol (PerspectRol { filledRoles, roleAliases, contextAliases }) cType rn = case lookup (NT.unwrap cType) contextAliases of
-  Nothing -> { context: cType, role: rn, instances: [] }
-  Just contextAlias -> case lookup contextAlias filledRoles of
-    Nothing -> { context: ContextType contextAlias, role: rn, instances: [] }
-    Just roleMap -> case lookup (NT.unwrap rn) roleAliases of
-      Nothing -> { context: ContextType contextAlias, role: rn, instances: [] }
-      Just alias -> maybe
-        { context: ContextType contextAlias, role: (EnumeratedRoleType alias), instances: [] }
-        (\instances -> { context: ContextType contextAlias, role: (EnumeratedRoleType alias), instances })
-        (lookup alias roleMap)
+rol_gevuldeRol :: PerspectRol -> ContextType -> EnumeratedRoleType -> MP { context :: ContextType, role :: EnumeratedRoleType, instances :: Array RoleInstance }
+rol_gevuldeRol (PerspectRol { filledRoles }) cType rn = do
+  matches <- for (keys filledRoles) \contextKey -> do
+    case lookup contextKey filledRoles of
+      Nothing -> pure []
+      Just roleMap | null (keys roleMap) -> pure []
+      Just roleMap -> do
+        let actualContext = ContextType contextKey
+        contexts <- if actualContext == cType then pure (Right [ actualContext ]) else try (actualContext ###= contextAspectsClosure)
+        case contexts of
+          Right contextTypes | elem cType contextTypes -> concat <$> for (keys roleMap) \roleKey -> do
+            let actualRole = EnumeratedRoleType roleKey
+            roles <- if actualRole == rn then pure (Right [ actualRole ]) else try (actualRole ###= roleAspectsClosure)
+            pure $ case roles of
+              Right roleTypes | elem rn roleTypes -> maybe [] identity (lookup roleKey roleMap)
+              _ -> []
+          _ -> pure []
+  pure { context: cType, role: rn, instances: nub (concat matches) }
 
 -- | The first argument is the role Filler instance that receives a new inverse link to a role that binds it.
 -- | The fourth argument represents the Filled role instance that binds the role of the first argument.

@@ -28,7 +28,7 @@ module Perspectives.DependencyTracking.Dependency where
 
 import Prelude
 
-import Data.Array (concat, delete, elemIndex, filter, partition, (:))
+import Data.Array (concat, delete, elemIndex, filter, nub, partition, (:))
 import Data.Foldable (for_)
 import Data.Maybe (Maybe(..), maybe)
 import Data.Newtype (class Newtype, unwrap)
@@ -45,7 +45,7 @@ import Perspectives.Persistent (entityExists)
 import Perspectives.PerspectivesState (queryAssumptionRegister, queryAssumptionRegisterModify)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..))
 import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedPropertyType, EnumeratedRoleType(..))
-import Perspectives.Types.ObjectGetters (roleAspectsClosure)
+import Perspectives.Types.ObjectGetters (contextAspectsClosure, roleAspectsClosure)
 
 -- | Execute an EffectRunner to re-create an effect. This should be done whenever one or more assumptions underlying
 -- | the computation of the query that delivers the results to the ApiEffect, has changed.
@@ -182,11 +182,17 @@ findBindingRequests (RoleInstance roleId) = do
 -- | Returns CorrelationIdentifiers for requests through the API that have
 -- | the `binder <EnumeratedRoleType> in <ContextType>` step on the `roleId`.
 findFilledRoleRequests :: RoleInstance -> ContextType -> EnumeratedRoleType -> MP (Array CorrelationIdentifier)
-findFilledRoleRequests (RoleInstance fillerId) (ContextType filledContextType) (EnumeratedRoleType filledType) = do
+findFilledRoleRequests (RoleInstance fillerId) filledContextType filledType = do
   r <- queryAssumptionRegister
   case lookup fillerId r of
     Nothing -> pure []
-    Just typesForResource -> pure $ maybe [] identity (lookup (filledContextType <> filledType) typesForResource)
+    Just typesForResource -> do
+      contexts <- filledContextType ###= contextAspectsClosure
+      roles <- filledType ###= roleAspectsClosure
+      pure $ nub $ concat do
+        context <- contexts
+        role <- roles
+        pure $ maybe [] identity (lookup (unwrap context <> unwrap role) typesForResource)
 
 findContextStateRequests :: ContextInstance -> MP (Array CorrelationIdentifier)
 findContextStateRequests (ContextInstance contextId) = do

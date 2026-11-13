@@ -864,14 +864,11 @@ createDeltasFromAssumption users (Filler roleInstance) = do
 -- FilledRolesAssumption fillerId filledContextType filledType
 createDeltasFromAssumption users (FilledRolesAssumption fillerId filledContextType filledType) = do
   filledRoles <- lift (fillerId ##= getFilledRoles filledContextType filledType)
-  case head filledRoles of
-    Nothing -> pure unit
-    Just someFilled -> (lift $ tryGetPerspectEntiteit someFilled) >>=
-      ( case _ of
-          -- This means that the context of the filler is public.
-          Nothing -> pure unit
-          Just (PerspectRol { context: filledContext }) -> magic filledContext filledRoles filledType users
-      )
+  for_ filledRoles \filled -> (lift $ tryGetPerspectEntiteit filled) >>=
+    ( case _ of
+        Nothing -> pure unit
+        Just (PerspectRol { context: filledContext }) -> magic filledContext [ filled ] filledType users
+    )
   -- Query DeltaStore for binding deltas of filled roles.
   for_ filledRoles \filledId -> do
     bindingDeltas <- lift $ getDeltasForResource (unwrap filledId <> "#binding")
