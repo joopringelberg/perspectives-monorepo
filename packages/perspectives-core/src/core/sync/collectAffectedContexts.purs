@@ -421,8 +421,8 @@ usersWithPerspectiveOnRoleBinding' :: RoleInstance -> RoleInstance -> Maybe Role
 usersWithPerspectiveOnRoleBinding' filled filler moldFiller deltaType runForwards = do
   filledType <- lift (filled ##>> OG.roleType)
   fillerType <- lift (filler ##>> OG.roleType)
-  filledContextType <- lift $ enumeratedRoleContextType filledType
-  fillerContextType <- lift $ enumeratedRoleContextType fillerType
+  filledContextType <- lift (filled ##>> (OG.context >=> OG.contextType))
+  fillerContextType <- lift (filler ##>> (OG.context >=> OG.contextType))
   -- `storeInvertedQueries` removes the first backward binding step before persisting
   -- both `RTFillerKey` and `RTFilledKey` queries.  Runtime therefore starts from the
   -- role instances carried by the RoleBindingDelta itself and only evaluates the

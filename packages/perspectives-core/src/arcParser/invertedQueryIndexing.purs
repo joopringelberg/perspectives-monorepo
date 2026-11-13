@@ -32,7 +32,7 @@ module Perspective.InvertedQuery.Indices where
 
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Writer (WriterT, execWriterT, tell)
-import Data.Array (cons, elemIndex)
+import Data.Array (cons, elemIndex, mapMaybe)
 import Data.Maybe (Maybe(..), isJust, maybe)
 import Data.Newtype (unwrap)
 import Data.Traversable (for, traverse)
@@ -54,7 +54,7 @@ import Perspectives.Representation.InstanceIdentifiers (ContextInstance)
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
 import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..))
 import Perspectives.Sidecar.ToReadable (toReadable)
-import Perspectives.Types.ObjectGetters (roleAspectsClosure)
+import Perspectives.Types.ObjectGetters (contextAspectsClosure, roleAspectsClosure)
 import Perspectives.TypesForDeltas (RoleBindingDelta(..))
 import Prelude (class Eq, class Ord, Unit, bind, compare, discard, eq, identity, join, map, not, pure, unit, ($), (&&), (/=), (<#>), (<$>), (<<<), (==), (>=>), (>>=))
 
@@ -86,20 +86,22 @@ runtimeIndexForFilledQueries :: Partial => RoleBindingDelta -> MonadPerspectives
 runtimeIndexForFilledQueries (RoleBindingDelta { filled, filledType: filledRole_destination }) = do
   filledContext <- context' filled
   filledContext_destination <- contextType_ filledContext
-  -- all RoleInContext items in the complete expansion of the declared filler restriction of the filled type, including aspects.
-  fillerRoleInContexts <- getEnumeratedRole filledRole_destination >>= completeExpandedFillerRestriction >>= pure <<< maybe [] allLeavesInExpandedADT
-  pure $ ArrayUnions $ fillerRoleInContexts <#> \(RoleInContext { role: fillerRole_origin, context: fillerContext_origin }) ->
-    RTFilledKey { fillerRole_origin, fillerContext_origin, filledRole_destination, filledContext_destination }
+  runtimeIndexForFilledQueries' filledRole_destination filledContext_destination
 
 -- | Keys for queries from filler to filled, exactly like runtimeIndexForFilledQueries.
 runtimeIndexForFilledQueries' :: EnumeratedRoleType -> ContextType -> MonadPerspectives (ArrayUnions RunTimeInvertedQueryKey)
-runtimeIndexForFilledQueries' filledRole_destination filledContext_destination = do
+runtimeIndexForFilledQueries' filledRole filledContext = do
   -- all RoleInContext items in the complete expansion of the declared filler restriction of the filled type, including aspects.
-  fillerRoleInContexts <- getEnumeratedRole filledRole_destination >>= completeExpandedFillerRestriction >>= pure <<< maybe [] allLeavesInExpandedADT
+  fillerRoleInContexts <- getEnumeratedRole filledRole >>= completeExpandedFillerRestriction >>= pure <<< maybe [] allLeavesInExpandedADT
+  filledRoles <- filledRole ###= roleAspectsClosure
+  filledContexts <- filledContext ###= contextAspectsClosure
   -- Conceptually, the filler fills not only the filled role but also all roles it fills - recursively.
   -- However, we deal with that outside this function. 
-  pure $ ArrayUnions $ fillerRoleInContexts <#> \(RoleInContext { role: fillerRole_origin, context: fillerContext_origin }) ->
-    RTFilledKey { fillerRole_origin, fillerContext_origin, filledRole_destination, filledContext_destination }
+  pure $ ArrayUnions do
+    RoleInContext { role: fillerRole_origin, context: fillerContext_origin } <- fillerRoleInContexts
+    filledRole_destination <- filledRoles
+    filledContext_destination <- filledContexts
+    pure $ RTFilledKey { fillerRole_origin, fillerContext_origin, filledRole_destination, filledContext_destination }
 
 -- | Keys for inverted queries from filler to filled.
 -- | Query the InvertedQueryDatase with these keys computed from a RoleBindingDelta,
@@ -118,10 +120,14 @@ runtimeIndexForFillerQueries d = do
 -- | Keys for queries from filler to filled.
 runtimeIndexForFillerQueries' :: EnumeratedRoleType -> ContextType -> MonadPerspectives (ArrayUnions RunTimeInvertedQueryKey)
 runtimeIndexForFillerQueries' filledRole_origin filledContext_origin = do
-  -- all RoleInContext items in the complete expansion of the declared filler restriction of the filled type, including aspects.
-  fillerRoleInContexts <- getEnumeratedRole filledRole_origin >>= completeExpandedFillerRestriction >>= pure <<< maybe [] allLeavesInExpandedADT
-  pure $ ArrayUnions $ fillerRoleInContexts <#> \(RoleInContext { role: fillerRole_destination, context: fillerContext_destination }) ->
-    RTFillerKey { filledRole_origin, filledContext_origin, fillerRole_destination, fillerContext_destination }
+  ArrayUnions keys <- runtimeIndexForFilledQueries' filledRole_origin filledContext_origin
+  pure $ ArrayUnions $ mapMaybe
+    ( case _ of
+        RTFilledKey { fillerRole_origin: fillerRole_destination, fillerContext_origin: fillerContext_destination, filledRole_destination: filledRole_origin', filledContext_destination: filledContext_origin' } ->
+          Just $ RTFillerKey { filledRole_origin: filledRole_origin', filledContext_origin: filledContext_origin', fillerRole_destination, fillerContext_destination }
+        _ -> Nothing
+    )
+    keys
 
 -- | Construct the combination of the role type and its aspects 
 -- with their lexical contexts, and add to that the combination of the role type and the instantiation context type.
