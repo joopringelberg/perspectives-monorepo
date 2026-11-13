@@ -1,0 +1,36 @@
+MODELS AND MANIFESTS IN BESPOKE DATABASES
+A model M begins its life with a single Author. Currently, we describe such models with a ModelManifest and its versions with a VersionedModelManifest. These are associated with a Repository.
+
+======== LET OP: hieronder ga ik uit van een BespokeDatabase. Maar dat moet niet: ik wil het mogelijk maken dat de Manifesten als gewone gedeelde context worden verspreid, en het Model als attachment in een persoonlijke cloudstorage.
+========
+
+Let's assume that he stores the (versioned) manifest and the DomeinFile itself in a BespokeDatabase (see the CouchdbManagement model). Such a database has an address in terms of the DNS. That allows us to mint a unique model identifier for such a model that is not in a Repository, much like we do for models that in fact are in a Repository. That identifier we can map to a URL.
+
+This Author creates context instances typed from M and involves peers in them. Peers find new types and the normal just in time model loading fetches M from the BespokeDatabase of the Author. When one of Author's peers creates M-typed contexts herself, and involves her own peers in them, these peers will repeat this procedure.
+
+In this way, M spreads through the social network of PerspectivesUsers in concentric circles, where each recipient again is the centre of such circles.
+
+
+OPEN QUESTIONS
+1. In the above, I have assumed that a ModelManifest and a VersionedModelManifest can be stored in a BespokeDatabase. The current descriptions of those types refer back to the Repository context that they belong to. Similarly, the Repository refers back to the CouchdbServer that the Repository belongs to. These types assume the existence of a database called cw_servers_and_repositories and two databases per Repository: cw_repositorydomain and models_repositorydomain. Can we map our (Versioned)ModelManifests to that infrastructure? If not, what would be a good adaptation or extension, assuming we keep the current infrastructure intact?
+
+2. When the Author creates a new version of M and starts using that version, what will happen? It may be that we already have typed identifiers in Deltas and so have provided a hook for just-in-time model update.
+
+
+
+====================
+A SCHEME FOR DISTRIBUTING A MODEL HORIZONTALLY
+Currently, we distribute models 'vertically', meaning: from a repository 'downwards' to installations. Instead, we describe a scheme in this note that allows us to distribute a model from installation to installation - 'horizontally'.
+
+While this hasn't been worked out in detail for Manifests and Models yet, I describe a more general scheme for distributing a value.
+
+Let's assume there is a context SpreadTheWord with a property of interest called P. An initial author sets P to a value in his capacity as filler of the role Sender. The context also has a multi-role Receivers filled with peers. Sender can write P; Receivers can read it. 
+Now upon receiving a (new) value for P, each Receiver becomes active in another instance of SpreadTheWord - but now as Sender. Let's assume that Receiver fills Sender. This second instance also has property P and now the Sender-filled-by-Receiver sets that property to the value taken from the context in which he is Receiver (this can be done automatically). All Receivers in that second context instance now receive P and the process will repeat itself recursively.
+
+I've sketched the distribution algorithm for a property, but it will work similarly for a role or a nested context.
+
+How are instances of SpreadTheWord created? Each peer, upon becoming a Receiver, will create a new context instance of SpreadTheWord, with himself as Sender (this can be done automatically). Subsequently he adds Receivers as he sees fit.
+
+We can refine this algorithm. In general, a peer may be involved in multiple instances of SpreadTheWord, each one from one of his peers. However, on becoming a Receiver for the second time, he can mark himself as unwilling to participate (this may take the form of a property value, or maybe he just removes himself from the context again). Again, this may happen automatically. 
+This guarantees that each peer is updated by just a single one of his contexts.
+
