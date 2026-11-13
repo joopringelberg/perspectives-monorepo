@@ -937,3 +937,60 @@ domain model://joopringelberg.nl#TwoPDRDestructiveTests@1.0
       user Member filledBy (sys:TheWorld$PerspectivesUsers)
         perspective on Owner
           props (FirstName) verbs (Consult)
+
+  ------------------------------------------------------------------------------
+  ---- Remove a context through its external role, as computed by a calculated context role.
+  ---- The context is removed; the context role it fills remains, without a filler.
+  ------------------------------------------------------------------------------
+  case Test_RemoveContextThroughExternalRole
+    aspect mm:Test
+    state TesterAvailable = exists Leader 
+      on entry
+        do for Leader
+          create context EmbeddedContext5 bound to TestRole17
+
+    external
+      property TestExecuted (Boolean)
+      property ContextExited (Boolean)
+      state TestSucceeded = ContextExited and (exists context >> TestRole17) and not exists context >> TestRole17 >> binding
+        on entry
+          do for Follower
+            TestSucceeded = true
+
+      state TestExecuted = TestExecuted
+        on entry
+          do for Leader
+            after 200 Milliseconds remove context (context >> EmbeddedContexts)
+
+    user Leader filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Leader
+      perspective on extern
+        props (TestExecuted) verbs (SetPropertyValue, Consult)
+      perspective on TestRole17
+        only (CreateAndFill)
+      perspective on EmbeddedContexts
+        only (RemoveContext)
+      action RunTest
+        TestName = "Remove a context through its external role" for extern
+        TestExecuted = true for extern
+
+    user Follower filledBy (sys:TheWorld$PerspectivesUsers)
+      aspect mm:Test$Follower
+      perspective on extern
+        props (TestSucceeded) verbs (Consult)
+      perspective on TestRole17
+
+    context TestRole17 filledBy EmbeddedContext5
+
+    -- Yields external roles rather than context roles.
+    context EmbeddedContexts = TestRole17 >> binding
+
+    case EmbeddedContext5
+      on exit
+        do for Follower
+          ContextExited = true for ExternOfTest5
+      user Follower = extern >> binder TestRole17 >> context >> Follower
+        perspective on ExternOfTest5
+          props (ContextExited) verbs (SetPropertyValue, Consult)
+
+      thing ExternOfTest5 = extern >> binder TestRole17 >> context >> extern

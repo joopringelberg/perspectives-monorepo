@@ -627,11 +627,12 @@ compileActionEffect originDomain currentcontextDomain userRoleTypes statements =
     describeContextRemoval :: Array RoleType -> Step -> ArcPosition -> ArcPosition -> Array Verbs.RoleVerb -> QF.QueryFunction -> PhaseThree QueryFunctionDescription
     describeContextRemoval subjects roleExpression start end verbs queryFunction = do
       rle <- ensureRole subjects roleExpression
-      -- The range of the QueryFunctionDescription must consist of EnumeratedRoleTypes that have kind ContextRole.
+      -- The range of the QueryFunctionDescription must consist of EnumeratedRoleTypes that have kind ContextRole,
+      -- or ExternalRole (e.g. computed by a calculated context role); then the context of the external role is removed.
       isContextRole <- foldM
         ( \isContextRole (QT.RoleInContext { role }) -> do
             EnumeratedRole { kindOfRole } <- lift $ lift $ getEnumeratedRole role
-            pure $ isContextRole && (ContextRole == kindOfRole)
+            pure $ isContextRole && (ContextRole == kindOfRole || ExternalRole == kindOfRole)
         )
         true
         (allLeavesInADT $ unsafePartial domain2roleType $ range rle)

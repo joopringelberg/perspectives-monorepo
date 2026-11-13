@@ -294,6 +294,38 @@ remove context <expression>
 
 Removes the context role instance(s) produced by `<expression>` from their parent context, together with the contexts that fill them. The removal is shared with peers.
 
+Requires a perspective on the role with `RemoveContext` or `DeleteContext`.
+
+`<expression>` may produce instances of two kinds of role. The statement handles them differently:
+
+* *Context roles.* This is the usual case: `<expression>` produces instances of a context role, such as `Meetings`. Both the context role instance and the context that fills it are removed.
+* *External roles.* `<expression>` produces the external roles of contexts. This is typical for a calculated context role such as `context MyContracts = me >> binder AccountHolder >> context >> extern`. Its instances _are_ the external roles of the contracts; they are not context roles that hold them. In this case, the context of each external role is removed (and with it, that external role). The context roles that the external role fills are not removed: they remain, but lose their filler. This happens in every installation that has such a context role and receives the removal.
+
+[[remove-context-through-external-role]]
+===== Removing a context through its external role
+
+Why would you remove a context through its external role? Because the context role that holds the context may not be available to the user who wants to remove it. A context role is stored in the context that contains it. If that context is not shared with the user, the user does not have the context role, even though she does have the context that fills it.
+
+Consider a contract between an account holder and a service. The service keeps track of its contracts in a context role `Accounts`. Only the service's administrator has that role; an account holder does not. To list her contracts, an account holder uses a calculated context role that starts from herself:
+
+[source, perspectivesarc]
+----
+case MyApp
+  context Contracts = me >> binder AccountHolder >> context >> extern
+
+  user Manager = sys:Me
+    perspective on Contracts
+      only (RemoveContext)
+    action RemoveAllContracts
+      remove context Contracts
+----
+
+When the Manager removes the contracts, they are removed from her installation. The removal is shared with the users who play a role in each contract, such as the administrator. In the administrator's installation the contract is removed as well, and her `Accounts` role instance remains without a filler. Users who only have a perspective on `Accounts` (and play no role in the contract) are not informed.
+
+The same applies when the end user removes a context in a screen. If the user has a perspective with `RemoveContext` on a calculated context role whose instances are external roles, the end user can remove a context from a table or form for that role. The effect is the same as that of `remove context`.
+
+NOTE: You can also remove the current context with `remove context extern`.
+
 [[keyword-remove_contextlocally]]
 ==== Remove a context locally
 
@@ -307,6 +339,8 @@ Removes the contexts that fill the context role instance(s) produced by `<expres
 Removing a context locally means leaving it. The user role instances that the user fills in the context are removed in the installations of the other participants. Hence a user who may remove a context locally may leave it, and a user who may not, cannot.
 
 The context role instances themselves remain. In this installation they no longer have a filler; for peers they stay filled. To remove them as well, add `remove role <expression>`.
+
+If `<expression>` produces external roles, for example through a calculated context role, the contexts of those external roles are removed locally. See <<remove-context-through-external-role>>.
 
 Requires a perspective on the context role with `RemoveContextLocally`, `RemoveContext` or `DeleteContext`.
 

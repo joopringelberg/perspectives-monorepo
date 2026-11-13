@@ -31,7 +31,7 @@ import Control.Monad.AvarMonadAsk (gets, modify)
 import Control.Monad.Error.Class (catchError, throwError, try)
 import Control.Monad.Except (runExceptT)
 import Control.Monad.Trans.Class (lift)
-import Data.Array (catMaybes, concat, elem, filter, filterA, head, index, length, nub, singleton, union, unsafeIndex)
+import Data.Array (catMaybes, concat, elem, filter, filterA, head, index, length, nub, partition, singleton, union, unsafeIndex)
 import Data.Either (Either(..), hush)
 import Data.Foldable (for_)
 import Data.Maybe (Maybe(..), fromJust, maybe)
@@ -50,7 +50,7 @@ import Perspectives.Error.Boundaries (handlePerspectRolError)
 import Perspectives.Error.Pretty (renderPerspectivesError)
 import Perspectives.External.HiddenFunctionCache (lookupHiddenFunctionNArgs, lookupHiddenFunction)
 import Perspectives.HiddenFunction (HiddenFunction)
-import Perspectives.Identifiers (buitenRol)
+import Perspectives.Identifiers (buitenRol, deconstructBuitenRol, isExternalRole)
 import Perspectives.InstanceRepresentation (PerspectRol(..))
 import Perspectives.Instances.Builders (constructContext, createAndAddRoleInstance)
 import Perspectives.Instances.ObjectGetters (allRoleBinders, getFilledRoles) as OG
@@ -98,7 +98,9 @@ compileAssignmentFromRole (UQD _ QF.RemoveContextLocally rle _ _ _) = do
     (roles :: Array RoleInstance) <- lift (roleId ##= roleGetter)
     for_ roles \ri -> do
       authorizedRole <- lift $ roleType_ ri
-      contextsToBeRemoved <- lift (ri ##= binding >=> context)
+      contextsToBeRemoved <-
+        if isExternalRole (unwrap ri) then pure [ ContextInstance $ deconstructBuitenRol $ unwrap ri ]
+        else lift (ri ##= binding >=> context)
       for_ contextsToBeRemoved (scheduleLocalContextRemoval (Just (ENR authorizedRole)))
 
 -- Removes, from all contexts, both the role with kind ContextRole that hold the contexts, and the context themselves.
@@ -111,13 +113,17 @@ compileAssignmentFromRole (UQD _ QF.RemoveContext rle _ _ mry) = do
     else role2role rle
   pure \roleId -> do
     (roles :: Array RoleInstance) <- lift (roleId ##= roleGetter)
-    contextsToBeRemoved <- lift (roleId ##= roleGetter >=> binding >=> context)
-    case head roles of
+    -- A calculated role may yield external roles; the roles they fill (if any) just lose their filler.
+    let { yes: externalRoles, no: contextRoles } = partition (isExternalRole <<< unwrap) roles
+    for_ externalRoles \ri -> do
+      authorizedRole <- lift $ roleType_ ri
+      scheduleContextRemoval (Just (ENR authorizedRole)) [] (ContextInstance $ deconstructBuitenRol $ unwrap ri)
+    contextsToBeRemoved <- lift (concat <$> for contextRoles \ri -> ri ##= binding >=> context)
+    case head contextRoles of
       Nothing -> pure unit
       Just ri -> do
         authorizedRole <- lift $ roleType_ ri
-        for_ roles (scheduleRoleRemoval synchronise)
-        users <- nub <<< concat <$> for roles (scheduleRoleRemoval synchronise)
+        users <- nub <<< concat <$> for contextRoles (scheduleRoleRemoval synchronise)
         for_ contextsToBeRemoved (scheduleContextRemoval (Just $ ENR authorizedRole) users)
 
 -- Deletes, from all contexts, all instances of the role.

@@ -824,13 +824,16 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
       (autorizedRole :: RoleType) <- string2RoleType predicate
       kind <- roleKindOfRoleType autorizedRole
       if kind == ContextRole then do
-        void $ runMonadPerspectivesTransaction authoringRole do
-          mcontextToBeRemoved <- lift ((RoleInstance subject) ##> binding >=> context)
-          case mcontextToBeRemoved of
-            Nothing -> void $ scheduleRoleRemoval synchronise (RoleInstance subject)
-            Just contextToBeRemoved -> do
-              users <- scheduleRoleRemoval synchronise (RoleInstance subject)
-              scheduleContextRemoval (Just autorizedRole) users contextToBeRemoved
+        void $ runMonadPerspectivesTransaction authoringRole
+          -- A calculated context role may yield external roles; the roles they fill (if any) just lose their filler.
+          if isExternalRole subject then scheduleContextRemoval (Just autorizedRole) [] (ContextInstance $ deconstructBuitenRol subject)
+          else do
+            mcontextToBeRemoved <- lift ((RoleInstance subject) ##> binding >=> context)
+            case mcontextToBeRemoved of
+              Nothing -> void $ scheduleRoleRemoval synchronise (RoleInstance subject)
+              Just contextToBeRemoved -> do
+                users <- scheduleRoleRemoval synchronise (RoleInstance subject)
+                scheduleContextRemoval (Just autorizedRole) users contextToBeRemoved
 
         sendResponse (Result corrId []) setter
       else sendResponse (Error corrId ("Cannot remove a context from a non-context role kind: " <> show autorizedRole)) setter
