@@ -221,14 +221,16 @@ theSuite = suite "Perspective property anchors" do
         ArrayUnions fillerKeys <- runtimeIndexForFillerQueries' secondRole childContext
         let missingContext = ContextType (modelName <> "$MissingContext")
         cacheInDomeinFile childContext (Context context { id = childContext, contextAspects = [ baseContext, missingContext ] })
+        ArrayUnions missingContextKeys <- runtimeIndexForFilledQueries' secondRole childContext
         cacheInDomeinFile secondRole
           (EnumeratedRole prototype { id = secondRole, roleAspects = [ aspect, RoleInContext { context: missingContext, role: role "MissingRole" } ] })
+        requestsWithMissingAspect <- findFilledRoleRequests dossierId childContext secondRole
         Tuple withMissingAspect _ <- runMonadPerspectivesQuery dossierId (getFilledRoles baseContext baseRole)
         cacheInDomeinFile childContext (Context context { id = childContext, contextAspects = [ baseContext ] })
         cacheInDomeinFile secondRole (EnumeratedRole prototype { id = secondRole, roleAspects = [ aspect ] })
         void $ cacheEntity dossierId (removeRol_gevuldeRollen third baseContext secondRole secondId)
         Tuple remaining _ <- runMonadPerspectivesQuery dossierId (getFilledRoles baseContext baseRole)
-        pure { empty, both, compiled, withMissingAspect, remaining, firstRequests, secondRequests, filledKeys, fillerKeys, firstId, secondId, thirdId, baseRole, baseContext }
+        pure { empty, both, compiled, withMissingAspect, remaining, firstRequests, secondRequests, requestsWithMissingAspect, filledKeys, fillerKeys, missingContextKeys, firstId, secondId, thirdId, baseRole, baseContext }
       equal [] result.empty
       assert "Both concrete types are returned even with legacy aliases" $
         all (\id -> any (_ == id) result.both) [ result.firstId, result.secondId, result.thirdId ] && length result.both == 3
@@ -240,6 +242,7 @@ theSuite = suite "Perspective property anchors" do
         all (\id -> any (_ == id) result.remaining) [ result.firstId, result.thirdId ] && length result.remaining == 2
       equal [ 42 ] result.firstRequests
       equal [ 42 ] result.secondRequests
+      equal [ 42 ] result.requestsWithMissingAspect
       assert "Binding changes index the filled role and context aspects" $
         any
           ( case _ of
@@ -247,6 +250,13 @@ theSuite = suite "Perspective property anchors" do
               _ -> false
           )
           result.filledKeys
+      assert "Unavailable context aspects do not prevent indexing available aspects" $
+        any
+          ( case _ of
+              RTFilledKey { filledRole_destination, filledContext_destination } -> filledRole_destination == result.baseRole && filledContext_destination == result.baseContext
+              _ -> false
+          )
+          result.missingContextKeys
       assert "Binding changes index the inverse filled role and context aspects" $
         any
           ( case _ of

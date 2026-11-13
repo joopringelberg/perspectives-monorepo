@@ -22,10 +22,8 @@
 
 module Perspectives.ContextAndRole where
 
-import Control.Monad.Error.Class (try)
 import Data.Array (concat, cons, elem, foldl, nub, null)
 import Data.Array (delete, difference, elemIndex, snoc, union) as Arr
-import Data.Either (Either(..))
 import Data.Foldable (maximum)
 import Data.Int (floor, fromString, toNumber)
 import Data.Lens (Lens', Traversal', _Just, over, set, view)
@@ -42,16 +40,14 @@ import Data.Tuple (Tuple(..))
 import Foreign.Object (Object, delete, empty, insert, keys, lookup, singleton)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (MonadPerspectives, MP, (###=))
-import Perspectives.DependencyTracking.Array.Trans (ArrayT(..), runArrayT)
 import Perspectives.Identifiers (Namespace, typeUri2typeNameSpace)
 import Perspectives.InstanceRepresentation (ContextRecord, PerspectContext(..), PerspectRol(..), RolRecord)
 import Perspectives.InstanceRepresentation.PublicUrl (PublicUrl)
-import Perspectives.Instances.Combinators (closure_)
 import Perspectives.Representation.Class.PersistentType (getContext)
 import Perspectives.Representation.Context (Context(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value)
 import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), RoleType, StateIdentifier)
-import Perspectives.Types.ObjectGetters (aspectsOfContext, aspectsOfRole, contextAspectsClosure, roleAspectsClosure)
+import Perspectives.Types.ObjectGetters (availableContextAspectsClosure, availableRoleAspectsClosure, contextAspectsClosure, roleAspectsClosure)
 import Prelude (bind, flip, identity, pure, show, ($), (+), (/), (<#>), (<$>), (<<<), (<>), (==))
 import Type.Proxy (Proxy(..))
 
@@ -299,20 +295,13 @@ rol_gevuldeRol (PerspectRol { filledRoles }) cType rn = do
       Just roleMap | null (keys roleMap) -> pure []
       Just roleMap -> do
         let actualContext = ContextType contextKey
-        contexts <- if actualContext == cType then pure [ actualContext ] else actualContext ###= closure_ (availableAspects aspectsOfContext)
+        contexts <- if actualContext == cType then pure [ actualContext ] else actualContext ###= availableContextAspectsClosure
         if elem cType contexts then concat <$> for (keys roleMap) \roleKey -> do
           let actualRole = EnumeratedRoleType roleKey
-          roles <- if actualRole == rn then pure [ actualRole ] else actualRole ###= closure_ (availableAspects aspectsOfRole)
+          roles <- if actualRole == rn then pure [ actualRole ] else actualRole ###= availableRoleAspectsClosure
           pure $ if elem rn roles then maybe [] identity (lookup roleKey roleMap) else []
         else pure []
   pure { context: cType, role: rn, instances: nub (concat matches) }
-
-availableAspects :: forall a. (a -> ArrayT MP a) -> a -> ArrayT MP a
-availableAspects aspects typeId = ArrayT do
-  result <- try $ runArrayT (aspects typeId)
-  pure $ case result of
-    Left _ -> []
-    Right types -> types
 
 -- | The first argument is the role Filler instance that receives a new inverse link to a role that binds it.
 -- | The fourth argument represents the Filled role instance that binds the role of the first argument.

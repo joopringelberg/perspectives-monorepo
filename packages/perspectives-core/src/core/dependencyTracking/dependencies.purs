@@ -45,7 +45,7 @@ import Perspectives.Persistent (entityExists)
 import Perspectives.PerspectivesState (queryAssumptionRegister, queryAssumptionRegisterModify)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..))
 import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedPropertyType, EnumeratedRoleType(..))
-import Perspectives.Types.ObjectGetters (contextAspectsClosure, roleAspectsClosure)
+import Perspectives.Types.ObjectGetters (availableContextAspectsClosure, availableRoleAspectsClosure, roleAspectsClosure)
 
 -- | Execute an EffectRunner to re-create an effect. This should be done whenever one or more assumptions underlying
 -- | the computation of the query that delivers the results to the ApiEffect, has changed.
@@ -187,8 +187,8 @@ findFilledRoleRequests (RoleInstance fillerId) filledContextType filledType = do
   case lookup fillerId r of
     Nothing -> pure []
     Just typesForResource -> do
-      contexts <- filledContextType ###= contextAspectsClosure
-      roles <- filledType ###= roleAspectsClosure
+      contexts <- filledContextType ###= availableContextAspectsClosure
+      roles <- filledType ###= availableRoleAspectsClosure
       pure $ nub $ concat do
         context <- contexts
         role <- roles

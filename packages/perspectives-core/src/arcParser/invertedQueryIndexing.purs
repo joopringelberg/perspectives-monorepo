@@ -54,7 +54,7 @@ import Perspectives.Representation.InstanceIdentifiers (ContextInstance)
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
 import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..))
 import Perspectives.Sidecar.ToReadable (toReadable)
-import Perspectives.Types.ObjectGetters (contextAspectsClosure, roleAspectsClosure)
+import Perspectives.Types.ObjectGetters (availableContextAspectsClosure, roleAspectsClosure)
 import Perspectives.TypesForDeltas (RoleBindingDelta(..))
 import Prelude (class Eq, class Ord, Unit, bind, compare, discard, eq, identity, join, map, not, pure, unit, ($), (&&), (/=), (<#>), (<$>), (<<<), (==), (>=>), (>>=))
 
@@ -94,7 +94,7 @@ runtimeIndexForFilledQueries' filledRole filledContext = do
   -- all RoleInContext items in the complete expansion of the declared filler restriction of the filled type, including aspects.
   fillerRoleInContexts <- getEnumeratedRole filledRole >>= completeExpandedFillerRestriction >>= pure <<< maybe [] allLeavesInExpandedADT
   filledRoles <- filledRole ###= roleAspectsClosure
-  filledContexts <- filledContext ###= contextAspectsClosure
+  filledContexts <- filledContext ###= availableContextAspectsClosure
   -- Conceptually, the filler fills not only the filled role but also all roles it fills - recursively.
   -- However, we deal with that outside this function. 
   pure $ ArrayUnions do
