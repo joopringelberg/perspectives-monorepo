@@ -33,7 +33,7 @@ import Data.Maybe (Maybe(..))
 import Data.Newtype (class Newtype, unwrap)
 import Data.Show.Generic (genericShow)
 import Data.Traversable (traverse)
-import Foreign (F, isNull, isUndefined)
+import Foreign (F)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.Identifiers (typeUri2LocalName_)
 import Perspectives.Query.QueryTypes (QueryFunctionDescription(..), domain, functional, range)
@@ -57,19 +57,14 @@ instance WriteForeign StartMoment where
   writeImpl (After duration) = writeImpl { after: duration }
   writeImpl OnceSettled = writeImpl "OnceSettled"
 
--- Transitional reader: accepts legacy DomeinFiles compiled with `Maybe Duration`.
--- Remove after the repository has been regenerated and installations reboot from canonical shapes.
 instance ReadForeign StartMoment where
-  readImpl f
-    | isNull f || isUndefined f = pure Immediately
-    | otherwise =
-        do
-          constructor <- read' f :: F String
-          unsafePartial case constructor of
-            "Immediately" -> pure Immediately
-            "OnceSettled" -> pure OnceSettled
-          <|> After <<< _.after <$> (read' f :: F { after :: Duration })
-          <|> After <$> (read' f :: F Duration)
+  readImpl f =
+    do
+      constructor <- read' f :: F String
+      unsafePartial case constructor of
+        "Immediately" -> pure Immediately
+        "OnceSettled" -> pure OnceSettled
+      <|> After <<< _.after <$> (read' f :: F { after :: Duration })
 
 newtype ActionEffect = ActionEffect
   { bindings :: Array QueryFunctionDescription
@@ -88,13 +83,9 @@ instance eqActionEffect :: Eq ActionEffect where
 instance WriteForeign ActionEffect where
   writeImpl (ActionEffect r) = writeImpl r
 
--- Transitional reader: accepts legacy single-QFD action effects and the short-lived `{ stages }` shape.
--- Remove after the repository has been regenerated and installations reboot from canonical shapes.
 instance ReadForeign ActionEffect where
   readImpl f =
     ActionEffect <$> (read' f :: F { bindings :: Array QueryFunctionDescription, stages :: Array QueryFunctionDescription, capturedBindingNames :: Array String })
-      <|> (\{ stages } -> ActionEffect { bindings: [], stages, capturedBindingNames: [] }) <$> (read' f :: F { stages :: Array QueryFunctionDescription })
-      <|> (\qfd -> ActionEffect { bindings: [], stages: [ qfd ], capturedBindingNames: [] }) <$> (read' f :: F QueryFunctionDescription)
 
 traverseActionEffect :: forall m. Applicative m => (QueryFunctionDescription -> m QueryFunctionDescription) -> ActionEffect -> m ActionEffect
 traverseActionEffect f (ActionEffect { bindings, stages, capturedBindingNames }) =
