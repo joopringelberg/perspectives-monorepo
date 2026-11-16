@@ -96,9 +96,29 @@ At runtime, four message families are exchanged:
 
 These functions are part of connection setup, lifecycle, and message plumbing; they are not part of the domain API exposed to application code.
 
+### Context search
+
+These one-shot methods return `Promise<ContextSearchOption[]>`, where the exported
+`ContextSearchOption` type is `{ id: string; label: string }`:
+
+- `getContextSearchModels()` lists installed, non-library models with translated,
+  readable model names.
+- `getContextSearchTypes(modelId: string)` lists only context types declared directly
+  inside that model's domain, with translated, readable type names.
+- `getContextSearchInstances(contextType: ContextType)` lists local instances using
+  their readable names. **An option's ID identifies the context instance, not its
+  external role.** Convert it with `externalRole` when a role ID is required.
+
+Each method sends the correspondingly named `GetContextSearch*` request. Model/type
+selectors travel in `subject`; results contain one JSON-encoded option array.
+Unavailable individual manifests or instances are skipped without losing other results.
+
 ## 6. Build
 
 ```bash
 corepack pnpm -C packages/perspectives-proxy run build
 corepack pnpm -C packages/perspectives-proxy run lint
 ```
+
+After building, run the focused context-search contract tests with
+`node --test packages/perspectives-proxy/test/contextSearch.test.mjs`.

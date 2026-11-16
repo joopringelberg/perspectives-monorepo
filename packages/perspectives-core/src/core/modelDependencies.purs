@@ -86,6 +86,9 @@ idProperty = "model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$auftu9ldl2$hjk0
 modelsInUse :: String
 modelsInUse = "model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$ikjc543of4"
 
+apps :: String
+apps = "model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$lmo838ttwi"
+
 modelToRemove :: String
 modelToRemove = "model://perspectives.domains#tiodn6tcyc$gu4otpfq9c$ikjc543of4$s5mfnho8f6"
 

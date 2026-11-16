@@ -55,6 +55,7 @@ import Perspectives.Assignment.SerialiseAsDeltas (noNewPeer, serialisedAsDeltasF
 import Perspectives.Assignment.Update (RoleProp(..), addProperty, deleteProperty, getPropertyBearingRoleInstance, saveFile, setPreferredUserRoleType, setProperty)
 import Perspectives.Checking.PerspectivesTypeChecker (checkBinding)
 import Perspectives.Conversation (getHelpConversation)
+import Perspectives.ContextSearch (getContextSearchModels, getContextSearchTypes, getContextSearchInstances)
 import Perspectives.CoreTypes (MP, MonadPerspectives, MonadPerspectivesTransaction, PropertyValueGetter, RoleGetter, liftToInstanceLevel, runMonadPerspectives, (##=), (##>), (##>>), (###=))
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..), runArrayT)
 import Perspectives.DependencyTracking.Dependency (registerSupportedEffect, unregisterSupportedEffect)
@@ -711,6 +712,18 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
     Api.GetModelContextGraph -> do
       graphJson <- constructModelGraph (ContextType subject)
       sendResponse (Result corrId [ graphJson ]) setter
+
+    Api.GetContextSearchModels -> do
+      options <- getContextSearchModels
+      sendResponse (Result corrId [ writeJSON options ]) setter
+
+    Api.GetContextSearchTypes -> do
+      options <- getContextSearchTypes subject
+      sendResponse (Result corrId [ writeJSON options ]) setter
+
+    Api.GetContextSearchInstances -> do
+      options <- getContextSearchInstances (ContextType subject)
+      sendResponse (Result corrId [ writeJSON options ]) setter
 
     Api.SubscribeSelectedRoleFromClipboard -> do
       -- Get the SelectedClipboardItem.

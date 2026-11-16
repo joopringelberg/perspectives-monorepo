@@ -22,6 +22,8 @@ export type ConversationReceiver = (conversation: ConversationBody[]) => void;
 export type ConversationBranchReceiver = (branch: ConversationBranch[]) => void;
 export type PropertyType = string & { readonly brand: unique symbol };
 export type ContextType = string & { readonly brand: unique symbol };
+/** Search option identifiers are model URIs, context types, or context instances respectively. */
+export type ContextSearchOption = { id: string; label: string };
 export type RoleKind = "RoleInContext" | "ContextRole" | "ExternalRole" | "UserRole" | "Public" | "PublicProxy"
 export type EnumeratedOrCalculatedProperty = {type: "ENP" | "CP", value: PropertyType}
 

@@ -17,7 +17,7 @@ const pos = (line, column) => ({ line, column });
 const fromMaybe = (m) => (m instanceof Maybe.Just ? m.value0 : null);
 
 test("diagnostic code is the data constructor name; range spans start..end (0-based)", () => {
-  const d = D.error2Diagnostic(M.UnknownVariable.create(pos(3, 5))("x"));
+  const d = D.error2Diagnostic(M.UnknownVariable.create(pos(3, 5))(pos(3, 5))("x"));
   assert.equal(d.code, "UnknownVariable");
   assert.equal(d.severity, 1);
   assert.deepEqual(d.range, { start: { line: 2, character: 4 }, end: { line: 2, character: 4 } });
