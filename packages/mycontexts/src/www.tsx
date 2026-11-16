@@ -33,6 +33,7 @@ import FlippingTitle from './flippingTitle';
 import ConversationViewer, { positionNearTarget, type HelpViewerContent } from './conversationViewer';
 import ConversationEditor from './conversationEditor';
 import { HelpModeContext, type HelpActivation, type HelpTarget } from './helpTypes';
+import FindContext from './findContext';
 
 const mycontextStartPage = __STARTPAGE__ as RoleInstanceT; 
 
@@ -48,6 +49,7 @@ interface WWWComponentState {
   doubleSection: Section;
   colWidths: [number, number, number];
   showNotifications: boolean;
+  showFindContext: boolean;
   leftPanelContent: 'about' | 'me' | 'settings' | 'apps' | 'myroles' | false;
   activeSection: Section;
   systemIdentifier: ContextInstanceT;
@@ -107,6 +109,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
       , doubleSection: 'what'
       , colWidths: [25, 50, 25]
       , showNotifications: false
+      , showFindContext: false
       , leftPanelContent: false
       , activeSection: 'what' 
       , systemIdentifier: '' as ContextInstanceT
@@ -925,6 +928,7 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
         <NavDropdown.Item onClick={() => component.setState({leftPanelContent: 'about'})}>About...</NavDropdown.Item>
         <NavDropdown.Item onClick={() => component.setState({leftPanelContent: 'me'})}>Me</NavDropdown.Item>
         <NavDropdown.Item onClick={() => component.setState({leftPanelContent: 'apps'})}>Apps</NavDropdown.Item>
+        <NavDropdown.Item onClick={() => component.setState({showFindContext: true})}>{i18next.t("findContext_menu", {ns: 'mycontexts'})}</NavDropdown.Item>
         <NavDropdown.Item onClick={() => component.setState({leftPanelContent: 'settings'})}>Settings</NavDropdown.Item>
         { component.state.openContext ? <NavDropdown.Item onClick={ () => component.setState( {leftPanelContent: 'myroles'} ) }>{ i18next.t("www_myroles", {ns: 'mycontexts'}) }</NavDropdown.Item> : null }
       </NavDropdown>
@@ -1234,22 +1238,22 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
     }));
   }
 
-  copyContext( eRole : RoleInstanceT )
+  copyContext( eRole : RoleInstanceT, contextType = this.state.openContextType!, title = this.state.title, myRoleType = this.state.openContextUserType! )
   {
-    navigator.clipboard.writeText(eRole);
+    navigator.clipboard?.writeText(eRole).catch(() => {});
     addRoleToClipboard(eRole,
       {
         roleData: {
           rolinstance: eRole,
-          cardTitle: this.state.title || "No title",
-          roleType: externalRoleType( this.state.openContextType! ),
-          contextType: this.state.openContextType!,
+          cardTitle: title || "No title",
+          roleType: externalRoleType( contextType ),
+          contextType,
         },
         addedBehaviour: ["fillARole"],
-        myroletype: this.state.openContextUserType!,
+        myroletype: myRoleType,
       },
       externalRole( this.state.systemIdentifier ),
-      this.state.openContextUserType!
+      myRoleType
       ).catch((e) =>
             UserMessagingPromise.then((um) =>
               um.addMessageForEndUser({
@@ -1537,6 +1541,12 @@ class WWWComponent extends PerspectivesComponent<WWWComponentProps, WWWComponent
               { this.state.openContext ? this.state.isSmallScreen ? this.renderMobile() : this.renderDesktop() : null }
               {this.notificationsAndClipboard()}
               {this.leftPanel()}
+              {this.state.showFindContext ? <FindContext
+                onClose={() => this.setState({showFindContext: false})}
+                onOpen={context => this.tryToOpenContext(externalRole(context))}
+                onCopy={(context, contextType, title) =>
+                  this.copyContext(externalRole(context), contextType, title, ModelDependencies.sysUser)}
+              /> : null}
             </HelpModeContext.Provider>
             {this.state.helpViewer ? (
               <ConversationViewer

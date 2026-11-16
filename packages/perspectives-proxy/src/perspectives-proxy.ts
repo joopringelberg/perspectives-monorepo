@@ -37,6 +37,7 @@ import type {
   TableFormReceiver,
   PropertyType,
   ContextType,
+  ContextSearchOption,
   RoleKind,
   ContextActions,
   FileShareCredentials,
@@ -1701,6 +1702,44 @@ export class PerspectivesProxy
       });
   }
  
+  getContextSearchModels(): Promise<ContextSearchOption[]>
+  {
+    return this.getContextSearchOptions("GetContextSearchModels");
+  }
+
+  getContextSearchTypes(modelId: string): Promise<ContextSearchOption[]>
+  {
+    return this.getContextSearchOptions("GetContextSearchTypes", modelId);
+  }
+
+  /** Instance option IDs identify contexts, not their external roles. */
+  getContextSearchInstances(contextType: ContextType): Promise<ContextSearchOption[]>
+  {
+    return this.getContextSearchOptions("GetContextSearchInstances", contextType);
+  }
+
+  private getContextSearchOptions(request: string, subject: string = ""): Promise<ContextSearchOption[]>
+  {
+    return new Promise((resolve, reject) =>
+    {
+      this.send(
+        {request, subject, onlyOnce: true},
+        options =>
+        {
+          try
+          {
+            resolve(JSON.parse(options[0] ?? "[]"));
+          }
+          catch (error)
+          {
+            reject(error);
+          }
+        },
+        reject
+      );
+    });
+  }
+
   // { request: "GetModelContextGraph", subject: ContextType }
   // Returns the static type-level context navigation DAG for the model that defines
   // the given context type. The result is a one-shot response.
