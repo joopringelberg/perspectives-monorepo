@@ -58,7 +58,7 @@ import Perspectives.Representation.CNF (CNF, traverseDPROD)
 import Perspectives.Representation.Class.Identifiable (identifier)
 import Perspectives.Representation.Class.PersistentType (getEnumeratedProperty, getEnumeratedRole)
 import Perspectives.Representation.Class.Property (range) as PT
-import Perspectives.Representation.Class.Role (completeDeclaredFillerRestriction, roleKindOfRoleType, toConjunctiveNormalForm_)
+import Perspectives.Representation.Class.Role (completeDeclaredFillerRestriction, rangeOfRoleCalculation, roleKindOfRoleType, toConjunctiveNormalForm_)
 import Perspectives.Representation.Class.Role (roleTypeIsFunctional) as ROLE
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..)) as QF
@@ -398,15 +398,19 @@ compileActionEffect originDomain currentcontextDomain userRoleTypes statements =
     DeleteContext f@{ contextRoleIdentifier, contextExpression, start, end } -> do
       (cte :: QueryFunctionDescription) <- unsafePartial constructContextGetterDescription contextExpression
       (qualifiedRoleType :: RoleType) <- qualifyWithRespectTo contextRoleIdentifier cte f.start f.end
-      case qualifiedRoleType of
-        ENR qualifiedRoleIdentifier ->
-          -- Check for each of the subjects whether they have a sufficient perspective to Delete the qualifiedRoleIdentifier.
-          for_ subjects
-            ( \subject -> (lift $ lift $ roleHasPerspectiveOnRoleWithVerb subject qualifiedRoleIdentifier [ Verbs.DeleteContext ] (Just start) (Just end)) >>= case _ of
+      -- A calculated context role yields external roles; check the perspective on those.
+      (objects :: Array EnumeratedRoleType) <- case qualifiedRoleType of
+        ENR qualifiedRoleIdentifier -> pure [ qualifiedRoleIdentifier ]
+        CR _ -> lift2 (isDatabaseQueryRole qualifiedRoleType) >>=
+          if _ then pure []
+          else allLeavesInADT <$> (lift2 $ rangeOfRoleCalculation qualifiedRoleType)
+      for_ subjects
+        ( \subject -> for_ objects
+            ( \object -> (lift $ lift $ roleHasPerspectiveOnRoleWithVerb subject object [ Verbs.DeleteContext ] (Just start) (Just end)) >>= case _ of
                 Left e -> throwError e
                 _ -> pure unit
             )
-        _ -> pure unit
+        )
       kindOfRole <- (lift $ lift $ roleKindOfRoleType qualifiedRoleType)
       if kindOfRole == ContextRole then pure $ UQD originDomain (QF.DeleteContext qualifiedRoleType) cte originDomain True True
       else throwError $ NotAContextRole start end
@@ -634,11 +638,12 @@ compileActionEffect originDomain currentcontextDomain userRoleTypes statements =
     describeContextRemoval :: Array RoleType -> Step -> ArcPosition -> ArcPosition -> Array Verbs.RoleVerb -> QF.QueryFunction -> PhaseThree QueryFunctionDescription
     describeContextRemoval subjects roleExpression start end verbs queryFunction = do
       rle <- ensureRole subjects roleExpression
-      -- The range of the QueryFunctionDescription must consist of EnumeratedRoleTypes that have kind ContextRole.
+      -- The range of the QueryFunctionDescription must consist of EnumeratedRoleTypes that have kind ContextRole,
+      -- or ExternalRole (e.g. computed by a calculated context role); then the context of the external role is removed.
       isContextRole <- foldM
         ( \isContextRole (QT.RoleInContext { role }) -> do
             EnumeratedRole { kindOfRole } <- lift $ lift $ getEnumeratedRole role
-            pure $ isContextRole && (ContextRole == kindOfRole)
+            pure $ isContextRole && (ContextRole == kindOfRole || ExternalRole == kindOfRole)
         )
         true
         (allLeavesInADT $ unsafePartial domain2roleType $ range rle)

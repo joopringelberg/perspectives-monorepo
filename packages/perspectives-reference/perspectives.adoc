@@ -114,7 +114,7 @@ no roleverbs
 | Detach the filler from an object role instance, without deleting either.
 
 | `RemoveContext`
-| Remove a context role instance together with the context it represents.
+| Remove a context role instance together with the context it represents. If the object is a calculated context role whose instances are external roles, the context of each external role is removed; the context roles it fills lose their filler. See <<remove-context-through-external-role>>.
 
 | `RemoveContextLocally`
 | Remove the context that fills a context role instance from this installation only, and thereby leave it. Implied by `RemoveContext` and `DeleteContext`. See <<keyword-remove_contextlocally,remove context locally>>.

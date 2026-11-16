@@ -20,6 +20,8 @@ case ShoppingList
   user Shopper = sys:SocialMe
 ----
 
+External roles cannot be filled. Hence it is an error to apply `binding` to an expression that yields only external roles, such as `extern >> binding` or `ShoppingLists >> binding >> binding`: such a step would never yield a result. The compiler reports `FillerOfExternalRole`. Remember that the instances of a calculated context role are external roles, too (see <<remove-context-through-external-role>>). To go from an external role to the roles it fills, use `binder <RoleType>`; to go to its context, use `context`.
+
 [[keyword-allfilledroles]]
 === allfilledroles
 

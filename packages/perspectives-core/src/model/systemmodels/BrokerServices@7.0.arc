@@ -101,6 +101,11 @@ domain model://perspectives.domains#BrokerServices@7.0
       perspective on Contracts
         props (Name, Registered) verbs (Consult)
         props (Registered) verbs (SetPropertyValue)
+        in object state TerminationAcknowledged
+          only (RemoveContext)
+          action RemoveThisContract
+            remove context binder Accounts
+
       perspective on ContractInUse
         props (Name) verbs (Consult)
       perspective on TcpContracts
@@ -121,6 +126,7 @@ domain model://perspectives.domains#BrokerServices@7.0
             in
               bind me to AccountHolder in accountsinstance >> binding >> context
               bind accountsinstance >> context >> Administrator to Administrator in accountsinstance >> binding >> context
+
 
       screen
         who
@@ -171,6 +177,7 @@ domain model://perspectives.domains#BrokerServices@7.0
                         You can only have a single active contract.
                       >
               without props (Name, Registered)
+              no roleverbs
             detail
           TcpContracts
             master
@@ -448,7 +455,7 @@ domain model://perspectives.domains#BrokerServices@7.0
       on entry
         do for Upgrader
           create role SystemDataUpgrade
-
+    
     -- On exiting, both the queue and the account are deleted. See the exit states of AccountHolder and Queue respectively.
     
     external
@@ -473,6 +480,8 @@ domain model://perspectives.domains#BrokerServices@7.0
       property TerminationAcknowledged (Boolean)
 
       view Account (FirstNameOfAccountHolder, LastNameOfAccountHolder)
+
+      state TerminationAcknowledged = TerminationAcknowledged
 
               
     -----------------

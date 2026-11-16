@@ -54,7 +54,7 @@ import Record as Record
 import Type.Proxy (Proxy(..))
 import Perspectives.Representation.Class.PersistentType (getEnumeratedRole)
 import Perspectives.Representation.Class.Role (completeDeclaredType, completeExpandedType, declaredType, expandUnexpandedLeaves, toConjunctiveNormalForm_)
-import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleKind(UserRole), RoleType(..), StateIdentifier(..), propertytype2string)
+import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleKind(UserRole), RoleType(..), StateIdentifier(..), propertytype2string)
 import Perspectives.Representation.Verbs (PropertyVerb(..))
 import Perspectives.Representation.View (View(..))
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable)
@@ -791,6 +791,29 @@ theSuite = suite "Perspectives.Parsing.Arc.PhaseThree" do
               (range bndg == RDOM (UET (RoleInContext { context: ContextType "model://example.org#Test", role: EnumeratedRoleType "model://example.org#Test$Gast" })))
             Just unexpected -> assert ("Unexpected bind query: " <> show unexpected) false
             Nothing -> assert ("The action should contain a bind query, got " <> show action) false
+
+  expectError "Binding step on an external role"
+    "domain model://example.org#Test\n  context C1 filledBy Company\n  thing Wrong = C1 >> binding >> binding\n  party Company\n    user Employee\n"
+    case _ of
+      (Left (FillerOfExternalRole _ _)) -> assert "ok" true
+      otherwise -> assert ("Expected the error FillerOfExternalRole, got " <> show otherwise) false
+
+  expectError "Delete context through a calculated context role requires DeleteContext"
+    "domain model://example.org#Test\n  context C1 filledBy Company\n  context MyCompanies = C1 >> binding\n  user Gast (mandatory)\n    property Prop1 (mandatory, Number)\n    perspective on MyCompanies\n      only (RemoveContext)\n    state SomeState = Prop1 > 10\n      on entry\n        do\n          delete context bound to MyCompanies\n  party Company\n    user Employee\n"
+    case _ of
+      (Left (UnauthorizedForRole _ _ _ _ _ _)) -> assert "ok" true
+      otherwise -> assert ("Expected the error UnauthorizedForRole, got " <> show otherwise) false
+
+  domainTest "Delete context through a calculated context role"
+    "domain model://example.org#Test\n  context C1 filledBy Company\n  context MyCompanies = C1 >> binding\n  user Gast (mandatory)\n    property Prop1 (mandatory, Number)\n    perspective on MyCompanies\n      only (DeleteContext)\n    state SomeState = Prop1 > 10\n      on entry\n        do\n          delete context bound to MyCompanies\n  party Company\n    user Employee\n"
+    \correctedDFR ->
+      ensureState "model://example.org#Test$Gast$SomeState" correctedDFR
+        >>= ensureOnEntry (ENR (EnumeratedRoleType "model://example.org#Test$Gast"))
+        >>= pure <<< effectOfAction
+        >>= \action ->
+          case findQueryFunction (QF.DeleteContext $ CR $ CalculatedRoleType "model://example.org#Test$MyCompanies") action of
+            Just _ -> assert "ok" true
+            Nothing -> assert ("The action should contain a delete context query, got " <> show action) false
 
   expectError "Bind to role without non-matching possible bindings"
     "domain model://example.org#Test\n  user Gast (mandatory)\n    property Prop1 (mandatory, Number)\n    perspective on EreGast\n      all roleverbs\n    state SomeState = Prop1 > 10\n      on entry\n        do\n          bind context >> Gast to EreGast\n  user Organisator\n    property Prop2\n  user EreGast filledBy Organisator\n"

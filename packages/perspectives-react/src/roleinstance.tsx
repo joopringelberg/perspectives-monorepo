@@ -11,6 +11,7 @@ import {PDRproxy, FIREANDFORGET, ContextInstanceT, FillMode, RoleInstanceT, Role
 
 import BinaryModal from "./binarymodal.js";
 import {UserMessagingPromise} from "./userMessaging.js";
+import {isExternalRole} from "./urifunctions.js";
 import i18next from "i18next";
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -119,6 +120,11 @@ export default class RoleInstance extends PerspectivesComponent<RoleInstanceProp
         {
           if (component.state.roleKind == "ContextRole" && component.props.roleinstance && component.props.allowedtoremovecontext)
           {
+            // A calculated context role yields external roles: there is no context role instance to remove.
+            if (isExternalRole(component.props.roleinstance))
+            {
+              return component.removeWithContext();
+            }
             return pproxy.getBinding (
               component.props.roleinstance, 
               function( values )

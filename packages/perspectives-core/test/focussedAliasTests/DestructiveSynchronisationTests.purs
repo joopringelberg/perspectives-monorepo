@@ -156,6 +156,8 @@ destructiveTests =
   , { testContextTypeName: test_RemoveContextWithFilledRole, logConfiguration: Nothing }
   , { testContextTypeName: test_RemoveContextWithFilledRoleThatShouldRemain, logConfiguration: Nothing }
   , { testContextTypeName: test_RemoveContextLocally, logConfiguration: Nothing }
+  , { testContextTypeName: test_RemoveContextThroughExternalRole, logConfiguration: Nothing }
+  , { testContextTypeName: test_DeleteContextThroughCalculatedRole, logConfiguration: Nothing }
   ]
 
 debugConfiguration :: LogConfiguration
@@ -219,3 +221,9 @@ test_RemoveContextWithFilledRoleThatShouldRemain = "model://joopringelberg.nl#Tw
 
 test_RemoveContextLocally :: String
 test_RemoveContextLocally = "model://joopringelberg.nl#TwoPDRDestructiveTests$Test_RemoveContextLocally"
+
+test_RemoveContextThroughExternalRole :: String
+test_RemoveContextThroughExternalRole = "model://joopringelberg.nl#TwoPDRDestructiveTests$Test_RemoveContextThroughExternalRole"
+
+test_DeleteContextThroughCalculatedRole :: String
+test_DeleteContextThroughCalculatedRole = "model://joopringelberg.nl#TwoPDRDestructiveTests$Test_DeleteContextThroughCalculatedRole"

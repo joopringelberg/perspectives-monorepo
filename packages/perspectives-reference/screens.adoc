@@ -386,6 +386,29 @@ table Peers
   with props (FirstName, LastName)
 ----
 
+=== Restricting role verbs
+
+A `form`, `table`, or the `master` or `detail` part of a table-form item can restrict the role verbs available through that widget. Use one of the following clauses:
+
+* `only (Create, Fill)` retains only the listed role verbs.
+* `except (Remove, Delete)` excludes the listed role verbs.
+* `no roleverbs` excludes all role verbs.
+* `all roleverbs` specifies no screen-level restriction.
+
+Omitting the clause also leaves role verbs unrestricted by the screen. These clauses do not grant permissions: the underlying perspective must support the requested role verbs, and the verbs offered at run time remain limited by the active states.
+
+Place the role-verb clause after any property selection and property-verb restrictions, at the same indentation level:
+
+[source, arc]
+----
+form TestRole
+  with props (Text, Bool)
+  props (Text, Bool) verbs (SetPropertyValue)
+  no roleverbs
+----
+
+This form selects Text and Bool, removes `SetPropertyValue` for those properties, and offers no role verbs. The restrictions apply to this widget, not to the underlying perspective or other widgets.
+
 === Refining the available properties and verbs
 
 A form, table or master-detail screen is based on the perspective a user role has on a particular role in the context (including itself). However, the perspective of a user role on a particular role may include many properties and verbs that are not relevant for the screen. In such cases, it is useful to be able to refine the perspective to include only the relevant properties and verbs.
@@ -394,10 +417,11 @@ Perspectives inherited through role aspects are included, also when the aspects 
 
 ==== Refining properties and verbs for a form or table
 
-When refining for a form or table, we can either
+When refining for a form or table, we can
 
-* specify a list of properties and verbs to include and accept the verbs from the perspective, or
-* accept all properties from the perspective, but restrict the verbs to a specified list.
+* select properties with `with props (...)` or exclude properties with `without props (...)`, leaving their property verbs unchanged;
+* exclude specified property verbs, leaving the property selection unchanged; or
+* combine a property selection with property-verb restrictions.
 
 [source, arc]
 ----
@@ -413,13 +437,13 @@ When refining for a form or table, we can either
             form "With props style" TestRole
               with props (Text, WeekDay, ADate)
           row
-            form "Without props style" TestForm
+            form "Without props style" TestRole
               without props (Bool, AnEmail, ANumber)
 ----
 
 The first form uses the `with props` refinement, which means that it only includes the properties Text, WeekDay and ADate. The second form uses the `without props` refinement, which means that it includes all properties except for Bool, AnEmail and ANumber.
 
-If we want to refine the verbs, we can use the following syntax:
+If we want to refine the property verbs, we can use the following syntax:
 
 [source, arc]
 ----
@@ -428,14 +452,27 @@ If we want to refine the verbs, we can use the following syntax:
         what
           row
             form TestRole
-              props (Text, WeekDay, ADate) verbs (Consult)
+              props (Text, WeekDay, ADate) verbs (SetPropertyValue)
 ----
 
-In this example, the form will include all properties of TestRole, but the user can only Consult Text, WeekDay and ADate.
+In this example, the form keeps the properties available through the perspective, but removes `SetPropertyValue` for Text, WeekDay and ADate. With the perspective above, those three properties remain consultable but cannot be edited in this form; the other properties retain their original verbs.
+
+IMPORTANT: Inside a screen widget, `props (...) verbs (...)` lists verbs to _exclude_, unlike the same syntax in a perspective declaration, which grants the listed verbs. The equivalent screen syntax `props (...) without (...)` makes this exclusion explicit.
+
+To restrict both the visible properties and their verbs, put the property selection first, followed by the property-verb restrictions:
+
+[source, arc]
+----
+form TestRole
+  with props (Text, WeekDay, ADate)
+  props (Text, WeekDay, ADate) without (SetPropertyValue)
+----
+
+This selects Text, WeekDay and ADate and removes their `SetPropertyValue` verb. With the perspective above, all three are read-only. You can instead start with `without props (...)` to exclude unwanted properties, then restrict verbs on the remaining properties. Use at most one property selector (`with` or `without`); it can be followed by multiple property-verb clauses for different properties. A verb restriction does not itself select properties, and neither kind of refinement grants access beyond the underlying perspective. The role identifier or readable-name property may still be included by the runtime.
 
 ==== Refining properties and verbs for a master-detail screen
 
-When refining for a master-detail screen, we can combine both refinements:
+The same combination is supported independently in the `master` and `detail` parts:
 
 [source, arc]
 ----
@@ -450,11 +487,13 @@ When refining for a master-detail screen, we can combine both refinements:
           TestTable
             master
               without props (Text, ADate)
-              props (Bool, ANumber, AnEmail) verbs (Consult)
+              props (Bool, ANumber, AnEmail) without (SetPropertyValue, AddPropertyValue, RemovePropertyValue, DeleteProperty)
             detail
               with props (Text, Bool)
-              props (Text, Bool) verbs (Consult, SetPropertyValue)
+              props (Text, Bool) without (SetPropertyValue, AddPropertyValue, RemovePropertyValue, DeleteProperty)
 ----
+
+The master excludes Text and ADate and removes the listed editing verbs from Bool, ANumber and AnEmail. The detail selects Text and Bool and removes the listed editing verbs from both. Any `Consult` permission supplied by the perspective is retained.
 
 [[keyword-typeaheadfillfrom]]
 ==== `typeaheadfillfrom` versus `fillfrom`

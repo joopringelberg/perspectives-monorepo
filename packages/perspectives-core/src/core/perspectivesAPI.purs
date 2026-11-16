@@ -35,7 +35,7 @@ import Control.Monad.Trans.Class (lift)
 import Control.Plus ((<|>))
 import Data.Array (catMaybes, elemIndex, foldM, head, null)
 import Data.Either (Either(..))
-import Data.Foldable (for_)
+import Data.Foldable (any, for_)
 import Data.List.Types (NonEmptyList)
 import Data.Maybe (Maybe(..), fromJust, isJust, maybe)
 import Data.Newtype (class Newtype, unwrap)
@@ -814,6 +814,8 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
                 if isDBQ then void $ runMonadPerspectivesTransaction authoringRole (for_ rids \rid -> removeContextIfUnbound rid (Just cr))
                 else sendResponse (Error corrId ("Cannot remove an external role from non-database query role " <> (unwrap ctype))) setter
               (ENR rtype) -> sendResponse (Error corrId ("Cannot remove an external role from enumerated role " <> (unwrap rtype) <> " - use unbind instead!")) setter
+          -- Removing just an external role (e.g. an instance of a calculated context role) would leave a dangling context.
+          else if any (isExternalRole <<< unwrap) rids then sendResponse (Error corrId ("Cannot remove an external role as an instance of " <> predicate <> "; remove its context instead.")) setter
           else do
             void $ runMonadPerspectivesTransaction authoringRole (for_ rids \rid -> scheduleRoleRemoval synchronise rid)
             sendResponse (Result corrId []) setter
@@ -824,13 +826,16 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
       (autorizedRole :: RoleType) <- string2RoleType predicate
       kind <- roleKindOfRoleType autorizedRole
       if kind == ContextRole then do
-        void $ runMonadPerspectivesTransaction authoringRole do
-          mcontextToBeRemoved <- lift ((RoleInstance subject) ##> binding >=> context)
-          case mcontextToBeRemoved of
-            Nothing -> void $ scheduleRoleRemoval synchronise (RoleInstance subject)
-            Just contextToBeRemoved -> do
-              users <- scheduleRoleRemoval synchronise (RoleInstance subject)
-              scheduleContextRemoval (Just autorizedRole) users contextToBeRemoved
+        void $ runMonadPerspectivesTransaction authoringRole
+          -- A calculated context role may yield external roles; the roles they fill (if any) just lose their filler.
+          if isExternalRole subject then scheduleContextRemoval (Just autorizedRole) [] (ContextInstance $ deconstructBuitenRol subject)
+          else do
+            mcontextToBeRemoved <- lift ((RoleInstance subject) ##> binding >=> context)
+            case mcontextToBeRemoved of
+              Nothing -> void $ scheduleRoleRemoval synchronise (RoleInstance subject)
+              Just contextToBeRemoved -> do
+                users <- scheduleRoleRemoval synchronise (RoleInstance subject)
+                scheduleContextRemoval (Just autorizedRole) users contextToBeRemoved
 
         sendResponse (Result corrId []) setter
       else sendResponse (Error corrId ("Cannot remove a context from a non-context role kind: " <> show autorizedRole)) setter
