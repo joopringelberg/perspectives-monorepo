@@ -16,6 +16,7 @@ import Test.ContextAndRole as CAR
 import Test.Queries as QR
 import Test.ArrayT as ARRT
 import Test.Sync.HandleTransaction as HTA
+import Test.ActionRepresentation as ACTION
 import Test.Class.Role as ROLE
 
 main :: Effect Unit
@@ -43,4 +44,5 @@ main = runTest do
   -- GUID.theSuite
   -- DFE.theSuite
   -- RB.theSuite
+  ACTION.theSuite
   ROLE.theSuite
