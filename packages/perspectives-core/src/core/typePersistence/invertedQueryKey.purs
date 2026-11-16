@@ -79,6 +79,7 @@ data RunTimeInvertedQueryKey
   -- The filled step takes us from a filler to the role that it fills.
   -- Each combination of an element in fillerRoleInContexts with filledRoleInContext is a valid runtime key.
   | RTFilledKey FilledKeyFields
+  | RTAllFilledKey { fillerRole :: EnumeratedRoleType, fillerContext :: ContextType }
 
 instance WriteForeign RunTimeInvertedQueryKey where
   writeImpl (RTPropertyKey r) = write { keyType: "RTPropertyKey", fields: r }
@@ -86,6 +87,7 @@ instance WriteForeign RunTimeInvertedQueryKey where
   writeImpl (RTContextKey r) = write { keyType: "RTContextKey", fields: r }
   writeImpl (RTFillerKey r) = write { keyType: "RTFillerKey", fields: r }
   writeImpl (RTFilledKey r) = write { keyType: "RTFilledKey", fields: r }
+  writeImpl (RTAllFilledKey r) = write { keyType: "RTAllFilledKey", fields: r }
 
 instance ReadForeign RunTimeInvertedQueryKey where
   readImpl f = do
@@ -96,6 +98,7 @@ instance ReadForeign RunTimeInvertedQueryKey where
       "RTContextKey" -> RTContextKey <<< _.fields <$> ((read' f) :: F { fields :: ContextKeyFields })
       "RTFillerKey" -> RTFillerKey <<< _.fields <$> ((read' f) :: F { fields :: FillerKeyFields })
       "RTFilledKey" -> RTFilledKey <<< _.fields <$> ((read' f) :: F { fields :: FilledKeyFields })
+      "RTAllFilledKey" -> RTAllFilledKey <<< _.fields <$> ((read' f) :: F { fields :: { fillerRole :: EnumeratedRoleType, fillerContext :: ContextType } })
       key -> fail $ ForeignError $ "Unknown constructor for InvertedQueryKey: " <> key
 
 instance Eq RunTimeInvertedQueryKey where
@@ -104,6 +107,7 @@ instance Eq RunTimeInvertedQueryKey where
   eq (RTContextKey r1) (RTContextKey r2) = eq r1 r2
   eq (RTFillerKey r1) (RTFillerKey r2) = eq r1 r2
   eq (RTFilledKey r1) (RTFilledKey r2) = eq r1 r2
+  eq (RTAllFilledKey r1) (RTAllFilledKey r2) = eq r1 r2
   eq _ _ = false
 
 instance Show RunTimeInvertedQueryKey where
@@ -112,6 +116,7 @@ instance Show RunTimeInvertedQueryKey where
   show (RTContextKey r) = "RTContextKey" <> show r
   show (RTFillerKey r) = "RTFillerKey" <> show r
   show (RTFilledKey r) = "RTFilledKey" <> show r
+  show (RTAllFilledKey r) = "RTAllFilledKey" <> show r
 
 -- | Construct a string out of a RuntimeInvertedQueryKey.
 -- | Use these keys for the Couchdb views.
@@ -126,6 +131,8 @@ serializeInvertedQueryKey (RTFillerKey { filledRole_origin, filledContext_origin
   unwrap filledRole_origin <> unwrap filledContext_origin <> unwrap fillerRole_destination <> unwrap fillerContext_destination
 serializeInvertedQueryKey (RTFilledKey { fillerRole_origin, fillerContext_origin, filledRole_destination, filledContext_destination }) =
   unwrap fillerRole_origin <> unwrap fillerContext_origin <> unwrap filledRole_destination <> unwrap filledContext_destination
+serializeInvertedQueryKey (RTAllFilledKey { fillerRole, fillerContext }) =
+  "allfilledroles:" <> unwrap fillerRole <> unwrap fillerContext
 
 deserializeInvertedQueryKey :: String -> String -> Maybe RunTimeInvertedQueryKey
 deserializeInvertedQueryKey keyType s =
@@ -162,6 +169,11 @@ deserializeInvertedQueryKey keyType s =
           _ -> Nothing
       "RTFillerKey" ->
         case lst of
+          Cons "allfilledroles:" (Cons fillerRole (Cons fillerContext Nil)) ->
+            Just $ RTAllFilledKey
+              { fillerRole: EnumeratedRoleType ("model://" <> fillerRole)
+              , fillerContext: ContextType ("model://" <> fillerContext)
+              }
           Cons filledRole_origin (Cons filledContext_origin (Cons fillerRole_destination (Cons fillerContext_destination Nil))) ->
             Just $ RTFillerKey
               { filledRole_origin: EnumeratedRoleType ("model://" <> filledRole_origin)
@@ -178,6 +190,14 @@ deserializeInvertedQueryKey keyType s =
               , fillerContext_origin: ContextType ("model://" <> fillerContext_origin)
               , filledRole_destination: EnumeratedRoleType ("model://" <> filledRole_destination)
               , filledContext_destination: ContextType ("model://" <> filledContext_destination)
+              }
+          _ -> Nothing
+      "RTAllFilledKey" ->
+        case lst of
+          Cons "allfilledroles:" (Cons fillerRole (Cons fillerContext Nil)) ->
+            Just $ RTAllFilledKey
+              { fillerRole: EnumeratedRoleType ("model://" <> fillerRole)
+              , fillerContext: ContextType ("model://" <> fillerContext)
               }
           _ -> Nothing
       _ -> Nothing

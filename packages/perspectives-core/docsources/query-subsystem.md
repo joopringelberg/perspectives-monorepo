@@ -40,6 +40,17 @@ Perspectives data is structured as **contexts** that contain **roles**. Roles ca
 
 Queries also occur in **calculated properties**, **state conditions**, and **perspective filters** — anywhere a derived value is required.
 
+Typed `binder` lookup includes concrete role and context specialisations of the
+requested aspects. Its inverse-link selection, API assumptions and binding-change
+indexing must agree on that selection. See
+[Binder Lookup Through Role and Context Aspects](binder-aspect-lookup.md)
+for the design rationale, implementation and maintenance invariants.
+
+For unrestricted direct inverse traversal, see
+[All Filled Roles: Inherited Result Typing and Bulk Rebinding](allfilledroles.md).
+Its `FROLE` result records the input's inherited type, not a concrete result
+role/context identity.
+
 ---
 
 ## 2. End-to-end Pipeline

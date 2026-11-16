@@ -73,6 +73,8 @@ extern >> binder Members
 
 `>>` composes query steps left to right. Role identifiers select roles in the current context; `context` selects the containing context, `extern` its external role, `binding` follows a role's filler, and `binder` finds roles filled by the current role. `me` denotes the local user's role in the relevant context. Parenthesize nested expressions to make the query domain and traversal direction explicit.
 
+`allfilledroles` selects all directly filled roles from locally known inverse links, across concrete role/context types. Its result retains the input type only as a filler-contributed lower bound (`FROLE`), not as the result's own role/context identity. In this minimal version, use results in calculated thing/user roles, aggregation/existence checks, or bulk `bind_`; use `binding` to regain a concrete typed filler before property/context navigation. `context`, direct property lookup, and another `allfilledroles` on these opaque results are unsupported. Bulk `bind_` on these results keeps a functional replacement, skips targets lacking `Fill`/`CreateAndFill` permission with a warning, and validates actual filler restrictions and cycles before scheduling permitted replacements. Ordinary `bind_` remains single-target.
+
 Common operators include:
 
 - `filter <set-query> with <predicate>` filters the left-hand result set.

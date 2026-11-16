@@ -319,18 +319,25 @@ compileActionEffect originDomain currentcontextDomain userRoleTypes statements =
     Bind_ { bindingExpression, binderExpression, start, end } -> do
       -- bindingExpression should result in a functional role
       (bindings :: QueryFunctionDescription) <- ensureRole subjects bindingExpression >>= ensureFunctional bindingExpression
-      -- binderExpression should result in a functional role
-      (binders :: QueryFunctionDescription) <- ensureRole subjects binderExpression >>= ensureFunctional binderExpression
-      -- Check for each of the subjects whether they have a sufficient perspective on the range of the binders expression.
-      for_ subjects
-        ( \subject -> for_ (roleInContext2Role <$> (allLeavesInADT $ unsafePartial roleRange binders))
-            ( \object -> (lift $ lift $ roleHasPerspectiveOnRoleWithVerb subject object [ Verbs.Fill, Verbs.CreateAndFill ] (Just start) (Just end)) >>= case _ of
-                Left e -> throwError e
-                _ -> pure unit
+      candidate <- compileExpression originDomain binderExpression
+      case range candidate of
+        FROLE lowerBound -> do
+          replacementType <- lift2 $ toConjunctiveNormalForm_ (unsafePartial roleRange bindings)
+          requiredType <- lift2 $ toConjunctiveNormalForm_ lowerBound
+          if replacementType `equalsOrSpecialises_` requiredType then
+            pure $ BQD originDomain QF.BindAll_ bindings candidate originDomain True True
+          else throwError $ Custom "The replacement filler must specialise the inherited type of the allfilledroles argument."
+        RDOM _ -> do
+          binders <- ensureFunctional binderExpression candidate
+          for_ subjects
+            ( \subject -> for_ (roleInContext2Role <$> (allLeavesInADT $ unsafePartial roleRange binders))
+                ( \object -> (lift $ lift $ roleHasPerspectiveOnRoleWithVerb subject object [ Verbs.Fill, Verbs.CreateAndFill ] (Just start) (Just end)) >>= case _ of
+                    Left e -> throwError e
+                    _ -> pure unit
+                )
             )
-        )
-      -- Now create a function description.
-      pure $ BQD originDomain QF.Bind_ bindings binders originDomain True True
+          pure $ BQD originDomain QF.Bind_ bindings binders originDomain True True
+        _ -> (lift2 $ humanizePerspectivesError $ NotARoleDomain (range candidate) start end) >>= throwError
 
     RemoveAsFillerOfType f@{ roleIdentifier, fillerExpression, start, end } -> do
       (fillers :: QueryFunctionDescription) <- ensureRole subjects fillerExpression

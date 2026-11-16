@@ -59,6 +59,8 @@ invertFunction dom qf ran = case qf of
       (RDOM (ST (RoleInContext { context, role }))) -> pure $ Just $ FilledF role context
       (RDOM (UET (RoleInContext { context, role }))) -> pure $ Just $ FilledF role context
       otherwise -> pure $ Nothing
+    AllFilledRolesF -> pure $ Just $ DataTypeGetter DirectFillerF
+    DirectFillerF -> pure $ Just $ DataTypeGetter AllFilledRolesF
     ExternalRoleF -> pure $ Just $ DataTypeGetter ContextF
     -- Identity steps add nothing to the query and can be left out.
     IdentityF -> pure $ Nothing

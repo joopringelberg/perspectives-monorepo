@@ -155,6 +155,8 @@ simpleStep' =
       <|>
         Simple <$> (Filled <$> (getPosition <* reserved "binder") <*> arcIdentifier <*> (optionMaybe (reserved "in" *> arcIdentifier)))
       <|>
+        Simple <$> (AllFilledRoles <$> (getPosition <* reserved "allfilledroles"))
+      <|>
         Simple <$> (Context <$> (getPosition <* reserved "context"))
       <|>
         Simple <$> (Extern <$> (getPosition <* reserved "extern"))
@@ -205,7 +207,7 @@ simpleStep' =
       -- VARIABLE MUST BE LAST!
       <|>
         Simple <$> (Variable <$> getPosition <*> lowerCaseAlphaNumName)
-  ) <?> "binding, binder, context, extern, this, modelname, contextType, roleType, roleTypes, specialisesRoleType, a valid variablename (lowercase only) or a number, boolean, string (between double quotes), date (between single quotes), email address or a monoid function (sum, product, minimum, maximum) or count, "
+  ) <?> "binding, binder, allfilledroles, context, extern, this, modelname, contextType, roleType, roleTypes, specialisesRoleType, a valid variablename (lowercase only) or a number, boolean, string (between double quotes), date (between single quotes), email address or a monoid function (sum, product, minimum, maximum) or count, "
 
 -- | Parses just the regular expression; not "matches", which is interpreted like ">>".
 -- | We expect an expression like this: "..."gimyu
@@ -447,6 +449,7 @@ startOf stp = case stp of
   startOfSimple (PublicContext p _ _) = p
   startOfSimple (Filler p _) = p
   startOfSimple (Filled p _ _) = p
+  startOfSimple (AllFilledRoles p) = p
   startOfSimple (Context p) = p
   startOfSimple (Extern p) = p
   startOfSimple (IndexedName p) = p
@@ -495,6 +498,7 @@ endOf stp = case stp of
   endOfSimple (PublicContext (ArcPosition { line, column }) url _) = ArcPosition ({ line, column: column + length url + 1 })
   endOfSimple (Filler (ArcPosition { line, column }) _) = ArcPosition { line, column: column + 7 }
   endOfSimple (Filled (ArcPosition { line, column }) _ _) = ArcPosition { line, column: column + 6 }
+  endOfSimple (AllFilledRoles (ArcPosition { line, column })) = ArcPosition { line, column: column + 14 }
   endOfSimple (Context (ArcPosition { line, column })) = ArcPosition { line, column: column + 7 }
   endOfSimple (Extern (ArcPosition { line, column })) = ArcPosition { line, column: column + 6 }
   endOfSimple (IndexedName (ArcPosition { line, column })) = ArcPosition { line, column: column + 11 }

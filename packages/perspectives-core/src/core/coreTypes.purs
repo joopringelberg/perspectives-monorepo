@@ -515,6 +515,7 @@ data InformedAssumption
   | Filler RoleInstance -- RoleInstance is the role with a binding
   -- FilledRolesAssumption fillerId filledContextType filledType
   | FilledRolesAssumption RoleInstance ContextType EnumeratedRoleType
+  | AllFilledRolesAssumption RoleInstance
   | Property RoleInstance EnumeratedPropertyType
   | Context RoleInstance
   | External ContextInstance

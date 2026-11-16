@@ -347,16 +347,8 @@ getAllFilledRoles rid = ArrayT
   ( (lift (try $ getPerspectRol rid)) >>=
       handlePerspectRolError' "getAllFilledRoles" []
         \(filler :: IP.PerspectRol) -> do
-          tell $ ArrayWithoutDoubles $ execWriter
-            ( forWithIndex_ (rol_gevuldeRollen filler)
-                ( \contexttype filleds ->
-                    forWithIndex_ filleds
-                      ( \filledRoleType _ ->
-                          tell [ FilledRolesAssumption rid (ContextType contexttype) (EnumeratedRoleType filledRoleType) ]
-                      )
-                )
-            )
-          pure $ concat $ concat (values <$> values (rol_gevuldeRollen filler))
+          tell $ ArrayWithoutDoubles [ AllFilledRolesAssumption rid ]
+          pure $ nub $ concat $ concat (values <$> values (rol_gevuldeRollen filler))
   )
 
 getRecursivelyAllFilledRoles :: RoleInstance -> MonadPerspectives (Array RoleInstance)

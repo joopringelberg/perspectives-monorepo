@@ -6,6 +6,10 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+## [1.4.0]
+
+- Added syntax coloring for the `allfilledroles` query operator.
+
 ## [1.2.0]
 
 - Added `public` context kind

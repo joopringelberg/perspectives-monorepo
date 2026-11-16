@@ -49,6 +49,7 @@ data SimpleStep
   | Filler ArcPosition (Maybe String)
   -- Filled has an optional embedding context.
   | Filled ArcPosition String (Maybe String)
+  | AllFilledRoles ArcPosition
   | Context ArcPosition
   | Extern ArcPosition
   | IndexedName ArcPosition
@@ -189,6 +190,7 @@ instance prettyPrintSimpleStep :: PrettyPrint SimpleStep where
         Just ec -> " " <> ec
     )
   prettyPrint' t (Context _) = "Context"
+  prettyPrint' t (AllFilledRoles _) = "AllFilledRoles"
   prettyPrint' t (Extern _) = "Extern"
   prettyPrint' t (IndexedName _) = "IndexedName"
   prettyPrint' t (SequenceFunction _ s) = "SequenceFunction " <> show s

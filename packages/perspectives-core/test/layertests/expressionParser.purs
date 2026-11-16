@@ -25,6 +25,12 @@ import Test.Unit.Assert (assert)
 
 theSuite :: Free TestF Unit
 theSuite = suite "Perspectives.Parsing.Arc.Expression" do
+  test "SimpleStep: allfilledroles" do
+    result <- runIndentParser "allfilledroles" simpleStep
+    case result of
+      Right (Simple (AllFilledRoles _)) -> pure unit
+      _ -> assert ("Expected allfilledroles, got " <> show result) false
+
   test "SimpleStep: ArcIdentifier" do
     (r :: Either ParseError Step) <- runIndentParser "MyRole" simpleStep
     case r of

@@ -658,6 +658,7 @@ instance normalizeQfdInst :: Normalize QueryFunctionDescription where
 
     normalizeDomain :: Domain -> WithSideCars Domain
     normalizeDomain (RDOM (d :: ADT RoleInContext)) = RDOM <$> (traverse normalize d)
+    normalizeDomain (FROLE d) = FROLE <$> traverse normalize d
     normalizeDomain (CDOM (d :: ADT ContextType)) = CDOM <$> (traverse fqn2tid d)
     normalizeDomain (VDOM r (mp :: Maybe PropertyType)) = VDOM <$> pure r <*> (traverse fqn2tid mp)
     normalizeDomain d = pure d
@@ -992,6 +993,8 @@ instance Normalize RunTimeInvertedQueryKey where
     (\fro fco fde fcd -> RTFillerKey { filledRole_origin: fro, filledContext_origin: fco, fillerRole_destination: fde, fillerContext_destination: fcd }) <$> fqn2tid filledRole_origin <*> fqn2tid filledContext_origin <*> fqn2tid fillerRole_destination <*> fqn2tid fillerContext_destination
   normalize (RTFilledKey { fillerRole_origin, fillerContext_origin, filledRole_destination, filledContext_destination }) =
     (\fro fco fde fcd -> RTFilledKey { fillerRole_origin: fro, fillerContext_origin: fco, filledRole_destination: fde, filledContext_destination: fcd }) <$> fqn2tid fillerRole_origin <*> fqn2tid fillerContext_origin <*> fqn2tid filledRole_destination <*> fqn2tid filledContext_destination
+  normalize (RTAllFilledKey { fillerRole, fillerContext }) =
+    (\r c -> RTAllFilledKey { fillerRole: r, fillerContext: c }) <$> fqn2tid fillerRole <*> fqn2tid fillerContext
 
 normalizeStorableInvertedQuery :: StorableInvertedQuery -> WithSideCars StorableInvertedQuery
 normalizeStorableInvertedQuery siq@{ queryType, keys, query, model } = do

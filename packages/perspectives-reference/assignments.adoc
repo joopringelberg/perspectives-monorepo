@@ -183,6 +183,17 @@ Example:
 bind_ app >> extern to start
 ----
 
+[[keyword-bind_allfilledroles]]
+===== Bulk rebinding of `allfilledroles` results
+
+When `<binderExpression>` produces `allfilledroles` results (possibly through a calculated role or variable), `bind_` accepts multiple targets. The replacement filler must remain functional and its compile-time type must specialise the guaranteed inherited type of those results. Ordinary `bind_` expressions retain their existing single-target requirement.
+
+The runtime evaluates the target set before modifying bindings, removes duplicate targets, and checks `Fill` or `CreateAndFill` permission on each target's actual role type using the existing role-verb authorization rules. Missing permission skips that target with a warning rather than failing the operation.
+
+For permitted targets, the runtime validates the replacement against each actual target's filler restriction and rejects binding cycles. These validations happen before any replacement is scheduled. Invalid fillers and other errors fail explicitly; they are not silently skipped. A missing replacement filler is also an error, while an empty target set with a valid replacement is a no-op.
+
+The supplied replacement instance is used directly, without descending its binding chain to choose another filler. Replacement follows the normal deferred binding-change mechanism.
+
 [[keyword-remove_filler]]
 ==== Remove the filler of a role, starting with the filled role
 

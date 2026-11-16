@@ -112,7 +112,7 @@ makeRoleGetter currentDomain rt@(CR ct) = do
   rdom <- do
     crole@(CalculatedRole { calculation }) <- lift2 $ getCalculatedRole ct
     case calculation of
-      Q qfd -> lift2 $ RDOM <$> roleADT crole
+      Q qfd -> pure $ range qfd
       S step isFunctional -> compileAndSaveRole currentDomain step crole isFunctional
   isF <- lift2 $ roleTypeIsFunctional rt
   isM <- lift2 $ roleTypeIsMandatory rt
@@ -162,6 +162,9 @@ validateCalculatedRoleRange
   -> Domain
   -> PhaseThree Domain
 validateCalculatedRoleRange kindOfRole start end = case _ of
+  r@(FROLE _) ->
+    if kindOfRole == RTI.ContextRole then throwError $ NotAContextRole start end
+    else pure r
   r@(RDOM roleRange) ->
     if kindOfRole == RTI.ContextRole && contextRoleRangeHasNonExternalRole roleRange then
       throwError $ NotAContextRole start end
@@ -362,6 +365,20 @@ compileStep currentDomain (Computation st) = compileComputationStep currentDomai
 ------ COMPILING SIMPLE STEPS
 ------------------------------------------------------------------------------------
 compileSimpleStep :: Domain -> SimpleStep -> FD
+compileSimpleStep currentDomain (AllFilledRoles pos) = case currentDomain of
+  RDOM adt -> pure $ SQD currentDomain (QF.DataTypeGetter AllFilledRolesF) (FROLE adt) False False
+  FROLE _ -> throwError $ Custom "allfilledroles requires a known source role type; its results have only an inherited filler type."
+  _ -> (lift2 $ humanizePerspectivesError $ DomainTypeRequired "role" currentDomain pos (endOf $ Simple $ AllFilledRoles pos)) >>= throwError
+
+compileSimpleStep currentDomain@(FROLE adt) (Filler _ Nothing) =
+  pure $ SQD currentDomain (QF.DataTypeGetter QF.DirectFillerF) (RDOM adt) True True
+
+compileSimpleStep currentDomain@(FROLE _) s@(Context _) =
+  throwError $ Custom ("The containing context of an allfilledroles result is not known at compile time, at " <> show (startOf $ Simple s) <> ".")
+
+compileSimpleStep currentDomain@(FROLE _) (TypeOfRole _) =
+  pure $ SQD currentDomain (QF.TypeGetter TypeOfRoleF) RoleKind True True
+
 compileSimpleStep currentDomain s@(ArcIdentifier pos ident) = do
   -- Obviously, 'ident' will be a Readable identifier. It also must, by definition of the language, be fully qualified.
   -- Only after phase three will we replace it by a Stable identifier.

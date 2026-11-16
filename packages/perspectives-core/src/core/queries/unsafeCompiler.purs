@@ -57,7 +57,7 @@ import Perspectives.Identifiers (isExternalRole, isUrl)
 import Perspectives.InstanceRepresentation (PerspectRol(..))
 import Perspectives.Instances.Combinators (available_, exists, logicalAnd, logicalOr, not)
 import Perspectives.Instances.Combinators (conjunction, intersection, orElse) as Combinators
-import Perspectives.Instances.ObjectGetters (binding, binding_, completeRuntimeType, context, contextModelName, contextType, contextType_, externalRole, filledByCombinator, filledByOperator, fillsCombinator, fillsOperator, getActiveRoleStates_, getActiveStates_, getEnumeratedRoleInstances, getFilledRoles, getProperty, getRecursivelyFilledRoles', getUnlinkedRoleInstances, indexedContextName, indexedRoleName, roleModelName, roleType, roleType_)
+import Perspectives.Instances.ObjectGetters (binding, binding_, completeRuntimeType, context, contextModelName, contextType, contextType_, externalRole, filledByCombinator, filledByOperator, fillsCombinator, fillsOperator, getActiveRoleStates_, getActiveStates_, getAllFilledRoles, getEnumeratedRoleInstances, getFilledRoles, getProperty, getRecursivelyFilledRoles', getUnlinkedRoleInstances, indexedContextName, indexedRoleName, roleModelName, roleType, roleType_)
 import Perspectives.Instances.Values (parseBool, parseNumber)
 import Perspectives.Logging (errorCompiler)
 import Perspectives.ModelDependencies (roleWithId, socialEnvironment, socialEnvironmentPersons)
@@ -213,6 +213,8 @@ compileSQD (SQD _ (ContextTypeConstant qname) ContextKind _ _) = pure $ (\_ -> p
 compileSQD (SQD _ (TypeGetter RoleTypesF) _ _ _) = pure $ (unsafeCoerce (liftToInstanceLevel allRoleTypesInContext)) >=> pure <<< roletype2string
 
 compileSQD (SQD _ (DataTypeGetter FillerF) ran _ _) = pure $ unsafeCoerce (getFillerTypeRecursively $ unsafePartial domain2roleType ran)
+compileSQD (SQD _ (DataTypeGetter DirectFillerF) _ _ _) = pure $ unsafeCoerce binding
+compileSQD (SQD _ (DataTypeGetter AllFilledRolesF) _ _ _) = pure $ unsafeCoerce getAllFilledRoles
 
 compileSQD (SQD dom (Constant range value) _ _ _) = pure \_ -> pure value
 

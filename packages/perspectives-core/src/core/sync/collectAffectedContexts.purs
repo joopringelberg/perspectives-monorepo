@@ -42,11 +42,11 @@ import Perspectives.Deltas (addDelta)
 import Perspectives.Error.Boundaries (handlePerspectContextError)
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..))
 import Perspectives.Instances.Me (notIsMe)
-import Perspectives.Instances.ObjectGetters (allFillers, binding, context, context', contextIsInState, contextType, contextType_, getActiveRoleStates_, getFilledRoles, getRecursivelyAllFilledRoles, roleIsInState, roleType_)
+import Perspectives.Instances.ObjectGetters (allFillers, binding, completeRuntimeType, context, context', contextIsInState, contextType, contextType_, getActiveRoleStates_, getAllFilledRoles, getFilledRoles, getRecursivelyAllFilledRoles, roleIsInState, roleType_)
 import Perspectives.Instances.ObjectGetters (context, contextType, roleType) as OG
 import Perspectives.InvertedQuery (InvertedQuery(..), QueryWithAKink(..), backwards, backwardsQueryResultsInContext, backwardsQueryResultsInRole, forwardStartsWithFilter, forwards, isCalculatedUserQuery, shouldResultInContextStateQuery, shouldResultInRoleStateQuery, startsWithFilter, userRoleTypeOfInvertedQuery, invertedQueryIsForSynchronisation)
 import Perspectives.InvertedQuery.Storable (getContextQueries, getFilledQueries, getFillerQueries, getPropertyQueries, getRoleQueries)
-import Perspectives.InvertedQueryKey (RunTimeInvertedQueryKey)
+import Perspectives.InvertedQueryKey (RunTimeInvertedQueryKey(..))
 import Perspectives.Logging (debugSync, errorSync, infoDelta)
 import Perspectives.Persistence.DeltaStore (getDeltasForResource)
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
@@ -58,7 +58,8 @@ import Perspectives.Query.UnsafeCompiler (getHiddenFunction, getRoleInstances)
 import Perspectives.Representation.ADT (ADT(..), allLeavesInADT)
 import Perspectives.Representation.Class.PersistentType (ContextType, StateIdentifier, tryGetState, getEnumeratedRole)
 import Perspectives.Representation.Class.Property (propertyTypeIsAuthorOnly, propertyTypeIsSelfOnly)
-import Perspectives.Representation.Class.Role (bindingOfRole, calculationOfRoleType, contextOfRepresentation)
+import Perspectives.Representation.Class.Role (bindingOfRole, calculationOfRoleType, contextOfRepresentation, expandUnexpandedLeaves)
+import Perspectives.Representation.ADT (allLeavesInExpandedADT)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance, externalRole)
 import Perspectives.Representation.State (StateFulObject(..))
 import Perspectives.Representation.State (StateFulObject(..), State(..)) as State
@@ -430,10 +431,16 @@ usersWithPerspectiveOnRoleBinding' filled filler moldFiller deltaType runForward
   -- specialises the stored domain.
   -- Includes calculations from all types of filledType.
   (ArrayUnions fillerKeys) <- lift $ runtimeIndexForFillerQueries' filledType filledContextType
-  fillerCalculations <- lift
+  typedFillerCalculations <- lift
     ( getFillerQueries compileBoth fillerKeys
         >>= filterA (invertedQueryHasRoleDomain fillerContextType fillerType)
     )
+  fillerPairs <- lift $ completeRuntimeType filler >>= expandUnexpandedLeaves
+  allFilledCalculations <- lift $
+    getFillerQueries compileBoth
+      (map (\(RoleInContext { role, context }) -> RTAllFilledKey { fillerRole: role, fillerContext: context }) (allLeavesInExpandedADT fillerPairs))
+      >>= filterA (invertedQueryHasRoleDomain fillerContextType fillerType)
+  let fillerCalculations = typedFillerCalculations <> allFilledCalculations
   -- Separate Calculated User detection queries from regular synchronisation/state queries.
   let regularFillerCalculations = filter (not <<< isCalculatedUserQuery) fillerCalculations
   let calcUserFillerCalculations = filter isCalculatedUserQuery fillerCalculations
@@ -872,6 +879,16 @@ createDeltasFromAssumption users (FilledRolesAssumption fillerId filledContextTy
   -- Query DeltaStore for binding deltas of filled roles.
   for_ filledRoles \filledId -> do
     bindingDeltas <- lift $ getDeltasForResource (unwrap filledId <> "#binding")
+    for_ bindingDeltas \(DeltaStoreRecord { signedDelta }) ->
+      addDelta $ DeltaInTransaction { users, delta: signedDelta }
+
+createDeltasFromAssumption users (AllFilledRolesAssumption fillerId) = do
+  filledRoles <- lift (fillerId ##= getAllFilledRoles)
+  for_ filledRoles \filled -> do
+    filledContext <- lift (filled ##>> context)
+    filledType <- lift (filled ##>> OG.roleType)
+    magic filledContext [ filled ] filledType users
+    bindingDeltas <- lift $ getDeltasForResource (unwrap filled <> "#binding")
     for_ bindingDeltas \(DeltaStoreRecord { signedDelta }) ->
       addDelta $ DeltaInTransaction { users, delta: signedDelta }
 

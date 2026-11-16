@@ -43,6 +43,7 @@ data FunctionName
   = ContextF
   | FillerF
   | DirectFillerF
+  | AllFilledRolesF
   | ExternalRoleF
   | IndexedContextName
   | IndexedRoleName
@@ -91,6 +92,7 @@ instance eqFunctionName :: Eq FunctionName where
   eq ContextF ContextF = true
   eq FillerF FillerF = true
   eq DirectFillerF DirectFillerF = true
+  eq AllFilledRolesF AllFilledRolesF = true
   eq ExternalRoleF ExternalRoleF = true
   eq IndexedContextName IndexedContextName = true
   eq IndexedRoleName IndexedRoleName = true
@@ -144,6 +146,7 @@ instance showFunctionName :: Show FunctionName where
   show ContextF = "context"
   show FillerF = "binding"
   show DirectFillerF = "directFiller"
+  show AllFilledRolesF = "allfilledroles"
   show ExternalRoleF = "external" -- TODO klopt dit met de parser?
   show IndexedContextName = "indexedContext"
   show IndexedRoleName = "indexedRole"
@@ -196,6 +199,7 @@ instance readForeignFunctionName :: ReadForeign FunctionName where
       "context" -> pure ContextF
       "binding" -> pure FillerF
       "directFiller" -> pure DirectFillerF
+      "allfilledroles" -> pure AllFilledRolesF
       "external" -> pure ExternalRoleF -- TODO klopt dit met de parser?
       "indexedContext" -> pure IndexedContextName
       "indexedRole" -> pure IndexedRoleName
@@ -244,6 +248,7 @@ isFunctionalFunction fn = case fn of
   ContextF -> True
   FillerF -> True
   DirectFillerF -> True
+  AllFilledRolesF -> False
   ExternalRoleF -> True
   IndexedRoleName -> True
   IndexedContextName -> True
@@ -292,6 +297,7 @@ isMandatoryFunction fn = case fn of
   ContextF -> True
   FillerF -> False
   DirectFillerF -> False
+  AllFilledRolesF -> False
   ExternalRoleF -> True
   IndexedRoleName -> False
   IndexedContextName -> False
@@ -381,6 +387,7 @@ data QueryFunction
   | CreateRole EnumeratedRoleType
   | Bind EnumeratedRoleType
   | Bind_
+  | BindAll_
   | RemoveAsFillerOfType EnumeratedRoleType
   | RemoveAsFiller
   | RemoveFiller
@@ -453,6 +460,7 @@ instance showQueryFunction :: Show QueryFunction where
   show (CreateRole enumeratedRoleType) = "CreateRole " <> show enumeratedRoleType
   show (Bind enumeratedRoleType) = "Bind " <> show enumeratedRoleType
   show Bind_ = "Bind_"
+  show BindAll_ = "BindAll_"
   show (RemoveAsFillerOfType enumeratedRoleType) = "RemoveAsFillerOfType " <> show enumeratedRoleType
   show RemoveAsFiller = "RemoveAsFiller"
   show RemoveFiller = "RemoveFiller"
@@ -525,6 +533,7 @@ instance eqQueryFunction :: Eq QueryFunction where
   eq (CreateRole a) (CreateRole b) = eq a b
   eq (Bind a) (Bind b) = eq a b
   eq Bind_ Bind_ = true
+  eq BindAll_ BindAll_ = true
   eq (RemoveAsFillerOfType a) (RemoveAsFillerOfType b) = eq a b
   eq RemoveAsFiller RemoveAsFiller = true
   eq RemoveFiller RemoveFiller = true
@@ -613,6 +622,7 @@ instance writeForeignQueryFunction :: WriteForeign QueryFunction where
   writeImpl (CreateRole enumeratedRoleType) = writeImpl { constructor: "CreateRole", arg1: writeJSON enumeratedRoleType, arg2: "" }
   writeImpl (Bind enumeratedRoleType) = writeImpl { constructor: "Bind", arg1: writeJSON enumeratedRoleType, arg2: "" }
   writeImpl Bind_ = writeImpl { constructor: "Bind_", arg1: "", arg2: "" }
+  writeImpl BindAll_ = writeImpl { constructor: "BindAll_", arg1: "", arg2: "" }
   writeImpl (RemoveAsFillerOfType enumeratedRoleType) = writeImpl { constructor: "RemoveAsFillerOfType", arg1: writeJSON enumeratedRoleType, arg2: "" }
   writeImpl RemoveAsFiller = writeImpl { constructor: "RemoveAsFiller", arg1: "", arg2: "" }
   writeImpl RemoveFiller = writeImpl { constructor: "RemoveFiller", arg1: "", arg2: "" }
@@ -693,6 +703,7 @@ instance readForeignQueryFunction :: ReadForeign QueryFunction where
       "CreateRole", enumeratedRoleType, _ -> CreateRole <$> readJSON' enumeratedRoleType
       "Bind", enumeratedRoleType, _ -> Bind <$> readJSON' enumeratedRoleType
       "Bind_", _, _ -> pure $ Bind_
+      "BindAll_", _, _ -> pure BindAll_
       "RemoveAsFillerOfType", enumeratedRoleType, _ -> RemoveAsFillerOfType <$> readJSON' enumeratedRoleType
       "RemoveAsFiller", _, _ -> pure $ RemoveAsFiller
       "RemoveFiller", _, _ -> pure $ RemoveFiller
@@ -768,6 +779,7 @@ instance ordQueryFunction :: Ord QueryFunction where
   compare (CreateRole enumeratedRoleType) (CreateRole enumeratedRoleType') = compare enumeratedRoleType enumeratedRoleType'
   compare (Bind enumeratedRoleType) (Bind enumeratedRoleType') = compare enumeratedRoleType enumeratedRoleType'
   compare Bind_ Bind_ = EQ
+  compare BindAll_ BindAll_ = EQ
   compare (RemoveAsFillerOfType a) (RemoveAsFillerOfType b) = compare a b
   compare RemoveAsFiller RemoveAsFiller = EQ
   compare RemoveFiller RemoveFiller = EQ
