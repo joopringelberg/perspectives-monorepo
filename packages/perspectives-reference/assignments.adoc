@@ -363,6 +363,10 @@ delete context bound to <ContextRoleName> [from <contextExpression>]
 
 Permanently deletes the context that is bound (via its external role) to `<ContextRoleName>`. The optional `from` clause identifies the containing context.
 
+Requires a perspective on `<ContextRoleName>` with `DeleteContext`.
+
+`<ContextRoleName>` may be a calculated context role, whose instances are external roles rather than context roles. Then the contexts of those external roles are deleted, and the context roles they fill remain without a filler, just as for `remove context` (see <<remove-context-through-external-role>>).
+
 Example:
 [source, arc]
 ----

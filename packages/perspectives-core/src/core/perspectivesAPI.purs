@@ -35,7 +35,7 @@ import Control.Monad.Trans.Class (lift)
 import Control.Plus ((<|>))
 import Data.Array (catMaybes, elemIndex, foldM, head, null)
 import Data.Either (Either(..))
-import Data.Foldable (for_)
+import Data.Foldable (any, for_)
 import Data.List.Types (NonEmptyList)
 import Data.Maybe (Maybe(..), fromJust, isJust, maybe)
 import Data.Newtype (class Newtype, unwrap)
@@ -814,6 +814,8 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
                 if isDBQ then void $ runMonadPerspectivesTransaction authoringRole (for_ rids \rid -> removeContextIfUnbound rid (Just cr))
                 else sendResponse (Error corrId ("Cannot remove an external role from non-database query role " <> (unwrap ctype))) setter
               (ENR rtype) -> sendResponse (Error corrId ("Cannot remove an external role from enumerated role " <> (unwrap rtype) <> " - use unbind instead!")) setter
+          -- Removing just an external role (e.g. an instance of a calculated context role) would leave a dangling context.
+          else if any (isExternalRole <<< unwrap) rids then sendResponse (Error corrId ("Cannot remove an external role as an instance of " <> predicate <> "; remove its context instead.")) setter
           else do
             void $ runMonadPerspectivesTransaction authoringRole (for_ rids \rid -> scheduleRoleRemoval synchronise rid)
             sendResponse (Result corrId []) setter

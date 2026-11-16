@@ -150,8 +150,11 @@ compileAssignment (UQD _ (QF.DeleteContext qualifiedRoleIdentifier) contextsToDe
     ctxts <- lift (contextId ##= contextGetter)
     for_ ctxts \ctxtToDeleteFrom -> do
       -- Remove all role instances and remove all contexts bound to them.
-      rolesToBeRemoved <- lift (ctxtToDeleteFrom ##= getRoleInstances qualifiedRoleIdentifier)
-      contextsToBeRemoved <- lift (ctxtToDeleteFrom ##= getRoleInstances qualifiedRoleIdentifier >=> binding >=> context)
+      roles <- lift (ctxtToDeleteFrom ##= getRoleInstances qualifiedRoleIdentifier)
+      -- A calculated context role yields external roles; the roles they fill (if any) just lose their filler.
+      let { yes: externalRoles, no: rolesToBeRemoved } = partition (isExternalRole <<< unwrap) roles
+      for_ externalRoles \ri -> scheduleContextRemoval (Just qualifiedRoleIdentifier) [] (ContextInstance $ deconstructBuitenRol $ unwrap ri)
+      contextsToBeRemoved <- lift (concat <$> for rolesToBeRemoved \ri -> ri ##= binding >=> context)
       users <- nub <<< concat <$> for rolesToBeRemoved (scheduleRoleRemoval synchronise)
       for_ contextsToBeRemoved (scheduleContextRemoval (Just qualifiedRoleIdentifier) users)
 

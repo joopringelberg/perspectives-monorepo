@@ -34,7 +34,7 @@ import Control.Monad.Error.Class (catchError, catchJust, try)
 import Control.Monad.Except (lift)
 import Control.Monad.Reader (runReaderT)
 import Control.Monad.State (gets)
-import Data.Array (any, elemIndex, filter, foldM, foldMap, fromFoldable, head, length, null, uncons)
+import Data.Array (all, any, elemIndex, filter, foldM, foldMap, fromFoldable, head, length, null, uncons)
 import Data.Either (Either(..))
 import Data.Map (empty)
 import Data.Maybe (Maybe(..), fromJust, isJust)
@@ -66,7 +66,7 @@ import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.PerspectivesState (addWarning)
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), RoleInContext(..), context2RoleInContextADT, domain, equalDomainKinds, functional, makeComposition, mandatory, productOfDomains, range, replaceContext, replaceRange, roleInContext2Role, setCardinality, sumOfDomains, traverseQfd)
 import Perspectives.Query.QueryTypes (Range) as QT
-import Perspectives.Representation.ADT (ADT(..), commonLeavesInADT)
+import Perspectives.Representation.ADT (ADT(..), allLeavesInADT, commonLeavesInADT)
 import Perspectives.Representation.CalculatedProperty (CalculatedProperty(..))
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
 import Perspectives.Representation.Class.PersistentType (StateIdentifier(..), getCalculatedProperty, getCalculatedRole, getContext, getEnumeratedProperty, getEnumeratedRole, typeExists)
@@ -175,6 +175,13 @@ validateCalculatedRoleRange kindOfRole start end = case _ of
       throwError $ NotAContextRole start end
     else
       (lift2 $ humanizePerspectivesError $ NotARoleDomain r start end) >>= throwError
+
+onlyExternalRoles :: ADT RoleInContext -> Boolean
+onlyExternalRoles adt =
+  let
+    leaves = allLeavesInADT adt
+  in
+    (null leaves == false) && all (\(RoleInContext { role }) -> isExternalRole (unwrap role)) leaves
 
 contextRoleRangeHasNonExternalRole :: ADT RoleInContext -> Boolean
 contextRoleRangeHasNonExternalRole = any nonExternalRole <<< commonLeavesInADT
@@ -481,6 +488,8 @@ compileSimpleStep currentDomain s@(Value pos range stringRepresentation) = pure 
 
 compileSimpleStep currentDomain s@(Filler pos membeddingContext) = do
   case currentDomain of
+    RDOM (r :: ADT RoleInContext)
+      | onlyExternalRoles r -> throwError $ FillerOfExternalRole pos (endOf $ Simple s)
     RDOM (r :: ADT RoleInContext) -> do
       -- The binding of a role is always an ADT RoleInContext.
       (madtOfBinding :: Maybe (ADT RoleInContext)) <- lift2 $ bindingOfADT r
