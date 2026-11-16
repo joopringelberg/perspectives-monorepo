@@ -63,6 +63,7 @@ import Test.Persistence.Authentication (theSuite) as PA
 import Test.VariableBindings (theSuite) as VB
 import Test.TransactionQueue (theSuite) as TQ
 import Test.VersionedDeltas (theSuite) as VD
+import Test.Lsp.Members (theSuite) as LSPM
 
 -- Comprehensive unit tests for ExpandedADT, CNF, and ADT (with real assertions)
 import Test.Perspectives.Representation.AbstractDataTypeTests (theSuite) as ADTTESTS
@@ -97,6 +98,7 @@ main = runTest do
   VB.theSuite -- Variable bindings are private to a fiber
   TQ.theSuite
   VD.theSuite
+  LSPM.theSuite
   IRP.theSuite
   TPAS.theSuite -- Phase 1 — comprehensive non-expression syntax tests
   TPA.theSuite -- Supplementary phase-one regressions
