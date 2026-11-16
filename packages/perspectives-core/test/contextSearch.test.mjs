@@ -17,6 +17,23 @@ const otherChild = `${domain}$otherchild`;
 const nested = `${child}$nested`;
 const context = (id, parent) => ({ id, context: parent });
 
+test("model choices come from app external role types and keep stable model identifiers", () => {
+  assert.deepEqual(Search.modelIdsFromAppTypes([
+    `${domain}$stableapp$External`,
+    "model://other.org#othermodel$otherapp$External",
+  ]), [domain, "model://other.org#othermodel"]);
+  assert.deepEqual(Search.modelIdsFromAppTypes([]), []);
+});
+
+test("multiple apps and versions from one model produce only one model choice", () => {
+  assert.deepEqual(Search.modelIdsFromAppTypes([
+    `${domain}$stableapp$External`,
+    `${domain}$anotherapp$External`,
+    `${domain}$stableapp$External@2.0`,
+    `${domain}@1.0$stableapp$External`,
+  ]), [domain]);
+});
+
 test("context search lists direct children, not the domain, deeper contexts, or another model", () => {
   const contexts = {
     [domain]: context(domain, Maybe.Nothing.value),

@@ -48,6 +48,11 @@ This project is available as open source under the terms of the GPL-3.0-or-later
 Run `pnpm run test:layer1` from this package. These tests require no CouchDB or
 RabbitMQ service.
 
+The command runs the PureScript Layer 1 suites, followed by all standalone Node
+tests matching `test/*.test.mjs`. The Node suites cover context search, database
+info (with mocked HTTP), LSP diagnostics and resolution, performance measurement
+helpers, and transaction scheduling. They do not run live performance benchmarks.
+
 The parser and compiler suites exercise different stages:
 
 - `Test.Parsing.Arc.Syntax` covers the non-expression grammar;

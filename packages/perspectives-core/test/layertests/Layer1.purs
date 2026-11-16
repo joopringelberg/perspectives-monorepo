@@ -28,6 +28,9 @@
 -- |
 -- |   pnpm run test:layer1
 -- |
+-- | The command also runs the standalone Node suites in test/*.test.mjs after
+-- | this PureScript entry point succeeds.
+-- |
 -- | The suites included here are classified as Layer 1 because either:
 -- |   (a) they are fully pure (no MonadPerspectives, no IO beyond the file-system),
 -- |   (b) they use runP but only exercise in-memory computations (ADT algebra,
