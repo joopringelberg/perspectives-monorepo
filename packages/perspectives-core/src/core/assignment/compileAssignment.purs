@@ -44,6 +44,8 @@ import Foreign.Object (empty)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.ApiTypes (ContextSerialization(..), PropertySerialization(..), RolSerialization(..), defaultContextSerializationRecord)
 import Perspectives.Assignment.Update (addProperty, deleteProperty, moveRoleInstanceToAnotherContext, removeProperty, roleContextualisations, saveFile, setProperty)
+import Perspectives.Checking.Authorization (roleHasPerspectiveOnRoleWithVerb)
+import Perspectives.Checking.PerspectivesTypeChecker (checkBinding)
 import Perspectives.CoreTypes (type (~~>), LogLevel(..), LogTopic(..), MP, MPT, MonadPerspectivesTransaction, Updater, (###>>), (##=), (##>), (##>>))
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
 import Perspectives.Error.Boundaries (handlePerspectRolError)
@@ -55,9 +57,9 @@ import Perspectives.Identifiers (buitenRol) as Identifier
 import Perspectives.InstanceRepresentation (PerspectRol(..))
 import Perspectives.Instances.Builders (constructContext, createAndAddRoleInstance)
 import Perspectives.Instances.ObjectGetters (allRoleBinders, getFilledRoles) as OG
-import Perspectives.Instances.ObjectGetters (binding, context, roleType_)
+import Perspectives.Instances.ObjectGetters (allFillers, binding, context, roleType_)
 import Perspectives.Instances.Values (writePerspectivesFile)
-import Perspectives.Logging (errorCompiler, logWhen)
+import Perspectives.Logging (errorCompiler, logWhen, warnAuth)
 import Perspectives.ModelDependencies (sysUser)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistent (getPerspectRol)
@@ -73,13 +75,38 @@ import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunctio
 import Perspectives.Representation.QueryFunction (QueryFunction(..)) as QF
 import Perspectives.Representation.ThreeValuedLogic (pessimistic)
 import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedRoleType(..), RoleType(..))
+import Perspectives.Representation.Verbs (RoleVerb(..))
 import Perspectives.ResourceIdentifiers (databaseLocation, resourceIdentifier2DocLocator)
-import Perspectives.SaveUserData (removeBinding, scheduleContextRemoval, scheduleLocalContextRemoval, scheduleRoleRemoval, setBinding, setFirstBinding, synchronise)
+import Perspectives.SaveUserData (FillBindingMode(..), removeBinding, scheduleContextRemoval, scheduleLocalContextRemoval, scheduleRoleRemoval, setBinding, setBindingWithMode, setFirstBinding, synchronise)
 import Perspectives.ScheduledAssignment (ScheduledAssignment(..))
 import Perspectives.Sync.Transaction (Transaction(..))
 import Perspectives.Types.ObjectGetters (computesDatabaseQueryRole, hasContextAspect, isDatabaseQueryRole)
 import Perspectives.Warning (PerspectivesWarning(..))
 import Unsafe.Coerce (unsafeCoerce)
+
+bindAllWithPermission :: RoleInstance -> Array RoleInstance -> MonadPerspectivesTransaction Unit
+bindAllWithPermission filler targets = do
+  author <- gets (_.authoringRole <<< unwrap)
+  fillerChain <- lift $ allFillers filler
+  allowed <- catMaybes <$> for (nub targets) \target -> do
+    targetType <- lift $ roleType_ target
+    permission <- lift $ roleHasPerspectiveOnRoleWithVerb author targetType [ Fill, CreateAndFill ] Nothing Nothing
+    case permission of
+      Left e@(UnauthorizedForRole _ _ _ _ _ _) -> do
+        message <- lift $ renderPerspectivesError e
+        lift $ warnAuth ("bind_ allfilledroles: skipping " <> unwrap target <> ": " <> message)
+        pure Nothing
+      Left e -> do
+        message <- lift $ renderPerspectivesError e
+        throwError $ error message
+      Right false -> throwError $ error "bind_ allfilledroles: authorization returned an invalid result."
+      Right true -> do
+        valid <- lift $ checkBinding targetType filler
+        if not valid then throwError $ error ("bind_ allfilledroles: replacement filler " <> unwrap filler <> " does not satisfy " <> show targetType <> ".")
+        else if target == filler || elem target fillerChain then
+          throwError $ error ("bind_ allfilledroles: binding " <> unwrap target <> " would create a cycle.")
+        else pure $ Just target
+  for_ allowed \target -> void $ setBindingWithMode FillWithProvidedType target filler Nothing
 
 -- Deletes, from all contexts, the role instance.
 compileAssignment :: QueryFunctionDescription -> MP (Updater ContextInstance)
@@ -244,6 +271,16 @@ compileAssignment (BQD _ QF.Bind_ binding binder _ _ _) = do
     void $ case binding', binder' of
       Just binding'', Just binder'' -> setBinding binder'' binding'' Nothing
       _, _ -> pure []
+
+compileAssignment (BQD _ QF.BindAll_ binding binder _ _ _) = do
+  bindingGetter <- context2role binding
+  binderGetter <- context2role binder
+  pure \contextId -> do
+    replacement <- lift (contextId ##> bindingGetter)
+    targets <- lift (contextId ##= binderGetter)
+    case replacement of
+      Nothing -> throwError $ error "bind_ allfilledroles: no replacement filler."
+      Just filler -> bindAllWithPermission filler targets
 
 compileAssignment (UQD _ (QF.RemoveAsFillerOfType roleType) fillerQfd _ _ _) = do
   (fillerGetter :: (ContextInstance ~~> RoleInstance)) <- context2role fillerQfd

@@ -338,6 +338,10 @@ rangeOfRoleCalculation = getRole >=> getCalculation >=> case _ of
   UQD _ _ _ (RDOM adt) _ _ -> pure $ roleInContext2Role <$> adt
   BQD _ _ _ _ (RDOM adt) _ _ -> pure $ roleInContext2Role <$> adt
   MQD _ _ _ (RDOM adt) _ _ -> pure $ roleInContext2Role <$> adt
+  SQD _ _ (FROLE adt) _ _ -> pure $ roleInContext2Role <$> adt
+  UQD _ _ _ (FROLE adt) _ _ -> pure $ roleInContext2Role <$> adt
+  BQD _ _ _ _ (FROLE adt) _ _ -> pure $ roleInContext2Role <$> adt
+  MQD _ _ _ (FROLE adt) _ _ -> pure $ roleInContext2Role <$> adt
   otherwise -> empty -- NB: The Alt instance of Aff throws an error on empty!
 
 roleTypeIsFunctional :: RoleType -> MonadPerspectives Boolean
@@ -395,6 +399,7 @@ rangeOfCalculatedRole cr = calculation cr >>= roleCalculationRange
   roleCalculationRange :: QueryFunctionDescription -> MonadPerspectives (ADT RoleInContext)
   roleCalculationRange qfd = case range qfd of
     (RDOM x) -> pure x
+    (FROLE x) -> pure x
     otherwise -> throwError (error ("range of calculation of a calculated role is not a role Domain."))
 
 displayNameOfRoleType :: RoleType -> MonadPerspectives String

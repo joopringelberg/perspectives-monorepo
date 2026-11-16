@@ -50,7 +50,7 @@ import Perspectives.HiddenFunction (HiddenFunction)
 import Perspectives.HumanReadableType (translateType)
 import Perspectives.Identifiers (isExternalRole)
 import Perspectives.Instances.Combinators (available', not_)
-import Perspectives.Instances.ObjectGetters (Filled_(..), Filler_(..), binding, binding_, completeRuntimeType, context, contextModelName, contextType, contextType_, externalRole, filledBy, fills, getActiveRoleStates_, getActiveStates_, getAllFilledRoles_, getEnumeratedRoleInstances, getFilledRoles, getProperty, getUnlinkedRoleInstances, indexedContextName, indexedRoleName, roleModelName, roleType, roleType_)
+import Perspectives.Instances.ObjectGetters (Filled_(..), Filler_(..), binding, binding_, completeRuntimeType, context, contextModelName, contextType, contextType_, externalRole, filledBy, fills, getActiveRoleStates_, getActiveStates_, getAllFilledRoles, getAllFilledRoles_, getEnumeratedRoleInstances, getFilledRoles, getProperty, getUnlinkedRoleInstances, indexedContextName, indexedRoleName, roleModelName, roleType, roleType_)
 import Perspectives.Instances.Values (bool2Value, parseNumber)
 import Perspectives.Logging (errorCompiler)
 import Perspectives.ModelDependencies (roleWithId, socialEnvironment, socialEnvironmentPersons)
@@ -709,6 +709,8 @@ interpretSQD qfd a = case a.head of
       if parameter == "direct" then composePaths a <$> getDirectFillerType rid
       else composePaths a <$> getFillerTypeRecursively (unsafePartial domain2roleType ran) rid
     (SQD _ (FilledF roleType contextType) _ _ _) -> composePaths a <$> getRecursivelyFilledRoles contextType roleType rid
+    (SQD _ (DataTypeGetter AllFilledRolesF) _ _ _) -> flip consOnMainPath a <<< R <$> getAllFilledRoles rid
+    (SQD _ (DataTypeGetter DirectFillerF) _ _ _) -> composePaths a <$> getDirectFillerType rid
     (SQD _ (DataTypeGetterWithParameter IsInStateF parameter) _ _ _) -> do
       states <- lift $ lift $ getActiveRoleStates_ rid
       let result = isJust $ elemIndex (StateIdentifier parameter) states

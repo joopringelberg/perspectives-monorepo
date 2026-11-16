@@ -224,6 +224,7 @@ perspectDef = LanguageDef
       -- Functions in expressions
       , "specialisesRoleType"
       , "roleTypes"
+      , "allfilledroles"
       , "contextType"
       , "roleType"
       , "modelname"

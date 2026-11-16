@@ -179,6 +179,7 @@ swapPropertyType pt = case pt of
 humanizeDomain :: Domain -> MonadPerspectives Domain
 humanizeDomain dom = case dom of
   RDOM adt -> RDOM <$> traverse toReadable adt
+  FROLE adt -> FROLE <$> traverse toReadable adt
   CDOM adt -> CDOM <$> traverse toReadable adt
   VDOM ran mprop -> VDOM ran <$> traverse swapPropertyType mprop
   ContextKind -> pure ContextKind

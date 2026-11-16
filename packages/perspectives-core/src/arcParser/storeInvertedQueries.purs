@@ -36,7 +36,7 @@ import Perspectives.ArrayUnions (ArrayUnions(..))
 import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.Data.EncodableMap (EncodableMap(..))
 import Perspectives.InvertedQuery (InvertedQuery(..), QueryWithAKink(..), backwards, forwards)
-import Perspectives.InvertedQueryKey (serializeInvertedQueryKey)
+import Perspectives.InvertedQueryKey (RunTimeInvertedQueryKey(..), serializeInvertedQueryKey)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (PhaseTwo', addStorableInvertedQuery, getsDF, lift2, throwError)
 import Perspectives.Parsing.Arc.Position (ArcPosition)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
@@ -52,7 +52,7 @@ import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunctio
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..), bool2threeValued)
 import Perspectives.Representation.TypeIdentifiers (PropertyType(..), RoleType(..), StateIdentifier)
 import Perspectives.Utilities (prettyPrint)
-import Prelude (Unit, bind, discard, flip, not, pure, show, unit, ($), (<$>), (<>), (==), (/=), (<<<), (>=>), (<*>))
+import Prelude (Unit, bind, discard, flip, not, pure, show, unit, ($), (<$>), (<#>), (<>), (==), (/=), (<<<), (>=>), (<*>), (||))
 
 type WithModificationSummary = ReaderT ModificationSummary (PhaseTwo' MonadPerspectives)
 
@@ -331,8 +331,12 @@ setPathForStep qfd@(SQD dom qf ran fun man) qWithAK users states statesPerProper
     -- The key is stored under the filled role type (domain of FillerF) so that it fires whenever
     -- that filled role acquires a new filler.  No compensating step is added to the forward part.
     -- After step removal: domain(new backward) = range(FillerF) = RDOM filler.
-    QF.DataTypeGetter QF.FillerF -> do
-      (ArrayUnions keys) <- lift $ lift $ lift $ typeLevelKeyForFillerQueries qfd
+    QF.DataTypeGetter f | f == QF.FillerF || f == QF.DirectFillerF -> do
+      (ArrayUnions keys) <-
+        if f == QF.DirectFillerF then
+          pure $ ArrayUnions $ (allLeavesInADT $ unsafePartial domain2roleInContext ran) <#> \(RoleInContext { role, context }) ->
+            RTAllFilledKey { fillerRole: role, fillerContext: context }
+        else lift $ lift $ lift $ typeLevelKeyForFillerQueries qfd
       oneStepLess <- pure $ removeFirstBackwardsStep qWithAK (\_ _ _ -> Nothing)
       description <- pure $ case mfilter of
         Nothing -> case oneStepLess of
@@ -350,10 +354,12 @@ setPathForStep qfd@(SQD dom qf ran fun man) qWithAK users states statesPerProper
           -- NOTICE. The domain, being an ADT, may have multiple RoleInContext combinations. But we can only use one of these
           -- as parameters of FilledF. We arbitrarily choose the first.
           ( \ran' dom' man' ->
-              let
-                RoleInContext { context, role } = unsafePartial fromJust $ head $ allLeavesInADT (domain2roleInContext dom')
-              in
-                SQD ran' (FilledF role context) dom' True man'
+              if f == QF.DirectFillerF then SQD ran' (QF.DataTypeGetter QF.AllFilledRolesF) dom' False False
+              else
+                let
+                  RoleInContext { context, role } = unsafePartial fromJust $ head $ allLeavesInADT (domain2roleInContext dom')
+                in
+                  SQD ran' (FilledF role context) dom' True man'
           )
           filter
       case dom of

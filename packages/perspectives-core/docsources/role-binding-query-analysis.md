@@ -2,6 +2,12 @@
 
 This note documents the runtime call tree that starts at `usersWithPerspectiveOnRoleBinding` in `Perspectives.CollectAffectedContexts`, with the `System$Invitation$Inviter` → `Invitee` case as its guiding example.
 
+For the design of aspect-aware binder lookup and its coordinated changes to
+assumptions, runtime keys and synchronisation, see
+[Binder Lookup Through Role and Context Aspects](binder-aspect-lookup.md).
+That chapter also explains why runtime must use actual containing context
+types rather than the role types' declared contexts.
+
 ---
 
 ## Investigated case

@@ -73,6 +73,7 @@ instance Ord Dependency where
 -- | Caveats: Role types are construed to be Enumerated.
 domain2Dependency :: Domain -> String -> Dependency
 domain2Dependency (RDOM _) s = R $ RoleInstance s
+domain2Dependency (FROLE _) s = R $ RoleInstance s
 domain2Dependency (CDOM _) s = C $ ContextInstance s
 domain2Dependency (VDOM _ (Just pr)) s = V (propertytype2string pr) $ Value s
 domain2Dependency (VDOM _ Nothing) s = V "" $ Value s

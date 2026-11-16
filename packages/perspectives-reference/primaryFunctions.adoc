@@ -1,7 +1,7 @@
 [[keyword-binder]]
 === binding and binder
 anchor:keyword-binding[]
-The `binding` and `binder` keywords are used to traverse the link connecting role instances. `binding` refers to the role instance that fills the current role, while `binder` refers to a role instance that is filled by the current role. However, as roles can be filled by multiple other roles, `binder` can return multiple role instances. `binder` must be used with a role type to narrow the results to instances of that specific role type.
+The `binding` and `binder` keywords are used to traverse the link connecting role instances. `binding` refers to the role instance that fills the current role, while `binder` refers to a role instance that is filled by the current role. However, as roles can be filled by multiple other roles, `binder` can return multiple role instances. `binder` must be used with a role type to narrow the results to instances of that role type, including instances whose role type has it as an aspect. The filled role's context must also match the specified context type, or the role type's declared context when none is specified, including context specialisations.
 
 [source,perspectivesarc]
 ----
@@ -21,6 +21,31 @@ case ShoppingList
 ----
 
 External roles cannot be filled. Hence it is an error to apply `binding` to an expression that yields only external roles, such as `extern >> binding` or `ShoppingLists >> binding >> binding`: such a step would never yield a result. The compiler reports `FillerOfExternalRole`. Remember that the instances of a calculated context role are external roles, too (see <<remove-context-through-external-role>>). To go from an external role to the roles it fills, use `binder <RoleType>`; to go to its context, use `context`.
+
+[[keyword-allfilledroles]]
+=== allfilledroles
+
+`allfilledroles` returns every role instance *directly* filled by its input role instance, without restricting the concrete role or containing context types. Use it as a query step:
+
+[source,perspectivesarc]
+----
+thing Selected = Original >> binding >> allfilledroles
+----
+
+Results are distinct and may be empty. The operation reads locally known inverse links; it does not search other installations or recursively follow roles filled by the returned roles.
+
+The input type is a guaranteed lower bound of each result's complete runtime type, because the filler contributes its type to the filled role. This is an *inherited* type, not the result's own concrete role type or containing context. The compiler preserves that distinction instead of inferring a common concrete result type.
+
+In this minimal version, results can be stored in calculated thing/user roles, counted, tested for existence, or used as the targets of `bind_`. `roleType` returns the concrete role type. `binding` retrieves the direct filler with the known input type. Navigation to the result's `context`, direct property lookup on the result, and another `allfilledroles` step on the result are not supported by this conservative type representation. To read the filler's properties or navigate its context, use `binding` first.
+
+For example, in a role-origin action whose containing context has functional roles `OldPerson` and `NewPerson` filled by Persons instances:
+
+[source,perspectivesarc]
+----
+bind_ context >> NewPerson >> binding to context >> OldPerson >> binding >> allfilledroles
+----
+
+This replaces the filler of each permitted selected role with the new Persons instance. Permission is checked on each target's actual role type; a missing `Fill` or `CreateAndFill` permission skips that target and logs a warning. Other errors are not treated as permission failures. See <<keyword-bind_allfilledroles,bulk rebinding>>.
 
 [[keyword-context_operator]]
 === context

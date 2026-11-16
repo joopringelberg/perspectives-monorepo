@@ -26,6 +26,8 @@ This index provides an overview of the technical documentation in `packages/pers
 | [The Query Subsystem](query-subsystem.md) | End-to-end technical overview of the query pipeline: parsing an ARC expression into an AST, compiling it to a typed `QueryFunctionDescription`, evaluating it at runtime via the interpreter, and registering computed values in the external-function cache. Also covers three-valued logic and assumption tracking. |
 | [Query Inversion](query-inversion.md) | The compile-time transformation that turns every forward query into one or more *inverted* queries. Covers compiler-only property-anchor provenance, the distinction between perspective results and filter dependencies, and filtered/unfiltered triggers for visibility changes. Inverted queries identify affected queries and users without re-evaluating the world. |
 | [Role-Binding Query Analysis](role-binding-query-analysis.md) | A focused walkthrough of the binding-related runtime path in `Perspectives.CollectAffectedContexts`, including how `RTFillerKey` and `RTFilledKey` queries are applied and why the `Invitation$Inviter` → `Invitee` case likely points to stored-query data rather than an obvious runtime mismatch. |
+| [Binder Lookup Through Role and Context Aspects](binder-aspect-lookup.md) | Design rationale and mechanism for complete typed binder lookup across specialisations: concrete inverse-link buckets instead of single-valued aliases, requested-type assumptions, aspect-aware inverted-query keys, actual containing contexts, per-result synchronisation, and unavailable-branch limits. |
+| [All Filled Roles: Inherited Result Typing and Bulk Rebinding](allfilledroles.md) | The minimal `allfilledroles` operator: filler-contributed lower-bound typing without inventing a target context, untyped inverse-link assumptions, unrestricted binding index keys, and bulk replacement that skips unauthorized targets. |
 
 ### Transaction & Delta System
 
@@ -65,7 +67,8 @@ The table below lists every PureScript module that is referenced in at least one
 | `Perspectives.Assignment.SentenceCompiler` | [Model Translation](model-translation.md) |
 | `Perspectives.Assignment.Update` | [Installation Initialization](installation-initialization.md) |
 | `Perspectives.Checking.PerspectivesTypeChecker` | [Type Comparison](type-comparison.md) |
-| `Perspectives.CollectAffectedContexts` | [Query Inversion](query-inversion.md), [Role-Binding Query Analysis](role-binding-query-analysis.md) |
+| `Perspectives.CollectAffectedContexts` | [Query Inversion](query-inversion.md), [Role-Binding Query Analysis](role-binding-query-analysis.md), [Binder Aspect Lookup](binder-aspect-lookup.md) |
+| `Perspectives.ContextAndRole` | [Binder Aspect Lookup](binder-aspect-lookup.md) |
 | `Perspectives.ContextStateCompiler` | [Transaction Execution Process](transaction-execution.md) |
 | `Perspectives.CoreTypes` | [The Query Subsystem](query-subsystem.md), [Structured Logging](structured-logging.md) |
 | `Perspectives.Couchdb` | [Database Backend Options](database-backend-options.md) |
@@ -73,6 +76,7 @@ The table below lists every PureScript module that is referenced in at least one
 | `Perspectives.Conversations.Parser` | [Conversation Text Format and Parser](conversation-text-format.md) |
 | `Perspectives.Conversations.Renderer` | [Conversation Text Format and Parser](conversation-text-format.md) |
 | `Perspectives.Deltas` | [Transaction Distribution to Peers](transaction-distribution.md) |
+| `Perspectives.DependencyTracking.Dependency` | [Binder Aspect Lookup](binder-aspect-lookup.md) |
 | `Perspectives.DomeinCache` | [Model Translation](model-translation.md) |
 | `Perspectives.ErrorLogging` | [PDR → Frontend Messaging](pdr-messaging.md) |
 | `Perspectives.Extern.Parsing` | [Model Translation](model-translation.md) |
@@ -82,7 +86,7 @@ The table below lists every PureScript module that is referenced in at least one
 | `Perspectives.Identifiers` | [Model URI resolution](model-uri-resolution.md), [Model Translation](model-translation.md) |
 | `Perspectives.Inspector.InspectableResources` | [PDR Client Data Structures](pdr-client-data-structures.md) |
 | `Perspectives.Instances.Me` | [Installation Initialization](installation-initialization.md) |
-| `Perspectives.Instances.ObjectGetters` | [Type Comparison](type-comparison.md) |
+| `Perspectives.Instances.ObjectGetters` | [Type Comparison](type-comparison.md), [Binder Aspect Lookup](binder-aspect-lookup.md) |
 | `Perspectives.Instances.SerialiseAsJson` | [Context Serialisation for a Peer](context-serialisation-for-peer.md) |
 | `Perspectives.InvertedQuery` | [Query Inversion](query-inversion.md) |
 | `Perspectives.ModelTranslation` | [Model Translation](model-translation.md) |
@@ -122,7 +126,8 @@ The table below lists every PureScript module that is referenced in at least one
 | `Perspectives.Sync.Transaction` | [Transaction Execution Process](transaction-execution.md), [Transaction Distribution to Peers](transaction-distribution.md) |
 | `Perspectives.SideCar.PhantomTypedNewtypes` | [Model URI resolution](model-uri-resolution.md) |
 | `Perspectives.TypePersistence.PerspectiveSerialisation.Data` | [PDR Client Data Structures](pdr-client-data-structures.md) |
-| `Perspectives.Types.ObjectGetters` | [Type Comparison](type-comparison.md) |
+| `Perspectives.Types.ObjectGetters` | [Type Comparison](type-comparison.md), [Binder Aspect Lookup](binder-aspect-lookup.md) |
+| `Perspective.InvertedQuery.Indices` | [Binder Aspect Lookup](binder-aspect-lookup.md) |
 | `Perspectives.TypesForDeltas` | [Delta Ordering and Conflict Resolution](delta-ordering.md) |
 | `Perspectives.Parsing.Arc.AST` | [Typeahead Screen Widgets](typeahead-screen-widgets.md) |
 | `Perspectives.Parsing.Arc` | [Typeahead Screen Widgets](typeahead-screen-widgets.md) |

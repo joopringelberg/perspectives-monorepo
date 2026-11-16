@@ -8,6 +8,7 @@
 * <<keyword-authoronly,authoronly (perspective)>>
 * <<keyword-authoronly-property,authoronly (property)>>
 * <<keyword-binder,binder>>
+* <<keyword-allfilledroles,allfilledroles>>
 * <<keyword-binding,binding>>
 * <<keyword-context,context (role declaration)>>
 * <<keyword-context_operator,context (operator)>>

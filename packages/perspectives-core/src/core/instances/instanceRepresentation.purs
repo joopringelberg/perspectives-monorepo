@@ -111,8 +111,8 @@ type RolRecord = PouchbdDocumentFields
   , properties :: F.Object (Array Value)
   -- Inverse links: the first index is the context type of the filled role,
   -- the second is the role type of the filled role.
-  -- These are indexed by the names in the aspect closure (all types of the role), so that a role instance can be found
-  -- regardless of which alias of the context/role type happened to be used while constructing it.
+  -- The keys are concrete types. Aspect-based lookup expands those types rather than relying
+  -- on aliases, which may have been overwritten when several types share an aspect.
   , filledRoles :: F.Object (F.Object (Array RoleInstance))
   , occurrence :: Int
   , isMe :: Boolean
@@ -161,4 +161,3 @@ binding :: RoleInstance -> Filler
 binding id = case id of
   RoleInstance "" -> Nothing
   otherwise -> (Just id)
-

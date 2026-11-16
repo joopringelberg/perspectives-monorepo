@@ -30,6 +30,7 @@ import Foreign.Object as Object
 import Perspectives.ApiTypes (ApiEffect, ResponseWithWarnings(..))
 import Perspectives.Assignment.Update (setPreferredUserRoleType)
 import Perspectives.ContextAndRole (defaultContextRecord, defaultRolRecord)
+import Perspectives.CompileAssignment (bindAllWithPermission)
 import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction, (##>))
 import Perspectives.Cuid2 (cuid2)
 import Perspectives.Data.EncodableMap as EM
@@ -40,7 +41,7 @@ import Perspectives.DomeinFile (DomeinFile(..), defaultDomeinFileRecord)
 import Perspectives.Identifiers (typeUri2ModelUri)
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..))
 import Perspectives.Instances.Me (getMyType, isMe)
-import Perspectives.Instances.ObjectGetters (getMe, roleType_)
+import Perspectives.Instances.ObjectGetters (binding_, getMe, roleType_)
 import Perspectives.ModelDependencies (perspectivesUsers, perspectivesUsersPublicKey, perspectivesUsersTransportPublicKey)
 import Perspectives.Parsing.Arc.Position (ArcPosition(..))
 import Perspectives.Persistence.DeltaStore (storeDeltaFromSignedDelta)
@@ -49,6 +50,7 @@ import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunction
 import Perspectives.Query.QueryTypes (RoleInContext(..)) as QT
 import Perspectives.Representation.ADT (ADT(..))
 import Perspectives.Representation.Class.Cacheable (cacheEntity)
+import Perspectives.Representation.Class.PersistentType (cacheInDomeinFile, getEnumeratedRole)
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..), defaultCalculatedRole)
 import Perspectives.Representation.Context (Context(..), ContextKind(..), defaultContext)
 import Perspectives.Representation.EnumeratedProperty (defaultEnumeratedProperty)
@@ -60,7 +62,7 @@ import Perspectives.Representation.QueryFunction (QueryFunction(..))
 import Perspectives.Representation.Range (Range(..))
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleKind(..), RoleType(..), StateIdentifier(..), roletype2string)
-import Perspectives.Representation.Verbs (PropertyVerb(..))
+import Perspectives.Representation.Verbs (PropertyVerb(..), RoleVerb(..), RoleVerbList(..))
 import Perspectives.RoleAssignment (filledNoLongerPointsTo, filledPointsTo, fillerPointsTo, lookForAlternativeMe)
 import Perspectives.RunPerspectives (runPerspectivesWithoutCouchdb)
 import Perspectives.RunMonadPerspectivesTransaction (phase2)
@@ -82,6 +84,42 @@ main = runTest theSuite
 
 theSuite :: TestSuite
 theSuite = suite "User-role filler replacement" do
+  test "bulk rebinding skips denied targets and replaces permitted targets in their own contexts" $
+    withFixture oldRemotePeer [] [] do
+      EnumeratedRole author <- lift $ getEnumeratedRole userType
+      let grant (Perspective p) = Perspective p { roleVerbs = EM.singleton (ContextState $ StateIdentifier $ unwrap contextType) (Including [ Fill ]) }
+      lift $ cacheInDomeinFile userType (EnumeratedRole author { perspectives = grant <$> author.perspectives })
+      second <- addFilledContext "bulk-second" userType oldRemotePeer false
+      bindAllWithPermission newRemotePeer [ hiddenId, userId, second.role, userId ]
+      Transaction { scheduledAssignments } <- AA.get
+      liftAff $ equal 2 (length scheduledAssignments)
+      for_ scheduledAssignments \assignment -> case assignment of
+        RoleUnbinding target (Just filler) _ -> changeRoleBinding target (Just filler)
+        _ -> liftAff $ assert "Expected only permitted binding replacements" false
+      firstBinding <- lift $ binding_ userId
+      secondBinding <- lift $ binding_ second.role
+      hiddenBinding <- lift $ binding_ hiddenId
+      liftAff $ equal (Just newRemotePeer) firstBinding
+      liftAff $ equal (Just newRemotePeer) secondBinding
+      liftAff $ equal Nothing hiddenBinding
+
+  test "bulk rebinding rejects an invalid replacement before scheduling changes" $
+    withFixture oldRemotePeer [] [] do
+      EnumeratedRole author <- lift $ getEnumeratedRole userType
+      let grant (Perspective p) = Perspective p { roleVerbs = EM.singleton (ContextState $ StateIdentifier $ unwrap contextType) (Including [ Fill ]) }
+      lift $ cacheInDomeinFile userType
+        ( EnumeratedRole author
+            { perspectives = grant <$> author.perspectives
+            , binding = Just $ ST $ QT.RoleInContext { context: contextType, role: visibleType }
+            }
+        )
+      result <- try $ bindAllWithPermission newRemotePeer [ userId ]
+      case result of
+        Left _ -> pure unit
+        Right _ -> liftAff $ assert "An incompatible filler must fail explicitly" false
+      Transaction { scheduledAssignments } <- AA.get
+      liftAff $ equal [] scheduledAssignments
+
   for_ [ localPeer, oldRemotePeer ] \oldFiller ->
     test ("initializes the new remote peer when replacing " <> unwrap oldFiller) $
       withFixture oldFiller [] [] do

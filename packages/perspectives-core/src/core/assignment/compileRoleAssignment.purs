@@ -44,6 +44,7 @@ import Foreign.Object (empty)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.ApiTypes (ContextSerialization(..), PropertySerialization(..), RolSerialization(..), defaultContextSerializationRecord)
 import Perspectives.Assignment.Update (addProperty, deleteProperty, moveRoleInstanceToAnotherContext, removeProperty, roleContextualisations, saveFile, setProperty)
+import Perspectives.CompileAssignment (bindAllWithPermission)
 import Perspectives.CoreTypes (type (~~>), MP, MPT, MonadPerspectivesTransaction, Updater, (###>>), (##=), (##>), (##>>))
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
 import Perspectives.Error.Boundaries (handlePerspectRolError)
@@ -229,6 +230,16 @@ compileAssignmentFromRole (BQD _ QF.Bind_ binding binder _ _ _) = do
     void $ case binding', binder' of
       Just binding'', Just binder'' -> setBinding binder'' binding'' Nothing
       _, _ -> pure []
+
+compileAssignmentFromRole (BQD _ QF.BindAll_ binding binder _ _ _) = do
+  bindingGetter <- role2role binding
+  binderGetter <- role2role binder
+  pure \roleId -> do
+    replacement <- lift (roleId ##> bindingGetter)
+    targets <- lift (roleId ##= binderGetter)
+    case replacement of
+      Nothing -> throwError $ error "bind_ allfilledroles: no replacement filler."
+      Just filler -> bindAllWithPermission filler targets
 
 compileAssignmentFromRole (UQD _ (QF.RemoveAsFillerOfType roleType) fillerQfd _ _ _) = do
   (fillerGetter :: (RoleInstance ~~> RoleInstance)) <- role2role fillerQfd

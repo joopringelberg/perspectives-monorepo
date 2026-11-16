@@ -319,6 +319,8 @@ data Domain
     -- as such to the context type. If Nothing, use the static context type (the namespace of the Enumerated).
     -- RDOM (ADT EnumeratedRoleType) (Maybe ContextType)
     RDOM (ADT RoleInContext)
+  -- The type is contributed by a filler, not the selected role's own context/type.
+  | FROLE (ADT RoleInContext)
   | CDOM (ADT ContextType)
   | VDOM RAN.Range (Maybe PropertyType)
   | ContextKind
@@ -339,6 +341,7 @@ instance eqDomain :: Eq Domain where
 instance writeForeignDomain :: WriteForeign Domain where
   -- writeImpl (RDOM adt ct) = unsafeToForeign { rdom: write adt, ctype: write ct}
   writeImpl (RDOM adt) = writeImpl { rdom: write adt }
+  writeImpl (FROLE adt) = writeImpl { fillerRole: write adt }
   writeImpl (CDOM adt) = writeImpl { cdom: write adt }
   writeImpl (VDOM ran mprop) = writeImpl { range: write ran, maybeproperty: write mprop }
   writeImpl ContextKind = writeImpl "ContextKind"
@@ -350,6 +353,7 @@ instance readForeignDomain :: ReadForeign Domain where
     -- (\({rdom, ctype} :: {rdom :: ADT EnumeratedRoleType, ctype :: Maybe ContextType})-> (RDOM rdom ctype)) <$> (readImpl f)
     -- RDOM <$> (readImpl f)
     (\({ rdom: adt } :: { rdom :: ADT RoleInContext }) -> (RDOM adt)) <$> (readImpl f)
+      <|> (\({ fillerRole: adt } :: { fillerRole :: ADT RoleInContext }) -> FROLE adt) <$> readImpl f
       <|> (\({ cdom: adt } :: { cdom :: ADT ContextType }) -> (CDOM adt)) <$> (readImpl f)
       <|> (\({ range: r, maybeproperty } :: { range :: RAN.Range, maybeproperty :: Maybe PropertyType }) -> (VDOM r maybeproperty)) <$> (readImpl f)
       <|>
@@ -452,6 +456,7 @@ domain2PropertyRange d = case d of
 sumOfDomains :: Domain -> Domain -> Maybe Domain
 -- sumOfDomains (RDOM a ec1) (RDOM b ec2) | ec1 == ec2 = Just (RDOM (SUM [a, b]) ec1)
 sumOfDomains (RDOM a) (RDOM b) = Just (RDOM (SUM [ a, b ]))
+sumOfDomains (FROLE a) (FROLE b) = Just (FROLE (SUM [ a, b ]))
 sumOfDomains AnyRoleType (RDOM _) = Just AnyRoleType
 sumOfDomains (RDOM _) AnyRoleType = Just AnyRoleType
 sumOfDomains AnyRoleType AnyRoleType = Just AnyRoleType
@@ -466,6 +471,7 @@ productOfDomains :: Domain -> Domain -> Maybe Domain
 -- productOfDomains (RDOM a ec1) (RDOM b ec2) | ec1 == ec2 = Just (RDOM (PROD [a, b]) ec1)
 -- productOfDomains (RDOM a _) (RDOM b _) = Just (RDOM (PROD [a, b]) Nothing)
 productOfDomains (RDOM a) (RDOM b) = Just (RDOM (PROD [ a, b ]))
+productOfDomains (FROLE a) (FROLE b) = Just (FROLE (PROD [ a, b ]))
 productOfDomains AnyRoleType (RDOM _) = Just AnyRoleType
 productOfDomains (RDOM _) AnyRoleType = Just AnyRoleType
 productOfDomains AnyRoleType AnyRoleType = Just AnyRoleType
@@ -475,10 +481,12 @@ productOfDomains _ _ = Nothing
 
 domain2roleInContext :: Partial => Domain -> ADT RoleInContext
 domain2roleInContext (RDOM r) = r
+domain2roleInContext (FROLE r) = r
 domain2roleInContext AnyRoleType = PROD []
 
 domain2roleType :: Partial => Domain -> ADT RoleInContext
 domain2roleType (RDOM r) = r
+domain2roleType (FROLE r) = r
 domain2roleType AnyRoleType = PROD []
 
 domain2contextType :: Partial => Domain -> ADT ContextType
@@ -487,6 +495,7 @@ domain2contextType (CDOM c) = c
 equalDomainKinds :: Domain -> Domain -> Boolean
 equalDomainKinds (CDOM _) (CDOM _) = true
 equalDomainKinds (RDOM _) (RDOM _) = true
+equalDomainKinds (FROLE _) (FROLE _) = true
 equalDomainKinds (VDOM r1 _) (VDOM r2 _) = r1 == r2
 equalDomainKinds ContextKind ContextKind = true
 equalDomainKinds RoleKind RoleKind = true

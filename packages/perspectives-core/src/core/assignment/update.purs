@@ -777,6 +777,7 @@ isUntouchable ctxts rls (RoleAssumption c r) = ST.evalStateT ((for_ rls f) *> ST
 isUntouchable ctxts rls (Me c) = pure $ isJust $ elemIndex c ctxts
 isUntouchable ctxts rls (Filler rl) = pure $ isJust $ elemIndex rl rls
 isUntouchable ctxts rls (FilledRolesAssumption filler _ _) = pure $ isJust $ elemIndex filler rls
+isUntouchable ctxts rls (AllFilledRolesAssumption filler) = pure $ isJust $ elemIndex filler rls
 isUntouchable ctxts rls (Property rl _) = pure $ isJust $ elemIndex rl rls
 isUntouchable ctxts rls (Context rl) = pure $ isJust $ elemIndex rl rls
 isUntouchable ctxts rls (External ct) = pure $ isJust $ elemIndex ct ctxts

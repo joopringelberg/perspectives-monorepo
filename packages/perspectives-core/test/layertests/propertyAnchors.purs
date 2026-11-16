@@ -22,38 +22,52 @@ module Test.Query.PropertyAnchors where
 import Prelude
 
 import Control.Monad.Error.Class (throwError)
-import Data.Array (any, concat, drop, filter, head, nub, null)
+import Data.Array (any, concat, drop, filter, head, length, mapMaybe, nub, nubEq, null)
 import Data.Either (Either(..))
-import Data.Foldable (for_)
+import Data.Foldable (all, for_)
 import Data.Maybe (Maybe(..), isJust)
 import Data.Newtype (unwrap)
 import Data.String (joinWith)
 import Data.Traversable (for)
 import Data.Tuple (Tuple(..))
 import Effect (Effect)
+import Effect.Class (liftEffect)
 import Effect.Exception (error)
 import Foreign.Object as Object
-import Perspectives.ContextAndRole (addRol_gevuldeRollen, defaultContextRecord, defaultRolRecord)
-import Perspectives.CoreTypes (MonadPerspectives, (##=))
+import Perspective.InvertedQuery.Indices (runtimeIndexForFilledQueries', runtimeIndexForFillerQueries')
+import Perspectives.ArrayUnions (ArrayUnions(..))
+import Perspectives.ContextAndRole (addRol_gevuldeRollen, defaultContextRecord, defaultRolRecord, removeRol_gevuldeRollen)
+import Perspectives.CoreTypes (MonadPerspectives, runMonadPerspectivesQuery, (##=))
+import Perspectives.Cuid2 (cuid2)
 import Perspectives.Data.EncodableMap as EM
+import Perspectives.DependencyTracking.Dependency (findFilledRoleRequests, registerDependency, toAssumption)
 import Perspectives.DomeinCache (storeDomeinFileInCache)
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..))
+import Perspectives.Instances.ObjectGetters (getAllFilledRoles, getFilledRoles)
 import Perspectives.InvertedQuery (InvertedQuery(..), QueryWithAKink(..), startsWithFilter)
-import Perspectives.InvertedQuery.Storable (StoredQueries)
+import Perspectives.InvertedQuery.Storable (StoredQueries, getFillerQueries, saveInvertedQueries)
 import Perspectives.InvertedQueryKey (RunTimeInvertedQueryKey(..), deserializeInvertedQueryKey)
 import Perspectives.Parsing.Arc (domain) as ARC
 import Perspectives.Parsing.Arc.IndentParser (runIndentParser)
+import Perspectives.Parsing.Arc.Expression.AST (SimpleStep(..), Step(..)) as EXPR
+import Perspectives.Parsing.Arc.Position (ArcPosition(..))
 import Perspectives.Parsing.Arc.PhaseThree (phaseThree)
 import Perspectives.Parsing.Arc.PhaseTwo (traverseDomain)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (runPhaseTwo', toStableDomeinFile)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
+import Perspectives.Persistence.API (createDatabase)
+import Perspectives.Persistent (invertedQueryDatabaseName)
 import Perspectives.Query.Kinked (AnchoredQueryWithAKink, PropertyAnchor(..), invert, invertWithAnchors)
-import Perspectives.Query.QueryTypes (Domain(..), QueryFunctionDescription(..), RoleInContext(..), domain, makeComposition)
+import Perspectives.Query.ExpressionCompiler (compileExpression)
+import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), RoleInContext(..), domain, makeComposition, range)
+import Perspectives.Query.Interpreter (interpret)
+import Perspectives.Query.Interpreter.Dependencies (Dependency(..), singletonPath)
 import Perspectives.Query.UnsafeCompiler (compileFunction)
-import Perspectives.Representation.ADT (ADT(..))
+import Perspectives.Representation.ADT (ADT(..), allLeavesInADT)
 import Perspectives.Representation.Class.Cacheable (cacheEntity)
 import Perspectives.Representation.Class.PersistentType (cacheInDomeinFile, getContext, getEnumeratedProperty, getEnumeratedRole)
 import Perspectives.Representation.Context (Context(..))
+import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
 import Perspectives.Representation.EnumeratedProperty (EnumeratedProperty(..))
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value(..))
@@ -63,6 +77,8 @@ import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
 import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..))
 import Perspectives.DomeinFile (DomeinFile(..), DomeinFileRecord)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable)
+import Perspectives.RunPerspectives (runPerspectivesWithoutCouchdb)
+import Perspectives.SetupCouchdb (setRTFillerKeyView)
 import Test.Perspectives.Utils (runP)
 import Test.Unit (Test, TestSuite, suite, test)
 import Test.Unit.Assert (assert, equal)
@@ -73,6 +89,84 @@ main = runTest theSuite
 
 theSuite :: TestSuite
 theSuite = suite "Perspective property anchors" do
+  test "allfilledroles does not invent a containing context from its inherited type" do
+    Tuple result _ <- runP $ runPhaseTwo' $ compileExpression
+      (FROLE (UET (RoleInContext { role: role "Person", context: ContextType modelName })))
+      (EXPR.Simple (EXPR.Context (ArcPosition { line: 1, column: 1 })))
+    case result of
+      Left [ Custom _ ] -> pure unit
+      _ -> assert ("Expected an explicit unknown-context diagnostic, got " <> show result) false
+
+  test "allfilledroles tracks empty results and returns all direct buckets once" $
+    withCompiledModel "Attendees >> binding" \dfr _ -> do
+      result <- runP do
+        void $ storeDomeinFileInCache (ModelUri modelName) (toStableDomeinFile $ DomeinFile dfr)
+        let empty = PerspectRol defaultRolRecord { id = dossierId }
+        void $ cacheEntity dossierId empty
+        Tuple noRoles assumptions <- runMonadPerspectivesQuery dossierId getAllFilledRoles
+        for_ (unwrap assumptions) \assumption -> registerDependency 84 (toAssumption assumption)
+        first <- addRol_gevuldeRollen empty (ContextType (modelName <> "$Meeting")) (role "Meeting$Attendees") attendeeId
+        second <- addRol_gevuldeRollen first (ContextType (modelName <> "$Dossier")) (role "Dossier$Ambassador") meetingRoleId
+        duplicate <- addRol_gevuldeRollen second (ContextType (modelName <> "$Dossier")) (role "Dossier$Ambassador") attendeeId
+        void $ cacheEntity dossierId duplicate
+        direct <- dossierId ##= getAllFilledRoles
+        compiled <- compileFunction $ SQD itemDomain (DataTypeGetter AllFilledRolesF) (FROLE (UET (RoleInContext { role: role "Items", context: ContextType modelName }))) False False
+        actual <- unwrap dossierId ##= compiled
+        paths <- singletonPath (R dossierId) ##= interpret (SQD itemDomain (DataTypeGetter AllFilledRolesF) (FROLE (UET (RoleInContext { role: role "Items", context: ContextType modelName }))) False False)
+        requests <- findFilledRoleRequests dossierId (ContextType (modelName <> "$Meeting")) (role "Meeting$Attendees")
+        pure { noRoles, direct, actual, paths, requests }
+      equal [] result.noRoles
+      equal [ 84 ] result.requests
+      assert "All concrete buckets are returned without duplicates" $
+        all (\id -> any (_ == id) result.direct) [ attendeeId, meetingRoleId ] && length result.direct == 2
+      equal (nub (unwrap <$> result.direct)) (nub result.actual)
+      equal 2 (length result.paths)
+
+  test "allfilledroles compiles with a filler lower bound and an unrestricted binding key" $
+    withCompiledSource allFilledModel \dfr queries -> do
+      let originalRole = Object.lookup (unwrap $ role "Meeting$Selected") dfr.calculatedRoles
+      case originalRole of
+        Nothing -> assert "The calculated selector should compile" false
+        Just (CalculatedRole { calculation: Q query }) ->
+          case range query of
+            FROLE adt ->
+              equal [ RoleInContext { context: ContextType modelName, role: role "Person" } ] (allLeavesInADT adt)
+            actual -> assert ("Expected an inherited filler domain, got " <> show actual) false
+        _ -> assert "The selector must have a compiled query" false
+      let
+        hasAllFilledKey { queryType, keys } =
+          any
+            ( \key -> case deserializeInvertedQueryKey queryType key of
+                Just (RTAllFilledKey _) -> true
+                _ -> false
+            )
+            keys
+      assert "State conditions are indexed by filler type, not unknown target types" $
+        any hasAllFilledKey queries
+      assert "The allfilledroles key survives serialization" $
+        all (\{ queryType, keys } -> all (isJust <<< deserializeInvertedQueryKey queryType) keys) (filter hasAllFilledKey queries)
+
+  test "allfilledroles uses the existing filler-query database view" $
+    withCompiledSource allFilledModel \_ queries -> do
+      let
+        keys = nubEq $ concat $ map
+          (\{ queryType, keys } -> mapMaybe (deserializeInvertedQueryKey queryType) keys)
+          queries
+        allFilledKeys = filter
+          ( \key -> case key of
+              RTAllFilledKey _ -> true
+              _ -> false
+          )
+          keys
+      name <- liftEffect $ cuid2 "allfilledroles-view"
+      loaded <- runPerspectivesWithoutCouchdb name do
+        db <- invertedQueryDatabaseName
+        createDatabase db
+        setRTFillerKeyView db
+        saveInvertedQueries queries
+        getFillerQueries pure allFilledKeys
+      assert "Unrestricted queries must be retrieved without a new view or database upgrade" (not $ null loaded)
+
   test "Filter dependencies are not property anchors, even with the result's role type" do
     withInversions (makeComposition source filterStep) \queries -> do
       assert "The criterion path remains indexed" (not $ null queries)
@@ -176,6 +270,91 @@ theSuite = suite "Perspective property anchors" do
       equal [ [], [ unwrap meetingId ], [] ] (map _.names results)
       equal [ [ unwrap meetingId ], [ unwrap meetingId ], [ unwrap meetingId ] ] (map _.dependencies results)
 
+  test "Binder lookup includes every role and context specialising the requested aspects" $
+    withCompiledModel "Attendees >> binding" \dfr _ -> do
+      result <- runP do
+        void $ storeDomeinFileInCache (ModelUri modelName) (toStableDomeinFile $ DomeinFile dfr)
+        let
+          baseContext = ContextType (modelName <> "$Meeting")
+          childContext = ContextType (modelName <> "$ChildMeeting")
+          baseRole = role "Meeting$Attendees"
+          firstRole = role "First"
+          secondRole = role "Second"
+          firstId = RoleInstance "binder-first"
+          secondId = RoleInstance "binder-second"
+          thirdId = RoleInstance "binder-third"
+          aspect = RoleInContext { context: baseContext, role: baseRole }
+        Context context <- getContext baseContext
+        EnumeratedRole prototype <- getEnumeratedRole baseRole
+        cacheInDomeinFile childContext (Context context { id = childContext, contextAspects = [ baseContext ] })
+        cacheInDomeinFile firstRole (EnumeratedRole prototype { id = firstRole, roleAspects = [ aspect ] })
+        cacheInDomeinFile secondRole (EnumeratedRole prototype { id = secondRole, roleAspects = [ aspect ] })
+        let emptyFiller = PerspectRol defaultRolRecord { id = dossierId }
+        void $ cacheEntity dossierId emptyFiller
+        Tuple empty assumptions <- runMonadPerspectivesQuery dossierId (getFilledRoles baseContext baseRole)
+        for_ (unwrap assumptions) \assumption -> registerDependency 42 (toAssumption assumption)
+        first <- addRol_gevuldeRollen emptyFiller baseContext firstRole firstId
+        second <- addRol_gevuldeRollen first baseContext secondRole secondId
+        third <- addRol_gevuldeRollen second childContext secondRole thirdId
+        let PerspectRol saved = third
+        let
+          stale = Object.insert (modelName <> "$MissingContext")
+            (Object.singleton (modelName <> "$MissingRole") [ RoleInstance "stale" ])
+            saved.filledRoles
+        void $ cacheEntity dossierId (PerspectRol saved { filledRoles = stale, roleAliases = Object.empty, contextAliases = Object.empty })
+        Tuple both _ <- runMonadPerspectivesQuery dossierId (getFilledRoles baseContext baseRole)
+        binder <- compileFunction (SQD itemDomain (FilledF baseRole baseContext) itemDomain False False)
+        compiled <- unwrap dossierId ##= binder
+        firstRequests <- findFilledRoleRequests dossierId baseContext firstRole
+        secondRequests <- findFilledRoleRequests dossierId childContext secondRole
+        ArrayUnions filledKeys <- runtimeIndexForFilledQueries' secondRole childContext
+        ArrayUnions fillerKeys <- runtimeIndexForFillerQueries' secondRole childContext
+        let missingContext = ContextType (modelName <> "$MissingContext")
+        cacheInDomeinFile childContext (Context context { id = childContext, contextAspects = [ baseContext, missingContext ] })
+        ArrayUnions missingContextKeys <- runtimeIndexForFilledQueries' secondRole childContext
+        cacheInDomeinFile secondRole
+          (EnumeratedRole prototype { id = secondRole, roleAspects = [ aspect, RoleInContext { context: missingContext, role: role "MissingRole" } ] })
+        requestsWithMissingAspect <- findFilledRoleRequests dossierId childContext secondRole
+        Tuple withMissingAspect _ <- runMonadPerspectivesQuery dossierId (getFilledRoles baseContext baseRole)
+        cacheInDomeinFile childContext (Context context { id = childContext, contextAspects = [ baseContext ] })
+        cacheInDomeinFile secondRole (EnumeratedRole prototype { id = secondRole, roleAspects = [ aspect ] })
+        void $ cacheEntity dossierId (removeRol_gevuldeRollen third baseContext secondRole secondId)
+        Tuple remaining _ <- runMonadPerspectivesQuery dossierId (getFilledRoles baseContext baseRole)
+        pure { empty, both, compiled, withMissingAspect, remaining, firstRequests, secondRequests, requestsWithMissingAspect, filledKeys, fillerKeys, missingContextKeys, firstId, secondId, thirdId, baseRole, baseContext }
+      equal [] result.empty
+      assert "Both concrete types are returned even with legacy aliases" $
+        all (\id -> any (_ == id) result.both) [ result.firstId, result.secondId, result.thirdId ] && length result.both == 3
+      assert "The compiled binder returns the same results" $
+        all (\id -> any (_ == unwrap id) result.compiled) [ result.firstId, result.secondId, result.thirdId ] && length result.compiled == 3
+      assert "Unavailable unrelated aspects do not hide matching roles" $
+        all (\id -> any (_ == id) result.withMissingAspect) [ result.firstId, result.secondId, result.thirdId ] && length result.withMissingAspect == 3
+      assert "Removing one binding preserves the others" $
+        all (\id -> any (_ == id) result.remaining) [ result.firstId, result.thirdId ] && length result.remaining == 2
+      equal [ 42 ] result.firstRequests
+      equal [ 42 ] result.secondRequests
+      equal [ 42 ] result.requestsWithMissingAspect
+      assert "Binding changes index the filled role and context aspects" $
+        any
+          ( case _ of
+              RTFilledKey { filledRole_destination, filledContext_destination } -> filledRole_destination == result.baseRole && filledContext_destination == result.baseContext
+              _ -> false
+          )
+          result.filledKeys
+      assert "Unavailable context aspects do not prevent indexing available aspects" $
+        any
+          ( case _ of
+              RTFilledKey { filledRole_destination, filledContext_destination } -> filledRole_destination == result.baseRole && filledContext_destination == result.baseContext
+              _ -> false
+          )
+          result.missingContextKeys
+      assert "Binding changes index the inverse filled role and context aspects" $
+        any
+          ( case _ of
+              RTFillerKey { filledRole_origin, filledContext_origin } -> filledRole_origin == result.baseRole && filledContext_origin == result.baseContext
+              _ -> false
+          )
+          result.fillerKeys
+
   for_
     [ { name: "readable names", context: ContextType modelName, role: role "Person", property: property "Dossier$External$ParticipantName" }
     , { name: "stable IDs", context: ContextType (modelName <> "$context-id"), role: role "role-id", property: property "property-id" }
@@ -225,8 +404,11 @@ withCompiledQueries :: String -> (StoredQueries -> Test) -> Test
 withCompiledQueries selection assertions = withCompiledModel selection \_ queries -> assertions queries
 
 withCompiledModel :: String -> (DomeinFileRecord Readable -> StoredQueries -> Test) -> Test
-withCompiledModel selection assertions = do
-  parsed <- runIndentParser (model selection) ARC.domain
+withCompiledModel selection = withCompiledSource (model selection)
+
+withCompiledSource :: String -> (DomeinFileRecord Readable -> StoredQueries -> Test) -> Test
+withCompiledSource source assertions = do
+  parsed <- runIndentParser source ARC.domain
   case parsed of
     Left err -> assert (show err) false
     Right root -> do
@@ -259,6 +441,26 @@ model selection = joinWith "\n"
   , "    user Ambassador filledBy Person"
   , "      property Approved (Boolean)"
   ]
+
+allFilledModel :: String
+allFilledModel = joinWith "\n"
+  [ "domain " <> modelName
+  , "  thing Person"
+  , "  case Meeting"
+  , "    user Manager"
+  , "      perspective on First"
+  , "        only (Fill)"
+  , "        action Replace"
+  , "          bind_ context >> Replacement >> binding to context >> Selected"
+  , "    thing Original filledBy Person"
+  , "    thing Replacement filledBy Person"
+  , "    thing First filledBy Person"
+  , "    thing Selected = Original >> binding >> allfilledroles"
+  , "    state HasSelection = exists Selected"
+  ]
+
+meetingRoleId :: RoleInstance
+meetingRoleId = RoleInstance "allfilledroles-second"
 
 modelName :: String
 modelName = "model://example.org#PropertyAnchors"
