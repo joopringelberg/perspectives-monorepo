@@ -1321,7 +1321,7 @@ export class PerspectivesProxy
       });
   }
 
-  getMostGeneralAllowedBindingType(roleName: RoleType, rolInstance: RoleInstanceT): Promise<FillerType | undefined>
+  getMostGeneralAllowedBindingType(roleName: RoleType, rolInstance: RoleInstanceT): Promise<(FillerType & { roleInstance: RoleInstanceT }) | undefined>
   {
     const proxy = this;
     return new Promise(function (resolver, rejecter)

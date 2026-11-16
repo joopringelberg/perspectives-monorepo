@@ -89,6 +89,7 @@
 , "tableContextMenu_fill": "Vul met de rol op het clipboard"
 , "tableContextMenu_fillWithProvidedType": "Vul met {{roleName}} ({{typeName}})"
 , "tableContextMenu_fillWithRequiredType": "Vul met {{roleName}} ({{typeName}})"
+, "tableContextMenu_fillWithUnderlyingFiller": "Vul met de onderliggende vuller van {{roleName}} ({{typeName}})"
 , "tableContextMenu_fillWith": "Vul met een {{roleName}}"
 , "tableContextMenu_replacefiller": "Vervang de vuller met de rol op het klembord"
 , "pasteRole_ProvidedShort": "Vul (aangeboden)"

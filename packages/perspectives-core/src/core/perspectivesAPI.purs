@@ -94,7 +94,7 @@ import Perspectives.Representation.View (View, propertyReferences)
 import Perspectives.ResourceIdentifiers (createPublicIdentifier, guid, resourceIdentifier2DocLocator)
 import Perspectives.RoleStateCompiler (evaluateRoleState)
 import Perspectives.RunMonadPerspectivesTransaction (detectPublicStateChanges, runMonadPerspectivesTransaction, runMonadPerspectivesTransaction')
-import Perspectives.SaveUserData (FillBindingMode(..), findMostGeneralAllowedFillerType, removeAllRoleInstances, removeBinding, removeContextIfUnbound, scheduleContextRemoval, scheduleRoleRemoval, setBindingWithMode, setFirstBinding, synchronise)
+import Perspectives.SaveUserData (FillBindingMode(..), findExactFiller, removeAllRoleInstances, removeBinding, removeContextIfUnbound, scheduleContextRemoval, scheduleRoleRemoval, setBindingWithMode, setFirstBinding, synchronise)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.Sync.HandleTransaction (executeTransaction)
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..))
@@ -917,12 +917,13 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
     Api.GetMostGeneralAllowedBindingType -> catchError
       ( do
           filledType <- string2EnumeratedRoleType predicate
-          mroleType <- findMostGeneralAllowedFillerType filledType (RoleInstance object)
-          case mroleType of
+          mfiller <- findExactFiller filledType (RoleInstance object)
+          case mfiller of
             Nothing -> sendResponse (Result corrId []) setter
-            Just roleType -> do
-              readableName <- displayNameOfRoleType (ENR roleType)
-              sendResponse (Result corrId [ writeJSON { roleType: roletype2string (ENR roleType), readableName } ]) setter
+            Just roleInstance -> do
+              fillerType <- roleType_ roleInstance
+              readableName <- translateType fillerType
+              sendResponse (Result corrId [ writeJSON { roleType: roletype2string (ENR fillerType), readableName, roleInstance } ]) setter
       )
       (\e -> sendResponse (Error corrId (show e)) setter)
     Api.SetProperty -> catchError

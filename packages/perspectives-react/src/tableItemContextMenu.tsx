@@ -142,7 +142,8 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
         this.setState(
           {
             providedTypeCompatible,
-            requiredTypeCompatible: requiredType !== undefined,
+            requiredTypeCompatible: requiredType !== undefined &&
+              (!providedTypeCompatible || requiredType.roleInstance !== clipboardRole),
             providedTypeName,
             requiredTypeName: requiredType?.readableName
           }
@@ -333,7 +334,7 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
           onClick={ () => this.fillRole("required")} 
         >{
           i18next.t(
-            "tableContextMenu_fillWithRequiredType",
+            "tableContextMenu_fillWithUnderlyingFiller",
             { ns: 'preact'
             , roleName: this.props.roleOnClipboard?.roleData.cardTitle
             , typeName: this.state.requiredTypeName
@@ -390,7 +391,7 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
           onClick={ () => this.fillRole("required")} 
         >{
           i18next.t(
-            "tableContextMenu_fillWithRequiredType",
+            "tableContextMenu_fillWithUnderlyingFiller",
             { ns: 'preact'
             , roleName: this.props.roleOnClipboard?.roleData.cardTitle
             , typeName: this.state.requiredTypeName

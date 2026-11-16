@@ -61,6 +61,15 @@ This is equivalent to:
 $ npx webpack --watch
 ```
 
+## Clipboard filling in context menus
+
+Row context menus offer filling with the copied role and, when it resolves to a
+different role instance, its deepest compatible underlying filler. Equivalent
+targets appear only once, based on role-instance identity rather than type names
+or translations. Both type names use the current model translation; the
+underlying-filler command is explicitly labelled. This also applies when replacing
+an existing filler.
+
 ## Components
 **NOTICE** THIS SECTION IS OUT OF DATE.
 

@@ -89,6 +89,7 @@
 , "tableContextMenu_fill": "Fill with the role on the clipboard"
 , "tableContextMenu_fillWithProvidedType": "Fill with {{roleName}} ({{typeName}})"
 , "tableContextMenu_fillWithRequiredType": "Fill with {{roleName}} ({{typeName}})"
+, "tableContextMenu_fillWithUnderlyingFiller": "Fill with underlying filler of {{roleName}} ({{typeName}})"
 , "tableContextMenu_fillWith": "Fill with a {{roleName}}"
 , "tableContextMenu_replacefiller": "Replace the filler with the role on the clipboard"
 , "pasteRole_ProvidedShort": "Fill (provided)"

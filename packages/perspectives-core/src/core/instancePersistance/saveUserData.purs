@@ -39,6 +39,7 @@ module Perspectives.SaveUserData
   , removeContextInstance
   , removeRoleInstance
   , FillBindingMode(..)
+  , findExactFiller
   , findMostGeneralAllowedFillerType
   , replaceBinding
   , scheduleContextRemoval
