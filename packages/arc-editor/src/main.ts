@@ -17,7 +17,7 @@ import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import { configurePDRproxy, PDRproxy, SharedWorkerChannelPromise } from "perspectives-proxy";
 import { ARC_LANGUAGE_ID, ARC_TAB_SIZE, arcLanguageConfiguration, arcMonarchLanguage } from "./arcLanguage.ts";
 import { parseLaunchParams } from "./launchParams.ts";
-import { diagnosticToMarker, DocumentSync, localTypeName, LspClient, lspRangeToRange, modelUriOfSourceUri, type LspCompletionList, type LspDiagnostic, type LspLocation, type LspMembers, type LspPerspectivesOn } from "./lspClient.ts";
+import { contextQualifiedRoleName, diagnosticToMarker, DocumentSync, localTypeName, LspClient, lspRangeToRange, modelUriOfSourceUri, type LspCompletionList, type LspDiagnostic, type LspLocation, type LspMembers, type LspPerspectivesOn } from "./lspClient.ts";
 import { NavigationHistory } from "./navigation.ts";
 import { feedbackEntries } from "./feedback.ts";
 import { setupFeedbackSplitter } from "./feedbackSplitter.ts";
@@ -259,7 +259,7 @@ async function showMembers(expected: LspMembers["kind"]) {
     `${expected === "properties" ? "Properties" : "Roles"} of ${localTypeName(result.owner)}`, result.owner, `No ${expected}.`,
     result.members.map(m => ({
       label: localTypeName(m.name), title: `${m.name} (${m.kind})`, location: m.location,
-      note: m.origin !== result.owner ? { text: ` from ${localTypeName(m.origin)}`, title: m.origin } : undefined,
+      note: m.origin !== result.owner ? { text: ` from ${expected === "properties" ? contextQualifiedRoleName(m.origin) : localTypeName(m.origin)}`, title: m.origin } : undefined,
     })));
 }
 

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { diagnosticToMarker, DocumentSync, LspClient, MarkerSeverity, modelUriOfSourceUri, type LspDiagnostic } from "../src/lspClient.ts";
+import { contextQualifiedRoleName, diagnosticToMarker, DocumentSync, LspClient, MarkerSeverity, modelUriOfSourceUri, type LspDiagnostic } from "../src/lspClient.ts";
 
 function fakeTransport(reply: (m: any) => object[]) {
   const sent: any[] = [];
@@ -57,6 +57,14 @@ test("diagnosticToMarker widens a zero-width range to the word, else to the line
 test("modelUriOfSourceUri", () => {
   assert.equal(modelUriOfSourceUri("perspectives-model:model://perspectives.domains#System"), "model://perspectives.domains#System");
   assert.equal(modelUriOfSourceUri("inmemory://model/1"), undefined);
+});
+
+test("role provenance includes its enclosing context, distinguishing same-named roles", () => {
+  assert.equal(contextQualifiedRoleName("model://perspectives.domains#System$ModelManifest$External"), "ModelManifest$External");
+  assert.equal(contextQualifiedRoleName("model://perspectives.domains#System$VersionedModelManifest$External"), "VersionedModelManifest$External");
+  assert.equal(contextQualifiedRoleName("model://perspectives.domains#System$User"), "System$User");
+  assert.equal(contextQualifiedRoleName("Context$Role"), "Context$Role");
+  assert.equal(contextQualifiedRoleName("Role"), "Role");
 });
 
 test("flushPending only sends a change the server has not seen yet", async () => {

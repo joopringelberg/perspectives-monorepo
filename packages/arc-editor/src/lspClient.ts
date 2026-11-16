@@ -178,6 +178,14 @@ export function localTypeName(name: string): string {
   return i < 0 ? name : name.slice(i + 1);
 }
 
+/** A role's local name qualified by its immediately enclosing context. */
+export function contextQualifiedRoleName(name: string): string {
+  const roleSeparator = name.lastIndexOf("$");
+  if (roleSeparator < 0) return localTypeName(name);
+  const contextSeparator = Math.max(name.lastIndexOf("$", roleSeparator - 1), name.lastIndexOf("#"));
+  return name.slice(contextSeparator + 1);
+}
+
 /** The readable model URI in a `perspectives-model:` location, or undefined for other uris. */
 export function modelUriOfSourceUri(uri: string): string | undefined {
   return uri.startsWith(MODEL_SOURCE_SCHEME) ? uri.slice(MODEL_SOURCE_SCHEME.length) : undefined;
