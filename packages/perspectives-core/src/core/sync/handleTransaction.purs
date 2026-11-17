@@ -68,7 +68,7 @@ import Perspectives.Persistence.API (getAttachment)
 import Perspectives.Persistence.DeltaStore (deltaStoreDocIdWithDeltaId, extractDeltaInfo, findDeltaByDeltaId, getDeltasForResource, getDeltasForRoleInstance, safeKey, storeDelta, storeDeltaFromSignedDelta, updateDeltaApplied)
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
 import Perspectives.Persistence.PendingTransactionStore (MissingDelta, storePendingTransaction)
-import Perspectives.Persistence.ResourceVersionStore (getResourceVersion, incrementResourceVersion, setResourceVersion)
+import Perspectives.Persistence.ResourceVersionStore (getResourceVersion, setResourceVersion)
 import Perspectives.Persistent (addAttachment, entityExists, forceSaveRole, getPerspectRol, saveEntiteit, saveEntiteit_, tryGetPerspectEntiteit, tryGetPerspectRol)
 import Perspectives.Query.UnsafeCompiler (getRoleInstances)
 import Perspectives.Representation.Class.Cacheable (EnumeratedRoleType(..), cacheEntity)
@@ -88,7 +88,7 @@ import Perspectives.Types.ObjectGetters (contextAspectsClosure, hasAspect, isPub
 import Perspectives.TypesForDeltas (ContextDelta(..), ContextDeltaType(..), DeltaRecord, RoleBindingDelta(..), RoleBindingDeltaType(..), RolePropertyDelta(..), RolePropertyDeltaType(..), UniverseContextDelta(..), UniverseContextDeltaType(..), UniverseRoleDelta(..), UniverseRoleDeltaType(..))
 import Perspectives.UnschemedIdentifiers (UnschemedResourceIdentifier, unschemePerspectivesUser)
 import Perspectives.Warning (PerspectivesWarning(..))
-import Prelude (class Eq, class Monad, class Ord, Unit, bind, compare, discard, flip, map, negate, not, pure, show, unit, void, ($), (*>), (+), (/=), (<), (<$>), (<<<), (<>), (==), (>), (>=), (>>=), (&&), (||), (>=>))
+import Prelude (class Eq, class Monad, class Ord, Unit, bind, compare, discard, flip, map, not, pure, show, unit, void, ($), (*>), (+), (/=), (<), (<$>), (<<<), (<>), (==), (>), (>=), (>>=), (&&), (||), (>=>))
 import Simple.JSON (readJSON')
 
 -- TODO. Each of the executing functions must catch errors that arise from unknown types.
@@ -515,7 +515,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
       Nothing -> Nothing
       Just stringified -> case extractOrderingInfo stringified of
         Just { resourceKey, resourceVersion } -> Just { signedDelta: s, stringified, resourceKey, resourceVersion, author }
-        Nothing -> Nothing
+        Nothing -> Just { signedDelta: s, stringified, resourceKey: "", resourceVersion: 0, author }
 
   -- STEP 2: Check for gaps. If any delta has resourceVersion > localVersion + 1, block the transaction.
   let
