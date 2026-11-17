@@ -92,7 +92,10 @@ data DSUM a  = DSUM (Array a)          -- A single disjunction
 DPROD [ DSUM [A, B], DSUM [C, D] ]
 ```
 
-`CNF` is the only form over which type comparison is defined. It is also **cached**: the `completeType :: CNF RoleInContext` field of `EnumeratedRole` stores the precomputed CNF so that the expensive expansion and normalisation need only happen once, at compile time (Phase 3 of the arc parser).
+`CNF` is the only form over which type comparison is defined. The
+`completeType :: CNF RoleInContext` field of `EnumeratedRole` stores a precomputed
+CNF, but the runtime `toConjunctiveNormalForm_` entry point currently expands and
+normalises role leaves afresh rather than reading that field.
 
 ---
 
@@ -133,6 +136,17 @@ Rules:
 
 This transformation is the standard Boolean CNF conversion applied to the type-lattice.
 
+After combining products or distributing sums, `simplifyCNF` removes clauses
+strictly subsumed by another clause. It prepares each clause's set of distinct
+terms and cardinality once per call. A candidate can strictly subsume a clause
+only if its cardinality is smaller and its terms are a subset of the clause's
+terms. Equal-sized candidates need no subset test. The original arrays, order
+and equivalent duplicate clauses are retained for surviving clauses; this
+temporary set representation changes neither the public type nor JSON encoding.
+Leaves need no simplification, and an `ECT` wrapper directly returns its already
+simplified child's result without another clause scan. No cross-call cache is
+introduced.
+
 ### The combined shortcut: `toConjunctiveNormalForm_`
 
 ```purescript
@@ -140,9 +154,11 @@ This transformation is the standard Boolean CNF conversion applied to the type-l
 toConjunctiveNormalForm_ :: ADT RoleInContext -> MP (CNF RoleInContext)
 ```
 
-For `ST` and `UET` leaves, instead of re-expanding and re-normalising at call time, this function **reads the precomputed `completeType`** field from the stored `EnumeratedRole`. For `SUM` and `PROD` nodes it normalises the children and then applies `distribute` / `flattenProducts`.
-
-> **Important:** `toConjunctiveNormalForm_` relies on the `completeType` field being already populated. This is guaranteed only after Phase 3 of the arc parser has run. Calling it on a freshly constructed `ADT` whose role definitions have not yet been through Phase 3 will silently return whatever default value `completeType` was initialised with (a single-element CNF containing just the role itself).
+For both `ST` and `UET` leaves, this function retrieves the `EnumeratedRole`,
+fully expands its type, then normalises the expansion. For `SUM` and `PROD`
+nodes it normalises the children and then applies `distribute` /
+`flattenProducts`, followed by simplification. It does not rely on the stored
+`completeType` being populated.
 
 ### How `completeType` is precomputed (Phase 3)
 
