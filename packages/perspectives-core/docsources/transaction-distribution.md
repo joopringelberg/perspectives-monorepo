@@ -159,6 +159,29 @@ Only then does it send the peer transactions. So a peer that learns about a publ
 3. **Encryption.** The payload is encrypted once with a symmetric key (`encryptForRecipients`). That key is wrapped for every recipient. Each wrapped key is labelled with the recipient's **unschemed** guid.
 4. **Sending.** `sendTransactieToUserUsingAMQP` publishes the `EncryptedTransactionForPeer` to the AMQP topic named by the unschemed guid. Each PDR's queue is bound to its own guid as routing key. The message is also stored in the `OutgoingTransactions` post database until the broker sends a receipt. If there is no broker connection, it is only stored and is sent later.
 
+### Coordinating outgoing sends
+
+The outgoing message is saved before publication and deleted only after a broker
+receipt. On connection, `sendOutgoingPost` replays the messages still stored.
+This replay can overlap normal sending, including a transport retry waiting for
+the actual STOMP connection even when the model already reports a connection.
+
+The JavaScript transport reserves each message/receipt ID per client connection.
+Normal sending, connection replay and retry timers share that reservation, so
+they cannot publish the same message independently. The reservation retains only
+send bookkeeping, not the message body. It remains after receipt because an
+outbox snapshot taken before deletion may still attempt to send that ID.
+
+Disconnect, WebSocket closure and explicit deactivation cancel pending timers and
+clear the reservations. A subsequent connection can therefore replay messages
+whose receipts were not received. Receipts from an invalidated send attempt are
+ignored. Publication errors release the reservation and propagate; exhausted
+connection retries log an error and leave the durable message available for a
+later attempt.
+
+This prevents redundant publication within a connection, not all duplicate
+delivery: reconnecting after a lost receipt can legitimately resend a message.
+
 On the receiving side, `incomingPost` uses the PDR's own unschemed guid to find its wrapped key. `executeTransaction` then runs the deltas. The `UniverseRoleDelta` and property deltas for the author's `PerspectivesUsers` instance create or update a local `def:#<guid>` copy of the sender (including its public keys).
 
 Before importing verification keys or executing deltas, `executeTransaction`
@@ -177,6 +200,91 @@ The transaction record shape is unchanged. However, receivers of a single bundle
 supporting mixed author aliases must support identity-based verification; older
 receivers that require an exact bundle-map entry for every author alias need to
 be updated.
+
+### Opt-in timing diagnostics
+
+Timing diagnostics are separate from log-topic thresholds and the performance
+test collector. They are disabled by default. In the **PDR SharedWorker's DevTools
+console** (or the page worker's execution context), enable them before signup:
+
+```javascript
+globalThis.pdrTraceTimings = true;
+```
+
+Enable this independently for the subscriber and manager. Setting it in the
+ordinary page console does not enable a separate worker. The flag is not
+persistent: enable it again after restarting the worker. Keep the manager running
+and enable tracing before the subscriber starts signup; there is no need to pause
+execution or enable verbose query/perspective logging.
+
+Collect console lines beginning with `[PDR TIMING]` (Info level), along with
+WebSocket frame timestamps. Disable tracing afterwards:
+
+```javascript
+globalThis.pdrTraceTimings = false;
+```
+
+Each line contains JSON with an event (`start`, `end`, or `event`), stage, ID, UTC
+wall-clock timestamp (`at`) and worker-local monotonic timestamp (`monotonicMs`).
+Span starts and ends share a unique worker-local `span` number; ends include
+`elapsedMs` and `succeeded`. Durations use the monotonic clock, not the wall clock.
+Turning tracing off suppresses outstanding span completions too.
+
+| Stage | What it measures or marks |
+|---|---|
+| `transport.connected` | Entry into the STOMP connection callback |
+| `transport.receive` → `consumer.receive` | JavaScript arrival through producer buffering and envelope decoding to consumer arrival |
+| `consumer.ack` | Sending the consumer ACK, before decryption or execution |
+| `connection.state` | Connection-state transaction, including its admission wait and state cascade |
+| `outbox.replay`, `outbox.save`, `outbox.receipt-delete` | Durable outgoing-post work |
+| `incoming.decrypt` | Transport decryption and transaction JSON decoding |
+| `incoming.admission.requested` → `incoming.admission.granted` | Incoming transaction admission, including the deliberate event-loop yield |
+| `admission.wait`, `admission.yield` | Queue waiting and the event-loop yield separately, for user and background work |
+| `transaction.flag.wait` | Waiting for the transaction flag after priority admission, where applicable |
+| `transaction.action`, `transaction.cascade` | Initial transaction action versus subsequent state/action cascades |
+| `incoming.verify`, `incoming.execute` | Verification versus delta execution, persistence, ordering and version checks |
+| `distribution.prepare`, `public.publish`, `peer.send` | Recipient preparation, public publication and encrypted peer sending |
+| `transport.publish`, `transport.published`, `transport.receipt` | Attempted publication, successful return from the publish call and broker receipt callback |
+| `incoming.transaction`, `incoming.public-states`, `incoming.total` | Incoming transaction, public-state follow-up and complete post-ACK processing |
+
+Incoming transport/consumer stages use the publisher's receipt ID when available;
+otherwise a local `incoming-N` ID is carried unchanged from callback to consumer.
+Outgoing stages use the durable outgoing-post ID. Transaction stages use the
+local transaction number; their spans occur inside the corresponding incoming or
+connection span. Generic admission stages identify the priority lane. No message
+bodies, keys, credentials or exception details are included.
+
+Compare the WebSocket receive timestamp with `transport.receive` to detect
+delayed JavaScript callback execution, then compare `transport.receive` with
+`consumer.receive` to detect consumer/producer backlog. Inspect overlapping
+connection, admission and transaction spans to locate the wait. Spans are nested
+and must not be added together. Monotonic timestamps and span numbers cannot be
+compared between workers; cross-device wall-clock comparisons require aligned
+clocks. Tracing itself adds console overhead and does not change ACK ordering or
+delivery guarantees.
+
+#### Headless broker signup
+
+With the three development domains routed locally, and local Apache, CouchDB and
+RabbitMQ running, use `pnpm run test:brokerServiceSignup:diagnostic` from
+`packages/perspectives-core`. This requires `mkcert`, local `rabbitmqctl` access,
+and a completed `rebootedUniverse/alice` test snapshot.
+
+The diagnostic enables timing before starting either PDR, restores the manager,
+creates a fresh subscriber, uses real STOMP and
+the ordinary public-resource `AddThisServer`/`SignUp` actions, and enables SYNC
+tracing. It checks the manager's receipt of the subscriber's account-holder
+details and the subscriber's active queue, then waits for both PDRs to settle.
+Unlike the full signup suite, it does not create a CouchDB account or run contract
+termination tests. Temporary RabbitMQ accounts and queues are removed on exit.
+Each invocation uses a fresh Node process and has a five-minute execution limit.
+
+`signup.*` spans distinguish startup, management setup, manager subscription,
+subscriber subscription, handshake and cleanup. Both PDRs share one process:
+generic transaction numbers can overlap, whereas transport receipt IDs identify
+individual messages. Node uses in-memory PouchDB, and snapshot restoration skips
+the browser's API startup/model-upgrade pass, so browser latencies need not match.
+Keep captured SYNC logs private: unlike timing records, they can contain payloads.
 
 ---
 

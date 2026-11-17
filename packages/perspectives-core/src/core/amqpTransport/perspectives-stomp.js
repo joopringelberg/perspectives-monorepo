@@ -22,6 +22,22 @@
 
 import * as Stomp from "@stomp/stompjs";
 
+const outgoingSends = new WeakMap();
+
+function clearOutgoingSends(stompClient)
+{
+  const sends = outgoingSends.get(stompClient);
+  if (sends)
+  {
+    for (const entry of sends.values())
+    {
+      if (entry.timer !== null) globalThis.clearTimeout(entry.timer);
+    }
+    sends.clear();
+    outgoingSends.delete(stompClient);
+  }
+}
+
 
 export function createStompClientImpl ( url )
 {
@@ -36,6 +52,7 @@ export function createStompClientImpl ( url )
 
 export function deactivateImpl (stompClient)
 {
+  clearOutgoingSends(stompClient);
   try
   {
     stompClient.deactivate();
@@ -57,6 +74,8 @@ export function deactivateImpl (stompClient)
 export function connectAndSubscribeImpl (stompClient, params, emitStep, finishStep, emit)
 {
   let pendingIncomingMessageCount = 0;
+  let incomingMessageSequence = 0;
+  stompClient.traceTiming = params.traceTiming ?? function() {};
   stompClient.getPendingIncomingMessageCount = function()
   {
     return pendingIncomingMessageCount;
@@ -66,6 +85,7 @@ export function connectAndSubscribeImpl (stompClient, params, emitStep, finishSt
   {
     emit(emitStep(
       { body
+      , messageId: body
       , ack: function() {}
       , markHandled: function() { return pendingIncomingMessageCount; }
       , pendingCount: pendingIncomingMessageCount
@@ -93,9 +113,12 @@ export function connectAndSubscribeImpl (stompClient, params, emitStep, finishSt
 
   stompClient.forwardIncomingMessage = function(message)
     {
+      const messageId = message.headers?.receipt ?? "incoming-" + (++incomingMessageSequence);
+      stompClient.traceTiming("transport.receive", messageId);
       pendingIncomingMessageCount += 1;
       stompClient.emitToPurescript(
         { body: message.body
+        , messageId
         , ack: message.ack.bind(message)
         , markHandled: function()
           {
@@ -109,6 +132,7 @@ export function connectAndSubscribeImpl (stompClient, params, emitStep, finishSt
   stompClient.onConnect =
     function()
     {
+      stompClient.traceTiming("transport.connected", "");
       // result = {id, unsubscribe}
       stompClient.subscribe(
         // publish to amq.topic
@@ -140,10 +164,12 @@ export function connectAndSubscribeImpl (stompClient, params, emitStep, finishSt
       };
     stompClient.onDisconnect = function ()
       {
+        clearOutgoingSends(stompClient);
         emitInternalMessage("noConnection");
       };
     stompClient.onWebSocketClose = function ()
       {
+        clearOutgoingSends(stompClient);
         emitInternalMessage("noConnection");
       };
     stompClient.onUnhandledMessage = function(message)
@@ -162,16 +188,43 @@ export function unsubscribeImpl( stompClient, queueId )
 // Send a message. We do not support additional headers.
 export function sendImpl( stompClient, destination, receiptId, messageString )
 {
+  let sends = outgoingSends.get(stompClient);
+  if (!sends)
+  {
+    sends = new Map();
+    outgoingSends.set(stompClient, sends);
+  }
+  if (sends.has(receiptId)) return;
+
+  // Keep the reservation after receipt too: an older outbox snapshot may still
+  // try to send this ID. Disconnect clears it so unacknowledged mail can replay.
+  const entry = { timer: null };
+  sends.set(receiptId, entry);
+
+  function scheduleRetry(attempt)
+  {
+    entry.timer = globalThis.setTimeout(function()
+    {
+      entry.timer = null;
+      attemptSend(attempt + 1);
+    }, 25);
+  }
+
   var attemptSend = function(attempt)
   {
+    if (sends.get(receiptId) !== entry) return;
+
     if (!stompClient.connected)
     {
       if (attempt < 200)
       {
-        setTimeout(function()
-        {
-          attemptSend(attempt + 1);
-        }, 25);
+        scheduleRetry(attempt);
+      }
+      else
+      {
+        sends.delete(receiptId);
+        console.error("Could not send AMQP message " + receiptId +
+          ": broker connection unavailable; message remains in outgoing post");
       }
       return;
     }
@@ -181,34 +234,37 @@ export function sendImpl( stompClient, destination, receiptId, messageString )
       stompClient.watchForReceipt( receiptId,
         function()
         {
+          if (sends.get(receiptId) !== entry) return;
+          stompClient.traceTiming?.("transport.receipt", receiptId);
           const pendingIncomingMessageCount =
             typeof stompClient.getPendingIncomingMessageCount === "function"
               ? stompClient.getPendingIncomingMessageCount()
               : 0;
           stompClient.emitToPurescript(
             { body: "receipt:" + receiptId
+            , messageId: receiptId
             , ack: function() {}
             , markHandled: function() { return pendingIncomingMessageCount; }
             , pendingCount: pendingIncomingMessageCount
             } );
         })
+      stompClient.traceTiming?.("transport.publish", receiptId);
       stompClient.publish(
         { destination: destination
         , body: messageString
         , headers: {receipt: receiptId}
         // , skipContentLengthHeader: true
         });
+      stompClient.traceTiming?.("transport.published", receiptId);
     }
     catch (error)
     {
       if (error instanceof TypeError && error.message === "There is no underlying STOMP connection" && attempt < 200)
       {
-        setTimeout(function()
-        {
-          attemptSend(attempt + 1);
-        }, 25);
+        scheduleRetry(attempt);
         return;
       }
+      sends.delete(receiptId);
       throw error;
     }
   };

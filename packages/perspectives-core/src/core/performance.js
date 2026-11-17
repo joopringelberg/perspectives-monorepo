@@ -4,6 +4,37 @@
 const sessionKey = Symbol.for("perspectives.performance.session");
 const allowedLabels = new Set(["decrypt", "executeTransaction", "incomingCascade", "publicStates"]);
 
+let nextTimingSpan = 0;
+
+export const timingEnabled = () => globalThis.pdrTraceTimings === true;
+
+function emitTiming(event, stage, id, monotonicMs, details = {}) {
+  console.info("[PDR TIMING] " + JSON.stringify({
+    event, stage, id, at: new Date().toISOString(), monotonicMs, ...details
+  }));
+}
+
+export function traceTimingImpl(stage, id) {
+  if (timingEnabled()) emitTiming("event", stage, id, globalThis.performance.now());
+}
+
+export const startTiming = stage => id => () => {
+  if (!timingEnabled()) return null;
+  const token = { stage, id, span: ++nextTimingSpan, start: globalThis.performance.now(), finished: false };
+  emitTiming("start", stage, id, token.start, { span: token.span });
+  return token;
+};
+
+export const finishTiming = token => succeeded => () => {
+  if (!token || token.finished) return;
+  token.finished = true;
+  if (!timingEnabled()) return;
+  const end = globalThis.performance.now();
+  emitTiming("end", token.stage, token.id, end, {
+    span: token.span, elapsedMs: end - token.start, succeeded
+  });
+};
+
 export const profilingEnabled = () => Boolean(globalThis[sessionKey]?.active);
 export const captureSession = () => globalThis[sessionKey]?.active ? globalThis[sessionKey] : null;
 export const sessionEnabled = session => () => Boolean(session?.active);

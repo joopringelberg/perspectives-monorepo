@@ -57,6 +57,7 @@ import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (Url, addDocument)
 import Perspectives.Persistence.DeltaStore (extractDeltaInfo, getDeltasForResource, storeDeltaFromSignedDelta)
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
+import Perspectives.Performance (timed)
 import Perspectives.Persistent (entityExists, getPerspectRol, postDatabaseName)
 import Perspectives.PerspectivesState (getPerspectivesUser, nextTransactionNumber, stompClient)
 import Perspectives.Query.UnsafeCompiler (getDynamicPropertyGetter)
@@ -189,7 +190,7 @@ sendTransactieToUserUsingAMQP perspectivesUser t@(EncryptedTransactionForPeer { 
     pure $ mConnected == (Just $ Value "true")
 
 saveTransactionInOutgoingPost :: UnschemedResourceIdentifier -> String -> EncryptedTransactionForPeer -> MonadPerspectives Unit
-saveTransactionInOutgoingPost userId messageId t@(EncryptedTransactionForPeer { timeStamp }) = do
+saveTransactionInOutgoingPost userId messageId t@(EncryptedTransactionForPeer { timeStamp }) = timed "outbox.save" messageId do
   debugBroker $ "Saving transaction for user " <> unwrap userId <> " in OutgoingTransactions post database with transaction timestamp " <> show timeStamp
   postDB <- postDatabaseName
   void $ addDocument postDB (OutgoingTransaction { _id: messageId, receiver: userId, transaction: t }) messageId

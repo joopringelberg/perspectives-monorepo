@@ -58,6 +58,7 @@ import Perspectives.Logging (debugState, errorCompiler, traceState, warnState)
 import Perspectives.ModelDependencies (sysUser)
 import Perspectives.ModelRemoval (removeModelFromLocalDatabase)
 import Perspectives.Persistent (entityExists, saveMarkedPublicResources)
+import Perspectives.Performance (timed)
 import Perspectives.PerspectivesState (addBinding, addWarning, clearPublicRolesJustLoaded, decreaseTransactionLevel, getPublicRolesJustLoaded, increaseTransactionLevel, nextTransactionNumber, pushFrame, restoreFrame, transactionFlag, transactionLevel)
 import Perspectives.Query.QueryTypes (Calculation(..))
 import Perspectives.Query.UnsafeCompiler (context2propertyValue, getCalculatedRoleInstances)
@@ -110,7 +111,7 @@ runMonadPerspectivesTransaction' share authoringRole a = (liftAff $ createTransa
   whenFlagIsDown = do
     -- 0. Only execute the transaction when we can take the flag down.
     t <- lift $ transactionFlag
-    lift $ liftAff $ void $ take t
+    lift $ timed "transaction.flag.wait" "" (liftAff $ void $ take t)
     transactionNumber <- lift $ nextTransactionNumber
     AA.modify \trns -> over Transaction (\tr -> tr { transactionNumber = transactionNumber }) trns
     padding <- lift transactionLevel
@@ -123,7 +124,8 @@ runMonadPerspectivesTransaction' share authoringRole a = (liftAff $ createTransa
     catchError
       do
         -- Execute the value that accumulates Deltas in a Transaction.
-        r <- a >>= phase1 share authoringRole
+        result <- timed "transaction.action" (show transactionNumber) a
+        r <- timed "transaction.cascade" (show transactionNumber) (phase1 share authoringRole result)
         -- Only now that this transaction (and everything it triggered) has fully settled, hand the
         -- continuations scheduled during it over to transactionWithTiming for dispatch.
         dispatchSettledFrame pendingSettledStack
@@ -334,11 +336,11 @@ phase2 share authoringRole r = do
     -- Notice that there may be ContextRemoval and RoleRemoval items, though!
     ft <- AA.get
     (transactionPerUser :: TransactionPerUser) <-
-      if share then lift $ distributeTransaction ft
+      if share then lift $ timed "distribution.prepare" (show transactionNumber) (distributeTransaction ft)
       else pure MAP.empty
     -- Publish to public roles before sending to peers, so that peers can retrieve the public resources they learn about.
     -- Collect all deltas in order, add the public resource schemes and remove doubles. Then execute.
-    published <- try do
+    published <- try $ timed "public.publish" (show transactionNumber) do
       void $ forWithIndex (publicRoleTransactions transactionPerUser)
         \destination publicRoleTransaction -> case destination of
           (PublicDestination userId) -> do
@@ -365,7 +367,7 @@ phase2 share authoringRole r = do
           Peer _ _ -> pure unit
       unless (MAP.isEmpty $ publicRoleTransactions transactionPerUser) (lift saveMarkedPublicResources)
     -- Send to peers even if publishing failed; then report the failure.
-    lift $ sendPeerTransactions transactionPerUser
+    lift $ timed "peer.send" (show transactionNumber) (sendPeerTransactions transactionPerUser)
     either throwError pure published
     -- Remove the deltas; we don't want to execute them again.
     AA.modify (\t -> over Transaction (\tr -> tr { deltas = [] }) t)

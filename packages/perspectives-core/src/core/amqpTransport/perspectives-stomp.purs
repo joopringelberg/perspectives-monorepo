@@ -64,6 +64,7 @@ import Foreign (ForeignError(..), MultipleErrors)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.Identifiers (getFirstMatch)
 import Perspectives.Persistence.Types (MonadPouchdb)
+import Perspectives.Performance (traceTimingImpl)
 import Perspectives.UnschemedIdentifiers (UnschemedResourceIdentifier(..))
 import Simple.JSON (class ReadForeign, readJSON')
 
@@ -112,6 +113,7 @@ type MarkHandledFunction = EffectFn1 AcknowledgementHeaders Int
 
 type Message =
   { body :: String
+  , messageId :: String
   , ack :: AcknowledgeFunction
   , markHandled :: MarkHandledFunction
   , pendingCount :: Int
@@ -137,7 +139,13 @@ connectAndSubscribe
   -> Effect Unit
 connectAndSubscribe stompClient params = runEffectFn5 connectAndSubscribeImpl
   stompClient
-  params
+  { topic: params.topic
+  , queueId: params.queueId
+  , login: params.login
+  , passcode: params.passcode
+  , vhost: params.vhost
+  , traceTiming: traceTimingImpl
+  }
   Emit
   Finish
 
@@ -150,6 +158,7 @@ messageProducer' stompClient params = produce' (connectAndSubscribe stompClient 
 
 type StructuredMessage f =
   { body :: f
+  , messageId :: String
   , ack :: AcknowledgeFunction
   , markHandled :: MarkHandledFunction
   , pendingCount :: Int
@@ -159,7 +168,7 @@ messageProducer :: forall t f p. ReadForeign t => StompClient -> ConnectAndSubsc
 messageProducer stompClient params = (messageProducer' stompClient params) $~ (forever (transform decodeMessage))
   where
   decodeMessage :: Message -> Either MultipleErrors (StructuredMessage t)
-  decodeMessage { body, ack, markHandled: markHandledFn, pendingCount } = case runExcept $ readJSON' body of
+  decodeMessage { body, messageId, ack, markHandled: markHandledFn, pendingCount } = case runExcept $ readJSON' body of
     Left e -> case body of
       "noConnection" -> Left $ singleton $ ForeignError "noConnection"
       "connection" -> Left $ singleton $ ForeignError "connection"
@@ -181,7 +190,7 @@ messageProducer stompClient params = (messageProducer' stompClient params) $~ (f
       -- NOTICE that we misuse / overload the TypeMismatch constructor here for our purposes.
       s | isAReceipt s -> Left $ singleton (TypeMismatch "receipt" (unsafePartial $ fromJust $ getReceipt s))
       otherwise -> Left $ cons (ForeignError body) e
-    Right m -> Right { body: m, ack, markHandled: markHandledFn, pendingCount }
+    Right m -> Right { body: m, messageId, ack, markHandled: markHandledFn, pendingCount }
 
   isAReceipt :: String -> Boolean
   isAReceipt = isJust <<< getReceipt

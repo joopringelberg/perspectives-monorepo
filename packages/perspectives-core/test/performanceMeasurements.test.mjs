@@ -8,6 +8,92 @@ import { statistics, aggregate, normalizeRounds, normalizeTrials } from "../scri
 import * as collector from "./layertests/PerformanceMeasurements.js";
 import * as profiler from "../src/core/performance.js";
 
+function timingCapture(t, enabled) {
+  const previous = globalThis.pdrTraceTimings;
+  globalThis.pdrTraceTimings = enabled;
+  t.after(() => {
+    if (previous === undefined) delete globalThis.pdrTraceTimings;
+    else globalThis.pdrTraceTimings = previous;
+  });
+  const output = t.mock.method(globalThis.console, "info", () => {});
+  return () => output.mock.calls.map(({ arguments: [line] }) =>
+    JSON.parse(line.slice("[PDR TIMING] ".length)));
+}
+
+test("disabled timing does not read the clock or emit output", t => {
+  const events = timingCapture(t, undefined);
+  t.mock.method(globalThis.performance, "now", () => {
+    throw new Error("Disabled timing must not read the clock");
+  });
+  profiler.traceTimingImpl("transport.receive", "message-1");
+  assert.equal(profiler.startTiming("incoming.verify")("1")(), null);
+  profiler.finishTiming(null)(false)();
+  assert.deepEqual(events(), []);
+});
+
+test("timing spans correlate overlapping work and report monotonic durations and failure", t => {
+  const events = timingCapture(t, true);
+  let now = 10;
+  t.mock.method(globalThis.performance, "now", () => now);
+  const first = profiler.startTiming("incoming.verify")("1")();
+  now = 12;
+  const second = profiler.startTiming("incoming.verify")("2")();
+  now = 20;
+  profiler.finishTiming(second)(false)();
+  now = 25;
+  profiler.finishTiming(first)(true)();
+  profiler.finishTiming(first)(true)();
+  const rows = events();
+  assert.deepEqual(rows.map(row => [row.event, row.id]), [
+    ["start", "1"], ["start", "2"], ["end", "2"], ["end", "1"]
+  ]);
+  assert.notEqual(rows[0].span, rows[1].span);
+  assert.equal(rows[2].span, rows[1].span);
+  assert.equal(rows[3].span, rows[0].span);
+  assert.equal(rows[2].elapsedMs, 8);
+  assert.equal(rows[2].succeeded, false);
+  assert.equal(rows[3].elapsedMs, 15);
+  assert.equal(rows[3].succeeded, true);
+  for (const row of rows) assert.ok(Number.isFinite(Date.parse(row.at)));
+});
+
+test("turning timing off suppresses events and outstanding span completion", t => {
+  const events = timingCapture(t, true);
+  const token = profiler.startTiming("incoming.decrypt")("message-1")();
+  globalThis.pdrTraceTimings = false;
+  profiler.traceTimingImpl("consumer.receive", "message-2");
+  profiler.finishTiming(token)(true)();
+  assert.equal(events().length, 1);
+});
+
+test("compiled timing wrapper preserves results and errors with tracing on or off", async t => {
+  const events = timingCapture(t, false);
+  const [runtime, aff, either] = await Promise.all([
+    import("../output/Perspectives.Performance/index.js"),
+    import("../output/Effect.Aff/index.js"),
+    import("../output/Data.Either/index.js")
+  ]);
+  const timed = runtime.timed(aff.monadEffectAff)(aff.monadErrorAff);
+  const run = action => new Promise((resolve, reject) => {
+    aff.runAff(result => () => {
+      if (result instanceof either.Left) reject(result.value0);
+      else resolve(result.value0);
+    })(action)();
+  });
+  const failure = new Error("private-error-detail");
+  for (const enabled of [false, true]) {
+    globalThis.pdrTraceTimings = enabled;
+    assert.equal(await run(timed("test.success")("1")(aff.monadEffectAff.liftEffect(() => 42))), 42);
+    await assert.rejects(run(timed("test.failure")("2")(
+      aff.monadEffectAff.liftEffect(() => { throw failure; })
+    )), error => error === failure);
+  }
+  const rows = events();
+  assert.equal(rows.length, 4);
+  assert.deepEqual(rows.filter(row => row.event === "end").map(row => row.succeeded), [true, false]);
+  assert.ok(!JSON.stringify(rows).includes(failure.message));
+});
+
 function captureReport(run, publish = true) {
   const messages = [];
   const originalCode = process.exitCode;

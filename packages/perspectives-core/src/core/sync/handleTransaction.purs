@@ -69,6 +69,7 @@ import Perspectives.Persistence.DeltaStore (deltaStoreDocIdWithDeltaId, extractD
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
 import Perspectives.Persistence.PendingTransactionStore (MissingDelta, storePendingTransaction)
 import Perspectives.Persistence.ResourceVersionStore (getResourceVersion, incrementResourceVersion, setResourceVersion)
+import Perspectives.Performance (timed)
 import Perspectives.Persistent (addAttachment, entityExists, forceSaveRole, getPerspectRol, saveEntiteit, saveEntiteit_, tryGetPerspectEntiteit, tryGetPerspectRol)
 import Perspectives.Query.UnsafeCompiler (getRoleInstances)
 import Perspectives.Representation.Class.Cacheable (EnumeratedRoleType(..), cacheEntity)
@@ -423,20 +424,21 @@ executeUniverseRoleDelta (UniverseRoleDelta { id, roleType, roleInstance, author
 -- | re-verification during delta execution.
 executeTransaction :: TransactionForPeer -> MonadPerspectivesTransaction Unit
 executeTransaction t = do
+  transactionNumber <- gets \(Transaction tr) -> tr.transactionNumber
   -- Prevent addDelta/insertDelta from storing deltas in the DeltaStore.
   -- executeDeltaWithVersionTracking handles DeltaStore persistence directly;
   -- the update functions called via executeDelta must not also store via addDelta.
   modify (over Transaction \tr -> tr { isExecutingIncomingDeltas = true })
   let filtered = withoutPredefinedContextScaffolding t
   try
-    ( do
+    ( timed "incoming.verify" (show transactionNumber) do
         publicKeys <- liftEffect $ deduplicatePublicKeys (unwrap filtered).publicKeys
         let incoming = over TransactionForPeer (\r -> r { publicKeys = publicKeys }) filtered
         verifiedKeys <- verifyTransaction incoming
         pure $ Tuple verifiedKeys incoming
     ) >>= case _ of
     Left e -> lift $ renderPerspectivesError >=> warnSync $ (IncomingTransactionFailed (show e))
-    Right (Tuple verifiedKeys incoming) -> executeTransaction' verifiedKeys incoming
+    Right (Tuple verifiedKeys incoming) -> timed "incoming.execute" (show transactionNumber) (executeTransaction' verifiedKeys incoming)
 
 verifyTransaction :: TransactionForPeer -> MonadPerspectivesTransaction (Map.Map UnschemedResourceIdentifier CryptoKey)
 verifyTransaction (TransactionForPeer { deltas, publicKeys }) = do

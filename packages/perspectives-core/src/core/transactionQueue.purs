@@ -19,6 +19,7 @@ import Effect.Aff (Aff, bracket, delay)
 import Effect.Aff.AVar (empty, take)
 import Effect.AVar as AVar
 import Effect.Class (liftEffect)
+import Perspectives.Performance (timed)
 
 foreign import data TransactionQueue :: Type
 
@@ -42,7 +43,8 @@ withPriority queue priority action = do
     (liftEffect $ enqueue queue user (void $ AVar.tryPut unit ready))
     liftEffect
     \_ -> do
-      take ready
+      let priorityId = if user then "user" else "background"
+      timed "admission.wait" priorityId (take ready)
       -- Yield to the worker's message loop even when a backlog can run synchronously.
-      delay (Milliseconds 0.0)
+      timed "admission.yield" priorityId (delay (Milliseconds 0.0))
       action

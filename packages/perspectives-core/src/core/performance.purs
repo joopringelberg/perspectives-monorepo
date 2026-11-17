@@ -9,6 +9,33 @@ import Control.Monad.Error.Class (class MonadError, catchError, throwError)
 import Effect (Effect)
 import Effect.Class (class MonadEffect, liftEffect)
 import Effect.Exception (Error)
+import Effect.Uncurried (EffectFn2, runEffectFn2)
+
+foreign import data TimingToken :: Type
+foreign import timingEnabled :: Effect Boolean
+foreign import traceTimingImpl :: EffectFn2 String String Unit
+foreign import startTiming :: String -> String -> Effect TimingToken
+foreign import finishTiming :: TimingToken -> Boolean -> Effect Unit
+
+traceTiming :: String -> String -> Effect Unit
+traceTiming = runEffectFn2 traceTimingImpl
+
+timed :: forall m a. MonadEffect m => MonadError Error m => String -> String -> m a -> m a
+timed stage identifier action = do
+  enabled <- liftEffect timingEnabled
+  if not enabled then action
+  else do
+    token <- liftEffect $ startTiming stage identifier
+    catchError
+      ( do
+          result <- action
+          liftEffect $ finishTiming token true
+          pure result
+      )
+      ( \err -> do
+          liftEffect $ finishTiming token false
+          throwError err
+      )
 
 foreign import data ProfileToken :: Type
 foreign import data ProfileSession :: Type

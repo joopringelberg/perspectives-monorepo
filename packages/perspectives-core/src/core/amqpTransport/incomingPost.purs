@@ -53,7 +53,7 @@ import Perspectives.Logging (debugBroker, traceBroker, warnBroker)
 import Perspectives.ModelDependencies (accountHolder, accountHolderName, accountHolderPassword, accountHolderQueueName, brokerEndpoint, brokerServiceContractInUse, brokerServiceExchange, connectedToAMQPBroker, myBrokers, sysUser)
 import Perspectives.Names (getMySystem, lookupIndexedContext)
 import Perspectives.Persistence.API (cleanupDeletedDocs, deleteDocument, documentsInDatabase, excludeDocs, getDocument_)
-import Perspectives.Performance (ProfileSession, captureSession, countDecrypted, countEncrypted, profile, sessionEnabled)
+import Perspectives.Performance (ProfileSession, captureSession, countDecrypted, countEncrypted, profile, sessionEnabled, timed, traceTiming)
 import Perspectives.Persistent (postDatabaseName)
 import Perspectives.PerspectivesState (getBrokerService, getCurrentLanguage, getPerspectivesUser, getStompClientFactory, pushMessage, pushSystemMessage, removeMessage, removeSystemMessage, setBrokerService, setStompClient, stompClient, transactionLevel, withTransactionPriority)
 import Perspectives.Query.UnsafeCompiler (getPropertyFunction, getRoleInstances)
@@ -101,32 +101,39 @@ incomingPost = do
       change <- await
       case change of
         Left me -> case head me of
-          ForeignError "noConnection" -> lift $ setConnectionState false
-          ForeignError "connection" -> lift $ setConnectionState true *> sendOutgoingPost
+          ForeignError "noConnection" -> lift $ timed "connection.state" "disconnected" (setConnectionState false)
+          ForeignError "connection" -> lift do
+            timed "connection.state" "connected" (setConnectionState true)
+            timed "outbox.replay" "connection" sendOutgoingPost
           TypeMismatch "receipt" docId -> do
             -- The broker has acknowledged that it has received and stored the message with id docId.
             lift $ debugBroker $ "Received receipt for message with id " <> show docId <> ", deleting from post database"
-            void $ lift $ deleteDocument postDB docId Nothing
+            void $ lift $ timed "outbox.receipt-delete" docId (deleteDocument postDB docId Nothing)
           _ -> lift $ warnBroker ("Perspectives.AMQP.IncomingPost.transactionConsumer: " <> show me)
-        Right { body, ack, markHandled: markHandled_, pendingCount } -> do
+        Right { body, messageId, ack, markHandled: markHandled_, pendingCount } -> do
+          lift $ liftEffect $ traceTiming "consumer.receive" messageId
           -- NOTE. Transaction execution seems to be so slow, that the connection can be lOst before we acknowledge.
           -- In that case, the broker resends the message.
           -- That is why we acknowledge first.
           -- The risk is that the PDR may not handle the message fully and then it is lost.
-          lift $ acknowledge ack
-          lift do
+          lift $ timed "consumer.ack" messageId (acknowledge ack)
+          lift $ timed "incoming.total" messageId do
             showPendingIncomingTransactions pendingCount
             padding <- transactionLevel
             debugBroker $ padding <> "Executing incoming post transaction from author " <> unwrap (unwrap body).author <> " and timestamp " <> show (unwrap body).timeStamp
             profileSession <- liftEffect captureSession
-            transaction <- profile profileSession "decrypt" (decryptTransaction profileSession body)
+            transaction <- profile profileSession "decrypt" $ timed "incoming.decrypt" messageId (decryptTransaction profileSession body)
+            liftEffect $ traceTiming "incoming.admission.requested" messageId
             withTransactionPriority BackgroundTransaction do
-              profile profileSession "incomingCascade" $
-                runMonadPerspectivesTransaction'
-                  false
-                  (ENR $ EnumeratedRoleType sysUser)
-                  (profile profileSession "executeTransaction" (executeTransaction transaction))
-              profile profileSession "publicStates" detectPublicStateChanges
+              liftEffect $ traceTiming "incoming.admission.granted" messageId
+              profile profileSession "incomingCascade"
+                $ timed "incoming.transaction" messageId
+                $
+                  runMonadPerspectivesTransaction'
+                    false
+                    (ENR $ EnumeratedRoleType sysUser)
+                    (profile profileSession "executeTransaction" (executeTransaction transaction))
+              profile profileSession "publicStates" $ timed "incoming.public-states" messageId detectPublicStateChanges
             remainingCount <- markHandled markHandled_
             showPendingIncomingTransactions remainingCount
 
