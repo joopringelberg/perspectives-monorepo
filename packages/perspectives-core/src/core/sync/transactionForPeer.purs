@@ -26,10 +26,10 @@ module Perspectives.Sync.TransactionForPeer where
 -- TRANSACTIE
 -----------------------------------------------------------
 
-import Data.Array (elemIndex, snoc)
+import Data.Array (elemIndex, filter, snoc)
 import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe(..), isJust)
-import Data.Newtype (class Newtype)
+import Data.Newtype (class Newtype, unwrap)
 import Data.Show.Generic (genericShow)
 import Persistence.Attachment (class Attachment)
 import Perspectives.Couchdb.Revision (class Revision)
@@ -37,9 +37,10 @@ import Perspectives.Data.EncodableMap as ENCMAP
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, PerspectivesUser)
 import Perspectives.UnschemedIdentifiers (UnschemedResourceIdentifier)
 import Perspectives.Sync.DateTime (SerializableDateTime)
-import Perspectives.Sync.SignedDelta (SignedDelta)
+import Perspectives.Sync.SignedDelta (SignedDelta(..))
 import Perspectives.Sync.Transaction (PublicKeyInfo)
-import Prelude (class Ord, class Show, class Eq, compare, show, ($), (<>), (&&), eq)
+import Perspectives.Sync.VersionedDelta (isPredefinedContextScaffolding)
+import Prelude (class Ord, class Show, class Eq, compare, map, not, show, ($), (<>), (&&), (<<<), eq)
 import Simple.JSON (class ReadForeign, class WriteForeign)
 
 -----------------------------------------------------------
@@ -107,6 +108,18 @@ addToTransactionForPeer d (TransactionForPeer r@{ deltas }) = TransactionForPeer
       if isJust $ elemIndex d deltas then deltas
       else snoc deltas d
   }
+
+-- | Keep local bootstrap history out of peer traffic and identity exports.
+withoutPredefinedContextScaffolding :: TransactionForPeer -> TransactionForPeer
+withoutPredefinedContextScaffolding (TransactionForPeer r) =
+  let
+    deltas = filter (not <<< isPredefinedContextScaffolding <<< _.encryptedDelta <<< unwrap) r.deltas
+    authors = map (_.author <<< unwrap) deltas
+  in
+    TransactionForPeer r
+      { deltas = deltas
+      , publicKeys = ENCMAP.filterKeys (\author -> isJust $ elemIndex author authors) r.publicKeys
+      }
 
 transactieID :: TransactionForPeer -> String
 transactieID (TransactionForPeer { author, timeStamp }) = show author <> "_" <> show timeStamp

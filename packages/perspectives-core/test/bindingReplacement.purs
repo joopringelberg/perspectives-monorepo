@@ -12,7 +12,8 @@ import Control.Monad.AvarMonadAsk as AA
 import Control.Monad.Error.Class (throwError, try)
 import Control.Monad.Reader (runReaderT)
 import Control.Monad.Trans.Class (lift)
-import Data.Array (elem, length, null, singleton)
+import Data.Array (elem, length, nub, null, singleton)
+import Data.Array.NonEmpty as NA
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.Map as Map
@@ -28,6 +29,7 @@ import Effect.Exception as Exception
 import Effect.Ref as Ref
 import Foreign.Object as Object
 import Perspectives.ApiTypes (ApiEffect, ResponseWithWarnings(..))
+import Perspectives.Assignment.SerialiseAsDeltas (serialiseRoleInstancesAndProperties)
 import Perspectives.Assignment.Update (setPreferredUserRoleType)
 import Perspectives.ContextAndRole (defaultContextRecord, defaultRolRecord)
 import Perspectives.CompileAssignment (bindAllWithPermission)
@@ -71,6 +73,7 @@ import Perspectives.ScheduledAssignment (ScheduledAssignment(..))
 import Perspectives.SetupUser (setupInvertedQueryDatabase)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
+import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
 import Perspectives.Sync.Transaction (Transaction(..), TransactionDestination(..), createTransaction)
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..))
 import Perspectives.UnschemedIdentifiers (unschemePerspectivesUser)
@@ -84,6 +87,46 @@ main = runTest theSuite
 
 theSuite :: TestSuite
 theSuite = suite "User-role filler replacement" do
+  for_
+    [ { name: "only the requested instance", users: NA.singleton userId, expected: [ userId ] }
+    , { name: "multiple requested instances", users: NA.singleton userId <> NA.singleton remoteAlternativeId, expected: [ userId, remoteAlternativeId ] }
+    , { name: "no unrequested instance when the caller does not match", users: NA.singleton otherLocalId, expected: [] }
+    , { name: "all instances for type-only export", users: NA.singleton (RoleInstance "def:#serializationuser"), expected: [ userId, remoteAlternativeId ] }
+    ]
+    \{ name, users, expected } ->
+      test ("self-only serialization includes " <> name) $
+        withFixture newRemotePeer [ remoteAlternativeId ] [] do
+          let
+            object = SQD (CDOM $ ST contextType) (RolGetter $ ENR userType)
+              (RDOM $ ST $ QT.RoleInContext { context: contextType, role: userType })
+              False
+              False
+            keyDelta peer = signed
+              { resourceKey: unwrap peer <> "#" <> perspectivesUsersPublicKey
+              , resourceVersion: 1
+              , deltaType: "SetProperty"
+              , id: peer
+              , roleType: EnumeratedRoleType perspectivesUsers
+              , property: EnumeratedPropertyType perspectivesUsersPublicKey
+              , values: [ Value "test-public-key" ]
+              , subject: ENR userType
+              }
+          lift $ for_ [ newRemotePeer, oldRemotePeer ] (storeDeltaFromSignedDelta <<< keyDelta)
+          serialiseRoleInstancesAndProperties contextId users object
+            [ ENP $ EnumeratedPropertyType perspectivesUsersPublicKey ]
+            true
+            false
+          Transaction { deltas } <- AA.get
+          let actualUsers = nub $ deltas >>= \(DeltaInTransaction d) -> d.users
+          liftAff do
+            equal (length expected) (length actualUsers)
+            for_ actualUsers \recipient ->
+              assert "Self-only serialization must not add another recipient" (elem recipient expected)
+            for_ [ Tuple userId newRemotePeer, Tuple remoteAlternativeId oldRemotePeer ] \(Tuple recipient peer) -> do
+              let addressedDeltas = deltas >>= \(DeltaInTransaction d) -> if elem recipient d.users then [ d.delta ] else []
+              equal (elem recipient expected) (elem (roleDelta recipient) addressedDeltas)
+              equal (elem recipient expected) (elem (keyDelta peer) addressedDeltas)
+
   test "bulk rebinding skips denied targets and replaces permitted targets in their own contexts" $
     withFixture oldRemotePeer [] [] do
       EnumeratedRole author <- lift $ getEnumeratedRole userType

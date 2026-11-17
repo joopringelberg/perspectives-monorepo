@@ -26,8 +26,9 @@ There are two scenarios:
 - Setting up the CouchDB databases and their views.
 - Loading the System model (and other required models) into the local store.
 - Creating the `PerspectivesSystem` context instance (authored by `PerspectivesSystem$Installer`).
-- On a first installation: creating `TheWorld`, the user's `PerspectivesUsers` role (including the public key), `SocialEnvironment`, and `SocialEnvironment$Persons` — all before any PL state reactions fire.
-- On a subsequent installation: executing the identity document (a serialised transaction from the first installation) to reconstruct `TheWorld`, `PerspectivesUsers`, `SocialEnvironment`, and `SocialEnvironment$Persons`.
+- On every installation: creating `TheWorld`, `SocialEnvironment`, and their external roles locally, before creating or importing the user's identity.
+- On a first installation: creating the user's `PerspectivesUsers` role (including its public keys) and `SocialEnvironment$Persons` before any PL state reactions fire.
+- On a subsequent installation: executing the identity document (a serialised transaction from the first installation) to reconstruct `PerspectivesUsers` and `SocialEnvironment$Persons` within the already-created containers.
 - Creating the `PerspectivesSystem$User` role and binding it to `me` (the `SocialEnvironment$Persons` instance for the local user).
 - Adding the `BaseRepository` role to `PerspectivesSystem`.
 - Creating the `Installer` user role in the model root context of the System model.
@@ -64,31 +65,46 @@ The System model (`model://perspectives.domains#System`) is loaded into the loca
 
 **Authoring role:** `PerspectivesSystem$Installer`.
 
-### Step 4a – Create `TheWorld`, `SocialEnvironment`, and `Persons` (PDR, first installation only)
+### Step 4 – Bootstrap predefined containers (PDR, every installation)
 
-If `isFirstInstallation = true` (a runtime option set by the client) and a public key is available, `initSystem` calls `createTheWorld` with `TheWorld$Initializer` (= `me`) as the authoring role. Inside `createTheWorld`:
+`initSystem` calls `createPredefinedContexts` with `TheWorld$Initializer` as the
+authoring role. It constructs `TheWorld` with identifier `"TheWorld"` and
+`SocialEnvironment` with identifier `"TheSocialEnvironment"`, together with their
+external roles. Their signed creation deltas remain stored locally for restoration.
 
-1. Constructs the `TheWorld` context with the fixed identifier `"TheWorld"`.
-2. Creates the user's `PerspectivesUsers` role inside `TheWorld`:
+These creation deltas are omitted from peer traffic and identity exports.
+Incoming transactions, including older identity documents, are filtered before
+key import and execution. This does not exclude the containers' role contents,
+bindings or properties. See [Context Serialisation for a Peer](context-serialisation-for-peer.md#predefined-containers).
+
+### Step 4a – Create the user's identity and `Persons` (PDR, first installation only)
+
+If `isFirstInstallation = true` (a runtime option set by the client) and both
+installation public keys are available, `initSystem` calls `createTheWorld`
+with the two existing containers and `TheWorld$Initializer` as the authoring role:
+
+1. Creates the user's `PerspectivesUsers` role inside `TheWorld`:
    - Identifier: the user's CUID (includes the storage scheme).
-   - Sets the `PublicKey` property to the user's public key.
+   - Sets the `PublicKey` and `TransportPublicKey` properties.
    - Marks this role as `isMe = true` (via `roleIsMe`), which also sets `context_me` on `TheWorld`.
-3. Constructs the `SocialEnvironment` context with the fixed identifier `"TheSocialEnvironment"`.
-4. Switches authoring role to `SocialEnvironment$SystemUser` and creates one `SocialEnvironment$Persons` role:
+2. Switches authoring role to `SocialEnvironment$SystemUser` and creates one `SocialEnvironment$Persons` role:
    - Filled with the user's `PerspectivesUsers` CUID.
    - Marked as `isMe = true` (via the `isMe` flag on `createAndAddRoleInstance_`).
    - **At this point `me` is available**: `computeMe_` will find this `Persons` instance.
-5. Creates the serialisation persona: a second `PerspectivesUsers` role with the fixed identifier `"def:#serializationuser"` and `LastName = "Serialisation persona"`. Authored by `TheWorld$Initializer`.
+3. Creates the serialisation persona: a second `PerspectivesUsers` role with the fixed identifier `"def:#serializationuser"` and `LastName = "Serialisation persona"`. Authored by `TheWorld$Initializer`.
 
-**Authoring role for steps 1–3 and 5:** `TheWorld$Initializer` (= `me`).  
-**Authoring role for step 4:** `SocialEnvironment$SystemUser` (= `me`).
+**Authoring role for steps 1 and 3:** `TheWorld$Initializer` (= `me`).
+
+**Authoring role for step 2:** `SocialEnvironment$SystemUser` (= `me`).
 
 ### Step 4b – Execute Identity Document (PDR, subsequent installation)
 
 If `isFirstInstallation = false` and an identity document is available:
 
 1. Executes the identity document as a Perspectives transaction.  
-   This reconstructs `TheWorld`, the user's `PerspectivesUsers` role, `SocialEnvironment`, and `SocialEnvironment$Persons` from the first installation.
+   This reconstructs the user's `PerspectivesUsers` role and
+   `SocialEnvironment$Persons` from the first installation, inside the containers
+   already bootstrapped locally in Step 4.
 2. Marks the `PerspectivesUsers` role as `isMe = true` in the local cache.
 3. After this step, `computeMe_` can find the `SocialEnvironment$Persons` instance (via the filler relationship to the user's CUID), so `me` is available for Step 5.
 
@@ -150,7 +166,7 @@ state FirstInstallation =
       bind sys:MySocialEnvironment >> extern to SocialEnvironment in sys:MySystem
 ```
 
-The `Installer` binds the already-created `SocialEnvironment` (created by PDR in Step 4a) into `PerspectivesSystem`. The context itself was created in PDR; PL just registers the binding.
+The `Installer` binds the already-created `SocialEnvironment` (created by PDR in Step 4) into `PerspectivesSystem`. The context itself was created in PDR; PL just registers the binding.
 
 ### Step 9 – PL State Reactions in `PerspectivesSystem`
 

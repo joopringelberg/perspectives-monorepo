@@ -81,7 +81,7 @@ import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.StrippedDelta (addPublicResourceScheme, addResourceSchemes, addSchemeToResourceIdentifier)
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
 import Perspectives.Sync.Transaction (PublicKeyInfo, Transaction(..))
-import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..))
+import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..), withoutPredefinedContextScaffolding)
 import Perspectives.Sync.VersionedDelta (DeltaEnvelope(..), parseIncomingDelta)
 import Perspectives.Types.ObjectGetters (contextAspectsClosure, hasAspect, isPublic, roleAspectsClosure, publicUserRole)
 import Perspectives.TypesForDeltas (ContextDelta(..), ContextDeltaType(..), DeltaRecord, RoleBindingDelta(..), RoleBindingDeltaType(..), RolePropertyDelta(..), RolePropertyDeltaType(..), UniverseContextDelta(..), UniverseContextDeltaType(..), UniverseRoleDelta(..), UniverseRoleDeltaType(..))
@@ -425,9 +425,10 @@ executeTransaction t = do
   -- executeDeltaWithVersionTracking handles DeltaStore persistence directly;
   -- the update functions called via executeDelta must not also store via addDelta.
   modify (over Transaction \tr -> tr { isExecutingIncomingDeltas = true })
-  try (verifyTransaction t) >>= case _ of
+  let incoming = withoutPredefinedContextScaffolding t
+  try (verifyTransaction incoming) >>= case _ of
     Left e -> lift $ renderPerspectivesError >=> warnSync $ (IncomingTransactionFailed (show e))
-    Right verifiedKeys -> executeTransaction' verifiedKeys t
+    Right verifiedKeys -> executeTransaction' verifiedKeys incoming
 
   where
 

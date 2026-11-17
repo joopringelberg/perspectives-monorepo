@@ -193,6 +193,8 @@ selfonly
 
 Applies to perspectives on user roles. Restricts the user-object role such that each user instance can only see _its own_ instance. When the user changes his own instance, no peers are informed. When another user changes one of these instances (e.g. by setting a property), only the user himself receives that update. 
 
+When synchronising this perspective for particular user instances, only those instances are considered. Other instances selected by the perspective's object query do not become additional recipients.
+
 Example:
 [source, arc]
 ----

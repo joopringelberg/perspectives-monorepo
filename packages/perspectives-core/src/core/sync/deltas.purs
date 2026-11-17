@@ -26,7 +26,7 @@ import Control.Monad.AvarMonadAsk (modify, gets) as AA
 import Control.Monad.State.Trans (StateT, execStateT, get, lift, modify, put)
 import Data.Array (catMaybes, concat, elemIndex, filter, filterA, foldl, head, nub, null, snoc, sortBy, union)
 import Data.DateTime.Instant (toDateTime)
-import Data.Map (Map, empty, filter, filterKeys, insert, lookup, toUnfoldable, values) as Map
+import Data.Map (Map, empty, filter, filterKeys, insert, lookup, mapMaybeWithKey, toUnfoldable, values) as Map
 import Data.Maybe (Maybe(..), fromJust, isJust, maybe)
 import Data.Newtype (over, unwrap)
 import Data.Ordering (Ordering)
@@ -70,7 +70,7 @@ import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
 import Perspectives.Sync.OutgoingTransaction (OutgoingTransaction(..))
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
 import Perspectives.Sync.Transaction (PublicKeyInfo, Transaction(..), TransactionDestination(..))
-import Perspectives.Sync.TransactionForPeer (EncryptedTransactionForPeer(..), TransactionForPeer(..), addToTransactionForPeer, transactieID)
+import Perspectives.Sync.TransactionForPeer (EncryptedTransactionForPeer(..), TransactionForPeer(..), addToTransactionForPeer, transactieID, withoutPredefinedContextScaffolding)
 import Perspectives.Types.ObjectGetters (isPublicProxy)
 import Perspectives.UnschemedIdentifiers (UnschemedResourceIdentifier, unschemePerspectivesUser)
 import Prelude (Unit, bind, compare, discard, eq, flip, map, not, pure, show, unit, void, when, ($), (*>), (<$>), (<<<), (<>), (==), (>=>), (>>=), (>>>), (||))
@@ -216,7 +216,7 @@ type RecipientKey =
 -- | `users` in DeltaInTransaction will not always be model://perspectives.domains#System$PerspectivesSystem$User instances.
 transactieForEachUser :: Transaction -> MonadPerspectives TransactionPerUser
 transactieForEachUser t@(Transaction tr@{ timeStamp, deltas, userRoleBottoms, publicKeys }) = do
-  execStateT
+  transactions <- execStateT
     ( void $ for deltas \(DeltaInTransaction { users, delta }) -> do
         system <- lift getMySystem
         -- Lookup the ultimate filler for all users in the delta.
@@ -224,6 +224,16 @@ transactieForEachUser t@(Transaction tr@{ timeStamp, deltas, userRoleBottoms, pu
         addDeltaToCustomisedTransactie delta (nub sysUsers) (ContextInstance system)
     )
     Map.empty
+  pure $ Map.mapMaybeWithKey
+    ( \destination transaction -> case destination of
+        Peer _ _ ->
+          let
+            filtered = withoutPredefinedContextScaffolding transaction
+          in
+            if null (unwrap filtered).deltas then Nothing else Just filtered
+        PublicDestination _ -> Just transaction
+    )
+    transactions
   where
   -- `destinations` WILL be either 
   --    * Peer model://perspectives.domains#System$TheWorld$PerspectivesUsers instances, or

@@ -793,9 +793,10 @@ initSystem = do
   -- It has no sufficient perspective but that seems to be no problem. Systems should not be shared between users anyway.
   withAuthoringRole (ENR $ EnumeratedRoleType DEP.installer) createSystem
 
-  -- Then either create the world, or read the identity document and execute the transaction contained in it.
+  -- Identity exports omit these containers: every installation bootstraps them locally.
+  Tuple world socialEnv <- withAuthoringRole (CR $ CalculatedRoleType DEP.theWorldInitializer) createPredefinedContexts
   isFirstInstallation <- lift $ AMA.gets (_.isFirstInstallation <<< _.runtimeOptions)
-  if isFirstInstallation then withAuthoringRole (CR $ CalculatedRoleType DEP.theWorldInitializer) createTheWorld
+  if isFirstInstallation then withAuthoringRole (CR $ CalculatedRoleType DEP.theWorldInitializer) (createTheWorld world socialEnv)
   else do
     mIdoc <- gets \(Transaction { identityDocument }) -> identityDocument
     case mIdoc of
@@ -827,70 +828,39 @@ initSystem = do
 
   where
 
-  createTheWorld :: MonadPerspectivesTransaction Unit
-  createTheWorld = do
+  createTheWorld :: ContextInstance -> ContextInstance -> MonadPerspectivesTransaction Unit
+  createTheWorld world@(ContextInstance worldId) (ContextInstance socialEnvId) = do
     mpublicKey <- lift getMyPublicKey
     mtransportPublicKey <- lift getMyTransportPublicKey
     case mpublicKey, mtransportPublicKey of
       Just publicKey, Just transportPublicKey -> do
-        -- Create TheWorld, complete with the PerspectivesUser role of TheWorld that represents the identity 
-        -- of the natural person setting up this installation.
-        worldresult <- runExceptT $ constructContext Nothing
-          ( ContextSerialization
-              { id: Just "TheWorld"
-              , prototype: Nothing
-              , ctype: theWorld
-              , rollen: empty
-              , externeProperties: (PropertySerialization empty)
+        PerspectivesUser perspectivesUser <- lift getPerspectivesUser
+        puser <- createAndAddRoleInstance_ (EnumeratedRoleType DEP.perspectivesUsers) worldId
+          ( RolSerialization
+              { id: Just perspectivesUser
+              , properties: PropertySerialization (fromFoldable [ Tuple DEP.perspectivesUsersPublicKey [ publicKey ], Tuple DEP.perspectivesUsersTransportPublicKey [ transportPublicKey ] ])
+              , binding: Nothing
               }
           )
-        case worldresult of
-          Left e -> lift $ errorInstall (show e)
-          Right world@(ContextInstance worldId) -> do
-            -- Is with a storage scheme right from the start.
-            PerspectivesUser perspectivesUser <- lift getPerspectivesUser
-            puser <- createAndAddRoleInstance_ (EnumeratedRoleType DEP.perspectivesUsers) worldId
-              ( RolSerialization
-                  { id: Just perspectivesUser
-                  , properties: PropertySerialization (fromFoldable [ Tuple DEP.perspectivesUsersPublicKey [ publicKey ], Tuple DEP.perspectivesUsersTransportPublicKey [ transportPublicKey ] ])
-                  , binding: Nothing
-                  }
-              )
-              true
-            -- Redundantly sets isMe on the role instance but also sets the `me` of the context.
-            roleIsMe puser world
-            -- Now create the SocialEnvironment.
-            socialEnvResult <- runExceptT $ constructContext Nothing
-              ( ContextSerialization
-                  { id: Just "TheSocialEnvironment"
-                  , prototype: Nothing
-                  , ctype: DEP.socialEnvironment
-                  , rollen: empty
-                  , externeProperties: (PropertySerialization empty)
-                  }
-              )
-            case socialEnvResult of
-              Left e -> lift $ errorInstall (show e)
-              Right socialEnv@(ContextInstance socialEnvId) -> do
-                -- Then create a Persons instance and fill it with puser.
-                void $ withAuthoringRole (CR $ CalculatedRoleType DEP.socialEnvironmentSystemUser) do
-                  createAndAddRoleInstance_ (EnumeratedRoleType DEP.socialEnvironmentPersons) socialEnvId
-                    ( RolSerialization
-                        { id: Nothing
-                        , properties: PropertySerialization empty
-                        , binding: Just perspectivesUser
-                        }
-                    )
-                    true
-                -- Lastly: create the serializationuser.
-                void $ createAndAddRoleInstance_ (EnumeratedRoleType DEP.perspectivesUsers) worldId
-                  ( RolSerialization
-                      { id: Just "def:#serializationuser"
-                      , properties: PropertySerialization (singleton DEP.identifiableLastName [ "Serialisation persona" ])
-                      , binding: Nothing
-                      }
-                  )
-                  false
+          true
+        roleIsMe puser world
+        void $ withAuthoringRole (CR $ CalculatedRoleType DEP.socialEnvironmentSystemUser) do
+          createAndAddRoleInstance_ (EnumeratedRoleType DEP.socialEnvironmentPersons) socialEnvId
+            ( RolSerialization
+                { id: Nothing
+                , properties: PropertySerialization empty
+                , binding: Just perspectivesUser
+                }
+            )
+            true
+        void $ createAndAddRoleInstance_ (EnumeratedRoleType DEP.perspectivesUsers) worldId
+          ( RolSerialization
+              { id: Just "def:#serializationuser"
+              , properties: PropertySerialization (singleton DEP.identifiableLastName [ "Serialisation persona" ])
+              , binding: Nothing
+              }
+          )
+          false
       _, _ -> lift $ errorInstall "No installation key pair found on setting up!"
 
   createSystem :: MonadPerspectivesTransaction Unit
@@ -929,6 +899,26 @@ initSystem = do
     roleIsMe sysUser (ContextInstance sysId)
     me <- lift $ computeMe_
     void $ setFirstBinding sysUser me Nothing
+
+createPredefinedContexts :: MonadPerspectivesTransaction (Tuple ContextInstance ContextInstance)
+createPredefinedContexts = do
+  world <- create "TheWorld" theWorld
+  socialEnv <- create "TheSocialEnvironment" DEP.socialEnvironment
+  pure $ Tuple world socialEnv
+  where
+  create id ctype = do
+    result <- runExceptT $ constructContext Nothing
+      ( ContextSerialization
+          { id: Just id
+          , prototype: Nothing
+          , ctype
+          , rollen: empty
+          , externeProperties: PropertySerialization empty
+          }
+      )
+    case result of
+      Left e -> throwError $ error $ "Cannot bootstrap " <> id <> ": " <> show e
+      Right context -> pure context
 
 -- Returns string ending on forward slash (/).
 repository :: String -> MonadPerspectivesTransaction String

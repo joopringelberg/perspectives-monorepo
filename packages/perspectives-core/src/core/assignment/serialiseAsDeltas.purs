@@ -88,7 +88,7 @@ import Perspectives.ResourceIdentifiers (isInPublicScheme)
 import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
 import Perspectives.Sync.Transaction (Transaction(..), createTransaction)
-import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..))
+import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..), withoutPredefinedContextScaffolding)
 import Perspectives.Types.ObjectGetters (isEnumeratedRoleType, perspectivesClosure_, propertiesInPerspective)
 import Perspectives.Warning (PerspectivesWarning(..))
 import Prelude (Unit, bind, discard, join, pure, show, unit, void, ($), (<$>), (<<<), (<>), (==), (>=>), (>>=), (||), (<), (*>), (&&))
@@ -129,7 +129,7 @@ serialisedAsDeltasForUserType cid userType = do
     , deltas: _.delta <<< unwrap <$> deltas
     , publicKeys
     }
-  pure $ Value $ unsafeStringify $ write tfp
+  pure $ Value $ unsafeStringify $ write $ withoutPredefinedContextScaffolding tfp
   where
   -- | Execute a value in MonadPerspectivesTransaction, discard the result and return the transaction.
   execMonadPerspectivesTransaction
@@ -259,10 +259,18 @@ serialiseRoleInstancesAndProperties cid users object properties selfOnly isPersp
   (rinstances :: Array (DependencyPath)) <- liftToMPT ((singletonPath (C cid)) ##= interpret object)
   -- Serialise all the dependencies.
   -- If the perspective is selfOnly, then each of the users can only receive his own role and properties.
-  -- This means that the users and (the role instances in) rinstances should be the same collection.
-  -- in that case, call serialiseDependency on a pair consisting of the instance (one of rinstances, each represented by a Dependency) and a user that is that same instance.
   if selfOnly then do
-    for_ (join (allPaths <$> rinstances))
+    let
+      requestedInstances =
+        -- Type-only export collects data without a concrete recipient; it does not distribute to peers.
+        if users == NA.singleton (RoleInstance "def:#serializationuser") then rinstances
+        else filter
+          ( \{ head: dependency } -> case dependency of
+              R r -> isJust $ elemIndex r (toArray users)
+              _ -> false
+          )
+          rinstances
+    for_ (join (allPaths <$> requestedInstances))
       \(dependencies :: NonEmptyList Dependency) -> do
         -- The head will be a user role because of selfOnly.
         oneUserOnly <- unsafePartial case head dependencies of

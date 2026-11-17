@@ -23,6 +23,7 @@
 module Perspectives.Sync.VersionedDelta
   ( DeltaEnvelope(..)
   , class SignVersionedDelta
+  , isPredefinedContextScaffolding
   , parseIncomingDelta
   , parseDeltaFormatVersion
   , signVersionedDelta
@@ -47,9 +48,10 @@ import Perspectives.Representation.EnumeratedProperty (EnumeratedProperty(..))
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), RoleType(..))
 import Perspectives.Representation.Class.PersistentType (getCalculatedRole, getContext, getEnumeratedProperty, getEnumeratedRole)
+import Perspectives.ResourceIdentifiers (stripNonPublicIdentifiers)
 import Perspectives.Sync.LegacyDeltas (LegacyContextDelta, LegacyRoleBindingDelta, LegacyRolePropertyDelta, LegacyUniverseContextDelta, LegacyUniverseRoleDelta, toContextDelta, toRoleBindingDelta, toRolePropertyDelta, toUniverseContextDelta, toUniverseRoleDelta)
 import Perspectives.Sync.SignedDelta (SignedDelta)
-import Perspectives.TypesForDeltas (ContextDelta(..), ContextDeltaType, RoleBindingDelta(..), RoleBindingDeltaType, RolePropertyDelta(..), RolePropertyDeltaType, UniverseContextDelta(..), UniverseContextDeltaType, UniverseRoleDelta(..), UniverseRoleDeltaType)
+import Perspectives.TypesForDeltas (ContextDelta(..), ContextDeltaType(..), RoleBindingDelta(..), RoleBindingDeltaType, RolePropertyDelta(..), RolePropertyDeltaType, UniverseContextDelta(..), UniverseContextDeltaType, UniverseRoleDelta(..), UniverseRoleDeltaType(..))
 import Simple.JSON (class ReadForeign, readJSON', writeJSON)
 
 defaultTypeVersion :: String
@@ -154,6 +156,26 @@ parseIncomingDelta stringifiedDelta =
     parseVersion2 stringifiedDelta
   else
     parseLegacyCompatible stringifiedDelta
+
+-- | Private bootstrap containers already exist at every receiver. Published copies do not.
+isPredefinedContextScaffolding :: String -> Boolean
+isPredefinedContextScaffolding stringifiedDelta = case parseIncomingDelta stringifiedDelta of
+  Right (UniverseContextEnvelope (UniverseContextDelta { id })) ->
+    isPredefined (unwrap id)
+  Right (UniverseRoleEnvelope (UniverseRoleDelta { id, roleInstance, deltaType: ConstructExternalRole })) ->
+    isExternal (unwrap id) (unwrap roleInstance)
+  Right (ContextEnvelope (ContextDelta { contextInstance, roleInstance, deltaType: AddExternalRole })) ->
+    isExternal (unwrap contextInstance) (unwrap roleInstance)
+  _ -> false
+  where
+  isPredefined id =
+    let
+      localId = stripNonPublicIdentifiers id
+    in
+      localId == "TheWorld" || localId == "TheSocialEnvironment"
+
+  isExternal id roleId =
+    isPredefined id && stripNonPublicIdentifiers roleId == stripNonPublicIdentifiers id <> "$External"
 
 parseVersion2 :: String -> Either String DeltaEnvelope
 parseVersion2 stringifiedDelta =

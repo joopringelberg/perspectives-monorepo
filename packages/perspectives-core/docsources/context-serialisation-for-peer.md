@@ -12,6 +12,25 @@ In the normal synchronisation flow, every modification to an instance (a context
 
 But when a user *creates a new connection* (for example via an Invitation), the recipient does not yet have any of the relevant instances. There is no shared history of deltas. The solution is to reconstruct, on demand, the full set of deltas that would have built the target context from scratch, and to send that set as a single package called a `TransactionForPeer`.
 
+### Predefined containers
+
+Every installation creates the private `TheWorld` and `TheSocialEnvironment`
+contexts and their external roles locally, including on secondary devices before
+importing an identity document. Peer transactions and type-based exports omit
+their `ConstructEmptyContext`, `ConstructExternalRole`, and `AddExternalRole`
+deltas. Verification-key bundles needed only by these omitted deltas are also
+removed. Receivers apply the same filter before importing keys or executing
+deltas, so older senders cannot accumulate redundant bootstrap histories.
+
+This exception concerns only container creation. Role memberships, bindings,
+external properties, and other contents still follow the normal perspective
+rules. Locally authored bootstrap deltas remain in the DeltaStore for restoration.
+Public-destination transactions and explicitly `pub:`-addressed resources retain
+their creation deltas, since a public copy may need to be constructed.
+
+This is not general reconstruction-evidence minimisation: other resource
+histories are still selected as described below.
+
 ---
 
 ## Communicated context of an elementary change
@@ -255,7 +274,9 @@ This is the top-level serialisation function. Its responsibilities are:
      }
    ```
 
-5. **Serialise to JSON** with `unsafeStringify (write tfp)` and return it as a `Value`.
+5. **Remove predefined-container scaffolding** and key bundles unused by the
+   remaining deltas, then **serialise to JSON** with `unsafeStringify (write tfp)`
+   and return it as a `Value`.
 
 ### The fictive serialisation user
 
@@ -338,7 +359,16 @@ A perspective marked **`selfOnly`** (`selfonly` in ARC) means: *each user may on
 
 ```purescript
 if selfOnly then do
-  for_ (join (allPaths <$> rinstances))
+  let
+    requestedInstances =
+      if users == NA.singleton (RoleInstance "def:#serializationuser") then rinstances
+      else filter
+        (\{ head: dependency } -> case dependency of
+          R r -> isJust $ elemIndex r (toArray users)
+          _ -> false
+        )
+        rinstances
+  for_ (join (allPaths <$> requestedInstances))
     \(dependencies :: NonEmptyList Dependency) -> do
       -- The head of each dependency path is one user's role instance.
       oneUserOnly <- unsafePartial case head dependencies of
@@ -349,7 +379,9 @@ if selfOnly then do
         for_ (join (allPaths <$> vals)) (serialiseDependencies oneUserOnly)
 ```
 
-For each role instance path the head of the path is the actual user role instance. The instance is used *both* as the resource to serialise *and* as the sole recipient of those deltas. No user ever receives another user's data from a `selfOnly` perspective.
+Only object instances present in the caller's `users` collection are serialised. A broad object query must not add recipients that the caller did not request. For each selected role instance path the head of the path is the actual user role instance. The instance is used *both* as the resource to serialise *and* as the sole recipient of those deltas. No user ever receives another user's data from a `selfOnly` perspective.
+
+The fictive `def:#serializationuser`, used only by type-only export, retains collection of all matching instances. That export collects deltas into a returned value; it does not distribute transactions to peers.
 
 Properties are computed starting from that single user's role instance, and the resulting deltas are likewise delivered only to that user.
 

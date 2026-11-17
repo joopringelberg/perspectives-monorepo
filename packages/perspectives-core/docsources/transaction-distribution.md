@@ -98,6 +98,17 @@ For every delta, the destinations of its `users` are looked up in `userRoleBotto
 
 The `Eq` and `Ord` instances of `TransactionDestination` compare a `Peer` **on its unschemed guid only**. A peer reached through both a `pub:` and a `def:` resource is therefore a single destination and receives a single transaction. Within one transaction, the map keeps the schemed resource of the first entry inserted for that peer.
 
+For `Peer` destinations, customisation removes the creation scaffolding of the
+private `TheWorld` and `TheSocialEnvironment` containers: `ConstructEmptyContext`,
+`ConstructExternalRole`, and `AddExternalRole`. Every installation creates these
+locally. Public-key bundles whose authors have no remaining deltas are removed,
+and transactions left without deltas are dropped. Contents of these containers,
+including memberships, bindings and external properties, are not excluded.
+
+`PublicDestination` transactions keep this scaffolding so publication can create
+public copies. Explicitly `pub:`-addressed resources are not filtered either.
+Local bootstrap history remains available for restoration; it is not deleted.
+
 ---
 
 ## 3. Public destinations
@@ -121,6 +132,12 @@ Only then does it send the peer transactions. So a peer that learns about a publ
 4. **Sending.** `sendTransactieToUserUsingAMQP` publishes the `EncryptedTransactionForPeer` to the AMQP topic named by the unschemed guid. Each PDR's queue is bound to its own guid as routing key. The message is also stored in the `OutgoingTransactions` post database until the broker sends a receipt. If there is no broker connection, it is only stored and is sent later.
 
 On the receiving side, `incomingPost` uses the PDR's own unschemed guid to find its wrapped key. `executeTransaction` then runs the deltas. The `UniverseRoleDelta` and property deltas for the author's `PerspectivesUsers` instance create or update a local `def:#<guid>` copy of the sender (including its public keys).
+
+Before importing verification keys or executing deltas, `executeTransaction`
+also removes predefined-container scaffolding and unused key bundles. Thus
+redundant histories received from older senders do not create or retain identities
+needed only to authenticate those histories. Identity-document exports use the
+same filtering rule.
 
 ---
 

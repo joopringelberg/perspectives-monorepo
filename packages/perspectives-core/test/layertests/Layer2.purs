@@ -51,6 +51,7 @@ import Test.Unit.Main (runTest)
 -- TODO: uncomment once persistenceAPI.node.js uses pouchdb-adapter-memory
 import Test.LoadArc (theSuite) as LARC
 import Test.Persistence.Recovery (theSuite) as PR
+import Test.PredefinedContexts (theSuite) as PC
 import Test.ModelPatches (theSuite) as MP
 
 -- import Test.ContextAndRole (theSuite) as CAR
@@ -62,4 +63,5 @@ main = runTest do
   -- Additional model suites remain disabled.
   -- LARC.theSuite
   PR.theSuite
+  PC.theSuite
   MP.theSuite
