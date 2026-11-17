@@ -11,6 +11,7 @@ import Control.Monad.Trans.Class (lift)
 import Crypto.Subtle.Constants.EC (ecdsa, p384)
 import Crypto.Subtle.Key.Generate (ec, generateKeyPair)
 import Crypto.Subtle.Key.Types (CryptoKeyPair(..), exportKey, jwk, sign, verify)
+import Data.Array (length)
 import Data.Either (Either(..), isLeft)
 import Data.Foldable (for_)
 import Data.Map as Map
@@ -29,7 +30,8 @@ import Perspectives.Data.EncodableMap as EM
 import Perspectives.Deltas (addPublicKeysToTransaction)
 import Perspectives.InstanceRepresentation (PerspectRol(..))
 import Perspectives.ModelDependencies as DEP
-import Perspectives.Persistence.ResourceVersionStore (setResourceVersion)
+import Perspectives.Persistence.PendingTransactionStore (getAllPendingTransactions, storePendingTransaction)
+import Perspectives.Persistence.ResourceVersionStore (getResourceVersion, setResourceVersion)
 import Perspectives.Persistent (getPerspectRol)
 import Perspectives.Representation.Class.Cacheable (cacheEntity)
 import Perspectives.Representation.Class.PersistentType (cacheInDomeinFile, getEnumeratedRole)
@@ -39,6 +41,7 @@ import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), Per
 import Perspectives.Representation.Perspective (Perspective(..), PropertyVerbs(..), StateSpec(..))
 import Perspectives.Representation.TypeIdentifiers (PropertyType(..), RoleType(..), StateIdentifier(..))
 import Perspectives.Representation.Verbs (PropertyVerb(..))
+import Perspectives.RunMonadPerspectivesTransaction (runEmbeddedIfNecessaryAwaitingSettlement, runMonadPerspectivesTransaction', runMonadPerspectivesTransactionAwaitingSettlement)
 import Perspectives.Sync.DateTime (SerializableDateTime(..))
 import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
 import Perspectives.Sync.HandleTransaction (executeTransaction, verifyTransaction)
@@ -168,20 +171,104 @@ theSuite = suite "Verification bundle identities" do
 
   test "executes a signed ordinary-author update with only a public-alias bundle" $
     withSigningFixture true \key -> do
-      EnumeratedRole subject <- lift $ getEnumeratedRole Binding.userType
-      let
-        grant (Perspective p) = Perspective p
-          { propertyVerbs = EM.singleton (ContextState $ StateIdentifier $ unwrap Binding.contextType)
-              [ PropertyVerbs (PSet [ ENP Binding.visibleProperty ]) (PSet [ Consult, SetPropertyValue ]) ]
-          }
-      lift do
-        cacheInDomeinFile Binding.userType $ EnumeratedRole subject { perspectives = map grant subject.perspectives }
-        setResourceVersion (unwrap Binding.visibleId <> "#" <> unwrap Binding.visibleProperty) 0
+      allowPropertyUpdates
       signed <- signAs localAuthor
       executeTransaction $ transaction [ signed ] $
         EM.singleton publicAuthor { key, transportKey: "unused", deltas: [] }
       PerspectRol role <- lift $ getPerspectRol Binding.visibleId
       liftAff $ equal (Just [ Value "updated" ]) $ Object.lookup (unwrap Binding.visibleProperty) role.properties
+
+  test "unblocks signed transactions on dependency arrival and clears stale records on replay" $
+    withSigningFixture true \key -> do
+      allowPropertyUpdates
+      first <- signAs localAuthor
+      second <- signVersionAs 2 "second" localAuthor
+      let
+        keys = EM.singleton publicAuthor { key, transportKey: "unused", deltas: [] }
+        pending = over TransactionForPeer (\t -> t { timeStamp = SerializableDateTime top }) $
+          transaction [ second ] keys
+        dependency = transaction [ first ] keys
+      runPeerTransaction pending
+      runPeerTransaction pending
+      blocked <- lift getAllPendingTransactions
+      liftAff $ equal 1 (length blocked)
+      lift $ runMonadPerspectivesTransaction' false (ENR Binding.userType) do
+        executeTransaction dependency
+        beforeSettlement <- lift getAllPendingTransactions
+        PerspectRol before <- lift $ getPerspectRol Binding.visibleId
+        liftAff do
+          equal 1 (length beforeSettlement)
+          equal (Just [ Value "updated" ]) $ Object.lookup (unwrap Binding.visibleProperty) before.properties
+      PerspectRol role <- lift $ getPerspectRol Binding.visibleId
+      remaining <- lift getAllPendingTransactions
+      version <- lift $ getResourceVersion propertyResourceKey
+      liftAff do
+        equal (Just [ Value "second" ]) $ Object.lookup (unwrap Binding.visibleProperty) role.properties
+        equal 2 version
+        equal 0 (length remaining)
+      lift $ storePendingTransaction dependency
+        [ { author: localAuthor, resourceKey: propertyResourceKey, expectedVersion: 1 } ]
+      runPeerTransaction dependency
+      afterReplay <- lift getAllPendingTransactions
+      liftAff $ equal 0 (length afterReplay)
+
+  test "revalidates pending signatures and retains an invalid record after replay" $
+    withSigningFixture true \key -> do
+      signed <- signAs localAuthor
+      let
+        tampered = over SignedDelta (\d -> d { encryptedDelta = "{}" }) signed
+        pending = transaction [ tampered ] $
+          EM.singleton localAuthor { key, transportKey: "unused", deltas: [] }
+      lift $ storePendingTransaction pending
+        [ { author: localAuthor, resourceKey: propertyResourceKey, expectedVersion: 1 } ]
+      runPeerTransaction $ transaction [] EM.empty
+      remaining <- lift getAllPendingTransactions
+      liftAff $ equal 1 (length remaining)
+
+  for_ [ false, true ] \awaitSettlement ->
+    test ("retries pending peers after local settlement, awaiting=" <> show awaitSettlement) $
+      withSigningFixture true \key -> do
+        allowPropertyUpdates
+        second <- signVersionAs 2 "after local settlement" localAuthor
+        let
+          pending = transaction [ second ] $
+            EM.singleton publicAuthor { key, transportKey: "unused", deltas: [] }
+          runSettled =
+            if awaitSettlement then runMonadPerspectivesTransactionAwaitingSettlement
+            else runMonadPerspectivesTransaction'
+        runPeerTransaction pending
+        blocked <- lift getAllPendingTransactions
+        liftAff $ equal 1 (length blocked)
+        lift $ runSettled true (ENR Binding.userType) do
+          lift $ setResourceVersion propertyResourceKey 1
+          lift $ runEmbeddedIfNecessaryAwaitingSettlement true (ENR Binding.userType) (pure unit)
+          stillBlocked <- lift getAllPendingTransactions
+          liftAff $ equal 1 (length stillBlocked)
+        PerspectRol role <- lift $ getPerspectRol Binding.visibleId
+        remaining <- lift getAllPendingTransactions
+        liftAff do
+          equal (Just [ Value "after local settlement" ]) $ Object.lookup (unwrap Binding.visibleProperty) role.properties
+          equal 0 (length remaining)
+
+runPeerTransaction :: TransactionForPeer -> MonadPerspectivesTransaction Unit
+runPeerTransaction incoming =
+  lift $ runMonadPerspectivesTransaction' false (ENR Binding.userType) $
+    executeTransaction incoming
+
+allowPropertyUpdates :: MonadPerspectivesTransaction Unit
+allowPropertyUpdates = do
+  EnumeratedRole subject <- lift $ getEnumeratedRole Binding.userType
+  let
+    grant (Perspective p) = Perspective p
+      { propertyVerbs = EM.singleton (ContextState $ StateIdentifier $ unwrap Binding.contextType)
+          [ PropertyVerbs (PSet [ ENP Binding.visibleProperty ]) (PSet [ Consult, SetPropertyValue ]) ]
+      }
+  lift do
+    cacheInDomeinFile Binding.userType $ EnumeratedRole subject { perspectives = map grant subject.perspectives }
+    setResourceVersion propertyResourceKey 0
+
+propertyResourceKey :: String
+propertyResourceKey = unwrap Binding.visibleId <> "#" <> unwrap Binding.visibleProperty
 
 localAuthor :: PerspectivesUser
 localAuthor = PerspectivesUser "local"
@@ -206,17 +293,20 @@ transaction deltas publicKeys = TransactionForPeer
   }
 
 signAs :: PerspectivesUser -> MonadPerspectivesTransaction SignedDelta
-signAs author =
+signAs = signVersionAs 1 "updated"
+
+signVersionAs :: Int -> String -> PerspectivesUser -> MonadPerspectivesTransaction SignedDelta
+signVersionAs version value author =
   over SignedDelta (\d -> d { author = author }) <$>
     signDelta
       ( writeJSON
-          { resourceKey: unwrap Binding.visibleId <> "#" <> unwrap Binding.visibleProperty
-          , resourceVersion: 1
+          { resourceKey: propertyResourceKey
+          , resourceVersion: version
           , deltaType: "SetProperty"
           , id: RoleInstance "visible"
           , roleType: Binding.visibleType
           , property: Binding.visibleProperty
-          , values: [ Value "updated" ]
+          , values: [ Value value ]
           , subject: ENR Binding.userType
           }
       )

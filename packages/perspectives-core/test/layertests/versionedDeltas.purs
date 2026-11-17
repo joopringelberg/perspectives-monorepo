@@ -2,7 +2,8 @@ module Test.VersionedDeltas where
 
 import Prelude
 
-import Data.Array (any)
+import Control.Monad.State (execState, gets, modify_) as State
+import Data.Array (any, snoc)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.Identity (Identity(..))
@@ -20,7 +21,7 @@ import Perspectives.Representation.InstanceIdentifiers (PerspectivesUser(..), Ro
 import Perspectives.Representation.TypeIdentifiers (ContextType(..))
 import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..), EnumeratedRoleType(..), RoleType(..))
 import Perspectives.Sync.CanonicalJson (canonicalizeJsonString, computeDeltaId)
-import Perspectives.Sync.HandleTransaction (checkForGapsWith)
+import Perspectives.Sync.HandleTransaction (checkForGapsWith, retryPendingTransactionsWith)
 import Perspectives.Sync.VersionedDelta (DeltaEnvelope(..), parseDeltaFormatVersion, parseIncomingDelta)
 import Perspectives.TypesForDeltas (RolePropertyDelta(..), RolePropertyDeltaType(..))
 import Test.Unit (TestF, suite, test)
@@ -141,6 +142,71 @@ theSuite = suite "Versioned delta phase 0/1" do
 
     test "ignores legacy and already applied versions" do
       Assert.equal [] $ gaps 2 [ delta publicKey (-1), delta localKey 1, delta publicKey 3 ]
+
+  suite "pending transaction retry passes" do
+    test "drains dependency chains in reverse pending order" do
+      let
+        attempt version = do
+          State.modify_ \s -> s { attempts = snoc s.attempts version }
+          current <- State.gets _.version
+          if version == current + 1 then do
+            State.modify_ \s -> s { version = version, completed = snoc s.completed version }
+            pure true
+          else pure false
+        result = State.execState
+          (retryPendingTransactionsWith attempt [ 4, 3, 2 ])
+          { version: 1, attempts: [], completed: [] }
+      Assert.equal 4 result.version
+      Assert.equal [ 4, 3, 2, 4, 3, 4 ] result.attempts
+      Assert.equal [ 2, 3, 4 ] result.completed
+
+    test "stops after one pass when no pending transaction can execute" do
+      let
+        attempt record = do
+          State.modify_ \attempts -> snoc attempts record
+          pure false
+        attempts = State.execState (retryPendingTransactionsWith attempt [ 3, 4 ]) []
+      Assert.equal [ 3, 4 ] attempts
+
+    test "cleans stale duplicate records without retrying successful entries" do
+      let
+        attempt version = do
+          State.modify_ \s -> s { attempts = snoc s.attempts version }
+          current <- State.gets _.version
+          if version <= current then pure true
+          else pure false
+        result = State.execState
+          (retryPendingTransactionsWith attempt [ 2, 5 ])
+          { version: 3, attempts: [] }
+      Assert.equal [ 2, 5, 5 ] result.attempts
+
+    test "rechecks every gap rather than only the original missing version" do
+      let
+        author = PerspectivesUser "alice"
+        attempt _ = do
+          State.modify_ \s -> s { attempts = s.attempts + 1 }
+          gaps <- checkForGapsWith (\_ -> State.gets _.version)
+            [ { resourceKey: "def:#role", resourceVersion: 2, author }
+            , { resourceKey: "def:#role", resourceVersion: 4, author }
+            ]
+          pure (gaps == [])
+        result = State.execState
+          (retryPendingTransactionsWith attempt [ unit ])
+          { version: 1, attempts: 0 }
+      Assert.equal 1 result.attempts
+
+    test "accepts a transaction's own prefix when checking later gaps" do
+      let
+        author = PerspectivesUser "alice"
+        attempt _ = do
+          gaps <- checkForGapsWith (\_ -> pure 0)
+            [ { resourceKey: "def:#role", resourceVersion: 1, author }
+            , { resourceKey: "def:#role", resourceVersion: 2, author }
+            ]
+          State.modify_ \attempts -> attempts + 1
+          pure (gaps == [])
+        attempts = State.execState (retryPendingTransactionsWith attempt [ unit ]) 0
+      Assert.equal 1 attempts
 
   test "compiled types are stamped with the model version" do
     let contextId = "model://example.org#Sales"

@@ -8,7 +8,7 @@ import Prelude
 import Control.Alt ((<|>))
 import Control.Monad.AvarMonadAsk (gets, modify)
 import Control.Parallel (parallel, sequential)
-import Data.Array (elem)
+import Data.Array (elem, length)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..), fromMaybe, isJust, isNothing)
 import Decacheable (decache)
@@ -21,8 +21,10 @@ import Foreign.Object (insert)
 import Perspectives.ContextAndRole (defaultContextRecord, defaultRolRecord)
 import Perspectives.CoreTypes (ResourceToBeStored(..))
 import Perspectives.Couchdb.Revision (changeRevision, rev)
+import Perspectives.Data.EncodableMap as EM
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..))
-import Perspectives.Persistence.API (addDocument, addDocumentImpl, deleteDatabase, getDocumentWithConflictsImpl, withDatabase, withForce)
+import Perspectives.Persistence.API (addDocument, addDocument_, addDocumentImpl, deleteDatabase, getDocumentWithConflictsImpl, withDatabase, withForce)
+import Perspectives.Persistence.PendingTransactionStore (PendingTransactionRecord(..), getAllPendingTransactions, getPendingTransactionsForResource, pendingTransactionDatabaseName, removePendingTransaction, storePendingTransaction)
 import Perspectives.Persistence.RunEffectAff (runEffectFnAff3)
 import Perspectives.Persistence.Types (PouchdbDatabase, runMonadPouchdb)
 import Perspectives.Persistent (entitiesDatabaseName, forceSaveRole, getPerspectRol, removeEntiteit, saveEntiteit_, saveMarkedResources)
@@ -32,7 +34,9 @@ import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), Role
 import Perspectives.RunMonadPerspectivesTransaction (computeStateEvaluations)
 import Perspectives.RunPerspectives (runPerspectivesWithoutCouchdb)
 import Perspectives.ScheduledAssignment (StateEvaluation(..))
+import Perspectives.Sync.DateTime (SerializableDateTime(..))
 import Perspectives.Sync.InvertedQueryResult (InvertedQueryResult(..))
+import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..))
 import Simple.JSON (read, write)
 import Test.Unit (TestSuite, suite, test)
 import Test.Unit.Assert (assert, equal)
@@ -45,6 +49,47 @@ main = runTest theSuite
 
 theSuite :: TestSuite
 theSuite = suite "Persistence recovery" do
+  test "retrieves, updates and removes pending transactions with their current revisions" do
+    runMonadPouchdb "test" "test" (PerspectivesUser "test") "pending-transactions-regression" Nothing do
+      let
+        transaction = TransactionForPeer
+          { author: PerspectivesUser "def:#author"
+          , perspectivesSystem: ContextInstance "def:#system"
+          , timeStamp: SerializableDateTime bottom
+          , deltas: []
+          , publicKeys: EM.empty
+          }
+        gap = { author: PerspectivesUser "def:#author", resourceKey: "def:#role", expectedVersion: 1 }
+      database <- pendingTransactionDatabaseName
+      empty <- getAllPendingTransactions
+      liftAff $ equal 0 (length empty)
+      void $ addDocument_ database { _id: "unrelated", value: "not a transaction" } "unrelated"
+      storePendingTransaction transaction [ gap ]
+      first <- getAllPendingTransactions
+      case first of
+        [ PendingTransactionRecord before ] -> do
+          liftAff do
+            assert "allDocs must include the document revision" (isJust before._rev)
+            equal transaction before.transaction
+            equal [ gap ] before.missingDeltas
+          storePendingTransaction transaction [ gap { expectedVersion = 2 } ]
+          updated <- getAllPendingTransactions
+          case updated of
+            [ PendingTransactionRecord after ] -> do
+              liftAff do
+                equal before._id after._id
+                assert "Reblocking must update the existing document" (after._rev /= before._rev)
+                equal [ gap { expectedVersion = 2 } ] after.missingDeltas
+              removePendingTransaction after._id after._rev
+              remaining <- getAllPendingTransactions
+              removed <- getPendingTransactionsForResource after._id
+              liftAff do
+                equal 0 (length remaining)
+                assert "Removed pending documents must not be returned" (isNothing removed)
+            _ -> liftAff $ assert "Reblocking must retain exactly one pending record" false
+        _ -> liftAff $ assert "Only pending transaction documents should be returned" false
+      deleteDatabase database
+
   test "updates stale revisions without creating conflict branches" do
     runMonadPouchdb "test" "test" (PerspectivesUser "test") "test" Nothing do
       let database = "persistence_conflict_regression"

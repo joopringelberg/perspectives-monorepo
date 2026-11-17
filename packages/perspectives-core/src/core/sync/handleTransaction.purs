@@ -27,7 +27,7 @@ import Control.Monad.Error.Class (catchError, throwError, try)
 import Control.Monad.Except (lift, runExcept, runExceptT)
 import Control.Monad.State (StateT, gets, modify, runStateT) as ST
 import Crypto.Subtle.Key.Types (CryptoKey)
-import Data.Array (any, catMaybes, concat, filter, foldl, fromFoldable, null, nub, sortBy)
+import Data.Array (any, catMaybes, concat, filter, foldl, fromFoldable, length, null, nub, sortBy)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.FoldableWithIndex (forWithIndex_)
@@ -422,7 +422,20 @@ executeUniverseRoleDelta (UniverseRoleDelta { id, roleType, roleInstance, author
 -- | so that keys of authors not yet in the entity store can still be used for
 -- | re-verification during delta execution.
 executeTransaction :: TransactionForPeer -> MonadPerspectivesTransaction Unit
-executeTransaction t = do
+executeTransaction = void <<< executeTransactionOnce
+
+-- | Retry a snapshot until a full pass makes no progress. Successful entries leave
+-- | the work list, so dependency chains terminate without recursively scanning storage.
+retryPendingTransactionsWith :: forall m a. Monad m => (a -> m Boolean) -> Array a -> m Unit
+retryPendingTransactionsWith attempt pending = do
+  remaining <- catMaybes <$> for pending \record -> do
+    completed <- attempt record
+    pure $ if completed then Nothing else Just record
+  if length remaining < length pending then retryPendingTransactionsWith attempt remaining
+  else pure unit
+
+executeTransactionOnce :: TransactionForPeer -> MonadPerspectivesTransaction Boolean
+executeTransactionOnce t = do
   -- Prevent addDelta/insertDelta from storing deltas in the DeltaStore.
   -- executeDeltaWithVersionTracking handles DeltaStore persistence directly;
   -- the update functions called via executeDelta must not also store via addDelta.
@@ -435,7 +448,9 @@ executeTransaction t = do
         verifiedKeys <- verifyTransaction incoming
         pure $ Tuple verifiedKeys incoming
     ) >>= case _ of
-    Left e -> lift $ renderPerspectivesError >=> warnSync $ (IncomingTransactionFailed (show e))
+    Left e -> do
+      lift $ renderPerspectivesError >=> warnSync $ (IncomingTransactionFailed (show e))
+      pure false
     Right (Tuple verifiedKeys incoming) -> executeTransaction' verifiedKeys incoming
 
 verifyTransaction :: TransactionForPeer -> MonadPerspectivesTransaction (Map.Map UnschemedResourceIdentifier CryptoKey)
@@ -494,7 +509,7 @@ verifyTransaction (TransactionForPeer { deltas, publicKeys }) = do
         Nothing -> throwError (error $ "Cannot verify delta allegedly by author: " <> show author)
         Just _ -> pure unit
 
-executeTransaction' :: Map.Map UnschemedResourceIdentifier CryptoKey -> TransactionForPeer -> MonadPerspectivesTransaction Unit
+executeTransaction' :: Map.Map UnschemedResourceIdentifier CryptoKey -> TransactionForPeer -> MonadPerspectivesTransaction Boolean
 executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) = do
 
   -- Add all public key information (possibly leading to more TheWorld$PerspectivesUsers instances).
@@ -527,11 +542,13 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
       -- No gaps: execute all deltas with version tracking.
       void $ for verifiedDeltas \{ signedDelta, stringified, resourceKey, resourceVersion, author } ->
         executeDeltaWithVersionTracking signedDelta stringified resourceKey resourceVersion author
+      pure true
     _ -> do
       -- Gaps detected: block the entire transaction.
       lift $ renderPerspectivesWarning >=> traceSync $ TransactionBlockedByVersionGaps
       lift $ traceSync $ "Missing peer delta versions: " <> show gaps
       lift $ storePendingTransaction t gaps
+      pure false
   where
 
   executeDeltaWithVersionTracking :: SignedDelta -> String -> String -> Int -> PerspectivesUser -> MonadPerspectivesTransaction Unit

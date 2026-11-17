@@ -37,15 +37,16 @@ module Perspectives.Persistence.PendingTransactionStore
 
 import Prelude
 
+import Data.Array (mapMaybe)
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
-import Perspectives.Persistence.API (addDocument_, tryGetDocument_, deleteDocument)
+import Perspectives.Persistence.API (addDocument_, deleteDocument, documentsInRange, tryGetDocument_)
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistence.Types (MonadPouchdb)
 import Perspectives.Representation.InstanceIdentifiers (PerspectivesUser)
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer)
 import Perspectives.Couchdb.Revision (Revision_)
-import Simple.JSON (class ReadForeign, class WriteForeign)
+import Simple.JSON (class ReadForeign, class WriteForeign, read_)
 
 -----------------------------------------------------------
 -- TYPES
@@ -91,10 +92,13 @@ storePendingTransaction :: forall f. TransactionForPeer -> Array MissingDelta ->
 storePendingTransaction txn missingDeltas = do
   dbName <- pendingTransactionDatabaseName
   let docId = pendingTransactionDocId txn
+  existing <- getPendingTransactionsForResource docId
   _ <- addDocument_ dbName
     ( PendingTransactionRecord
         { _id: docId
-        , _rev: Nothing
+        , _rev: case existing of
+            Just (PendingTransactionRecord r) -> r._rev
+            Nothing -> Nothing
         , transaction: txn
         , missingDeltas
         }
@@ -116,12 +120,11 @@ getPendingTransactionsForResource docId = do
   tryGetDocument_ dbName docId
 
 -- | Get all pending transactions.
--- | TODO: Implement using allDocs or a view for efficiency.
--- | For now, this is a placeholder that should be replaced with proper query logic.
 getAllPendingTransactions :: forall f. MonadPouchdb f (Array PendingTransactionRecord)
 getAllPendingTransactions = do
-  -- TODO: Use allDocs to retrieve all documents from the pending transactions database.
-  pure []
+  dbName <- pendingTransactionDatabaseName
+  result <- documentsInRange dbName "pending_" "pending_\xFFFF"
+  pure $ mapMaybe (\row -> row.doc >>= read_) result.rows
 
 -----------------------------------------------------------
 -- HELPERS
