@@ -44,7 +44,7 @@ import Effect.Exception (error)
 import Foreign (Foreign)
 import Foreign.Object (Object, empty, insert, lookup)
 import Partial.Unsafe (unsafePartial)
-import Perspectives.CoreTypes (JustInTimeModelLoad(..), MonadPerspectives, retrieveInternally)
+import Perspectives.CoreTypes (JustInTimeModelLoad(..), MonadPerspectives, invalidateRoleNormalisationCache, retrieveInternally)
 import Perspectives.Couchdb (DeleteCouchdbDocument(..))
 import Perspectives.Couchdb.Revision (Revision_)
 import Perspectives.DomeinFile (DomeinFile(..))
@@ -83,10 +83,12 @@ modifyDomeinFileInCache modifier domeinFileId@(ModelUri modelUri) =
     case mAvar of
       Nothing -> throwError $ error $ "modifyDomeinFileInCache cannot find domeinfile in cache: " <> modelUri
       (Just avar) -> do
+        invalidateRoleNormalisationCache
         df <- liftAff $ take avar
         -- Because we modify the existing Entiteit, we do not overwrite the version number -
         -- unless that is what our modifier does.
         liftAff $ put (modifier df) avar
+        invalidateRoleNormalisationCache
 
 -----------------------------------------------------------
 -- MODIFY ELEMENTS OF A DOMEINFILE

@@ -144,8 +144,8 @@ terms. Equal-sized candidates need no subset test. The original arrays, order
 and equivalent duplicate clauses are retained for surviving clauses; this
 temporary set representation changes neither the public type nor JSON encoding.
 Leaves need no simplification, and an `ECT` wrapper directly returns its already
-simplified child's result without another clause scan. No cross-call cache is
-introduced.
+simplified child's result without another clause scan. This pure conversion does
+not cache across calls.
 
 ### The combined shortcut: `toConjunctiveNormalForm_`
 
@@ -154,11 +154,24 @@ introduced.
 toConjunctiveNormalForm_ :: ADT RoleInContext -> MP (CNF RoleInContext)
 ```
 
-For both `ST` and `UET` leaves, this function retrieves the `EnumeratedRole`,
-fully expands its type, then normalises the expansion. For `SUM` and `PROD`
+For both `ST` and `UET` leaves, this function caches the fully expanded normal
+form in a per-PDR, in-memory LRU, keyed by enumerated role identifier. A miss
+retrieves the `EnumeratedRole`, fully expands its type, then normalises the
+expansion. The cache uses the existing LRU default bound of 2,500 entries.
+Failures are not cached. For `SUM` and `PROD`
 nodes it normalises the children and then applies `distribute` /
 `flattenProducts`, followed by simplification. It does not rely on the stored
 `completeType` being populated.
+
+While `modelUnderCompilation` is set, both cache lookup and insertion are
+bypassed. Model insertion, replacement, direct definition edits, removal,
+model-cache reset, compilation transitions and readable-to-stable model URI
+remapping discard the whole normalisation cache, including results for dependent
+models. Replacing the cache instead of clearing it prevents an older in-flight
+normalisation from repopulating the current cache. Compilation transitions
+replace the cache; intermediate compilation writes need not allocate another
+cache because lookup and insertion remain disabled. Pure conversion, comparison
+semantics, clause ordering and persisted CNF encoding are unchanged.
 
 ### How `completeType` is precomputed (Phase 3)
 

@@ -19,7 +19,7 @@ import Effect.Exception (message)
 import Node.Process (exit')
 import Perspectives.CoreTypes (LogLevel(..), LogTopic(..))
 import Perspectives.Cuid2 (cuid2)
-import Perspectives.Performance (timed)
+import Perspectives.Performance (reportNormalisationMeasurements, resetNormalisationMeasurements, setNormalisationPhase, timed)
 import Perspectives.PerspectivesState (defaultRuntimeOptions, setTopicLogLevel)
 import Test.BrokerServiceSignupTests (aliceHasBobAccount, aliceSnapshotDirectory, cleanupAliceSubscription, currentBrokerCredentials, ensureAliceSubscribed)
 import Test.LocalCouchdbTestSupport (addLocalCouchdbCredentials)
@@ -35,6 +35,7 @@ main = launchAff_ do
     [ attempt runDiagnostic
     , delay (Milliseconds 300000.0) *> pure (Left (error "Broker signup diagnostic exceeded five minutes"))
     ]
+  liftEffect reportNormalisationMeasurements
   case result of
     Left err -> liftEffect do
       Console.error $ "Broker signup diagnostic failed: " <> message err
@@ -43,6 +44,7 @@ main = launchAff_ do
 
 runDiagnostic :: Aff Unit
 runDiagnostic = do
+  liftEffect resetNormalisationMeasurements
   exists <- snapshotExists aliceSnapshotDirectory
   unless exists $ throwError $ error $ "Required diagnostic snapshot is missing: " <> aliceSnapshotDirectory
   bracket
@@ -76,12 +78,16 @@ runDiagnostic = do
                 runInPDR bob $ setTopicLogLevel SYNC Trace
                 addLocalCouchdbCredentials alice
                 addLocalCouchdbCredentials bob
+                liftEffect $ setNormalisationPhase "management-setup"
                 void $ timed "signup.management" "alice" $ reuseAMQPManagement credentials alice
+                liftEffect $ setNormalisationPhase "manager-signup"
                 timed "signup.manager" "alice" $ ensureAliceSubscribed alice
                 alreadyKnown <- aliceHasBobAccount alice
                 when alreadyKnown $ throwError $ error "Alice already has Bob's account-holder details before signup"
                 broker <- runInPDR alice getManagedBrokerService
+                liftEffect $ setNormalisationPhase "subscriber-signup"
                 timed "signup.subscriber" "bob" $ subscribePDRtoAMQP broker.publicContext bob
+                liftEffect $ setNormalisationPhase "handshake"
                 timed "signup.handshake" "alice-bob" do
                   void $ pollUntil 240 (Milliseconds 500.0) "Alice to receive Bob's account-holder details" do
                     received <- aliceHasBobAccount alice
@@ -100,8 +106,12 @@ runDiagnostic = do
 withDiagnosticPDR :: forall a. String -> Aff PDRInstance -> (PDRInstance -> Aff a) -> Aff a
 withDiagnosticPDR user acquire action =
   bracket
-    (timed "signup.start" user acquire)
+    ( do
+        liftEffect $ setNormalisationPhase ("startup-" <> user)
+        timed "signup.start" user acquire
+    )
     ( \pdr -> timed "signup.cleanup" user do
+        liftEffect $ setNormalisationPhase ("cleanup-" <> user)
         subscription <- runInPDR pdr currentBrokerCredentials
         finally pdr.shutdown (cleanupAliceSubscription pdr)
         for_ subscription \{ login, queueId } -> do

@@ -286,6 +286,26 @@ individual messages. Node uses in-memory PouchDB, and snapshot restoration skips
 the browser's API startup/model-upgrade pass, so browser latencies need not match.
 Keep captured SYNC logs private: unlike timing records, they can contain payloads.
 
+The diagnostic also enables `globalThis.pdrMeasureNormalisation = true` before
+startup and prints aggregate `[PDR NORMALISATION]` records on completion, including
+failure exits. This independent flag is off by default in ordinary PDRs.
+Measurements cover role lookup, expansion and CNF conversion on runtime cache
+misses and compilation calls, not cache hits or compound-type composition.
+Records separate PDRs and calls started during
+model compilation from runtime calls, and include workflow-phase breakdowns.
+Each phase is captured when a call starts, even if it finishes in a later phase.
+
+Reports contain request counts, distinct role identifiers, success/failure and
+unfinished counts, cumulative elapsed time, and the ten roles with the greatest
+repeated elapsed cost. A repeated request starts after a successful call for the
+same role in that PDR and compilation context; phase breakdowns additionally
+require an earlier successful call in the same phase. No per-call logs or
+normalised results are retained. The counters observe repetition, not actual
+cache hits: they do not model definition changes or eviction. Cumulative timings
+can overlap and include asynchronous waits, so repeated elapsed time is not a
+prediction of end-to-end speedup. Runtime cache behaviour and invalidation are
+described in [type-comparison.md](type-comparison.md#the-combined-shortcut-toconjunctivenormalform_).
+
 ---
 
 ## 5. `pub:` versus `def:` PerspectivesUsers resources

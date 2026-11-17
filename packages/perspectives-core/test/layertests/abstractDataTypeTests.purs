@@ -26,7 +26,7 @@
 -- |   * Perspectives.Representation.CNF           (conjunctiveNormalForm.purs)
 -- |   * Perspectives.Representation.ADT           (abstractDataType2.purs)
 -- |
--- | All tests are purely in-memory; no MonadPerspectives / CouchDB is needed.
+-- | All tests are in-memory; runtime cache tests use MonadPerspectives without CouchDB.
 -- | They therefore belong in Layer 1.
 -- |
 -- | For background see docsources/type-comparison.md.
@@ -36,21 +36,45 @@ module Test.Perspectives.Representation.AbstractDataTypeTests where
 import Prelude
 
 import Control.Monad.Free (Free)
+import Control.Monad.AvarMonadAsk (gets, modify)
+import Control.Monad.Error.Class (catchError)
+import Control.Monad.Reader (ask)
 import Data.Array (cons, nub, singleton)
 import Data.Foldable (all, any, foldMap, foldr, for_)
 import Data.Identity (Identity(..))
 import Data.Int (even)
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), isNothing)
 import Data.Monoid.Additive (Additive(..))
 import Data.Newtype (unwrap)
 import Data.Set (fromFoldable, member) as SET
 import Data.Traversable (traverse)
 import Data.Tuple (Tuple(..))
+import Data.Time.Duration (Milliseconds(..))
+import Effect.Aff (delay, forkAff, joinFiber)
+import Effect.Aff.AVar (put, take)
 import Effect.Aff.Class (liftAff)
+import Effect.Class (liftEffect)
+import Foreign.Object as Object
+import LRUCache (defaultCreateOptions, defaultGetOptions, get, newCache, set)
 import Partial.Unsafe (unsafePartial)
+import Perspectives.CoreTypes (MP, representInternally, retrieveInternally, removeInternally, runMonadPerspectives)
+import Perspectives.DomeinCache (modifyDomeinFileInCache, removeDomeinFileFromCache, storeDomeinFileInCache)
+import Perspectives.DomeinFile (DomeinFile(..), defaultDomeinFileRecord)
+import Perspectives.Parsing.Arc.Position (ArcPosition(..))
+import Perspectives.PerspectivesState (domeinCacheRemove, resetDomeinCache, setModelUnderCompilation, setModelUri)
+import Perspectives.Query.QueryTypes (RoleInContext(..))
 import Perspectives.Representation.ADT (ADT(..), allLeavesInADT, commonLeavesInADT, computeBoolean, computeExpandedBoolean, equals_, equalsOrSpecialises, equalsOrSpecialises_, expand, foldMapADT, generalises, generalises_, specialises, specialises_)
-import Perspectives.Representation.CNF (DPROD(..), DSUM(..), simplifyCNF, toConjunctiveNormalForm, traverseDPROD)
+import Perspectives.Representation.CNF (CNF, DPROD(..), DSUM(..), simplifyCNF, toConjunctiveNormalForm, traverseDPROD)
+import Perspectives.Representation.Class.Cacheable (cacheEntity, overwriteEntity)
+import Perspectives.Representation.Class.PersistentType (getEnumeratedRole)
+import Perspectives.Representation.Class.Role (completeExpandedType, toConjunctiveNormalForm_)
+import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..), defaultEnumeratedRole)
 import Perspectives.Representation.ExpandedADT (ExpandedADT(..), foldMapExpandedADT)
+import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedRoleType(..))
+import Perspectives.Representation.TypeIdentifiers (RoleKind(..)) as Kind
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Stable)
+import Simple.JSON (writeJSON)
+import Test.Perspectives.Utils (runP)
 import Test.Unit (TestF, suite, test, testSkip)
 import Test.Unit.Assert (assert, equal)
 
@@ -82,8 +106,191 @@ semanticallyImplies left right =
   in
     all (\assignment -> not (satisfiesCnf assignment left) || satisfiesCnf assignment right) (allAssignments universe)
 
+type NormalisationFixture =
+  { model :: ModelUri Stable
+  , dependency :: ModelUri Stable
+  , root :: RoleInContext
+  , filler :: RoleInContext
+  , alternative :: RoleInContext
+  , changedDependency :: DomeinFile Stable
+  , simpleModel :: DomeinFile Stable
+  }
+
+normalisationFixture :: MP NormalisationFixture
+normalisationFixture = do
+  let
+    model = "model://test.example#Normalisation"
+    dependency = "model://test.example#Dependency"
+    context = model <> "$Context"
+    dependencyContext = dependency <> "$Context"
+    origin = ArcPosition { line: 0, column: 0 }
+    role name = defaultEnumeratedRole (dependencyContext <> "$" <> name) name Kind.RoleInContext dependencyContext origin
+    aspect = role "Aspect"
+    filler = role "Filler"
+    alternative = role "Alternative"
+    leaf r = RoleInContext { context: (unwrap r).context, role: (unwrap r).id }
+    simple = defaultEnumeratedRole (context <> "$Root") "Root" Kind.RoleInContext context origin
+    root = EnumeratedRole (unwrap simple)
+      { roleAspects = [ leaf aspect ], binding = Just (SUM [ ST (leaf filler), ST (leaf alternative) ]) }
+    dependencyFile = DomeinFile defaultDomeinFileRecord
+      { id = ModelUri dependency
+      , namespace = ModelUri dependency
+      , enumeratedRoles = Object.fromFoldable (map (\r -> Tuple (unwrap (unwrap r).id) r) [ aspect, filler, alternative ])
+      }
+    changedDependency = case dependencyFile of
+      DomeinFile df -> DomeinFile df
+        { enumeratedRoles = Object.insert (unwrap (unwrap aspect).id)
+            (EnumeratedRole (unwrap aspect) { binding = Just (ST (leaf alternative)) })
+            df.enumeratedRoles
+        }
+    simpleModel = DomeinFile defaultDomeinFileRecord
+      { id = ModelUri model, namespace = ModelUri model, enumeratedRoles = Object.singleton (unwrap (unwrap simple).id) simple }
+  void $ storeDomeinFileInCache (ModelUri dependency) dependencyFile
+  void $ storeDomeinFileInCache (ModelUri model) case simpleModel of
+    DomeinFile df -> DomeinFile df { enumeratedRoles = Object.singleton (unwrap (unwrap root).id) root }
+  pure { model: ModelUri model, dependency: ModelUri dependency, root: leaf root, filler: leaf filler, alternative: leaf alternative, changedDependency, simpleModel }
+
+cachedNormalisation :: RoleInContext -> MP (Maybe (CNF RoleInContext))
+cachedNormalisation (RoleInContext { role }) = do
+  cache <- gets _.roleNormalisationCache
+  liftEffect $ get (unwrap role) defaultGetOptions cache
+
+uncachedNormalisation :: RoleInContext -> MP (CNF RoleInContext)
+uncachedNormalisation (RoleInContext { role }) =
+  getEnumeratedRole role >>= completeExpandedType >>= pure <<< toConjunctiveNormalForm
+
+normalisationCacheSuite :: Free TestF Unit
+normalisationCacheSuite = suite "Runtime normalisation cache" do
+  test "ST and UET preserve the exact expanded CNF, including imported aspects and fillers" $ runP do
+    f <- normalisationFixture
+    expected <- uncachedNormalisation f.root
+    first <- toConjunctiveNormalForm_ (ST f.root)
+    second <- toConjunctiveNormalForm_ (UET f.root)
+    cached <- cachedNormalisation f.root
+    liftAff do
+      equal (writeJSON expected) (writeJSON first)
+      equal (writeJSON expected) (writeJSON second)
+      equal (Just expected) cached
+
+  test "replacement, overwrite and direct dependency edits invalidate dependent roles" do
+    for_
+      [ \f -> void $ cacheEntity f.dependency f.changedDependency
+      , \f -> void $ overwriteEntity f.dependency f.changedDependency
+      , \f -> modifyDomeinFileInCache (const f.changedDependency) f.dependency
+      ]
+      \change -> runP do
+        f <- normalisationFixture
+        before <- toConjunctiveNormalForm_ (ST f.root)
+        change f
+        missing <- isNothing <$> cachedNormalisation f.root
+        after <- toConjunctiveNormalForm_ (ST f.root)
+        expected <- uncachedNormalisation f.root
+        liftAff do
+          assert "The dependent role must be evicted" missing
+          assert "The changed filler must affect normalisation" (before /= after)
+          equal (writeJSON expected) (writeJSON after)
+
+  test "model removal, cache reset and identifier remapping discard cached normal forms" do
+    for_
+      [ \f -> void $ removeInternally f.dependency
+      , \f -> removeDomeinFileFromCache f.dependency
+      , \f -> void $ domeinCacheRemove (unwrap f.dependency)
+      , \_ -> resetDomeinCache
+      , \f -> setModelUri (ModelUri "model://test.example#Readable") f.dependency
+      ]
+      \change -> runP do
+        f <- normalisationFixture
+        void $ toConjunctiveNormalForm_ (ST f.root)
+        change f
+        missing <- isNothing <$> cachedNormalisation f.root
+        liftAff $ assert "A model environment change must invalidate normalisation" missing
+
+  test "compilation bypasses both lookup and insertion, including previously warmed roles" $ runP do
+    f <- normalisationFixture
+    expected <- toConjunctiveNormalForm_ (ST f.root)
+    setModelUnderCompilation (Just (ModelUri "model://test.example#Compiling"))
+    void $ toConjunctiveNormalForm_ (UET f.root)
+    missing <- isNothing <$> cachedNormalisation f.root
+    liftAff $ assert "Compilation must not populate the runtime cache" missing
+    cache <- gets _.roleNormalisationCache
+    let sentinel = DPROD [] :: CNF RoleInContext
+    _ <- liftEffect $ set (unwrap (unwrap f.root).role) sentinel Nothing cache
+    bypassed <- toConjunctiveNormalForm_ (ST f.root)
+    untouched <- cachedNormalisation f.root
+    liftAff do
+      equal (writeJSON expected) (writeJSON bypassed)
+      equal (Just sentinel) untouched
+    void $ cacheEntity f.model f.simpleModel
+    compiled <- toConjunctiveNormalForm_ (ST f.root)
+    fresh <- uncachedNormalisation f.root
+    setModelUnderCompilation Nothing
+    runtime <- toConjunctiveNormalForm_ (UET f.root)
+    liftAff do
+      assert "Compilation must not reuse the previously warmed value" (compiled /= expected)
+      equal (writeJSON fresh) (writeJSON compiled)
+      equal (writeJSON fresh) (writeJSON runtime)
+
+  test "separate PDRs cannot reuse each other's definitions for the same role" $ runP do
+    f <- normalisationFixture
+    expected <- toConjunctiveNormalForm_ (ST f.root)
+    other <- liftAff $ runP do
+      g <- normalisationFixture
+      void $ cacheEntity g.model g.simpleModel
+      toConjunctiveNormalForm_ (ST g.root)
+    again <- toConjunctiveNormalForm_ (UET f.root)
+    liftAff do
+      assert "The two PDRs have different definitions" (other /= expected)
+      equal (writeJSON expected) (writeJSON again)
+
+  test "runtime hits refresh LRU recency and the configured capacity is respected" $ runP do
+    f <- normalisationFixture
+    modify \s -> s { roleNormalisationCache = newCache (defaultCreateOptions { max = Just 2 }) }
+    void $ toConjunctiveNormalForm_ (ST f.root)
+    void $ toConjunctiveNormalForm_ (ST f.filler)
+    void $ toConjunctiveNormalForm_ (UET f.root)
+    void $ toConjunctiveNormalForm_ (ST f.alternative)
+    retained <- cachedNormalisation f.root
+    evicted <- cachedNormalisation f.filler
+    newest <- cachedNormalisation f.alternative
+    liftAff do
+      assert "The recently read root must survive eviction" (not $ isNothing retained)
+      equal Nothing evicted
+      assert "The newest normal form must be cached" (not $ isNothing newest)
+
+  test "an old in-flight miss cannot populate the cache after a model replacement" $ runP do
+    f <- normalisationFixture
+    state <- ask
+    old <- retrieveInternally f.model
+    case old of
+      Nothing -> liftAff $ assert "The fixture model must be cached" false
+      Just oldAvar -> do
+        held <- liftAff $ take oldAvar
+        pending <- liftAff $ forkAff $ runMonadPerspectives (toConjunctiveNormalForm_ (ST f.root)) state
+        liftAff $ delay (Milliseconds 0.0)
+        replacement <- representInternally f.model
+        liftAff $ put f.simpleModel replacement
+        liftAff $ put held oldAvar
+        previous <- liftAff $ joinFiber pending
+        missing <- isNothing <$> cachedNormalisation f.root
+        current <- toConjunctiveNormalForm_ (ST f.root)
+        liftAff do
+          assert "The old request must not populate the replacement cache" missing
+          assert "The replacement model has a different normal form" (previous /= current)
+
+  test "failed normalisation remains an error and does not create an entry" $ runP do
+    f <- normalisationFixture
+    let missing = RoleInContext { context: ContextType (unwrap f.model <> "$Context"), role: EnumeratedRoleType (unwrap f.model <> "$Missing") }
+    for_ [ ST missing, UET missing ] \adt -> do
+      failed <- catchError (toConjunctiveNormalForm_ adt *> pure false) (const $ pure true)
+      cached <- cachedNormalisation missing
+      liftAff do
+        assert "An undefined role must still throw" failed
+        equal Nothing cached
+
 theSuite :: Free TestF Unit
 theSuite = suite "Test.Perspectives.Representation.AbstractDataTypeTests" do
+
+  normalisationCacheSuite
 
   -- ─── ExpandedADT ────────────────────────────────────────────────────────────
 

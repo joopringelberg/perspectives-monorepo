@@ -42,7 +42,7 @@ import Foreign.Object (Object, empty, singleton)
 import Foreign.Object (lookup, insert, delete) as OBJ
 import LRUCache (Cache, clear, defaultCreateOptions, defaultGetOptions, delete, get, newCache, set)
 import Perspectives.AMQP.Stomp (StompClient, createStompClient)
-import Perspectives.CoreTypes (AssumptionRegister, BrokerService, ContextInstances, DeltaCache, DomeinCache, IndexedResource, IntegrityFix, JustInTimeModelLoad, LogConfig, LogLevel(..), LogTopic, MonadPerspectives, PerspectivesState, QueryInstances, RepeatingTransaction, ResourceDeltasCache, ResourceVersionCache, RolInstances, RoleInstanceDeltasCache, RuntimeOptions, TranslationTable, TypeFix, Warning, newPendingSettledStack)
+import Perspectives.CoreTypes (AssumptionRegister, BrokerService, ContextInstances, DeltaCache, DomeinCache, IndexedResource, IntegrityFix, JustInTimeModelLoad, LogConfig, LogLevel(..), LogTopic, MonadPerspectives, PerspectivesState, QueryInstances, RepeatingTransaction, ResourceDeltasCache, ResourceVersionCache, RolInstances, RoleInstanceDeltasCache, RuntimeOptions, TranslationTable, TypeFix, Warning, invalidateRoleNormalisationCache, newPendingSettledStack, removeInternally)
 import Perspectives.DomeinFile (DomeinFile)
 import Perspectives.Instances.Environment (Environment, _pushFrame, addVariable, lookup) as ENV
 import Perspectives.Logging.DefaultLevels (defaultLogLevels)
@@ -51,7 +51,7 @@ import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistence.Types (Credential(..), MonadPouchdb(..), variableBindingsRef)
 import Perspectives.Representation.InstanceIdentifiers (PerspectivesUser(..), RoleInstance)
 import Perspectives.ResourceIdentifiers (createDefaultIdentifier)
-import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri, Readable, Stable)
+import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable, Stable)
 import Perspectives.TransactionQueue (TransactionPriority, newTransactionQueue, withPriority)
 import Prelude (Unit, bind, discard, pure, unit, void, ($), (+), (<<<), (>>=), (<>), (==))
 
@@ -72,6 +72,7 @@ newPerspectivesState uinfo transFlag transactionWithTiming modelToLoad runtimeOp
   { rolInstances: newCache defaultCreateOptions
   , contextInstances: newCache defaultCreateOptions
   , domeinCache: newCache defaultCreateOptions
+  , roleNormalisationCache: newCache defaultCreateOptions
   , queryCache: newCache defaultCreateOptions
   , deltaCache: newCache defaultCreateOptions
   , resourceVersionCache: newCache defaultCreateOptions
@@ -164,10 +165,14 @@ domeinCacheLookup :: String -> MonadPerspectives (Maybe (AVar (DomeinFile Stable
 domeinCacheLookup = lookup domeinCache
 
 domeinCacheInsert :: String -> AVar (DomeinFile Stable) -> MonadPerspectives (AVar (DomeinFile Stable))
-domeinCacheInsert = insert domeinCache
+domeinCacheInsert key value = do
+  invalidateRoleNormalisationCache
+  result <- insert domeinCache key value
+  invalidateRoleNormalisationCache
+  pure result
 
 domeinCacheRemove :: String -> MonadPerspectives (Maybe (AVar (DomeinFile Stable)))
-domeinCacheRemove = remove domeinCache
+domeinCacheRemove key = removeInternally (ModelUri key)
 
 queryAssumptionRegister :: MonadPerspectives AssumptionRegister
 queryAssumptionRegister = gets _.queryAssumptionRegister
@@ -339,17 +344,20 @@ getModelUnderCompilation :: MonadPerspectives (Maybe (ModelUri Readable))
 getModelUnderCompilation = gets _.modelUnderCompilation
 
 setModelUnderCompilation :: Maybe (ModelUri Readable) -> MonadPerspectives Unit
-setModelUnderCompilation mu = modify \s -> s { modelUnderCompilation = mu }
+setModelUnderCompilation mu = modify \s -> s
+  { modelUnderCompilation = mu, roleNormalisationCache = newCache defaultCreateOptions }
 
 -- | Returns the readable-to-stable model URI map loaded from the local models database during startup.
 getModelUris :: MonadPerspectives (Map.Map (ModelUri Readable) (ModelUri Stable))
 getModelUris = gets _.modelUris
 
 setModelUri :: ModelUri Readable -> ModelUri Stable -> MonadPerspectives Unit
-setModelUri muReadable muStable = modify \s -> s { modelUris = Map.insert muReadable muStable s.modelUris }
+setModelUri muReadable muStable = modify \s -> s
+  { modelUris = Map.insert muReadable muStable s.modelUris, roleNormalisationCache = newCache defaultCreateOptions }
 
 setModelUris :: Map.Map (ModelUri Readable) (ModelUri Stable) -> MonadPerspectives Unit
-setModelUris muMap = modify \s -> s { modelUris = muMap }
+setModelUris muMap = modify \s -> s
+  { modelUris = muMap, roleNormalisationCache = newCache defaultCreateOptions }
 
 lookupModelUri :: ModelUri Readable -> MonadPerspectives (Maybe (ModelUri Stable))
 lookupModelUri muReadable = do
@@ -374,7 +382,10 @@ getPerspectivesUser = gets _.perspectivesUser
 -- RESETTING CACHES
 -----------------------------------------------------------
 resetDomeinCache :: MonadPerspectives Unit
-resetDomeinCache = gets _.domeinCache >>= liftEffect <<< clear
+resetDomeinCache = do
+  invalidateRoleNormalisationCache
+  gets _.domeinCache >>= liftEffect <<< clear
+  invalidateRoleNormalisationCache
 
 resetRoleInstances :: MonadPerspectives Unit
 resetRoleInstances = gets _.rolInstances >>= liftEffect <<< clear

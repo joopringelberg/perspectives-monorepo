@@ -24,20 +24,24 @@ module Perspectives.Representation.Class.Role where
 
 import Perspectives.Representation.ADT
 
+import Control.Monad.AvarMonadAsk (gets)
 import Control.Monad.Error.Class (throwError)
 import Control.Plus (empty, map, (<|>))
 import Data.Array (catMaybes, cons, nub, null)
 import Data.Map (Map)
-import Data.Maybe (Maybe(..), isNothing)
+import Data.Maybe (Maybe(..), isJust, isNothing)
 import Data.Newtype (unwrap)
 import Data.Traversable (for, traverse)
 import Data.Tuple (Tuple(..))
 import Effect.Exception (error)
+import Effect.Class (liftEffect)
 import Foreign.Object (Object, toArrayWithKey)
+import LRUCache (defaultGetOptions, get, set)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (MP, MonadPerspectives)
 import Perspectives.Identifiers (buitenRol)
 import Perspectives.Parsing.Arc.Position (ArcPosition)
+import Perspectives.Performance (measureNormalisation, normalisationEnabled)
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), RoleInContext(..), domain2roleInContext, range, roleInContext2Context, roleInContext2Role, roleRange)
 import Perspectives.Query.QueryTypes (functional, mandatory) as QT
 import Perspectives.Representation.Action (Action)
@@ -52,7 +56,7 @@ import Perspectives.Representation.Perspective (Perspective, StateSpec)
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
 import Perspectives.Representation.ThreeValuedLogic (bool2threeValued, pessimistic)
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), EnumeratedPropertyType, EnumeratedRoleType(..), PropertyType, RoleKind, RoleType(..), ViewType)
-import Prelude (class Ord, class Show, bind, identity, pure, ($), (&&), (<$>), (<<<), (<>), (>=>), (>>=))
+import Prelude (class Ord, class Show, bind, discard, identity, pure, ($), (&&), (<$>), (<<<), (<>), (>=>), (>>=))
 
 -----------------------------------------------------------
 -- ROLE TYPE CLASS
@@ -267,17 +271,33 @@ completeExpandedRoleType (CR cr) = getCalculatedRole cr
 -----------------------------------------------------------
 toConjunctiveNormalForm_ :: ADT RoleInContext -> MP (CNF RoleInContext)
 toConjunctiveNormalForm_ adt = case adt of
-  ST (RoleInContext { role }) ->
-    getEnumeratedRole role
-      >>= completeExpandedType
-      >>= pure <<< toConjunctiveNormalForm
+  ST (RoleInContext { role }) -> normaliseRole role
   -- UET leaves are expanded recursively to guarantee a fully normalised CNF.
-  UET (RoleInContext { role }) ->
-    getEnumeratedRole role
-      >>= completeExpandedType
-      >>= pure <<< toConjunctiveNormalForm
+  UET (RoleInContext { role }) -> normaliseRole role
   SUM as -> for as toConjunctiveNormalForm_ >>= pure <<< simplifyCNF <<< unsafePartial distribute
   PROD as -> for as toConjunctiveNormalForm_ >>= pure <<< simplifyCNF <<< unsafePartial flattenProducts
+  where
+  normaliseRole role = do
+    { pdr, compiling, cache } <- gets \s ->
+      { pdr: s.systemIdentifier, compiling: isJust s.modelUnderCompilation, cache: s.roleNormalisationCache }
+    let
+      normalise = do
+        enabled <- liftEffect normalisationEnabled
+        if enabled then measureNormalisation pdr (unwrap role) compiling expandAndNormalise
+        else expandAndNormalise
+    if compiling then normalise
+    else do
+      cached <- liftEffect $ get (unwrap role) defaultGetOptions cache
+      case cached of
+        Just cnf -> pure cnf
+        Nothing -> do
+          cnf <- normalise
+          _ <- liftEffect $ set (unwrap role) cnf Nothing cache
+          pure cnf
+    where
+    expandAndNormalise = getEnumeratedRole role
+      >>= completeExpandedType
+      >>= pure <<< toConjunctiveNormalForm
 
 -----------------------------------------------------------
 -- CONTEXTOFADT

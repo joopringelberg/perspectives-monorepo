@@ -119,6 +119,142 @@ function captureReport(run, publish = true) {
   }
 }
 
+function normalisationCapture(t, enabled = true) {
+  const previous = globalThis.pdrMeasureNormalisation;
+  globalThis.pdrMeasureNormalisation = true;
+  profiler.resetNormalisationMeasurements();
+  globalThis.pdrMeasureNormalisation = enabled;
+  t.after(() => {
+    if (previous === undefined) delete globalThis.pdrMeasureNormalisation;
+    else globalThis.pdrMeasureNormalisation = previous;
+  });
+  const output = t.mock.method(globalThis.console, "info", () => {});
+  const prefix = "[PDR NORMALISATION] ";
+  return () => output.mock.calls
+    .map(({ arguments: [line] }) => line)
+    .filter(line => line.startsWith(prefix))
+    .map(line => JSON.parse(line.slice(prefix.length)));
+}
+
+test("disabled normalisation measurements do not read the clock or emit reports", t => {
+  const reports = normalisationCapture(t, undefined);
+  globalThis.pdrMeasureNormalisation = undefined;
+  t.mock.method(globalThis.performance, "now", () => {
+    throw new Error("Disabled normalisation measurements must not read the clock");
+  });
+  assert.equal(profiler.startNormalisation("alice")("role")(false)(), null);
+  profiler.finishNormalisation(null)(true)();
+  profiler.reportNormalisationMeasurements();
+  assert.deepEqual(reports(), []);
+});
+
+test("normalisation aggregates isolate PDRs, compilation and start phases without per-call logs", t => {
+  const reports = normalisationCapture(t);
+  let now = 0;
+  t.mock.method(globalThis.performance, "now", () => now);
+  profiler.setNormalisationPhase("startup")();
+  const first = profiler.startNormalisation("alice")("role")(false)();
+  now = 1;
+  const overlapping = profiler.startNormalisation("alice")("role")(false)();
+  now = 2;
+  const bob = profiler.startNormalisation("bob")("role")(false)();
+  now = 3;
+  const compilation = profiler.startNormalisation("alice")("role")(true)();
+  now = 5;
+  profiler.finishNormalisation(overlapping)(false)();
+  now = 8;
+  profiler.finishNormalisation(first)(true)();
+  now = 9;
+  profiler.finishNormalisation(bob)(true)();
+  now = 10;
+  profiler.finishNormalisation(compilation)(true)();
+  now = 12;
+  const repeated = profiler.startNormalisation("alice")("role")(false)();
+  profiler.setNormalisationPhase("signup")();
+  now = 16;
+  profiler.finishNormalisation(repeated)(true)();
+  profiler.finishNormalisation(repeated)(true)();
+  now = 20;
+  const nextPhase = profiler.startNormalisation("alice")("role")(false)();
+  now = 23;
+  profiler.finishNormalisation(nextPhase)(true)();
+  assert.deepEqual(reports(), []);
+  profiler.reportNormalisationMeasurements();
+  const rows = reports();
+  const alice = rows.find(row => row.pdr === "alice" && row.context === "runtime");
+  assert.deepEqual(alice.topRoles, [{
+    role: "role", requests: 4, succeeded: 3, failed: 1, unfinished: 0,
+    elapsedMs: 19, repeatRequests: 2, repeatedElapsedMs: 7
+  }]);
+  assert.equal(alice.distinctRoles, 1);
+  assert.deepEqual(alice.phases.map(row =>
+    [row.phase, row.requests, row.repeatRequests, row.repeatedElapsedMs]),
+  [["startup", 3, 1, 4], ["signup", 1, 0, 0]]);
+  assert.equal(rows.find(row => row.pdr === "bob").repeatRequests, 0);
+  assert.equal(rows.find(row => row.context === "compilation").repeatRequests, 0);
+});
+
+test("failed normalisation does not warm a later request", t => {
+  const reports = normalisationCapture(t);
+  const failed = profiler.startNormalisation("alice")("role")(false)();
+  profiler.finishNormalisation(failed)(false)();
+  const retry = profiler.startNormalisation("alice")("role")(false)();
+  profiler.finishNormalisation(retry)(true)();
+  profiler.reportNormalisationMeasurements();
+  assert.equal(reports()[0].failed, 1);
+  assert.equal(reports()[0].succeeded, 1);
+  assert.equal(reports()[0].repeatRequests, 0);
+});
+
+test("resetting normalisation measurements excludes late completions from the previous collection", t => {
+  const reports = normalisationCapture(t);
+  const old = profiler.startNormalisation("alice")("role")(false)();
+  profiler.resetNormalisationMeasurements();
+  const current = profiler.startNormalisation("alice")("role")(false)();
+  profiler.finishNormalisation(old)(true)();
+  profiler.reportNormalisationMeasurements();
+  assert.equal(reports()[0].requests, 1);
+  assert.equal(reports()[0].unfinished, 1);
+  profiler.finishNormalisation(current)(true)();
+  profiler.reportNormalisationMeasurements();
+  assert.equal(reports()[1].succeeded, 1);
+  assert.equal(reports()[1].repeatRequests, 0);
+});
+
+test("compiled normalisation measurement preserves results and errors and omits error details", async t => {
+  const reports = normalisationCapture(t);
+  const [runtime, aff, either] = await Promise.all([
+    import("../output/Perspectives.Performance/index.js"),
+    import("../output/Effect.Aff/index.js"),
+    import("../output/Data.Either/index.js")
+  ]);
+  runtime.resetNormalisationMeasurements();
+  const measured = runtime.measureNormalisation(aff.monadEffectAff)(aff.monadErrorAff);
+  const run = action => new Promise((resolve, reject) => {
+    aff.runAff(result => () => {
+      if (result instanceof either.Left) reject(result.value0);
+      else resolve(result.value0);
+    })(action)();
+  });
+  const failure = new Error("private-normalisation-error");
+  for (const enabled of [false, true]) {
+    globalThis.pdrMeasureNormalisation = enabled;
+    assert.equal(await run(measured("alice")("success-role")(false)(
+      aff.monadEffectAff.liftEffect(() => 42)
+    )), 42);
+    await assert.rejects(run(measured("alice")("failed-role")(false)(
+      aff.monadEffectAff.liftEffect(() => { throw failure; })
+    )), error => error === failure);
+  }
+  runtime.reportNormalisationMeasurements();
+  const [row] = reports();
+  assert.equal(row.requests, 2);
+  assert.equal(row.succeeded, 1);
+  assert.equal(row.failed, 1);
+  assert.equal(row.unfinished, 0);
+  assert.ok(!JSON.stringify(row).includes(failure.message));
+});
+
 test("statistics use nearest-rank p95 and population standard deviation", () => {
   assert.deepEqual(statistics([4, 1, 3, 2]), {
     count: 4, min: 1, median: 2.5, mean: 2.5, p95: 4, max: 4, standardDeviation: Math.sqrt(1.25)

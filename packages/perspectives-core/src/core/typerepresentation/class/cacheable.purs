@@ -39,7 +39,7 @@ import Effect.Aff (Aff)
 import Effect.Aff.AVar (AVar, isEmpty, put, read, status, take)
 import Effect.Aff.Class (liftAff)
 import Effect.Exception (error)
-import Perspectives.CoreTypes (class Cacheable, MonadPerspectives, representInternally, retrieveInternally)
+import Perspectives.CoreTypes (class Cacheable, MonadPerspectives, invalidateDerivedCaches, representInternally, retrieveInternally)
 import Perspectives.Couchdb.Revision (class Revision, Revision_, changeRevision, rev)
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), ViewType(..))
 
@@ -57,8 +57,9 @@ type Namespace = String
 -- | Invariant: after calling this function, the entity's AVar is guaranteed to be non-empty.
 cacheEntity :: forall a i. Cacheable a i => i -> a -> MonadPerspectives (AVar a)
 cacheEntity id e = do
+  invalidateDerivedCaches id
   mAvar <- retrieveInternally id
-  case mAvar of
+  result <- case mAvar of
     Nothing -> do
       (av :: AVar a) <- representInternally id
       liftAff $ put e av
@@ -72,12 +73,15 @@ cacheEntity id e = do
         -- that of the entity, replace the entities revision.
         if (rev oldE) > (rev e) then liftAff $ put (changeRevision (rev oldE) e) avar *> pure avar
         else liftAff $ put e avar *> pure avar
+  invalidateDerivedCaches id
+  pure result
 
 -- | Put the entity in the existing AVar (overwriting it completely) or create a new AVar.
 overwriteEntity :: forall a i. Cacheable a i => i -> a -> MonadPerspectives (AVar a)
 overwriteEntity id e = do
+  invalidateDerivedCaches id
   mAvar <- retrieveInternally id
-  case mAvar of
+  result <- case mAvar of
     Nothing -> do
       (av :: AVar a) <- representInternally id
       liftAff $ put e av
@@ -87,6 +91,8 @@ overwriteEntity id e = do
       _ <- liftAff $ take avar
       -- Put the new value in place.
       liftAff $ put e avar *> pure avar
+  invalidateDerivedCaches id
+  pure result
 
 -- | Returns an entity. Throws an error if the resource is not represented in cache or not
 -- | immediately available in cache.

@@ -73,6 +73,7 @@ module Perspectives.CoreTypes
   , RolInstances
   , RoleGetter
   , RoleInstanceDeltasCache
+  , RoleNormalisationCache
   , RuntimeOptions
   , StorageScheme(..)
   , TrackingObjectsGetter
@@ -100,6 +101,8 @@ module Perspectives.CoreTypes
   , forceArray
   , forceTypeArray
   , getPS
+  , invalidateDerivedCaches
+  , invalidateRoleNormalisationCache
   , liftToInstanceLevel
   , mkLibEffect1
   , mkLibEffect2
@@ -164,7 +167,7 @@ import Effect.Unsafe (unsafePerformEffect)
 import Foreign (Foreign)
 import Foreign.Object (Object)
 import Foreign.Object as F
-import LRUCache (Cache, defaultGetOptions, delete, get, set)
+import LRUCache (Cache, defaultCreateOptions, defaultGetOptions, delete, get, newCache, set)
 import Perspectives.AMQP.Stomp (ConnectAndSubscriptionParameters, StompClient)
 import Perspectives.ApiTypes (CorrelationIdentifier)
 import Perspectives.Couchdb.Revision (class Revision)
@@ -177,9 +180,11 @@ import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord)
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistence.Types (PouchdbState, MonadPouchdb, runMonadPouchdbWithState)
 import Perspectives.Persistent.ChangesFeed (EventSource)
+import Perspectives.Query.QueryTypes (RoleInContext)
 import Perspectives.Repetition (Duration)
 import Perspectives.Representation.Action (StartMoment)
 import Perspectives.Representation.Class.Identifiable (class Identifiable, identifier)
+import Perspectives.Representation.CNF (CNF)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), Value)
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic)
 import Perspectives.Representation.TypeIdentifiers (ContextType, EnumeratedPropertyType, EnumeratedRoleType, ResourceType, RoleType, StateIdentifier)
@@ -187,7 +192,7 @@ import Perspectives.ResourceIdentifiers.Parser (pouchdbDatabaseName)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri, Readable, Stable)
 import Perspectives.Sync.Transaction (Transaction)
 import Perspectives.TransactionQueue (TransactionQueue)
-import Prelude (class Eq, class Monad, class Monoid, class Ord, class Semigroup, class Show, Unit, bind, compare, eq, pure, show, unit, ($), (<$>), (<<<), (<>), (*>), (>>=))
+import Prelude (class Eq, class Monad, class Monoid, class Ord, class Semigroup, class Show, Unit, bind, compare, discard, eq, pure, show, unit, ($), (<$>), (<<<), (<>), (*>), (>>=))
 import Simple.JSON (class ReadForeign, class WriteForeign)
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -197,6 +202,8 @@ import Unsafe.Coerce (unsafeCoerce)
 type ContextInstances = Cache (AVar PerspectContext)
 type RolInstances = Cache (AVar PerspectRol)
 type DomeinCache = Cache (AVar (DomeinFile Stable))
+
+type RoleNormalisationCache = Cache (CNF RoleInContext)
 
 type QueryInstances = Cache (Array InvertedQuery)
 
@@ -229,6 +236,8 @@ type PerspectivesExtraState =
 
   -- Caching Domein files
   , domeinCache :: DomeinCache
+
+  , roleNormalisationCache :: RoleNormalisationCache
 
   , queryCache :: QueryInstances
 
@@ -840,6 +849,13 @@ class (Identifiable v i, Revision v, Newtype i String) <= Cacheable v i | v -> i
   representInternally :: i -> MonadPerspectives (AVar v)
   retrieveInternally :: i -> MonadPerspectives (Maybe (AVar v))
   removeInternally :: i -> MonadPerspectives (Maybe (AVar v))
+  invalidateDerivedCaches :: i -> MonadPerspectives Unit
+
+-- Replace rather than clear: in-flight normalisations may still hold the old cache.
+invalidateRoleNormalisationCache :: MonadPerspectives Unit
+invalidateRoleNormalisationCache = modify \s -> case s.modelUnderCompilation of
+  Just _ -> s
+  Nothing -> s { roleNormalisationCache = newCache defaultCreateOptions }
 
 -----------------------------------------------------------
 -- CLASS PERSISTENT
@@ -882,15 +898,22 @@ data TypeFix
 
 instance cacheableDomeinFile :: Cacheable (DomeinFile Stable) (ModelUri Stable) where
   theCache = gets _.domeinCache
+  invalidateDerivedCaches _ = invalidateRoleNormalisationCache
   representInternally c = do
+    invalidateRoleNormalisationCache
     av <- liftAff empty
     _ <- theCache >>= (liftEffect <<< (set (unwrap c) av Nothing))
     pure av
   retrieveInternally i = lookup theCache (unwrap i)
-  removeInternally i = remove theCache (unwrap i)
+  removeInternally i = do
+    invalidateRoleNormalisationCache
+    removed <- remove theCache (unwrap i)
+    invalidateRoleNormalisationCache
+    pure removed
 
 instance cacheablePerspectContext :: Cacheable PerspectContext ContextInstance where
   theCache = gets _.contextInstances
+  invalidateDerivedCaches _ = pure unit
   representInternally c = do
     av <- liftAff empty
     _ <- theCache >>= (liftEffect <<< (set (unwrap c) av Nothing))
@@ -900,6 +923,7 @@ instance cacheablePerspectContext :: Cacheable PerspectContext ContextInstance w
 
 instance cacheablePerspectRol :: Cacheable PerspectRol RoleInstance where
   theCache = gets _.rolInstances
+  invalidateDerivedCaches _ = pure unit
   representInternally c = do
     av <- liftAff empty
     _ <- theCache >>= (liftEffect <<< (set (unwrap c) av Nothing))

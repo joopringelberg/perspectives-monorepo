@@ -37,6 +37,28 @@ timed stage identifier action = do
           throwError err
       )
 
+foreign import data NormalisationToken :: Type
+foreign import normalisationEnabled :: Effect Boolean
+foreign import resetNormalisationMeasurements :: Effect Unit
+foreign import setNormalisationPhase :: String -> Effect Unit
+foreign import startNormalisation :: String -> String -> Boolean -> Effect NormalisationToken
+foreign import finishNormalisation :: NormalisationToken -> Boolean -> Effect Unit
+foreign import reportNormalisationMeasurements :: Effect Unit
+
+measureNormalisation :: forall m a. MonadEffect m => MonadError Error m => String -> String -> Boolean -> m a -> m a
+measureNormalisation pdr role compiling action = do
+  token <- liftEffect $ startNormalisation pdr role compiling
+  catchError
+    ( do
+        result <- action
+        liftEffect $ finishNormalisation token true
+        pure result
+    )
+    ( \err -> do
+        liftEffect $ finishNormalisation token false
+        throwError err
+    )
+
 foreign import data ProfileToken :: Type
 foreign import data ProfileSession :: Type
 foreign import captureSession :: Effect ProfileSession
