@@ -236,7 +236,9 @@ Because the store is persistent the pending transaction survives a session resta
 
 ### 6.4 Unblocking
 
-Whenever a new delta is processed that advances a resource-key's version, the implementation should check whether any pending transaction is now unblocked (all its `MissingDelta` entries are satisfied).  `getAllPendingTransactions` in `PendingTransactionStore` is intended to support this; its full query-based implementation is currently a TODO (the placeholder returns an empty array).
+After an outer transaction settles successfully, the runtime queries the pending-transaction database with `getAllPendingTransactions` and retries transactions whose version gaps have been filled. This covers version advances from both incoming deltas and local changes. Readiness is determined by rechecking the **full transaction** against current resource versions, not just its saved `MissingDelta` entries: filling the first missing version may still leave a later gap.
+
+Retried transactions are signature-verified again and each runs in its own transaction cycle, including automatic actions and deferred removals. A pending record is removed only after that cycle settles successfully. The runtime repeats the scan while transactions are being unblocked, so a retried transaction can unblock another transaction in the same drain. Transactions with remaining gaps stay persisted for a later attempt, including across session restarts.
 
 ### 6.5 Timeout
 
@@ -294,6 +296,7 @@ When an incoming `TransactionForPeer` is received:
 3. **Extract ordering info** (step 1 in `executeTransaction'`) — for each delta the ordering fields are extracted; legacy deltas receive sentinel values.
 4. **Gap check** (step 2) — if any versioned delta has `resourceVersion > localVersion + 1`, the whole transaction is stored in the pending-transaction store and processing stops.
 5. **Execute with version tracking** (step 3) — if no gaps, each delta is handled by `executeDeltaWithVersionTracking`, which applies the rules of §5 (legacy, outdated, conflict, or normal).
+6. **Settle and retry pending transactions** — after the transaction's automatic actions and deferred work settle, recheck persisted transactions and drain those whose full version gaps have been filled, in separate transaction cycles (§6.4).
 
 ---
 

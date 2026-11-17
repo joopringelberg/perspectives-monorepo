@@ -57,6 +57,7 @@ import Perspectives.Instances.ObjectGetters (Filler_(..), context, contextType, 
 import Perspectives.Logging (debugState, errorCompiler, traceState, warnState)
 import Perspectives.ModelDependencies (sysUser)
 import Perspectives.ModelRemoval (removeModelFromLocalDatabase)
+import Perspectives.Persistence.PendingTransactionStore (PendingTransactionRecord(..), getAllPendingTransactions, getPendingTransactionsForResource, removePendingTransaction)
 import Perspectives.Persistent (entityExists, saveMarkedPublicResources)
 import Perspectives.PerspectivesState (addBinding, addWarning, clearPublicRolesJustLoaded, decreaseTransactionLevel, getPublicRolesJustLoaded, increaseTransactionLevel, nextTransactionNumber, pushFrame, restoreFrame, transactionFlag, transactionLevel)
 import Perspectives.Query.QueryTypes (Calculation(..))
@@ -68,12 +69,12 @@ import Perspectives.RoleStateCompiler (enteringRoleState, evaluateRoleState, exi
 import Perspectives.SaveUserData (changeRoleBinding, removeContextInstance, removeRoleInstance, stateEvaluationAndQueryUpdatesForContext, queryUpdatesForRole)
 import Perspectives.ScheduledAssignment (ScheduledAssignment(..), StateEvaluation(..), contextsToBeRemoved)
 import Perspectives.Sidecar.ToReadable (toReadable)
-import Perspectives.Sync.HandleTransaction (executeDeltas, expandDeltas)
+import Perspectives.Sync.HandleTransaction (executeDeltas, executeTransactionOnce, expandDeltas, retryPendingTransactionsWith)
 import Perspectives.Sync.InvertedQueryResult (InvertedQueryResult(..))
 import Perspectives.Sync.Transaction (Transaction(..), TransactionDestination(..), createTransaction)
 import Perspectives.Types.ObjectGetters (contextRootStates, publicUrl_, roleRootStates)
 import Perspectives.Warning (PerspectivesWarning(..))
-import Prelude (Unit, bind, discard, flip, join, not, pure, show, unit, unless, void, ($), (&&), (*>), (<$>), (<<<), (<>), (>), (>=>), (>>=), (||), (/=))
+import Prelude (Unit, bind, discard, flip, join, not, pure, show, unit, unless, void, ($), (&&), (*>), (<$>), (<<<), (<>), (>), (>=>), (>>=), (||), (/=), (==))
 import Unsafe.Coerce (unsafeCoerce)
 
 -----------------------------------------------------------
@@ -103,7 +104,50 @@ runMonadPerspectivesTransaction'
   -> RoleType
   -> MonadPerspectivesTransaction o
   -> (MonadPerspectives o)
-runMonadPerspectivesTransaction' share authoringRole a = (liftAff $ createTransaction authoringRole share) >>= liftAff <<< new >>= runReaderT whenFlagIsDown
+runMonadPerspectivesTransaction' share authoringRole a =
+  withPendingTransactionRetries $ runMonadPerspectivesTransactionOnce share authoringRole a
+
+-- | Pending peers must run only after the outer transaction's state transitions
+-- | and physical removals have settled, each in its own non-sharing transaction.
+withPendingTransactionRetries :: forall o. MonadPerspectives o -> MonadPerspectives o
+withPendingTransactionRetries action = do
+  result <- action
+  level <- transactionLevel
+  if level == "" then
+    catchError retryPendingTransactions \e ->
+      warnState ("Cannot retry pending transactions: " <> show e)
+  else pure unit
+  pure result
+
+retryPendingTransactions :: MonadPerspectives Unit
+retryPendingTransactions = do
+  pending <- getAllPendingTransactions
+  retryPendingTransactionsWith retryPending pending
+  where
+  retryPending (PendingTransactionRecord { _id, transaction }) =
+    catchError
+      ( do
+          completed <- runMonadPerspectivesTransactionOnce false (ENR $ EnumeratedRoleType sysUser) $
+            executeTransactionOnce transaction
+          if completed then do
+            -- A previous blocked attempt may have refreshed this document's revision.
+            current <- getPendingTransactionsForResource _id
+            for_ current \(PendingTransactionRecord r) ->
+              removePendingTransaction r._id r._rev
+          else pure unit
+          pure completed
+      )
+      \e -> do
+        warnState ("Cannot execute pending transaction " <> _id <> ": " <> show e)
+        pure false
+
+runMonadPerspectivesTransactionOnce
+  :: forall o
+   . Boolean
+  -> RoleType
+  -> MonadPerspectivesTransaction o
+  -> MonadPerspectives o
+runMonadPerspectivesTransactionOnce share authoringRole a = (liftAff $ createTransaction authoringRole share) >>= liftAff <<< new >>= runReaderT whenFlagIsDown
   where
   -- | Wait until the TransactionFlag can be taken down, then run the action; raise it again.
   whenFlagIsDown :: MonadPerspectivesTransaction o
@@ -696,7 +740,16 @@ runMonadPerspectivesTransactionAwaitingSettlement
   -> RoleType
   -> MonadPerspectivesTransaction o
   -> (MonadPerspectives o)
-runMonadPerspectivesTransactionAwaitingSettlement share authoringRole a = (liftAff $ createTransaction authoringRole share) >>= liftAff <<< new >>= runReaderT whenFlagIsDown
+runMonadPerspectivesTransactionAwaitingSettlement share authoringRole a =
+  withPendingTransactionRetries $ runMonadPerspectivesTransactionAwaitingSettlementOnce share authoringRole a
+
+runMonadPerspectivesTransactionAwaitingSettlementOnce
+  :: forall o
+   . Boolean
+  -> RoleType
+  -> MonadPerspectivesTransaction o
+  -> MonadPerspectives o
+runMonadPerspectivesTransactionAwaitingSettlementOnce share authoringRole a = (liftAff $ createTransaction authoringRole share) >>= liftAff <<< new >>= runReaderT whenFlagIsDown
   where
   whenFlagIsDown :: MonadPerspectivesTransaction o
   whenFlagIsDown = do
