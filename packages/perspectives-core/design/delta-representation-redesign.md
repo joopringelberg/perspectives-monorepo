@@ -480,7 +480,7 @@ These are design consequences only:
 | `Perspectives.Persistence.DeltaStoreTypes` | replace the transitional record with a true stored-delta shape, including `baseResourceKey` and explicit status references. |
 | `Perspectives.Persistence.ResourceVersionStore` | evolve into a resource-head store with `deleted` and latest-delta pointers. |
 | `Perspectives.Sync.SignedDelta` | split canonical signature concerns from transport-envelope concerns. |
-| `Perspectives.Sync.LegacyDeltas` | remove after the universe cut-over. |
+| `Perspectives.Sync.LegacyDeltas` | removed after the universe cut-over. |
 
 ## Decisions
 

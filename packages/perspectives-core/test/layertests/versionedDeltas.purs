@@ -48,6 +48,18 @@ theSuite = suite "Versioned delta phase 0/1" do
   test "delta format parser distinguishes legacy and v2" do
     Assert.assert "missing version field should be treated as legacy format 1" (parseDeltaFormatVersion "{\"a\":1}" == 1)
     Assert.assert "explicit version field should be treated as format 2" (parseDeltaFormatVersion "{\"deltaFormatVersion\":2}" == 2)
+    let
+      legacyPayload = writeJSON
+        { subject: ENR (EnumeratedRoleType "model://example.org#Sales$User")
+        , id: RoleInstance "def:#role"
+        , roleType: EnumeratedRoleType "model://example.org#Sales$Order"
+        , property: EnumeratedPropertyType "model://example.org#Sales$Order$Status"
+        , values: [ Value "approved" ]
+        , deltaType: SetProperty
+        }
+    case parseIncomingDelta legacyPayload of
+      Left _ -> pure unit
+      Right _ -> Assert.assert "legacy delta payloads should not parse" false
 
   test "v2 role-property deltas strip revision suffixes on parse" do
     let

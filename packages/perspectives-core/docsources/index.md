@@ -122,7 +122,6 @@ The table below lists every PureScript module that is referenced in at least one
 | `Perspectives.RoleStateCompiler` | [Context Serialisation for a Peer](context-serialisation-for-peer.md), [Transaction Execution Process](transaction-execution.md) |
 | `Perspectives.RunMonadPerspectivesTransaction` | [Transaction Execution Process](transaction-execution.md), [Transaction Execution — Test Script Catalogue](transaction-execution-tests.md), [Transaction Distribution to Peers](transaction-distribution.md) |
 | `Perspectives.Sync.HandleTransaction` | [Delta Ordering and Conflict Resolution](delta-ordering.md), [Transaction Execution Process](transaction-execution.md) |
-| `Perspectives.Sync.LegacyDeltas` | [Delta Ordering and Conflict Resolution](delta-ordering.md) |
 | `Perspectives.Sync.Transaction` | [Transaction Execution Process](transaction-execution.md), [Transaction Distribution to Peers](transaction-distribution.md) |
 | `Perspectives.SideCar.PhantomTypedNewtypes` | [Model URI resolution](model-uri-resolution.md) |
 | `Perspectives.TypePersistence.PerspectiveSerialisation.Data` | [PDR Client Data Structures](pdr-client-data-structures.md) |
