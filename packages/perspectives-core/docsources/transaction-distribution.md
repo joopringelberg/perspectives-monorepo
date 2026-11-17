@@ -96,6 +96,19 @@ preferences, and `Me` subscriptions.
 
 For every delta, the destinations of its `users` are looked up in `userRoleBottoms` and de-duplicated. The delta is appended to a `TransactionForPeer` per destination, in a `Map TransactionDestination TransactionForPeer`.
 
+The envelope's `author` identifies the current sending PDR's user, without a
+storage scheme; `perspectivesSystem` identifies that user's sending installation.
+This also applies to public-destination transactions, where the installation
+publishes on behalf of the public role. The encrypted AMQP envelope copies the
+same sender identity.
+
+An envelope does not inherit the author of its first delta: reconstruction may
+forward historical deltas from other users, and filtering may remove that first
+delta altogether. Each signed delta retains its original author and signature.
+Recipient exclusion and verification-bundle selection still use those individual
+delta authors, not the envelope sender. Merely forwarding a transaction therefore
+does not add the sender's verification bundle.
+
 The `Eq` and `Ord` instances of `TransactionDestination` compare a `Peer` **on its unschemed guid only**. A peer reached through both a `pub:` and a `def:` resource is therefore a single destination and receives a single transaction. Within one transaction, the map keeps the schemed resource of the first entry inserted for that peer.
 
 For `Peer` destinations, customisation removes the creation scaffolding of the

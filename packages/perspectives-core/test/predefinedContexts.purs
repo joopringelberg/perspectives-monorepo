@@ -137,6 +137,7 @@ theSuite = suite "Predefined context scaffolding" do
 
   test "peer customization omits scaffolding without removing public publication support" $
     Binding.withFixture Binding.oldRemotePeer [] [] do
+      lift $ AA.modify \s -> s { perspectivesUser = PerspectivesUser "def:#sender" }
       let
         scaffold = scaffolding (PerspectivesUser "historical") "TheWorld"
         deltas = scaffold <> [ Binding.visiblePropertyDelta ]
@@ -157,12 +158,50 @@ theSuite = suite "Predefined context scaffolding" do
       liftAff do
         equal (Just [ Binding.visiblePropertyDelta ]) (_.deltas <<< unwrap <$> Map.lookup destination customized)
         equal (Just deltas) (_.deltas <<< unwrap <$> Map.lookup public customized)
+        equal (Just $ PerspectivesUser "sender") (_.author <<< unwrap <$> Map.lookup destination customized)
+        equal (Just $ PerspectivesUser "sender") (_.author <<< unwrap <$> Map.lookup public customized)
       let
         onlyScaffolding = over Transaction
           (\t -> t { deltas = map (\delta -> DeltaInTransaction { users: [ Binding.userId ], delta }) scaffold })
           input
       empty <- lift $ transactieForEachUser onlyScaffolding
       liftAff $ assert "Scaffolding alone must not produce a peer transaction" (Map.isEmpty empty)
+
+  test "forwarding preserves delta authors and author exclusion without making them envelope senders" $
+    Binding.withFixture Binding.oldRemotePeer [] [] do
+      lift $ AA.modify \s -> s { perspectivesUser = PerspectivesUser "def:#sender" }
+      let
+        firstAuthor = PerspectivesUser "first"
+        secondAuthor = PerspectivesUser "second"
+        first = over SignedDelta (\d -> d { author = firstAuthor }) Binding.visiblePropertyDelta
+        second = over SignedDelta (\d -> d { author = secondAuthor }) Binding.visiblePropertyDelta
+        recipient = PerspectivesUser "recipient"
+        destination = Peer (unschemePerspectivesUser recipient) recipient
+        firstDestination = Peer (unschemePerspectivesUser firstAuthor) firstAuthor
+        info = { key: "unused", transportKey: "unused", deltas: [] }
+      transaction <- AA.get
+      let
+        input = over Transaction
+          ( \t -> t
+              { deltas = map
+                  (\delta -> DeltaInTransaction { users: [ Binding.userId, Binding.otherLocalId ], delta })
+                  [ first, second ]
+              , userRoleBottoms = Map.fromFoldable
+                  [ Tuple Binding.userId destination, Tuple Binding.otherLocalId firstDestination ]
+              , publicKeys = EM.fromFoldable [ Tuple firstAuthor info, Tuple secondAuthor info ]
+              }
+          )
+          transaction
+      customized <- lift $ transactieForEachUser input
+      liftAff do
+        equal (Just [ first, second ]) (_.deltas <<< unwrap <$> Map.lookup destination customized)
+        equal (Just [ second ]) (_.deltas <<< unwrap <$> Map.lookup firstDestination customized)
+        for_ [ destination, firstDestination ] \peer -> case Map.lookup peer customized of
+          Nothing -> assert "Forwarded content must reach the intended peer" false
+          Just (TransactionForPeer output) -> do
+            equal (PerspectivesUser "sender") output.author
+            equal Nothing $ EM.lookup (PerspectivesUser "sender") output.publicKeys
+        equal (Just $ EM.singleton secondAuthor info) (_.publicKeys <<< unwrap <$> Map.lookup firstDestination customized)
 
   test "incoming scaffolding neither accumulates nor imports incidental identities" $
     Binding.withFixture Binding.oldRemotePeer [] [] do

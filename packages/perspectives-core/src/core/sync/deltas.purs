@@ -58,12 +58,12 @@ import Perspectives.Persistence.API (Url, addDocument)
 import Perspectives.Persistence.DeltaStore (extractDeltaInfo, getDeltasForResource, storeDeltaFromSignedDelta)
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
 import Perspectives.Persistent (entityExists, getPerspectRol, postDatabaseName)
-import Perspectives.PerspectivesState (nextTransactionNumber, stompClient)
+import Perspectives.PerspectivesState (getPerspectivesUser, nextTransactionNumber, stompClient)
 import Perspectives.Query.UnsafeCompiler (getDynamicPropertyGetter)
 import Perspectives.Representation.ADT (ADT(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser(..), RoleInstance(..), Value(..), perspectivesUser2RoleInstance)
 import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..), RoleType(..))
-import Perspectives.ResourceIdentifiers (isInPublicScheme)
+import Perspectives.ResourceIdentifiers (isInPublicScheme, takeGuid)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.Sync.DateTime (SerializableDateTime(..))
 import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
@@ -208,12 +208,13 @@ type RecipientKey =
 -- | `users` in DeltaInTransaction will not always be model://perspectives.domains#System$PerspectivesSystem$User instances.
 transactieForEachUser :: Transaction -> MonadPerspectives TransactionPerUser
 transactieForEachUser t@(Transaction tr@{ timeStamp, deltas, userRoleBottoms, publicKeys }) = do
+  sender <- over PerspectivesUser takeGuid <$> getPerspectivesUser
   transactions <- execStateT
     ( void $ for deltas \(DeltaInTransaction { users, delta }) -> do
         system <- lift getMySystem
         -- Lookup the ultimate filler for all users in the delta.
         (sysUsers :: Array TransactionDestination) <- pure $ catMaybes (flip Map.lookup userRoleBottoms <$> users)
-        addDeltaToCustomisedTransactie delta (nub sysUsers) (ContextInstance system)
+        addDeltaToCustomisedTransactie sender delta (nub sysUsers) (ContextInstance system)
     )
     Map.empty
   pure $ Map.mapMaybeWithKey
@@ -230,8 +231,8 @@ transactieForEachUser t@(Transaction tr@{ timeStamp, deltas, userRoleBottoms, pu
   -- `destinations` WILL be either 
   --    * Peer model://perspectives.domains#System$TheWorld$PerspectivesUsers instances, or
   --    * PublicDestination roleInstance, where the latter is an instance of the Visitor role.
-  addDeltaToCustomisedTransactie :: SignedDelta -> (Array TransactionDestination) -> ContextInstance -> StateT TransactionPerUser (MonadPerspectives) Unit
-  addDeltaToCustomisedTransactie d@(SignedDelta { author }) destinations perspectivesSystem = for_
+  addDeltaToCustomisedTransactie :: PerspectivesUser -> SignedDelta -> (Array TransactionDestination) -> ContextInstance -> StateT TransactionPerUser (MonadPerspectives) Unit
+  addDeltaToCustomisedTransactie sender d@(SignedDelta { author }) destinations perspectivesSystem = for_
     destinations
     ( \destination -> case destination of
         peer@(Peer perspectivesUser _) ->
@@ -239,13 +240,13 @@ transactieForEachUser t@(Transaction tr@{ timeStamp, deltas, userRoleBottoms, pu
             trs <- get
             case Map.lookup peer trs of
               -- TODO: verwijder public key info voor deltas die er niet toe doen voor deze user.
-              Nothing -> put $ Map.insert peer (TransactionForPeer { author, perspectivesSystem, timeStamp, deltas: [ d ], publicKeys }) trs
+              Nothing -> put $ Map.insert peer (TransactionForPeer { author: sender, perspectivesSystem, timeStamp, deltas: [ d ], publicKeys }) trs
               Just trans -> put $ Map.insert peer (addToTransactionForPeer d trans) trs
           else pure unit
         publicRole@(PublicDestination _) -> do
           trs <- get
           case Map.lookup publicRole trs of
-            Nothing -> put $ Map.insert publicRole (TransactionForPeer { author, perspectivesSystem, timeStamp, deltas: [ d ], publicKeys }) trs
+            Nothing -> put $ Map.insert publicRole (TransactionForPeer { author: sender, perspectivesSystem, timeStamp, deltas: [ d ], publicKeys }) trs
             Just trans -> put $ Map.insert publicRole (addToTransactionForPeer d trans) trs
     )
 
