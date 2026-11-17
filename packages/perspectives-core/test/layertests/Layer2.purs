@@ -52,6 +52,7 @@ import Test.Unit.Main (runTest)
 import Test.LoadArc (theSuite) as LARC
 import Test.Persistence.Recovery (theSuite) as PR
 import Test.PredefinedContexts (theSuite) as PC
+import Test.VerificationBundles (theSuite) as VB
 import Test.ModelPatches (theSuite) as MP
 
 -- import Test.ContextAndRole (theSuite) as CAR
@@ -64,4 +65,5 @@ main = runTest do
   -- LARC.theSuite
   PR.theSuite
   PC.theSuite
+  VB.theSuite
   MP.theSuite

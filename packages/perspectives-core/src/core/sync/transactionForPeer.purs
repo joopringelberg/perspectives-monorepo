@@ -26,21 +26,28 @@ module Perspectives.Sync.TransactionForPeer where
 -- TRANSACTIE
 -----------------------------------------------------------
 
-import Data.Array (elemIndex, filter, snoc)
+import Data.Array (elemIndex, filter, snoc, union)
+import Data.Foldable (foldM)
 import Data.Generic.Rep (class Generic)
+import Data.Map as Map
 import Data.Maybe (Maybe(..), isJust)
 import Data.Newtype (class Newtype, unwrap)
 import Data.Show.Generic (genericShow)
+import Data.Tuple (Tuple(..))
+import Effect (Effect)
+import Effect.Exception (throw)
 import Persistence.Attachment (class Attachment)
 import Perspectives.Couchdb.Revision (class Revision)
 import Perspectives.Data.EncodableMap as ENCMAP
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, PerspectivesUser)
-import Perspectives.UnschemedIdentifiers (UnschemedResourceIdentifier)
+import Perspectives.ResourceIdentifiers (isInPublicScheme)
+import Perspectives.UnschemedIdentifiers (UnschemedResourceIdentifier, unschemePerspectivesUser)
+import Perspectives.Sync.CanonicalJson (canonicalizeJsonString)
 import Perspectives.Sync.DateTime (SerializableDateTime)
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
 import Perspectives.Sync.Transaction (PublicKeyInfo)
 import Perspectives.Sync.VersionedDelta (isPredefinedContextScaffolding)
-import Prelude (class Ord, class Show, class Eq, compare, map, not, show, ($), (<>), (&&), (<<<), eq)
+import Prelude (class Ord, class Show, class Eq, bind, compare, map, not, pure, show, ($), (<$>), (<>), (&&), (<<<), (==), eq)
 import Simple.JSON (class ReadForeign, class WriteForeign)
 
 -----------------------------------------------------------
@@ -112,14 +119,47 @@ addToTransactionForPeer d (TransactionForPeer r@{ deltas }) = TransactionForPeer
 -- | Keep local bootstrap history out of peer traffic and identity exports.
 withoutPredefinedContextScaffolding :: TransactionForPeer -> TransactionForPeer
 withoutPredefinedContextScaffolding (TransactionForPeer r) =
+  removeUnusedPublicKeys $ TransactionForPeer r
+    { deltas = filter (not <<< isPredefinedContextScaffolding <<< _.encryptedDelta <<< unwrap) r.deltas }
+
+removeUnusedPublicKeys :: TransactionForPeer -> TransactionForPeer
+removeUnusedPublicKeys (TransactionForPeer r) =
   let
-    deltas = filter (not <<< isPredefinedContextScaffolding <<< _.encryptedDelta <<< unwrap) r.deltas
-    authors = map (_.author <<< unwrap) deltas
+    authors = map (unschemePerspectivesUser <<< _.author <<< unwrap) r.deltas
   in
     TransactionForPeer r
-      { deltas = deltas
-      , publicKeys = ENCMAP.filterKeys (\author -> isJust $ elemIndex author authors) r.publicKeys
+      { publicKeys = ENCMAP.filterKeys (\author -> isJust $ elemIndex (unschemePerspectivesUser author) authors) r.publicKeys
       }
+
+-- | Group signing identities without losing the public locator of their resources.
+deduplicatePublicKeys :: ENCMAP.EncodableMap PerspectivesUser PublicKeyInfo -> Effect (ENCMAP.EncodableMap PerspectivesUser PublicKeyInfo)
+deduplicatePublicKeys (ENCMAP.EncodableMap publicKeys) =
+  ENCMAP.EncodableMap <<< Map.fromFoldable <<< Map.values <$>
+    foldM addBundle Map.empty (Map.toUnfoldable publicKeys :: Array (Tuple PerspectivesUser PublicKeyInfo))
+  where
+  addBundle bundles (Tuple author info) =
+    let
+      identity = unschemePerspectivesUser author
+    in
+      case Map.lookup identity bundles of
+        Nothing -> pure $ Map.insert identity (Tuple author info) bundles
+        Just (Tuple existingAuthor existing) -> do
+          sameSigningKey <- sameKey existing.key info.key
+          sameTransportKey <- sameKey existing.transportKey info.transportKey
+          if sameSigningKey && sameTransportKey then
+            let
+              locator = if isInPublicScheme (unwrap existingAuthor) then existingAuthor else author
+              merged = existing { deltas = union existing.deltas info.deltas }
+            in
+              pure $ Map.insert identity (Tuple locator merged) bundles
+          else throw $ "Conflicting verification keys for identity " <> show identity
+
+  sameKey left right =
+    if left == right then pure true
+    else do
+      canonicalLeft <- canonicalizeJsonString left
+      canonicalRight <- canonicalizeJsonString right
+      pure $ canonicalLeft == canonicalRight
 
 transactieID :: TransactionForPeer -> String
 transactieID (TransactionForPeer { author, timeStamp }) = show author <> "_" <> show timeStamp

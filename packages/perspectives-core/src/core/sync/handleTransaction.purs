@@ -41,6 +41,7 @@ import Data.String (Pattern(..), drop, indexOf, length, take) as Str
 import Data.Traversable (for)
 import Data.Tuple (Tuple(..))
 import Effect.Aff.Class (liftAff)
+import Effect.Class (liftEffect)
 import Effect.Exception (error)
 import Foreign.Object (empty)
 import Partial.Unsafe (unsafePartial)
@@ -81,10 +82,11 @@ import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.StrippedDelta (addPublicResourceScheme, addResourceSchemes, addSchemeToResourceIdentifier)
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
 import Perspectives.Sync.Transaction (PublicKeyInfo, Transaction(..))
-import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..), withoutPredefinedContextScaffolding)
+import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..), deduplicatePublicKeys, withoutPredefinedContextScaffolding)
 import Perspectives.Sync.VersionedDelta (DeltaEnvelope(..), parseIncomingDelta)
 import Perspectives.Types.ObjectGetters (contextAspectsClosure, hasAspect, isPublic, roleAspectsClosure, publicUserRole)
 import Perspectives.TypesForDeltas (ContextDelta(..), ContextDeltaType(..), DeltaRecord, RoleBindingDelta(..), RoleBindingDeltaType(..), RolePropertyDelta(..), RolePropertyDeltaType(..), UniverseContextDelta(..), UniverseContextDeltaType(..), UniverseRoleDelta(..), UniverseRoleDeltaType(..))
+import Perspectives.UnschemedIdentifiers (UnschemedResourceIdentifier, unschemePerspectivesUser)
 import Perspectives.Warning (PerspectivesWarning(..))
 import Prelude (class Eq, class Monad, class Ord, Unit, bind, compare, discard, flip, map, negate, not, pure, show, unit, void, ($), (*>), (+), (/=), (<), (<$>), (<<<), (<>), (==), (>), (>=), (>>=), (&&), (||), (>=>))
 import Simple.JSON (readJSON')
@@ -425,39 +427,51 @@ executeTransaction t = do
   -- executeDeltaWithVersionTracking handles DeltaStore persistence directly;
   -- the update functions called via executeDelta must not also store via addDelta.
   modify (over Transaction \tr -> tr { isExecutingIncomingDeltas = true })
-  let incoming = withoutPredefinedContextScaffolding t
-  try (verifyTransaction incoming) >>= case _ of
+  let filtered = withoutPredefinedContextScaffolding t
+  try
+    ( do
+        publicKeys <- liftEffect $ deduplicatePublicKeys (unwrap filtered).publicKeys
+        let incoming = over TransactionForPeer (\r -> r { publicKeys = publicKeys }) filtered
+        verifiedKeys <- verifyTransaction incoming
+        pure $ Tuple verifiedKeys incoming
+    ) >>= case _ of
     Left e -> lift $ renderPerspectivesError >=> warnSync $ (IncomingTransactionFailed (show e))
-    Right verifiedKeys -> executeTransaction' verifiedKeys incoming
+    Right (Tuple verifiedKeys incoming) -> executeTransaction' verifiedKeys incoming
+
+verifyTransaction :: TransactionForPeer -> MonadPerspectivesTransaction (Map.Map UnschemedResourceIdentifier CryptoKey)
+verifyTransaction (TransactionForPeer { deltas, publicKeys }) = do
+  Tuple _ keysMap <- ST.runStateT
+    ( do
+        -- Verify public key informaton.
+        -- Stop or throw if a key cannot be verified!
+        forWithIndex_ (unwrap publicKeys) verifyPublicKey
+        -- Verify all deltas, using the (now verified) public keys.
+        -- Stop or throw if a delta cannot be verified!
+        for_ deltas verifyDelta_
+    )
+    Map.empty
+  pure keysMap
 
   where
-
-  verifyTransaction :: TransactionForPeer -> MonadPerspectivesTransaction (Map.Map PerspectivesUser CryptoKey)
-  verifyTransaction (TransactionForPeer { deltas, publicKeys }) = do
-    Tuple _ keysMap <- ST.runStateT
-      ( do
-          -- Verify public key informaton.
-          -- Stop or throw if a key cannot be verified!
-          forWithIndex_ (unwrap publicKeys) verifyPublicKey
-          -- Verify all deltas, using the (now verified) public keys.
-          -- Stop or throw if a delta cannot be verified!
-          for_ deltas verifyDelta_
-      )
-      Map.empty
-    pure keysMap
 
   -- Verify the deltas that make up the PerspectivesUser instance and his public key. 
   -- Add this author-key combination to state.
   -- For a author-key combination that is not yet known, will throw up one error on the console 
   -- as the PDR tries to find the author.
-  verifyPublicKey :: PerspectivesUser -> PublicKeyInfo -> ST.StateT (Map.Map PerspectivesUser CryptoKey) MonadPerspectivesTransaction Unit
+  verifyPublicKey :: PerspectivesUser -> PublicKeyInfo -> ST.StateT (Map.Map UnschemedResourceIdentifier CryptoKey) MonadPerspectivesTransaction Unit
   verifyPublicKey authorOfKey { key, deltas: keyDeltas } = do
-    mcryptoKey <- lift $ lift $ tryGetPublicKey authorOfKey
+    mcryptoKey <- lift $ lift do
+      localKey <- tryGetPublicKey $ over PerspectivesUser takeGuid authorOfKey
+      case localKey of
+        Just _ -> pure localKey
+        Nothing ->
+          if isInPublicScheme (unwrap authorOfKey) then tryGetPublicKey authorOfKey
+          else pure Nothing
     case mcryptoKey of
       Nothing -> do
         cryptoKey <- liftAff $ deserializeJWK key
         void $ for keyDeltas \d@(SignedDelta { author }) ->
-          if author == authorOfKey then (lift $ lift $ verifyDelta' d (Just cryptoKey)) >>=
+          if unschemePerspectivesUser author == unschemePerspectivesUser authorOfKey then (lift $ lift $ verifyDelta' d (Just cryptoKey)) >>=
             case _ of
               Nothing -> throwError (error $ "Cannot verify key of author: " <> show author)
               Just _ -> pure unit
@@ -468,19 +482,19 @@ executeTransaction t = do
               Just keyOfAuthor -> (lift $ lift $ verifyDelta' d (Just keyOfAuthor)) >>=
                 case _ of
                   Nothing -> throwError (error $ "Cannot verify key of author: " <> show author)
-                  Just _ -> void $ ST.modify \s -> Map.insert author keyOfAuthor s
-        void $ ST.modify \s -> Map.insert authorOfKey cryptoKey s
-      Just cryptoKey -> void $ ST.modify \s -> Map.insert authorOfKey cryptoKey s
+                  Just _ -> void $ ST.modify \s -> Map.insert (unschemePerspectivesUser author) keyOfAuthor s
+        void $ ST.modify \s -> Map.insert (unschemePerspectivesUser authorOfKey) cryptoKey s
+      Just cryptoKey -> void $ ST.modify \s -> Map.insert (unschemePerspectivesUser authorOfKey) cryptoKey s
 
-  verifyDelta_ :: SignedDelta -> ST.StateT (Map.Map PerspectivesUser CryptoKey) MonadPerspectivesTransaction Unit
+  verifyDelta_ :: SignedDelta -> ST.StateT (Map.Map UnschemedResourceIdentifier CryptoKey) MonadPerspectivesTransaction Unit
   verifyDelta_ d@(SignedDelta { author }) = do
-    cryptoKey <- ST.gets (Map.lookup author)
+    cryptoKey <- ST.gets (Map.lookup $ unschemePerspectivesUser author)
     lift $ lift $ verifyDelta' d cryptoKey >>=
       case _ of
         Nothing -> throwError (error $ "Cannot verify delta allegedly by author: " <> show author)
         Just _ -> pure unit
 
-executeTransaction' :: Map.Map PerspectivesUser CryptoKey -> TransactionForPeer -> MonadPerspectivesTransaction Unit
+executeTransaction' :: Map.Map UnschemedResourceIdentifier CryptoKey -> TransactionForPeer -> MonadPerspectivesTransaction Unit
 executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) = do
 
   -- Add all public key information (possibly leading to more TheWorld$PerspectivesUsers instances).
@@ -494,7 +508,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
   -- Use the keys collected during verifyTransaction to avoid re-querying the entity store
   -- for authors whose PerspectivesUsers instance may not yet have been fully persisted.
   verifiedDeltas <- catMaybes <$> for deltas \s@(SignedDelta { author }) -> do
-    mStringified <- case Map.lookup author verifiedKeys of
+    mStringified <- case Map.lookup (unschemePerspectivesUser author) verifiedKeys of
       Just cryptoKey -> lift $ verifyDelta' s (Just cryptoKey)
       Nothing -> lift $ verifyDelta s
     pure $ case mStringified of

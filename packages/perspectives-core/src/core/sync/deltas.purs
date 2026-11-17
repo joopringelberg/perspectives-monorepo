@@ -70,7 +70,7 @@ import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
 import Perspectives.Sync.OutgoingTransaction (OutgoingTransaction(..))
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
 import Perspectives.Sync.Transaction (PublicKeyInfo, Transaction(..), TransactionDestination(..))
-import Perspectives.Sync.TransactionForPeer (EncryptedTransactionForPeer(..), TransactionForPeer(..), addToTransactionForPeer, transactieID, withoutPredefinedContextScaffolding)
+import Perspectives.Sync.TransactionForPeer (EncryptedTransactionForPeer(..), TransactionForPeer(..), addToTransactionForPeer, deduplicatePublicKeys, removeUnusedPublicKeys, transactieID, withoutPredefinedContextScaffolding)
 import Perspectives.Types.ObjectGetters (isPublicProxy)
 import Perspectives.UnschemedIdentifiers (UnschemedResourceIdentifier, unschemePerspectivesUser)
 import Prelude (Unit, bind, compare, discard, eq, flip, map, not, pure, show, unit, void, when, ($), (*>), (<$>), (<<<), (<>), (==), (>=>), (>>=), (>>>), (||))
@@ -124,21 +124,13 @@ sendPeerTransactions customizedTransacties =
     Peer guid resource ->
       let
         recipient = Tuple guid resource
-        transaction' = removeUnnecessaryKeys transaction
+        transaction' = removeUnusedPublicKeys transaction
         serialised = writeJSON transaction'
       in
         case Map.lookup serialised groups of
           Nothing -> Map.insert serialised (Tuple transaction' [ recipient ]) groups
           Just (Tuple groupedTransaction recipients) -> Map.insert serialised (Tuple groupedTransaction (snoc recipients recipient)) groups
     PublicDestination _ -> groups
-
-  removeUnnecessaryKeys :: TransactionForPeer -> TransactionForPeer
-  removeUnnecessaryKeys (TransactionForPeer rec@{ deltas, publicKeys }) =
-    let
-      occurringUsers :: Array PerspectivesUser
-      occurringUsers = map (_.author <<< unwrap) deltas
-    in
-      TransactionForPeer rec { publicKeys = ENCMAP.filterKeys (\k -> isJust $ elemIndex k occurringUsers) publicKeys }
 
   -- | Reads the transport key from the schemed PerspectivesUsers resource that computeUserRoleBottom selected
   -- | (a local `def:` copy if available, otherwise the published `pub:` resource).
@@ -357,7 +349,8 @@ addCreatedRoleToTransaction rid =
 addPublicKeysToTransaction :: Transaction -> MonadPerspectives Transaction
 addPublicKeysToTransaction (Transaction tr@{ deltas }) = do
   publicKeys :: Map.Map PerspectivesUser PublicKeyInfo <- execStateT (void $ for deltas addPublicKeyInfo) Map.empty
-  pure $ Transaction tr { publicKeys = ENCMAP.EncodableMap publicKeys }
+  bundles <- liftEffect $ deduplicatePublicKeys $ ENCMAP.EncodableMap publicKeys
+  pure $ Transaction tr { publicKeys = bundles }
 
   where
   addPublicKeyInfo :: DeltaInTransaction -> StateT (Map.Map PerspectivesUser PublicKeyInfo) MonadPerspectives Unit

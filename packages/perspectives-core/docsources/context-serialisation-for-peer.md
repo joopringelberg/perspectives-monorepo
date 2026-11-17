@@ -262,6 +262,10 @@ This is the top-level serialisation function. Its responsibilities are:
 
 3. **Augment the transaction with public keys** (`addPublicKeysToTransaction`). After all deltas have been collected, the function scans every delta for its author (a `PerspectivesUser` identifier) and attaches the corresponding public-key information. The recipient needs these keys to verify the signatures.
 
+   Public and ordinary author identifiers sharing one unschemed identity use a
+   single bundle. A public lookup address is retained where available; signed
+   deltas are not rewritten. Conflicting signing or transport keys are rejected.
+
 4. **Wrap the result** in a `TransactionForPeer` record:
 
    ```purescript

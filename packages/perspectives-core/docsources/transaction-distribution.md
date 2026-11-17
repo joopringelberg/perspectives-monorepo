@@ -109,6 +109,21 @@ including memberships, bindings and external properties, are not excluded.
 public copies. Explicitly `pub:`-addressed resources are not filtered either.
 Local bootstrap history remains available for restoration; it is not deleted.
 
+### Verification bundles and storage aliases
+
+`addPublicKeysToTransaction` collects verification information using each delta
+author's original identifier, then combines bundles by unschemed identity.
+Consequently, a transaction containing both `alice` and `pub:...#alice` authors
+carries one verification bundle for Alice. If a public locator is present, it
+remains the bundle's representative identifier so receivers can still fetch
+public resources.
+
+Matching bundles retain the union of their signed evidence, without changing
+delta authors, payloads, signatures or resource identifiers. Signing and
+transport keys must agree; conflicting key material causes an explicit error
+rather than silently choosing one alias. JSON key ordering and whitespace do
+not affect this comparison.
+
 ---
 
 ## 3. Public destinations
@@ -126,7 +141,7 @@ Only then does it send the peer transactions. So a peer that learns about a publ
 
 ## 4. Sending to peers: `sendPeerTransactions`
 
-1. **Grouping.** Each `TransactionForPeer` is first stripped of public-key information for authors who do not occur in its deltas (`removeUnnecessaryKeys`). Peer transactions with identical serialisations are grouped, so one encrypted message serves several recipients.
+1. **Grouping.** Each `TransactionForPeer` is first stripped of public-key information for identities who do not occur in its deltas (`removeUnusedPublicKeys`). This comparison ignores storage schemes, so a public-locator bundle still supports an ordinary author identifier. Peer transactions with identical serialisations are grouped, so one encrypted message serves several recipients.
 2. **Transport keys.** `recipientTransportKey` reads `TheWorld$PerspectivesUsers$TransportPublicKey` from the schemed `resource` carried in the `Peer` destination. If a recipient has no transport key, that recipient is skipped.
 3. **Encryption.** The payload is encrypted once with a symmetric key (`encryptForRecipients`). That key is wrapped for every recipient. Each wrapped key is labelled with the recipient's **unschemed** guid.
 4. **Sending.** `sendTransactieToUserUsingAMQP` publishes the `EncryptedTransactionForPeer` to the AMQP topic named by the unschemed guid. Each PDR's queue is bound to its own guid as routing key. The message is also stored in the `OutgoingTransactions` post database until the broker sends a receipt. If there is no broker connection, it is only stored and is sent later.
@@ -138,6 +153,17 @@ also removes predefined-container scaffolding and unused key bundles. Thus
 redundant histories received from older senders do not create or retain identities
 needed only to authenticate those histories. Identity-document exports use the
 same filtering rule.
+
+Receivers also combine legacy duplicate bundles before importing their evidence.
+Verified signing keys are indexed by unschemed identity, allowing both public and
+ordinary delta authors to use the single bundle. A locally known identity key is
+preferred; the retained public locator is used when no local key is available.
+All content deltas still undergo signature verification.
+
+The transaction record shape is unchanged. However, receivers of a single bundle
+supporting mixed author aliases must support identity-based verification; older
+receivers that require an exact bundle-map entry for every author alias need to
+be updated.
 
 ---
 
