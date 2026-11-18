@@ -26,13 +26,13 @@ module Perspectives.Sync.Transaction where
 -- TRANSACTIE
 -----------------------------------------------------------
 
-import Data.Array (null)
+import Data.Array (null, snoc)
 import Data.DateTime.Instant (toDateTime)
 import Data.Generic.Rep (class Generic)
 import Data.Map (Map, empty) as MAP
 import Data.Maybe (Maybe(..))
 import Data.Newtype (class Newtype)
-import Data.Set (Set, empty) as Set
+import Data.Set (Set, empty, fromFoldable, insert, member) as Set
 import Data.Show.Generic (genericShow)
 import Effect.Aff (Aff)
 import Effect.Class (liftEffect)
@@ -89,6 +89,8 @@ newtype Transaction = Transaction
       , untouchableRoles :: Array RoleInstance
       -- A Map from any RoleInstance to its most deeply nested filler.
       , userRoleBottoms :: MAP.Map RoleInstance TransactionDestination
+      -- Membership only; deltas retains insertion order for distribution.
+      , deltaMembership :: Set.Set DeltaInTransaction
       -- used in runMonadPerspectivesTransaction'.run to evaluate states again (and execute actions on entry and exit).
       , postponedStateEvaluations :: Array StateEvaluation
       -- A Transaction for the users TheWorld and SocialEnvironment. Included as uninterpreted data to avoid
@@ -164,6 +166,7 @@ instance ReadForeign Transaction where
     pure $ Transaction
       { timeStamp
       , deltas
+      , deltaMembership: Set.fromFoldable deltas
       , changedDomeinFiles
       , scheduledAssignments: []
       , invertedQueryResults: []
@@ -208,6 +211,7 @@ createTransaction authoringRole sharing =
     pure $ Transaction
       { timeStamp: SerializableDateTime (toDateTime n)
       , deltas: []
+      , deltaMembership: Set.empty
       , changedDomeinFiles: []
       , scheduledAssignments: []
       , invertedQueryResults: []
@@ -230,6 +234,17 @@ createTransaction authoringRole sharing =
       , localRemovals: Set.empty
       , removingLocally: false
       }
+
+appendTransactionDelta :: DeltaInTransaction -> Transaction -> Transaction
+appendTransactionDelta delta transaction@(Transaction tr) =
+  if Set.member delta tr.deltaMembership then transaction
+  else Transaction tr
+    { deltas = snoc tr.deltas delta
+    , deltaMembership = Set.insert delta tr.deltaMembership
+    }
+
+clearTransactionDeltas :: Transaction -> Transaction
+clearTransactionDeltas (Transaction tr) = Transaction tr { deltas = [], deltaMembership = Set.empty }
 
 -- | We consider a Transaction to be 'empty' when it shows no difference to the clone of the original.
 -- | This means it is considered to be not empty when one of the members that is wiped on cloning, has content.

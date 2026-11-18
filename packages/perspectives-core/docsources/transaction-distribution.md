@@ -46,6 +46,25 @@ data TransactionDestination
 
 `addDelta` filters out the local user (`notIsMe`) before computing destinations. `transactieForEachUser` also never sends a delta back to its own author.
 
+### Historical deltas and transaction membership
+
+Dependency serialization forwards all required DeltaStore history without hashing
+or storing those records again. Newly created deltas still follow the normal
+persistence path; incoming/public execution keeps its existing storage rules.
+This does not prune history or change replay semantics.
+
+Each transaction maintains an in-memory membership set alongside its ordered
+delta array. Membership compares the entire signed delta (author, payload and
+optional signature) and the ordered recipient array, exactly like the previous
+duplicate check. Different recipients or signatures remain distinct. The array
+preserves first-insertion order, and recipient destinations are refreshed even
+for duplicate additions.
+
+New and embedded transactions start with an empty index; test deserialization
+reconstructs it from the delta array. After distribution, the array and index are
+cleared together so subsequent transaction phases can add the same deltas again.
+The index is neither persisted nor sent to peers.
+
 ### Replacing a user-role filler
 
 A replacement initializes the new peer just like a first-time fill. The replacement
@@ -204,8 +223,32 @@ be updated.
 ### Opt-in timing diagnostics
 
 Timing diagnostics are separate from log-topic thresholds and the performance
-test collector. They are disabled by default. In the **PDR SharedWorker's DevTools
-console** (or the page worker's execution context), enable them before signup:
+test collector. They are disabled by default.
+
+To capture a manager's own broker connection from the start, open MyContexts
+with `?pdrTraceTimings=true` on its page URL, for example:
+
+```text
+https://mycontexts.com/www/?pdrTraceTimings=true
+```
+
+Use `&pdrTraceTimings=true` if the URL already has query parameters. Only the
+literal value `true` enables the switch. MyContexts sends an enable command over
+the existing proxy port before any PDR startup request, in both SharedWorker and
+page-worker modes. This enables `globalThis.pdrTraceTimings` in the execution
+context that actually hosts the PDR; the worker script URL and name are unchanged.
+The host console reports `[PDR] Startup timing tracing enabled`.
+
+For a **cold-start trace**, first close all tabs connected to that PDR, including
+standalone ARC editor tabs, then open the tracing URL. Adding the parameter to an
+already-running installation enables future spans but cannot recover earlier
+ones. A later tab without the parameter does not disable tracing in a shared PDR.
+Remove the parameter and close all connected tabs to return to the default on
+the next start, or disable it directly in the PDR's console as shown below.
+The URL switch does not enable SYNC payload logging or normalisation measurements.
+
+For an already-running PDR, use the **PDR SharedWorker's DevTools console** (or
+the page worker's execution context) before signup:
 
 ```javascript
 globalThis.pdrTraceTimings = true;

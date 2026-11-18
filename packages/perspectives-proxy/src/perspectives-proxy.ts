@@ -106,7 +106,7 @@ export const PDRproxy: Promise<PerspectivesProxy> = new Promise(
 
 // sharedWorkerUrl and sharedWorkerName allow a separately built page (such as the standalone ARC editor) to connect
 // to the very same SharedWorker as MyContexts. A SharedWorker is identified by its script URL, its name and the origin.
-type Options = { pageHostingPDRPort?: (pdr: any) => MessagePort; sharedWorkerUrl?: string | URL; sharedWorkerName?: string };
+type Options = { pageHostingPDRPort?: (pdr: any) => MessagePort; sharedWorkerUrl?: string | URL; sharedWorkerName?: string; traceTimings?: boolean };
 
 // The name MyContexts uses for its SharedWorker. Changes with every MyContexts build.
 export const PDR_SHARED_WORKER_NAME = `pdr-${__MYCONTEXTS_VERSION__}-${__BUILD_ID__}`;
@@ -134,7 +134,7 @@ export function configurePDRproxy(channeltype: "internalChannel" | "sharedWorker
         name: workerName
       });
       sharedWorkerConnection = { url: workerUrl.href, name: workerName };
-      sharedWorkerChannel = new SharedWorkerChannel(sharedWorker.port, cursor);
+      sharedWorkerChannel = new SharedWorkerChannel(sharedWorker.port, cursor, options.traceTimings);
       sharedWorkerChannelResolver(sharedWorkerChannel);
       const instance = new PerspectivesProxy(sharedWorkerChannel, cursor);
       // Dev-only global hook for console debugging
@@ -146,7 +146,7 @@ export function configurePDRproxy(channeltype: "internalChannel" | "sharedWorker
     }
     case "hostPageChannel": {
       import("perspectives-core").then(core => {
-        sharedWorkerChannel = new SharedWorkerChannel(options.pageHostingPDRPort!(core), cursor);
+        sharedWorkerChannel = new SharedWorkerChannel(options.pageHostingPDRPort!(core), cursor, options.traceTimings);
         sharedWorkerChannelResolver(sharedWorkerChannel);
         const instance = new PerspectivesProxy(sharedWorkerChannel, cursor);
         if (typeof window !== "undefined") {
@@ -470,7 +470,7 @@ class SharedWorkerChannel
   // Refining the above: some requests are actually handled by the proxy itself.
   // It will call several PDR functions (like createAccount).
   // Most requests will be passed to the PDR API, though.
-  constructor( port: MessagePort, cursor: Cursor )
+  constructor( port: MessagePort, cursor: Cursor, traceTimings = false )
   {
     const serviceWorkerChannel = this;
     this.requestId = -1;
@@ -486,6 +486,10 @@ class SharedWorkerChannel
     this.handleWorkerResponse = this.handleWorkerResponse.bind(this);
     this.port.onmessage = this.handleWorkerResponse;
     this.cursor = cursor;
+    if (traceTimings === true) {
+      // This port preserves ordering before any subsequent PDR startup request.
+      this.port.postMessage({ proxyRequest: "enableTimingTracing" });
+    }
   }
 
   // The sharedworker or pageworker sends messages of various types.

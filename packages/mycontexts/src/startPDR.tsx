@@ -136,6 +136,8 @@ if (import.meta.env.DEV) {
   // As a result of calling this function, the two promises PDRHandler and PDRproxy are resolved.
 export function startPDR()
 {
+  const traceTimings = new URLSearchParams(window.location.search).get("pdrTraceTimings") === "true";
+
   function isIOS() {
     return /iPhone|iPad|iPod/i.test(navigator.userAgent);
   }
@@ -162,7 +164,7 @@ export function startPDR()
       // As a result, the PDR runs in the current page (that we call the 'host page').
       import( "perspectives-pageworker" )
         .then( pageWorker => 
-          configurePDRproxy( "hostPageChannel", { pageHostingPDRPort: pageWorker.default }))
+          configurePDRproxy( "hostPageChannel", { pageHostingPDRPort: pageWorker.default, traceTimings }))
         .catch( e => console.error("Error loading perspectives-pageworker:", e));
     } 
     else
@@ -170,7 +172,7 @@ export function startPDR()
     // The proxy function configurePDRProxy will create a SharedWorker. The SharedWorker will load the PDR, using 'importScripts'
     // (dyanmic import is not supported in SharedWorkers).
     // As a result, the PDR runs in the SharedWorker.
-    configurePDRproxy("sharedWorkerChannel", { sharedWorkerUrl: new URL(sharedWorkerUrl, window.location.href) });
+    configurePDRproxy("sharedWorkerChannel", { sharedWorkerUrl: new URL(sharedWorkerUrl, window.location.href), traceTimings });
   }
   // For easier debugging, attach to window in development
   if (import.meta.env.DEV) {

@@ -56,7 +56,7 @@ import Foreign.Object (empty)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (type (~~>), LogLevel(..), LogTopic(..), MonadPerspectives, MonadPerspectivesTransaction, (###=), (##=))
 import Perspectives.Data.EncodableMap (empty) as EM
-import Perspectives.Deltas (addDelta, addPublicKeysToTransaction)
+import Perspectives.Deltas (addDelta, addPublicKeysToTransaction, addStoredDelta)
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..), runArrayT)
 import Perspectives.DomeinFile (defaultDomeinFileRecord)
 import Perspectives.Error.Boundaries (handlePerspectContextError, handlePerspectRolError, handlePerspectRolError')
@@ -385,6 +385,9 @@ serialiseDependency users mpreviousDependency currentDependency = do
   pure $ Just currentDependency
 
   where
+  addHistory :: Array DeltaStoreRecord -> MonadPerspectivesTransaction Unit
+  addHistory records = for_ records $ addStoredDelta users
+
   -- | Returns true iff the binding of the first argument equals the second argument.
   -- | If true, also adds the binding delta from the DeltaStore to the transaction.
   addBindingDelta :: RoleInstance -> RoleInstance -> MonadPerspectivesTransaction Boolean
@@ -394,8 +397,7 @@ serialiseDependency users mpreviousDependency currentDependency = do
         if b == roleId1 then do
           -- Query DeltaStore for binding delta of this role instance.
           bindingDeltas <- lift $ getDeltasForResource (unwrap roleId2 <> "#binding")
-          for_ bindingDeltas \(DeltaStoreRecord { signedDelta }) ->
-            addDelta $ DeltaInTransaction { users, delta: signedDelta }
+          addHistory bindingDeltas
           pure true
         else pure false
       Nothing -> pure false
@@ -404,8 +406,7 @@ serialiseDependency users mpreviousDependency currentDependency = do
   addPropertyDelta :: RoleInstance -> PropertyName -> String -> MonadPerspectivesTransaction Unit
   addPropertyDelta roleId ptypeString val = do
     propertyDeltas <- lift $ getDeltasForResource (unwrap roleId <> "#" <> ptypeString)
-    for_ propertyDeltas \(DeltaStoreRecord { signedDelta }) ->
-      addDelta $ DeltaInTransaction { users, delta: signedDelta }
+    addHistory propertyDeltas
 
   -- | Query DeltaStore for creation deltas of this role and its context.
   addDeltasForRole :: RoleInstance -> MonadPerspectivesTransaction Unit
@@ -418,8 +419,7 @@ serialiseDependency users mpreviousDependency currentDependency = do
             roleDeltas <- lift $ getDeltasForResource (unwrap roleId)
             -- We expect at least one delta for the role: the ConstructEmptyRole delta. If there are none, something is wrong.
             if null roleDeltas then lift $ errorDelta ("No deltas found for role " <> show roleId) else pure unit
-            for_ roleDeltas \(DeltaStoreRecord { signedDelta }) ->
-              addDelta $ DeltaInTransaction { users, delta: signedDelta }
+            addHistory roleDeltas
           else do
             (liftToMPT $ try $ getPerspectContext context) >>=
               handlePerspectContextError "addDeltasForRole"
@@ -436,8 +436,7 @@ serialiseDependency users mpreviousDependency currentDependency = do
                   roleDeltas <- lift $ getDeltasForResource (unwrap roleId)
                   -- We expect at least one delta for the role: the ConstructEmptyRole delta. If there are none, something is wrong.
                   if null roleDeltas then lift $ errorDelta ("No deltas found for role " <> show roleId) else pure unit
-                  for_ (extRoleDeltas <> contextDeltas <> roleDeltas) \(DeltaStoreRecord { signedDelta }) ->
-                    addDelta $ DeltaInTransaction { users, delta: signedDelta }
+                  addHistory (extRoleDeltas <> contextDeltas <> roleDeltas)
 
   withContext :: Boolean
   withContext = true

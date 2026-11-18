@@ -31,4 +31,5 @@ Shared worker sync:
 Publish flow:
 * `publish:www` always runs `build:www` first.
 * `publish:root` always runs `build:root` first.
-* This ensures every publish uses a fresh build with the right base path, manifest, service worker and synced shared worker assets.
+* These commands ensure a fresh build with the right base path, manifest, service worker and synced shared worker assets.
+* `pnpm run publishOnly:www` uploads the existing `dist/` to `/www/` without rebuilding MyContexts or the ARC editor. Prepare the `/www/` bundles first; this command also deletes remote files absent from the local bundle.

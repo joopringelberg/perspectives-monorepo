@@ -49,5 +49,7 @@ instance eqDeltaInTransaction :: Eq DeltaInTransaction where
 
 derive instance newtypeDeltaInTransaction :: Newtype DeltaInTransaction _
 
+derive newtype instance Ord DeltaInTransaction
+
 instance prettyPrintDeltaInTransaction :: PrettyPrint DeltaInTransaction where
   prettyPrint' t (DeltaInTransaction r) = "DeltaInTransaction " <> prettyPrint' (t <> "  ") r

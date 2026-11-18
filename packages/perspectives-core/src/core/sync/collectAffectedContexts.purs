@@ -1014,7 +1014,7 @@ addDeltasForPropertyChange roleWithPropertyValue property replacementProperty = 
     -- For each of them: get and compile perspective object queries for the step from that roleWithPropertyValue role to its context
     -- (there may be state queries or calculated object queries that run through this segment, too, but we're not interested in them).
     -- These can be Enumerated user role instances from the same context, but also Enumerated user role instance computed by an inverted Calculated Perspective object.
-    -- We can understand a calculated perspective object from another context than its users equally well as a calculated user in the context of the perspective object! 
+    -- We can understand a calculated perspective object from another context than its users equally well as a calculated user in the context of the perspective object!
     -- Not all inverted queries are of interest to the current property change. We start by filtering out queries that don't mention the property at all.
     (contextCalculations :: (Array InvertedQuery)) <- lift $ runtimeIndexForContextQueries rType contextInstance
       >>= getContextQueries compileBoth <<< unwrap

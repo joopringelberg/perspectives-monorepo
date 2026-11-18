@@ -148,6 +148,10 @@ export function handleClientRequest( pdr, channels, request )
     // The request can be handled right here in the SharedWorker itself.
     switch (req.proxyRequest)
     {
+      case "enableTimingTracing":
+        globalThis.pdrTraceTimings = true;
+        console.info("[PDR] Startup timing tracing enabled");
+        break;
       case "pdrStarted":
         // This will always return an answer: it is not dependent on whether the PDR has actually been started.
         channels[corrId2ChannelId(req.channelId)].postMessage({responseType: "WorkerResponse", serviceWorkerMessage: "pdrStarted", pdrStarted: pdrStartedIsResolved});

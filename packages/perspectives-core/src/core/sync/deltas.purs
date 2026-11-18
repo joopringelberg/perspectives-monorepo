@@ -70,11 +70,11 @@ import Perspectives.Sync.DateTime (SerializableDateTime(..))
 import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
 import Perspectives.Sync.OutgoingTransaction (OutgoingTransaction(..))
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
-import Perspectives.Sync.Transaction (PublicKeyInfo, Transaction(..), TransactionDestination(..))
+import Perspectives.Sync.Transaction (PublicKeyInfo, Transaction(..), TransactionDestination(..), appendTransactionDelta)
 import Perspectives.Sync.TransactionForPeer (EncryptedTransactionForPeer(..), TransactionForPeer(..), addToTransactionForPeer, deduplicatePublicKeys, removeUnusedPublicKeys, transactieID, withoutPredefinedContextScaffolding)
 import Perspectives.Types.ObjectGetters (isPublicProxy)
 import Perspectives.UnschemedIdentifiers (UnschemedResourceIdentifier, unschemePerspectivesUser)
-import Prelude (Unit, bind, compare, discard, eq, flip, map, not, pure, show, unit, void, when, ($), (*>), (<$>), (<<<), (<>), (==), (>=>), (>>=), (>>>), (||))
+import Prelude (Unit, bind, compare, discard, eq, flip, map, not, pure, show, unit, void, when, ($), (&&), (*>), (<$>), (<<<), (<>), (==), (>=>), (>>=), (>>>), (||))
 import Simple.JSON (writeJSON)
 
 -- | Splits the transaction in versions specific for each peer and public role, but does not send them.
@@ -292,15 +292,23 @@ computeUserRoleBottom rid =
 -- |    * public roles
 -- |    * instances of sys:PerspectivesSystem$User, but not the one that equals the local sys:Me.
 addDelta :: DeltaInTransaction -> MonadPerspectivesTransaction Unit
-addDelta (DeltaInTransaction deltarecord@{ users, delta }) = do
+addDelta = addDeltaWithStorage true
+
+-- | Forward history already read from the DeltaStore without hashing or storing it again.
+addStoredDelta :: Array RoleInstance -> DeltaStoreRecord -> MonadPerspectivesTransaction Unit
+addStoredDelta users (DeltaStoreRecord { signedDelta }) =
+  addDeltaWithStorage false $ DeltaInTransaction { users, delta: signedDelta }
+
+addDeltaWithStorage :: Boolean -> DeltaInTransaction -> MonadPerspectivesTransaction Unit
+addDeltaWithStorage shouldStore (DeltaInTransaction deltarecord@{ users, delta }) = do
   -- Store locally-created deltas in the DeltaStore for persistent history.
   -- Skip storage when processing incoming deltas (executeTransaction / executeDeltas for public roles):
   -- in those paths the delta is either already stored (executeTransaction uses executeDeltaWithVersionTracking)
   -- or must not be stored at all (executeDeltas for public roles uses modified author identifiers).
   isExecuting <- AA.gets (\(Transaction tr) -> tr.isExecutingIncomingDeltas)
-  when (not isExecuting) $ lift $ storeDeltaFromSignedDelta delta
+  when (shouldStore && not isExecuting) $ lift $ storeDeltaFromSignedDelta delta
   -- NOTE. Even though we try not to create deltas with roles that represent me, on system installation this can go wrong.
-  users' <- (lift $ filterA notIsMe users)
+  users' <- lift $ filterA notIsMe users
   if null users' || isExecuting then pure unit
   else do
     newUserBottoms <- lift (concat <$> for users' computeUserRoleBottom)
@@ -312,16 +320,10 @@ addDelta (DeltaInTransaction deltarecord@{ users, delta }) = do
       <> ", delta "
       <> show (extractDeltaInfo encryptedDelta)
     AA.modify
-      ( over Transaction \t@{ deltas, userRoleBottoms } ->
-          let
-            alreadyPresent = isJust $ elemIndex newDelta deltas
-          in
-            t
-              { deltas =
-                  if alreadyPresent then deltas
-                  else snoc deltas newDelta
-              , userRoleBottoms = foldl (\userBottoms' (Tuple role user) -> Map.insert role user userBottoms') userRoleBottoms newUserBottoms
-              }
+      ( over Transaction
+          ( \t@{ userRoleBottoms } ->
+              t { userRoleBottoms = foldl (\userBottoms' (Tuple role user) -> Map.insert role user userBottoms') userRoleBottoms newUserBottoms }
+          ) <<< appendTransactionDelta newDelta
       )
 
 -- | Instrumental for QUERY UPDATES.

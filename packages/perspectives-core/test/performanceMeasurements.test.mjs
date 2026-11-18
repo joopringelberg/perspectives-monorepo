@@ -94,6 +94,138 @@ test("compiled timing wrapper preserves results and errors with tracing on or of
   assert.ok(!JSON.stringify(rows).includes(failure.message));
 });
 
+async function transactionDeltaFixture(t) {
+  const previousSelf = globalThis.self;
+  globalThis.self ??= globalThis;
+  t.after(() => {
+    if (previousSelf === undefined) delete globalThis.self;
+    else globalThis.self = previousSelf;
+  });
+  const [transaction, deltaEq, types, maybe, set, json, aff, either] = await Promise.all([
+    import("../output/Perspectives.Sync.Transaction/index.js"),
+    import("../output/Perspectives.Sync.DeltaInTransaction/index.js"),
+    import("../output/Perspectives.Representation.TypeIdentifiers/index.js"),
+    import("../output/Data.Maybe/index.js"),
+    import("../output/Data.Set/index.js"),
+    import("../output/Simple.JSON/index.js"),
+    import("../output/Effect.Aff/index.js"),
+    import("../output/Data.Either/index.js")
+  ]);
+  const run = action => new Promise((resolve, reject) => {
+    aff.runAff(result => () => {
+      if (result instanceof either.Left) reject(result.value0);
+      else resolve(result.value0);
+    })(action)();
+  });
+  const create = () => run(transaction.createTransaction(
+    types.ENR.create("model://example.invalid#History$User")
+  )(true));
+  const makeDelta = (version, users = ["recipient-a"]) => ({
+    users,
+    delta: {
+      author: "author",
+      encryptedDelta: JSON.stringify({
+        resourceKey: "def:#external#ConnectedToAMQPBroker",
+        resourceVersion: version,
+        deltaType: "SetProperty",
+        values: [version % 2 === 0 ? "false" : "true"]
+      }),
+      signature: new maybe.Just(`signature-${version}`)
+    }
+  });
+  return { transaction, deltaEq, maybe, set, json, aff, either, run, create, makeDelta };
+}
+
+test("indexed delta membership preserves structural equality, recipients, order and transaction lifecycle", async t => {
+  const { transaction, deltaEq, maybe, set, json, either, create, makeDelta } = await transactionDeltaFixture(t);
+  const base = await create();
+  const first = makeDelta(1, ["recipient-a", "recipient-b"]);
+  const withSigned = fields => ({ ...first, delta: { ...first.delta, ...fields } });
+  const variants = [
+    first,
+    { ...first, users: ["recipient-b", "recipient-a"] },
+    { ...first, users: ["recipient-a"] },
+    { ...first, users: ["recipient-a", "recipient-b", "recipient-a"] },
+    withSigned({ author: "another-author" }),
+    withSigned({ encryptedDelta: `${first.delta.encryptedDelta} ` }),
+    withSigned({ signature: maybe.Nothing.value }),
+    withSigned({ signature: new maybe.Just("") }),
+    { ...first, users: [] }
+  ];
+  const attempts = [
+    ...variants,
+    ...variants.map(({ users, delta }) => ({ users: [...users], delta: { ...delta } })),
+    ...[...variants].reverse()
+  ];
+  const expected = [];
+  let actual = base;
+  for (const delta of attempts) {
+    if (!expected.some(previous => deltaEq.eqDeltaInTransaction.eq(previous)(delta))) expected.push(delta);
+    actual = transaction.appendTransactionDelta(delta)(actual);
+  }
+  assert.deepEqual(actual.deltas, expected);
+  assert.equal(set.size(actual.deltaMembership), expected.length);
+  assert.deepEqual(base.deltas, []);
+  const encoded = JSON.parse(json.writeJSON(transaction.writeForeignTransaction)(actual));
+  assert.equal(Object.hasOwn(encoded, "deltaMembership"), false);
+  const restored = json.readJSON(transaction.readForeignTransaction)(
+    JSON.stringify({ ...encoded, publicKeys: [] })
+  );
+  assert.ok(restored instanceof either.Right);
+  assert.deepEqual(transaction.appendTransactionDelta(first)(restored.value0).deltas, expected);
+  const cleared = transaction.clearTransactionDeltas(actual);
+  assert.deepEqual(transaction.appendTransactionDelta(first)(cleared).deltas, [first]);
+  const independent = await create();
+  assert.deepEqual(transaction.appendTransactionDelta(first)(independent).deltas, [first]);
+});
+
+test("manager-sized history replay retains all delta-recipient pairs without repeated array searches", async t => {
+  const { transaction, set, create, makeDelta } = await transactionDeltaFixture(t);
+  const history = Array.from({ length: 1086 + 5 }, (_, i) => makeDelta(i).delta);
+  let result = await create();
+  const started = performance.now();
+  for (let perspective = 0; perspective < 4; perspective++) {
+    for (let context = 0; context < 14; context++) {
+      for (const delta of history) {
+        result = transaction.appendTransactionDelta({ users: [`recipient-${context}`], delta })(result);
+      }
+    }
+  }
+  const elapsedMs = performance.now() - started;
+  assert.equal(result.deltas.length, 15274);
+  assert.equal(set.size(result.deltaMembership), 15274);
+  assert.deepEqual(result.deltas[0], { users: ["recipient-0"], delta: history[0] });
+  assert.deepEqual(result.deltas.at(-1), { users: ["recipient-13"], delta: history.at(-1) });
+  t.diagnostic(`61,096 delta-add attempts, 15,274 retained entries: ${elapsedMs.toFixed(1)} ms`);
+});
+
+test("stored history bypasses persistence while new and incoming deltas retain their storage rules", async t => {
+  const { maybe, run, create, makeDelta } = await transactionDeltaFixture(t);
+  const [deltas, core, avar] = await Promise.all([
+    import("../output/Perspectives.Deltas/index.js"),
+    import("../output/Perspectives.CoreTypes/index.js"),
+    import("../output/Effect.AVar/index.js")
+  ]);
+  const unavailableStorage = new Error("storage-unavailable");
+  const state = avar.empty();
+  avar.kill(unavailableStorage)(state)();
+  const transaction = avar.new(await create())();
+  const incoming = avar.new({ ...await create(), isExecutingIncomingDeltas: true })();
+  const delta = makeDelta(1, []);
+  const record = {
+    _id: "stored-delta", _rev: new maybe.Just("1-revision"),
+    resourceKey: "external#ConnectedToAMQPBroker", resourceVersion: 1,
+    author: delta.delta.author, deltaId: new maybe.Just("stored-delta-id"),
+    signedDelta: delta.delta, deltaType: "SetProperty",
+    applied: true, disposition: new maybe.Just("Applied"), contextKey: maybe.Nothing.value
+  };
+  const execute = (scope, action) => run(core.runMonadPerspectives(action(scope))(state));
+  await execute(transaction, deltas.addStoredDelta([])(record));
+  await assert.rejects(execute(transaction, deltas.addDelta(delta)),
+    error => error === unavailableStorage);
+  await execute(incoming, deltas.addDelta(delta));
+});
+
 function captureReport(run, publish = true) {
   const messages = [];
   const originalCode = process.exitCode;

@@ -54,5 +54,7 @@ instance eqSignedDelta :: Eq SignedDelta where
 
 derive instance newtypeSignedDelta :: Newtype SignedDelta _
 
+derive newtype instance Ord SignedDelta
+
 instance prettyPrintSignedDelta :: PrettyPrint SignedDelta where
   prettyPrint' t (SignedDelta r) = "SignedDelta " <> prettyPrint' (t <> "  ") r

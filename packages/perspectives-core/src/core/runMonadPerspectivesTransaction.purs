@@ -71,7 +71,7 @@ import Perspectives.ScheduledAssignment (ScheduledAssignment(..), StateEvaluatio
 import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.Sync.HandleTransaction (executeDeltas, expandDeltas)
 import Perspectives.Sync.InvertedQueryResult (InvertedQueryResult(..))
-import Perspectives.Sync.Transaction (Transaction(..), TransactionDestination(..), createTransaction)
+import Perspectives.Sync.Transaction (Transaction(..), TransactionDestination(..), clearTransactionDeltas, createTransaction)
 import Perspectives.Types.ObjectGetters (contextRootStates, publicUrl_, roleRootStates)
 import Perspectives.Warning (PerspectivesWarning(..))
 import Prelude (Unit, bind, discard, flip, join, not, pure, show, unit, unless, void, ($), (&&), (*>), (<$>), (<<<), (<>), (>), (>=>), (>>=), (||), (/=))
@@ -370,7 +370,7 @@ phase2 share authoringRole r = do
     lift $ timed "peer.send" (show transactionNumber) (sendPeerTransactions transactionPerUser)
     either throwError pure published
     -- Remove the deltas; we don't want to execute them again.
-    AA.modify (\t -> over Transaction (\tr -> tr { deltas = [] }) t)
+    AA.modify clearTransactionDeltas
     -- Now finally remove contexts and roles.
     void $ for scheduledAssignments case _ of
       ContextRemoval ctxt authorizedRole -> lift (debugState (padding <> "Remove context " <> unwrap ctxt) *> removeContextInstance ctxt authorizedRole)
