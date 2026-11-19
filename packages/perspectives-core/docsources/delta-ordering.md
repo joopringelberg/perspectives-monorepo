@@ -103,7 +103,7 @@ The `applied` flag records whether the delta was executed or was suppressed by c
 | Function | Returns |
 |---|---|
 | `getDelta docId` | A single delta by exact document ID |
-| `getDeltasForResource resourceKey` | All deltas for a resource key, sorted by document ID (which sorts by version because the format is `…_v<n>_…`) |
+| `getDeltasForResource resourceKey` | All retained deltas for a resource key, explicitly sorted by numeric version (decimal document IDs alone are not numerically ordered) |
 | `getDeltasForResourceByDeltaType resourceKey deltaType` | As above, filtered by `deltaType` |
 | `getDeltasForRoleInstance roleInstanceId` | All deltas for a role instance **and** all of its sub-resources (properties, binding) using a PouchDB range query from `safeKey` to `safeKey + U+FFFF`, then filtering to exclude accidental prefix matches |
 
@@ -196,7 +196,7 @@ If `resourceKey` is the empty string (a legacy delta that could not be parsed; s
 
 1. All stored deletion deltas for the role are marked `applied = false`.
 2. All non-deletion, role-level deltas (i.e. deltas whose resource key equals the role-instance ID, such as `ConstructEmptyRole` and `AddRoleInstancesToContext`) are re-executed regardless of their `applied` flag.  Role creation is idempotent, and these deltas may have been stored with `applied = false` when they arrived in the same transaction as a later modification (outdated path).
-3. All sub-resource deltas (property and binding) that are currently `applied = true` are re-executed in version order.
+3. Applied binding deltas are replayed in version order. Each property's effective state is reconstructed from its newest checkpoint and applied tail in numeric version order, resolving same-version conflicts by original author.
 
 ---
 
@@ -307,3 +307,68 @@ When an incoming `TransactionForPeer` is received:
 | Gap response | Block entire transaction | Execute available deltas and patch later |
 | Persistence | PouchDB (survives restarts) | In-memory only |
 | Timeout | Planned: 24-hour threshold | No timeout (block forever) |
+
+## 10. Property history retention
+
+Stored property keys retain a signed reconstruction checkpoint and the ten most
+recent subsequent logical versions. Conflicting deltas at a retained version
+share a history position. Retention runs when local or incoming property deltas
+are persisted; untouched old properties are not swept on startup. It does not
+change the monotonic ResourceVersionStore counters.
+
+ARC's `fullhistory` property attribute opts out of this pruning:
+
+```arc
+property WorkflowBusy (Boolean)
+property AgreedPrice (Number, fullhistory)
+```
+
+The policy belongs to the actual property storing the value, after filler/aspect
+replacement resolution. Missing metadata in older compiled models means the
+bounded default. Opting in preserves subsequently received history; it cannot
+recover already removed changes. The attribute grants no access rights and does
+not cause the archive to be resent on every ordinary update.
+
+### Checkpoint protocol and trust
+
+A checkpoint uses delta format **3**, retains the property payload shape, and
+adds `historyCheckpoint` containing the values immediately before its boundary
+and the original signed winning change. Its outer signature certifies the
+resolved state at that boundary. Original changes retain their own signatures;
+the disclosing installation signs a new certificate rather than modifying them.
+
+The chosen trust model allows an authenticated disclosing peer to certify state
+without replacement-write permission. This is a trusted state assertion by that
+peer, not a proof that every omitted historical operation was supplied. Ordinary
+perspective selection still determines which data is disclosed. Receivers verify
+the certificate and original winner, check their resource/type/version agreement,
+and reject unsigned, nested, malformed or identity-key checkpoints. The original
+winner's author, not the certifier, determines conflicts at the boundary.
+
+For gap checking, verified checkpoints cover earlier versions of their own key.
+They do not excuse gaps on another key: the whole transaction remains pending
+until all uncovered gaps are filled. No baseline is applied before this check.
+Execution starts with the baseline and then applies newer property versions
+numerically. An equally new or newer local state is never overwritten by a
+baseline. Recovery reconstructs property state from the checkpoint and effective
+tail, including relative additions/removals and boundary conflicts.
+
+The checkpoint is persisted before covered records are deleted. Interrupted
+pruning leaves redundant evidence that a later write can clean up. Delayed old
+packets cannot repopulate compacted history. This does not rewrite, delete or
+cancel pending/outgoing transactions: encrypted outbox packets remain intact.
+Initialisation transfers state, not a promise to re-execute discarded historical
+workflow transitions.
+
+### Operational evidence and compatibility
+
+Creation, membership, binding and deletion histories are unchanged. Public-key
+and transport-key establishment proofs remain independently verifiable and are
+not compacted. The latest `UploadFile` operation remains available even before
+the checkpoint boundary; public publication processes it after property replay
+so it reads final metadata. These are operational-evidence exceptions, not
+additional user-visible audit history.
+
+Only checkpoint-aware runtimes can consume compacted history. Do not mix this
+protocol with older PDR versions without a coordinated rollout; capability
+negotiation and historical backfill are not provided.

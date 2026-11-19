@@ -118,8 +118,8 @@ domain model://joopringelberg.nl#TwoPDRDestructiveTests@1.0
           -- Moves the role removal out of this transaction.
           -- Because setting TestName also triggers state evaluation, the removal of the role 
           -- would not trigger a state change in the same transaction. So we delay the removal of the role.
-          do for Leader
-            after 200 Milliseconds remove role context >> TestRole1
+          do for Leader once settled
+            remove role context >> TestRole1
       state TestSucceeded = RoleAvailable and not exists context >> TestRole1
         on entry
           do for Follower

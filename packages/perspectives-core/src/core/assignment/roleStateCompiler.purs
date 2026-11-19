@@ -49,7 +49,7 @@ import Foreign.Object (singleton)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.ApiTypes (PropertySerialization(..), RolSerialization(..))
 import Perspectives.Assignment.SentenceCompiler (CompiledSentence, compileRoleSentence)
-import Perspectives.Assignment.SerialiseAsDeltas (serialiseRoleInstancesAndProperties)
+import Perspectives.Assignment.SerialiseAsDeltas (serialiseRoleInstancesAndPropertiesForInitialVisibility)
 import Perspectives.Assignment.StateCache (CompiledAutomaticAction, CompiledNotification, CompiledRoleState, CompiledStateDependentPerspective, cacheCompiledRoleState, retrieveCompiledRoleState)
 import Perspectives.Assignment.Update (ConditionResult(..), isUndetermined, setActiveRoleState, setInActiveRoleState)
 import Perspectives.CompileActionEffect (compileActionEffectWith)
@@ -247,7 +247,7 @@ enteringRoleState roleId stateId = do
           if authorOnly then pure unit
           else case stateFulObject of
             -- The users acquire a perspective on the subject because it enters a state. The users should only see this instance.
-            Orole _ -> serialiseRoleInstancesAndProperties
+            Orole _ -> serialiseRoleInstancesAndPropertiesForInitialVisibility
               currentcontext
               u'
               (UQD (domain objectQfd) (UnaryCombinator RoleIndividualF) (SQD (domain objectQfd) (Constant PString (unwrap roleId)) (VDOM PString Nothing) True True) (range objectQfd) True True)
@@ -255,7 +255,7 @@ enteringRoleState roleId stateId = do
               selfOnly
               isSelfPerspective
             -- The alternative must be Srole. When a subject (=the user) enters a state and then acquires a new perspective, it is valid for all instances - but just for the user role that enters that state!
-            Srole _ -> serialiseRoleInstancesAndProperties
+            Srole _ -> serialiseRoleInstancesAndPropertiesForInitialVisibility
               currentcontext
               (unsafePartial fromJust (fromArray [ roleId ]))
               objectQfd
@@ -263,7 +263,7 @@ enteringRoleState roleId stateId = do
               selfOnly
               isSelfPerspective
             --  Finally, the last case must be Cnt. When a context enters a state and then all users acquires a new perspective on all instances.
-            _ -> serialiseRoleInstancesAndProperties
+            _ -> serialiseRoleInstancesAndPropertiesForInitialVisibility
               currentcontext
               u'
               objectQfd

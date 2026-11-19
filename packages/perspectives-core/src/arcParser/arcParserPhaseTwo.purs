@@ -605,6 +605,8 @@ traverseEnumeratedPropertyE (PropertyE { id, range, propertyParts, propertyFacet
   -- AUTHORONLYATTRIBUTE
   handleParts (EnumeratedProperty propertyUnderConstruction) AuthoronlyAttribute = pure (EnumeratedProperty $ propertyUnderConstruction { selfonly = true })
 
+  handleParts (EnumeratedProperty propertyUnderConstruction) FullhistoryAttribute = pure (EnumeratedProperty $ propertyUnderConstruction { fullhistory = Just true })
+
 -- | Traverse a PropertyE that results in an CalculatedProperty.
 traverseCalculatedPropertyE :: PropertyE -> Namespace -> PhaseTwo Property.Property
 traverseCalculatedPropertyE (PropertyE { id, range, propertyParts, propertyFacets, pos }) ns = do

@@ -23,7 +23,7 @@
 module Perspectives.Representation.EnumeratedProperty where
 
 import Data.Generic.Rep (class Generic)
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Newtype (class Newtype, over, unwrap)
 import Data.Show.Generic (genericShow)
 import Foreign.Object (Object, empty)
@@ -55,6 +55,8 @@ type EnumeratedPropertyRecord =
   , mandatory :: Boolean
   , selfonly :: Boolean
   , authoronly :: Boolean
+  -- Optional so compiled models predating this modifier remain readable.
+  , fullhistory :: Maybe Boolean
 
   , pos :: ArcPosition
 
@@ -77,10 +79,14 @@ defaultEnumeratedProperty id dn role range pos = EnumeratedProperty
   , mandatory: false
   , selfonly: false
   , authoronly: false
+  , fullhistory: Nothing
   , pos: pos
   , onPropertyDelta: empty
   , constrainingFacets: []
   }
+
+retainsFullHistory :: EnumeratedProperty -> Boolean
+retainsFullHistory = fromMaybe false <<< _.fullhistory <<< unwrap
 
 derive instance genericRepEnumeratedProperty :: Generic EnumeratedProperty _
 

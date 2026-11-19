@@ -45,7 +45,7 @@ const property = {
 };
 const propertyFacets = {
     scope: base08,
-    begin: /\b(mandatory|relational|functional|unlinked|selfonly|authoronly|minLength|maxLength|enumeration|pattern|maxInclusive|minInclusive|maxExclusive|minExclusive|whiteSpace|totalDigits|fractionDigits|messageProperty|mediaProperty|readableName|regexp|setting)\b/
+    begin: /\b(mandatory|relational|functional|unlinked|selfonly|authoronly|fullhistory|minLength|maxLength|enumeration|pattern|maxInclusive|minInclusive|maxExclusive|minExclusive|whiteSpace|totalDigits|fractionDigits|messageProperty|mediaProperty|readableName|regexp|setting)\b/
 };
 const perspective = {
     scope: base0D,

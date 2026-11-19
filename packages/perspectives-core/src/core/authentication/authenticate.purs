@@ -30,6 +30,7 @@ module Perspectives.Authenticate
   , getPrivateKey
   , getTransportPrivateKey
   , signDelta
+  , signDeltaMP
   , verifyDelta
   , verifyDelta'
   , encryptForRecipients
@@ -90,11 +91,14 @@ import Web.Encoding.TextEncoder (encode, new) as Encoder
 -- | Top level entry to message authentication. Sign a message. Under the hood this requires fetching
 -- | the users private key and signing the message.
 signDelta :: String -> MonadPerspectivesTransaction SignedDelta
-signDelta encryptedDelta = do
+signDelta = lift <<< signDeltaMP
+
+signDeltaMP :: String -> MonadPerspectives SignedDelta
+signDeltaMP encryptedDelta = do
   canonicalDelta <- liftEffect $ canonicalizeJsonString encryptedDelta
-  author <- lift getPerspectivesUser
+  author <- getPerspectivesUser
   deltaBuff :: ArrayBuffer <- liftEffect $ string2buff canonicalDelta
-  mcryptoKey <- lift $ gets (_.privateKey <<< _.runtimeOptions)
+  mcryptoKey <- gets (_.privateKey <<< _.runtimeOptions)
   case mcryptoKey of
     Nothing -> pure $ SignedDelta
       { author: over PerspectivesUser stripNonPublicIdentifiers author
@@ -102,7 +106,7 @@ signDelta encryptedDelta = do
       , signature: Nothing
       }
     Just cryptoKey -> do
-      signatureBuff <- lift $ liftAff $ sign (ecdsa sha384) (unsafeCoerce cryptoKey) deltaBuff
+      signatureBuff <- liftAff $ sign (ecdsa sha384) (unsafeCoerce cryptoKey) deltaBuff
       (int8array :: Uint8Array) <- liftEffect $ whole signatureBuff
       (signature :: String) <- liftAff $ bytesToBase64DataUrl int8array
       sd <- pure $ SignedDelta

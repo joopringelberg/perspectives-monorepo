@@ -27,6 +27,7 @@ module Perspectives.Assignment.SerialiseAsDeltas
   , perspectivePositionText
   , serialiseDependencies
   , serialiseRoleInstancesAndProperties
+  , serialiseRoleInstancesAndPropertiesForInitialVisibility
   , serialisedAsDeltasFor
   , serialisedAsDeltasForUserType
   , serialisedAsDeltasFor_
@@ -56,7 +57,7 @@ import Foreign.Object (empty)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (type (~~>), LogLevel(..), LogTopic(..), MonadPerspectives, MonadPerspectivesTransaction, (###=), (##=))
 import Perspectives.Data.EncodableMap (empty) as EM
-import Perspectives.Deltas (addDelta, addPublicKeysToTransaction, addStoredDelta)
+import Perspectives.Deltas (addDelta, addPublicKeysToTransaction, addStoredDeltas, addStoredDeltaForInitialVisibility)
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..), runArrayT)
 import Perspectives.DomeinFile (defaultDomeinFileRecord)
 import Perspectives.Error.Boundaries (handlePerspectContextError, handlePerspectRolError, handlePerspectRolError')
@@ -164,6 +165,8 @@ serialisedAsDeltasFor_ cid userId userType isNewPeer = do
       Nothing -> pure unit
   else pure unit
   -- Now serialise all modelled perspectives for the user. This will include the self-perspective if it is modelled.
+  -- This is a context snapshot, also used when an existing peer newly fills a
+  -- calculated user role (`noNewPeer`). Previous visibility must not suppress it.
   traverse_ (serialisePerspectiveForUser cid (NA.singleton userId) userType) perspectives
   where
   isPerspectiveOnSelf :: Perspective -> Boolean
@@ -222,7 +225,7 @@ serialisePerspectiveForUser cid users userRoleType p@(Perspective { object, prop
         <> ") with properties "
         <> show (propertytype2string <$> readableVisiblePropertyTypes)
         <> "."
-    serialiseRoleInstancesAndProperties cid users object (nub visiblePropertyTypes) selfOnly isSelfPerspective
+    serialiseRoleInstancesAndPropertiesForInitialVisibility cid users object (nub visiblePropertyTypes) selfOnly isSelfPerspective
 
 -- | MODEL DEPENDENCY IN THIS FUNCTION. The correct operation of this function depends on
 -- | model:System. The role model:System$PerspectivesSystem$User should have a property with
@@ -241,7 +244,30 @@ serialiseRoleInstancesAndProperties
   Boolean
   -> -- true iff the object of the perspective equals its subject.
   MonadPerspectivesTransaction Unit
-serialiseRoleInstancesAndProperties cid users object properties selfOnly isPerspectiveOnSelf = do
+serialiseRoleInstancesAndProperties = serialiseRoleInstancesAndPropertiesWith false
+
+-- | State entry is a fresh visibility grant, including re-entry after a period
+-- | without a perspective. Do not let previous delivery suppress its baseline.
+serialiseRoleInstancesAndPropertiesForInitialVisibility
+  :: ContextInstance
+  -> NA.NonEmptyArray RoleInstance
+  -> QueryFunctionDescription
+  -> Array PropertyType
+  -> Boolean
+  -> Boolean
+  -> MonadPerspectivesTransaction Unit
+serialiseRoleInstancesAndPropertiesForInitialVisibility = serialiseRoleInstancesAndPropertiesWith true
+
+serialiseRoleInstancesAndPropertiesWith
+  :: Boolean
+  -> ContextInstance
+  -> NA.NonEmptyArray RoleInstance
+  -> QueryFunctionDescription
+  -> Array PropertyType
+  -> Boolean
+  -> Boolean
+  -> MonadPerspectivesTransaction Unit
+serialiseRoleInstancesAndPropertiesWith initialVisibility cid users object properties selfOnly isPerspectiveOnSelf = do
   -- TODO. Pas traceSync hier toe en gebruik:
   --   - Perspective.roleTypes (waar het perspectief op is)
   --   - userRoleType (wie het perspectief heeft)
@@ -275,26 +301,46 @@ serialiseRoleInstancesAndProperties cid users object properties selfOnly isPersp
         -- The head will be a user role because of selfOnly.
         oneUserOnly <- unsafePartial case head dependencies of
           R r -> pure [ r ]
-        serialiseDependencies oneUserOnly dependencies
+        serialiseDependenciesWith initialVisibility oneUserOnly dependencies
         for_ properties'
-          \pt -> do
-            (vals :: Array DependencyPath) <- liftToMPT ((singletonPath (R $ unsafePartial fromJust $ ARR.head oneUserOnly)) ##= getPropertyValues pt)
-            for_ (join (allPaths <$> vals)) (serialiseDependencies oneUserOnly)
+          \pt -> serialisePropertyValues initialVisibility oneUserOnly pt
+            (R $ unsafePartial fromJust $ ARR.head oneUserOnly)
   else do
-    for_ (join (allPaths <$> rinstances)) (serialiseDependencies (toArray users))
+    for_ (join (allPaths <$> rinstances)) (serialiseDependenciesWith initialVisibility (toArray users))
     for_ properties'
       \pt -> do
         isSelfOnlyProperty <- lift $ propertyTypeIsSelfOnly pt
         for_ (_.head <$> rinstances)
-          \(dep :: Dependency) -> do
-            (vals :: Array DependencyPath) <- liftToMPT ((singletonPath dep) ##= getPropertyValues pt)
-            if isSelfOnlyProperty then for_ (join (allPaths <$> vals))
-              ( serialiseDependencies
-                  ( unsafePartial case dep of
-                      R oneUserOnly -> [ oneUserOnly ]
-                  )
+          \(dep :: Dependency) ->
+            serialisePropertyValues initialVisibility
+              ( if isSelfOnlyProperty then unsafePartial case dep of
+                  R oneUserOnly -> [ oneUserOnly ]
+                else toArray users
               )
-            else for_ (join (allPaths <$> vals)) (serialiseDependencies (toArray users))
+              pt
+              dep
+
+serialisePropertyValues :: Boolean -> Array RoleInstance -> PropertyType -> Dependency -> MonadPerspectivesTransaction Unit
+serialisePropertyValues initialVisibility users pt dep = do
+  vals <- lift ((singletonPath dep) ##= getPropertyValues pt)
+  for_ (join (allPaths <$> vals)) (serialiseDependenciesWith initialVisibility users)
+  -- An empty property has no V dependency, but its retained removals/baseline
+  -- still belong to a newly granted perspective.
+  case pt of
+    ENP property | null vals -> do
+      authorOnly <- lift $ propertyTypeIsAuthorOnly pt
+      if authorOnly then pure unit
+      else do
+        paths <- lift ((singletonPath dep) ##= computePathToFillerWithProperty pt)
+        for_ paths \path -> case path.head of
+          R role | isInPublicScheme (unwrap role) -> pure unit
+          R role -> do
+            for_ (allPaths path) (serialiseDependenciesWith initialVisibility users)
+            records <- lift $ getDeltasForResource (unwrap role <> "#" <> unwrap property)
+            if initialVisibility then for_ records $ addStoredDeltaForInitialVisibility users
+            else addStoredDeltas users records
+          _ -> pure unit
+    _ -> pure unit
 
 perspectivePositionText :: Maybe ArcPosition -> String
 perspectivePositionText Nothing = ""
@@ -307,47 +353,47 @@ getPropertyValues pt dep = (lift $ lift $ propertyTypeIsAuthorOnly pt) >>=
     calc <- lift $ lift $ (PClass.getProperty >=> PClass.getCalculation) pt
     -- Calculate the DependencyPath that leads to the filler whose type supports the property. Start from that.
     -- This is to accomodate overloaded fillers.
-    pathToRoleWithProperty <- unsafePartial computePathToFillerWithProperty dep
+    pathToRoleWithProperty <- computePathToFillerWithProperty pt dep
     interpret calc pathToRoleWithProperty
 
-  where
-  computePathToFillerWithProperty :: Partial => DependencyPath ~~> DependencyPath
-  computePathToFillerWithProperty path@{ head } = ArrayT case head of
-    R rid -> do
-      localProps <- lift $ (roleType_ >=> allLocallyRepresentedProperties <<< ST) rid
-      if isJust $ elemIndex pt localProps
-      -- The type of the role instance support the property. Return the path
-      then pure [ path ]
-      -- The type of the role instance doesn't support the property. Compute the path that leads to its filler
-      else do
-        mfiller <- lift $ binding_ rid
-        case mfiller of
-          -- We cannot find the filler that supports this property.
-          Nothing -> pure []
-          -- Contintue with the filler and add a step to the path.
-          Just b -> runArrayT $ computePathToFillerWithProperty (consOnMainPath (R b) path)
+computePathToFillerWithProperty :: PropertyType -> DependencyPath ~~> DependencyPath
+computePathToFillerWithProperty pt path@{ head } = ArrayT case head of
+  R rid -> do
+    localProps <- lift $ (roleType_ >=> allLocallyRepresentedProperties <<< ST) rid
+    if isJust $ elemIndex pt localProps then pure [ path ]
+    else do
+      mfiller <- lift $ binding_ rid
+      case mfiller of
+        Nothing -> pure []
+        Just b -> runArrayT $ computePathToFillerWithProperty pt (consOnMainPath (R b) path)
+  _ -> pure []
 
 -- | Adds deltas to the current transaction for the given users and for the dependencies in the List of Dependency-s.
 serialiseDependencies :: Array RoleInstance -> NonEmptyList Dependency -> MonadPerspectivesTransaction Unit
-serialiseDependencies users deps = void $ runStateT (serialiseDependencies_ users deps) []
+serialiseDependencies = serialiseDependenciesWith false
+
+serialiseDependenciesWith :: Boolean -> Array RoleInstance -> NonEmptyList Dependency -> MonadPerspectivesTransaction Unit
+serialiseDependenciesWith initialVisibility users deps = void $ runStateT (serialiseDependencies_ initialVisibility users deps) []
 
 serialiseDependencies_
-  :: Array RoleInstance
+  :: Boolean
+  -> Array RoleInstance
   -> NonEmptyList Dependency
   -> StateT (Array Dependency) MonadPerspectivesTransaction Unit
-serialiseDependencies_ users deps = void $ foldM
-  (serialiseDependency users)
+serialiseDependencies_ initialVisibility users deps = void $ foldM
+  (serialiseDependency initialVisibility users)
   Nothing
   deps
 
 -- Always returns the second argument in Maybe.
 -- | `users` will not always be model:System$PerspectivesSystem$User instances.
 serialiseDependency
-  :: Array RoleInstance
+  :: Boolean
+  -> Array RoleInstance
   -> Maybe Dependency
   -> Dependency
   -> StateT (Array Dependency) MonadPerspectivesTransaction (Maybe Dependency)
-serialiseDependency users mpreviousDependency currentDependency = do
+serialiseDependency initialVisibility users mpreviousDependency currentDependency = do
   -- We serialise a role dependency as soon as we see it, hence we analyse the currentDependency.
   -- Public resources are not serialised as deltas: the receiving peer will fetch them directly
   -- from the public endpoint.
@@ -386,7 +432,9 @@ serialiseDependency users mpreviousDependency currentDependency = do
 
   where
   addHistory :: Array DeltaStoreRecord -> MonadPerspectivesTransaction Unit
-  addHistory records = for_ records $ addStoredDelta users
+  addHistory records =
+    if initialVisibility then for_ records $ addStoredDeltaForInitialVisibility users
+    else addStoredDeltas users records
 
   -- | Returns true iff the binding of the first argument equals the second argument.
   -- | If true, also adds the binding delta from the DeltaStore to the transaction.

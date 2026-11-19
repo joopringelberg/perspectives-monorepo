@@ -768,6 +768,7 @@ domain model://perspectives.domains#CouchdbManagement@12.4
               -- We cannot omit the readable name. It equals the LocalModelName, but we cannot edit it. 
               -- Hence we need both.
               with props (ModelManifest$External$Name)
+              only (RemoveContext)
             detail
       
     -- This role requires credentials for the ServerUrl. It 'inherits' them from its filler.
@@ -852,6 +853,7 @@ domain model://perspectives.domains#CouchdbManagement@12.4
               -- We cannot omit the readable name. It equals the LocalModelName, but we cannot edit it. 
               -- Hence we need both.
               with props (LocalModelName, ModelCuid)
+              only (RemoveContext)
             detail    
     
     user Accounts (relational, unlinked) filledBy (CouchdbServer$Accounts, CouchdbServer$Admin)
@@ -1033,6 +1035,7 @@ domain model://perspectives.domains#CouchdbManagement@12.4
                         components should be integers. For example: "1.0" or "2.11".
                       >
               without props (Versions$Version, Description, Patch, Build)
+              only (RemoveContext)
             detail
     
     -- A public version of ModelManifest is available in the database cw_<NameSpace>.

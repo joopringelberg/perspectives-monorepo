@@ -45,9 +45,10 @@ import Perspectives.UnschemedIdentifiers (UnschemedResourceIdentifier, unschemeP
 import Perspectives.Sync.CanonicalJson (canonicalizeJsonString)
 import Perspectives.Sync.DateTime (SerializableDateTime)
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
+import Perspectives.Sync.PropertyHistory (checkpoint)
 import Perspectives.Sync.Transaction (PublicKeyInfo)
 import Perspectives.Sync.VersionedDelta (isPredefinedContextScaffolding)
-import Prelude (class Ord, class Show, class Eq, bind, compare, map, not, pure, show, ($), (<$>), (<>), (&&), (<<<), (==), eq)
+import Prelude (class Ord, class Show, class Eq, bind, compare, map, not, pure, show, ($), (<$>), (<>), (&&), (<<<), (==), (>>=), eq)
 import Simple.JSON (class ReadForeign, class WriteForeign)
 
 -----------------------------------------------------------
@@ -125,7 +126,11 @@ withoutPredefinedContextScaffolding (TransactionForPeer r) =
 removeUnusedPublicKeys :: TransactionForPeer -> TransactionForPeer
 removeUnusedPublicKeys (TransactionForPeer r) =
   let
-    authors = map (unschemePerspectivesUser <<< _.author <<< unwrap) r.deltas
+    authors = r.deltas >>= \delta ->
+      map unschemePerspectivesUser $
+        [ (unwrap delta).author ] <> case checkpoint (unwrap delta).encryptedDelta of
+          Nothing -> []
+          Just { winner } -> [ (unwrap winner).author ]
   in
     TransactionForPeer r
       { publicKeys = ENCMAP.filterKeys (\author -> isJust $ elemIndex (unschemePerspectivesUser author) authors) r.publicKeys

@@ -733,7 +733,7 @@ propertyE = do
   -- the opening parenthesis functions as the recognizer: when found, the rest of the stream **must** start on
   -- a valid property attribute specification.
   propertyAttributes :: IP (List PropertyPart)
-  propertyAttributes = token.parens (((mandatory <|> relational <|> selfonly <|> authoronly <|> (Ran <$> propertyRange)) <?> "(optionally) mandatory, then optionally relational, then optionally either selfonly or authoronly, then (required) a range (Boolean, Number, String, DateTime, Email), ") `sepBy` token.symbol ",")
+  propertyAttributes = token.parens (((mandatory <|> relational <|> selfonly <|> authoronly <|> fullhistory <|> (Ran <$> propertyRange)) <?> "a property range or modifier (mandatory, relational, selfonly, authoronly, fullhistory), ") `sepBy` token.symbol ",")
     where
     mandatory :: IP PropertyPart
     mandatory = (reserved "mandatory" *> (pure (MandatoryAttribute' true)))
@@ -747,6 +747,9 @@ propertyE = do
 
     authoronly :: IP PropertyPart
     authoronly = (reserved "authoronly" *> (pure AuthoronlyAttribute))
+
+    fullhistory :: IP PropertyPart
+    fullhistory = reserved "fullhistory" *> pure FullhistoryAttribute
 
   onlyRoleFacets :: List PropertyFacet -> IP Unit
   onlyRoleFacets facets =

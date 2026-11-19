@@ -51,10 +51,13 @@ Properties are declared under roles:
 ```arc
 property Name (mandatory, String)
 property Remarks (relational, String, authoronly)
+property AuditTrail (String, fullhistory)
 property DisplayName = Name
 ```
 
 Built-in ranges include `Boolean`, `Number`, `String`, `DateTime`, and `Email` (and other ranges supported by the current parser). Properties are functional by default; `(relational)` allows multiple values. `(mandatory)` requires a value. A calculated property uses `= <query>` and is read-only as a derived value. Property facets and supported ranges are parser-defined; inspect `arcParser.purs` rather than guessing a range or facet.
+
+`fullhistory` applies only to enumerated/stored properties, not calculated properties, roles, or perspectives. It requests retention of all legitimate local and received property history instead of the default checkpoint plus ten recent changes. Omission (including older compiled models without this metadata) means false. It does not grant read, write, or synchronization permissions and does not override `selfonly` or `authoronly`. Authenticated peers entitled to disclose the property may certify checkpoints without having write permission; this does not authorize them to create property changes.
 
 An `aspect` composes type definitions without creating a separate filler binding. A role aspect contributes the aspect role's type constraints/properties to the role; a context aspect contributes the aspect context's roles to the context. Aspects can themselves have aspects. Use `aspect <qualified-name>` on a role and `aspect <qualified-context-name>` in a context declaration. Role aspect property mappings can explicitly map an aspect property to a replacing property; verify the parser's `where ... is replaced by ...` syntax before writing a mapping. Use `filledBy` instead when a real, independently existing filler instance and navigable binding are intended. Aspects are not inheritance of instances and do not create copies of the aspect's instances.
 

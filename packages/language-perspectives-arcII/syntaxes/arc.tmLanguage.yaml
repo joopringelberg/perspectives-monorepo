@@ -85,7 +85,7 @@ patterns:
 
   ## PROPERTY FACETS
   - name: entity.name.tag.propertyfacet.arc
-    match: \b(mandatory|relational|unlinked|minLength|maxLength|enumeration|pattern|maxInclusive|minInclusive)\b
+    match: \b(mandatory|relational|unlinked|fullhistory|minLength|maxLength|enumeration|pattern|maxInclusive|minInclusive)\b
 
   ## PERSPECTIVE
   - name: keyword.other.special-method.perspective.arc

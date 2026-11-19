@@ -41,24 +41,27 @@ module Perspectives.Persistence.DeltaStore
   , deltaStoreDocIdWithDeltaId
   , findDeltaByDeltaId
   , safeKey
+  , pruneDeltasThrough
   ) where
 
 import Prelude
 
 import Control.Monad.AvarMonadAsk (gets)
+import Control.Monad.Error.Class (throwError)
 import Control.Monad.Except (runExcept)
-import Data.Array (catMaybes, elem, filter, head, last, length) as Arr
+import Data.Array (catMaybes, elem, filter, head, last, length, sortBy) as Arr
 import Data.Either (Either(..))
-import Data.Foldable (traverse_)
+import Data.Foldable (for_, traverse_)
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Newtype (unwrap)
 import Data.String (Pattern(..), drop, indexOf, lastIndexOf, length, split, take) as Str
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
+import Effect.Exception (error)
 import Foreign (Foreign)
 import LRUCache (defaultGetOptions, delete, get, set) as LRU
 import Perspectives.CoreTypes (MonadPerspectives)
-import Perspectives.Persistence.API (addDocument_, documentsInRange, tryGetDocument_)
+import Perspectives.Persistence.API (addDocument_, deleteDocument, documentsInRange, tryGetDocument_)
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
 import Perspectives.Persistence.State (getSystemIdentifier)
 import Perspectives.Persistence.Types (MonadPouchdb)
@@ -66,6 +69,7 @@ import Perspectives.Representation.InstanceIdentifiers (PerspectivesUser)
 import Perspectives.ResourceIdentifiers (getResourceIdentifierScheme, takeGuid)
 import Perspectives.Sync.CanonicalJson (computeDeltaId, shortDeltaId)
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
+import Perspectives.Sync.PropertyHistory (checkpoint, isCheckpoint)
 import Simple.JSON (read', readJSON')
 
 -----------------------------------------------------------
@@ -250,8 +254,24 @@ storeDelta rec@(DeltaStoreRecord { _id, resourceKey }) = do
     Nothing -> do
       _ <- addDocument_ dbName rec _id
       cacheInsertDelta _id rec
-      -- A new delta was written: evict the stale result-set caches.
       invalidateResultCachesForResource resourceKey
+
+-- Only called after the replacement checkpoint has been persisted.
+pruneDeltasThrough :: String -> Int -> String -> MonadPerspectives Unit
+pruneDeltasThrough resourceKey version checkpointId = do
+  records <- getDeltasForResource resourceKey
+  let latestUpload = Arr.last $ Arr.filter (\(DeltaStoreRecord r) -> r.deltaType == "UploadFile") records
+  let
+    isLatestUpload id = case latestUpload of
+      Just (DeltaStoreRecord upload) -> upload._id == id
+      Nothing -> false
+  dbName <- deltaStoreDatabaseName
+  invalidateResultCachesForResource resourceKey
+  for_ (Arr.filter (\(DeltaStoreRecord r) -> r.resourceVersion <= version && r._id /= checkpointId && not (isLatestUpload r._id)) records) \(DeltaStoreRecord r) -> do
+    cache <- gets _.deltaCache
+    void $ liftEffect $ LRU.delete r._id cache
+    deleted <- deleteDocument dbName r._id r._rev
+    unless deleted $ throwError $ error $ "Could not prune delta " <> r._id
 
 -- | Retrieve a specific delta from the store by its document ID.
 -- | Checks the in-memory cache first; falls back to PouchDB on a miss.
@@ -283,7 +303,10 @@ getDeltasForResource resourceKey = do
       let startkey = sk <> "_v"
       let endkey = sk <> "_v\xFFFF"
       result <- documentsInRange dbName startkey endkey
-      let records = Arr.catMaybes $ map decodeDoc result.rows
+      let
+        records = Arr.sortBy (\(DeltaStoreRecord a) (DeltaStoreRecord b) -> compare a.resourceVersion b.resourceVersion)
+          $ Arr.catMaybes
+          $ map decodeDoc result.rows
       -- Populate both the result-set cache and the per-delta cache.
       cacheResourceDeltasInsert sk records
       populateDeltaCache records
@@ -431,7 +454,9 @@ type DeltaInfo =
 -- | Extract ordering info and deltaType from the encrypted/stringified delta JSON.
 extractDeltaInfo :: String -> Maybe DeltaInfo
 extractDeltaInfo stringifiedDelta = case runExcept $ readJSON' stringifiedDelta of
-  Right (info :: DeltaInfo) -> Just info
+  Right (info :: DeltaInfo) -> Just $ case checkpoint stringifiedDelta of
+    Just _ -> info { deltaType = "PropertyCheckpoint" }
+    Nothing -> info
   Left _ -> Nothing
 
 -- | Store a locally-created delta from a SignedDelta.

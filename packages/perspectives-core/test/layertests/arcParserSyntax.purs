@@ -40,7 +40,9 @@ import Data.Either (Either(..))
 import Data.List (List(..), filter, find, findIndex, head, length, (:))
 import Data.List.NonEmpty (length) as LNE
 import Data.Maybe (Maybe(..), isJust, isNothing)
+import Effect (Effect)
 import Parsing (ParseError(..))
+import Parsing.String (eof)
 import Perspectives.Parsing.Arc (automaticEffectE, contextE, domain, propertyE, thingRoleE, userRoleE, viewE)
 import Perspectives.Parsing.Arc.AST (ContextE(..), ContextPart(..), PropertyE(..), PropertyFacet(..), PropertyPart(..), PropsOrView(..), RoleE(..), RolePart(..), StateSpecification(..), ViewE(..))
 import Perspectives.Parsing.Arc.Expression.AST (TypeCombination(..))
@@ -56,6 +58,10 @@ import Perspectives.Representation.Verbs (RoleVerb(..), PropertyVerb(..)) as RV
 import Test.Parsing.ArcAstSelectors (actionExists, ensureAction, ensureContext, ensureOnEntry, ensureOnExit, ensurePerspectiveOf, ensurePerspectiveOn, ensurePropertyVerbSetForPropsOrView, ensurePropertyVerbsForPropsOrView, ensureRoleVerbs, ensureStateInContext, ensureStateInRole, ensureSubState, ensureUserRole, failure, hasAutomaticAction, isRoleOnIdentifier, isIndexed, isNotified, isStateWithContext, isStateWithExplicitRole_, perspectiveExists, stateExists, stateParts)
 import Test.Unit (TestF, suite, test)
 import Test.Unit.Assert (assert)
+import Test.Unit.Main (runTest)
+
+main :: Effect Unit
+main = runTest theSuite
 
 theSuite :: Free TestF Unit
 theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
@@ -758,6 +764,34 @@ theSuite = suite "Perspectives.Parsing.Arc.Syntax" do
                   propertyParts
               )
         _ -> assert "Expected PE PropertyE" false
+
+    test "Stored property with fullhistory after its range" do
+      r <- runIndentParser "property MyProp (String, fullhistory)\n" propertyE
+      case r of
+        Left e -> assert (show e) false
+        Right (PE (PropertyE { range, propertyParts })) -> do
+          assert "The range should remain String" (range == Just PString)
+          assert "Should have FullhistoryAttribute"
+            $ isJust
+            $ findIndex
+                ( case _ of
+                    FullhistoryAttribute -> true
+                    _ -> false
+                )
+                propertyParts
+        _ -> assert "Expected PE PropertyE" false
+
+    test "fullhistory cannot modify a calculated property" do
+      r <- runIndentParser "property MyProp (fullhistory) = SomeProp\n" (propertyE <* eof)
+      case r of
+        Left _ -> pure unit
+        Right _ -> assert "Calculated properties have no stored history" false
+
+    test "fullhistory is not a role modifier" do
+      r <- runIndentParser "thing MyRole (fullhistory)\n" (thingRoleE <* eof)
+      case r of
+        Left _ -> pure unit
+        Right _ -> assert "Only stored properties accept fullhistory" false
 
     test "Calculated property" do
       r <- runIndentParser "property MyProp = SomeRole >> SomeOtherProp\n" propertyE

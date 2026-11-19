@@ -23,18 +23,22 @@
 module Perspectives.Deltas where
 
 import Control.Monad.AvarMonadAsk (modify, gets) as AA
+import Control.Monad.Error.Class (throwError)
 import Control.Monad.State.Trans (StateT, execStateT, get, lift, modify, put)
 import Data.Array (catMaybes, concat, elemIndex, filter, filterA, foldl, head, nub, null, snoc, sortBy, union)
 import Data.DateTime.Instant (toDateTime)
-import Data.Map (Map, empty, filter, filterKeys, insert, lookup, mapMaybeWithKey, toUnfoldable, values) as Map
+import Data.Foldable (any)
+import Data.Map (Map, empty, filter, filterKeys, insert, insertWith, lookup, mapMaybeWithKey, toUnfoldable, values) as Map
 import Data.Maybe (Maybe(..), fromJust, isJust, maybe)
 import Data.Newtype (over, unwrap)
 import Data.Ordering (Ordering)
+import Data.Set as Set
 import Data.Traversable (for, for_)
 import Data.TraversableWithIndex (forWithIndex)
 import Data.Tuple (Tuple(..))
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
+import Effect.Exception (error)
 import Effect.Now (now)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.AMQP.Stomp (sendToTopic)
@@ -54,9 +58,11 @@ import Perspectives.ModelDependencies (connectedToAMQPBroker, userChannel) as DE
 import Perspectives.ModelDependencies (perspectivesUsersCancelled, perspectivesUsersPublicKey, perspectivesUsersTransportPublicKey)
 import Perspectives.Names (getMySystem)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
-import Perspectives.Persistence.API (Url, addDocument)
-import Perspectives.Persistence.DeltaStore (extractDeltaInfo, getDeltasForResource, storeDeltaFromSignedDelta)
+import Perspectives.Persistence.API (Url, addDocument, addDocument_, tryGetDocument_)
+import Perspectives.Persistence.DeltaStore (extractDeltaInfo, getDeltasForResource)
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
+import Perspectives.Persistence.PeerDeliveryStore (peerDeliveryKnowledge, recordQueuedPeerDeltas, storedDeltaDeliveryId)
+import Perspectives.Persistence.PropertyHistoryStore (storeLocalDeltaWithHistory)
 import Perspectives.Performance (timed)
 import Perspectives.Persistent (entityExists, getPerspectRol, postDatabaseName)
 import Perspectives.PerspectivesState (getPerspectivesUser, nextTransactionNumber, stompClient)
@@ -69,12 +75,13 @@ import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.Sync.DateTime (SerializableDateTime(..))
 import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
 import Perspectives.Sync.OutgoingTransaction (OutgoingTransaction(..))
+import Perspectives.Sync.PropertyHistory (checkpoint)
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
 import Perspectives.Sync.Transaction (PublicKeyInfo, Transaction(..), TransactionDestination(..), appendTransactionDelta)
 import Perspectives.Sync.TransactionForPeer (EncryptedTransactionForPeer(..), TransactionForPeer(..), addToTransactionForPeer, deduplicatePublicKeys, removeUnusedPublicKeys, transactieID, withoutPredefinedContextScaffolding)
 import Perspectives.Types.ObjectGetters (isPublicProxy)
 import Perspectives.UnschemedIdentifiers (UnschemedResourceIdentifier, unschemePerspectivesUser)
-import Prelude (Unit, bind, compare, discard, eq, flip, map, not, pure, show, unit, void, when, ($), (&&), (*>), (<$>), (<<<), (<>), (==), (>=>), (>>=), (>>>), (||))
+import Prelude (Unit, bind, compare, discard, eq, flip, map, not, pure, show, unit, void, when, ($), (&&), (*>), (<$>), (<<<), (<>), (==), (>=), (>=>), (>>=), (>>>), (||))
 import Simple.JSON (writeJSON)
 
 -- | Splits the transaction in versions specific for each peer and public role, but does not send them.
@@ -114,7 +121,9 @@ sendPeerTransactions customizedTransacties =
               }
           , publicKeys: (unwrap transaction).publicKeys
           }
-      for_ recipientKeys \(Tuple recipient _) -> sendTransactieToUserUsingAMQP recipient encryptedTransaction
+      for_ recipientKeys \(Tuple recipient _) ->
+        sendTransactieToUserUsingAMQPWithDelivery recipient encryptedTransaction
+          (unwrap transaction).deltas
   where
   peerGroups :: Map.Map String (Tuple TransactionForPeer (Array (Tuple UnschemedResourceIdentifier PerspectivesUser)))
   peerGroups =
@@ -162,11 +171,19 @@ sendTransactieToUserUsingCouchdb cdbUrl userId t = do
 -- |   * a model://perspectives.domains#System$PerspectivesSystem$User instance, or
 -- |   * an instance of the Visitor role.
 sendTransactieToUserUsingAMQP :: UnschemedResourceIdentifier -> EncryptedTransactionForPeer -> MonadPerspectives Unit
-sendTransactieToUserUsingAMQP perspectivesUser t@(EncryptedTransactionForPeer { timeStamp }) = do
+sendTransactieToUserUsingAMQP perspectivesUser t =
+  sendTransactieToUserUsingAMQPWithDelivery perspectivesUser t []
+
+sendTransactieToUserUsingAMQPWithDelivery :: UnschemedResourceIdentifier -> EncryptedTransactionForPeer -> Array SignedDelta -> MonadPerspectives Unit
+sendTransactieToUserUsingAMQPWithDelivery perspectivesUser t@(EncryptedTransactionForPeer { timeStamp }) deliveredDeltas = do
   connected <- connectedToAMQPBroker
   n <- liftEffect $ now
   dt <- pure $ SerializableDateTime (toDateTime n)
-  messageId <- pure $ unwrap perspectivesUser <> show dt
+  transactionNumber <- nextTransactionNumber
+  -- Distinct packets queued in the same millisecond must not replace each other.
+  messageId <- pure $ unwrap perspectivesUser <> show dt <> "_" <> show transactionNumber
+  let
+    persist = savePeerTransactionInOutgoingPost perspectivesUser messageId t deliveredDeltas
   if connected then do
     mstompClient <- stompClient
     case mstompClient of
@@ -174,13 +191,13 @@ sendTransactieToUserUsingAMQP perspectivesUser t@(EncryptedTransactionForPeer { 
         -- If sending fails, we will still save the transaction in the OutgoingTransactions post database, so that it can be retried later.
         -- The transaction will be removed when incomingPost receives an acknowledgement from the RabbitMQ broker, meaning 
         -- that the broker has accepted and stored the message.
-        saveTransactionInOutgoingPost perspectivesUser messageId t
+        persist
         -- Just send the message to the topic that is the addressees PerspectivesUser instance.
         -- Each system will listen to a queue that is bound to that topic upon subscription.
         debugBroker $ "Sending transaction for user " <> unwrap perspectivesUser <> " to AMQP broker with transaction timestamp " <> show timeStamp
         liftEffect $ sendToTopic stompClient perspectivesUser messageId (writeJSON t)
-      otherwise -> saveTransactionInOutgoingPost perspectivesUser messageId t
-  else saveTransactionInOutgoingPost perspectivesUser messageId t
+      otherwise -> persist
+  else persist
 
   where
   connectedToAMQPBroker :: MonadPerspectives Boolean
@@ -193,7 +210,21 @@ saveTransactionInOutgoingPost :: UnschemedResourceIdentifier -> String -> Encryp
 saveTransactionInOutgoingPost userId messageId t@(EncryptedTransactionForPeer { timeStamp }) = timed "outbox.save" messageId do
   debugBroker $ "Saving transaction for user " <> unwrap userId <> " in OutgoingTransactions post database with transaction timestamp " <> show timeStamp
   postDB <- postDatabaseName
-  void $ addDocument postDB (OutgoingTransaction { _id: messageId, receiver: userId, transaction: t }) messageId
+  existing <- tryGetDocument_ postDB messageId
+  case existing of
+    Just (OutgoingTransaction { receiver, transaction }) ->
+      if receiver == userId && writeJSON transaction == writeJSON t then pure unit
+      else throwError $ error $ "Refusing to replace an outgoing packet: " <> messageId
+    Nothing -> do
+      revision <- addDocument_ postDB (OutgoingTransaction { _id: messageId, receiver: userId, transaction: t }) messageId
+      case revision of
+        Just _ -> pure unit
+        Nothing -> throwError $ error $ "Outgoing packet persistence returned no revision: " <> messageId
+
+savePeerTransactionInOutgoingPost :: UnschemedResourceIdentifier -> String -> EncryptedTransactionForPeer -> Array SignedDelta -> MonadPerspectives Unit
+savePeerTransactionInOutgoingPost userId messageId encrypted deltas = do
+  saveTransactionInOutgoingPost userId messageId encrypted
+  recordQueuedPeerDeltas userId deltas
 
 -- | An object of TransactionForPeer where the keys are the string value of RoleInstances, invariably identifying user roles.
 -- | Must be either an instance of sys:PerspectivesSystem$User, or of a RoleInstance of a type with RoleKind Visitor.
@@ -294,9 +325,48 @@ computeUserRoleBottom rid =
 addDelta :: DeltaInTransaction -> MonadPerspectivesTransaction Unit
 addDelta = addDeltaWithStorage true
 
--- | Forward history already read from the DeltaStore without hashing or storing it again.
+-- | Forward only retained history not yet durably queued for each destination.
 addStoredDelta :: Array RoleInstance -> DeltaStoreRecord -> MonadPerspectivesTransaction Unit
-addStoredDelta users (DeltaStoreRecord { signedDelta }) =
+addStoredDelta users record = addStoredDeltas users [ record ]
+
+-- | Read knowledge once per resource/destination, not once per historical delta.
+-- | In particular, forwarding fullhistory must not repeatedly decode an
+-- | ever-growing knowledge document for every entry in the same history.
+addStoredDeltas :: Array RoleInstance -> Array DeltaStoreRecord -> MonadPerspectivesTransaction Unit
+addStoredDeltas users records = do
+  destinations <- lift $ for users \user -> Tuple user <$> computeUserRoleBottom user
+  let
+    byResource = foldl
+      (\acc record@(DeltaStoreRecord { resourceKey }) -> Map.insertWith (flip (<>)) resourceKey [ record ] acc)
+      Map.empty
+      records
+  for_ (Map.toUnfoldable byResource :: Array (Tuple String (Array DeltaStoreRecord))) \(Tuple resourceKey history) -> do
+    knowledge <- lift $ for destinations \(Tuple user bottoms) -> do
+      known <- for bottoms \(Tuple _ destination) -> case destination of
+        PublicDestination _ -> pure Nothing
+        Peer peer _ -> Just <$> peerDeliveryKnowledge peer resourceKey
+      pure $ Tuple user known
+    for_ history \record@(DeltaStoreRecord { signedDelta, deltaType, resourceVersion }) -> do
+      deltaId <- lift $ storedDeltaDeliveryId record
+      let
+        unknown = filter
+          ( \(Tuple _ known) -> null known || any
+              ( case _ of
+                  Nothing -> true
+                  Just peer ->
+                    not (Set.member deltaId peer.knownIds) &&
+                      not (deltaType == "PropertyCheckpoint" && maybe false (\version -> version >= resourceVersion) peer.maxVersion)
+              )
+              known
+          )
+          knowledge
+        users' = map (\(Tuple user _) -> user) unknown
+      addDeltaWithStorage false $ DeltaInTransaction { users: users', delta: signedDelta }
+
+-- | State entry must explicitly reinitialise a newly gained perspective, even
+-- | when the same peer saw its data before losing visibility.
+addStoredDeltaForInitialVisibility :: Array RoleInstance -> DeltaStoreRecord -> MonadPerspectivesTransaction Unit
+addStoredDeltaForInitialVisibility users (DeltaStoreRecord { signedDelta }) =
   addDeltaWithStorage false $ DeltaInTransaction { users, delta: signedDelta }
 
 addDeltaWithStorage :: Boolean -> DeltaInTransaction -> MonadPerspectivesTransaction Unit
@@ -306,7 +376,7 @@ addDeltaWithStorage shouldStore (DeltaInTransaction deltarecord@{ users, delta }
   -- in those paths the delta is either already stored (executeTransaction uses executeDeltaWithVersionTracking)
   -- or must not be stored at all (executeDeltas for public roles uses modified author identifiers).
   isExecuting <- AA.gets (\(Transaction tr) -> tr.isExecutingIncomingDeltas)
-  when (shouldStore && not isExecuting) $ lift $ storeDeltaFromSignedDelta delta
+  when (shouldStore && not isExecuting) $ lift $ storeLocalDeltaWithHistory delta
   -- NOTE. Even though we try not to create deltas with roles that represent me, on system installation this can go wrong.
   users' <- lift $ filterA notIsMe users
   if null users' || isExecuting then pure unit
@@ -358,16 +428,23 @@ addPublicKeysToTransaction (Transaction tr@{ deltas }) = do
 
   where
   addPublicKeyInfo :: DeltaInTransaction -> StateT (Map.Map PerspectivesUser PublicKeyInfo) MonadPerspectives Unit
-  addPublicKeyInfo (DeltaInTransaction { delta }) = case delta of
-    SignedDelta { author } -> do
-      keys <- get
-      case Map.lookup author keys of
-        Just _ -> pure unit
-        Nothing -> do
-          mpkInfo <- lift $ getPkInfo author
-          case mpkInfo of
-            Nothing -> pure unit
-            Just pkInfo -> void $ modify (\keys' -> Map.insert author pkInfo keys')
+  addPublicKeyInfo (DeltaInTransaction { delta }) = do
+    addAuthor (unwrap delta).author
+    case checkpoint (unwrap delta).encryptedDelta of
+      Just { winner } ->
+        addAuthor (unwrap winner).author
+      _ -> pure unit
+
+  addAuthor :: PerspectivesUser -> StateT (Map.Map PerspectivesUser PublicKeyInfo) MonadPerspectives Unit
+  addAuthor author = do
+    keys <- get
+    case Map.lookup author keys of
+      Just _ -> pure unit
+      Nothing -> do
+        mpkInfo <- lift $ getPkInfo author
+        case mpkInfo of
+          Nothing -> pure unit
+          Just pkInfo -> void $ modify (\keys' -> Map.insert author pkInfo keys')
 
   -- This is built on the assumption that the argument is the string value of the RoleInstance of type TheWorld$PerspectivesUser
   -- that fills SocialEnvironment$Me
@@ -393,12 +470,12 @@ addPublicKeysToTransaction (Transaction tr@{ deltas }) = do
 -- | - Context creation before role creation
 -- | - Role creation before adding roles to a context (UniverseRoleDelta before ContextDelta)
 -- | - Role-context linking before binding/property updates
--- | - Construction/addition before removal/move operations
+-- | - Role/context construction before removal
 -- | Within each delta type:
 -- | - UniverseRoleDelta: ConstructEmptyRole/ConstructExternalRole before RemoveRoleInstance/…
 -- | - ContextDelta: AddRoleInstancesToContext/AddExternalRole before MoveRoleInstancesToAnotherContext
 -- | - RoleBindingDelta: SetFirstBinding before RemoveBinding/ReplaceBinding
--- | - RolePropertyDelta: AddProperty/SetProperty/UploadFile before RemoveProperty/DeleteProperty
+-- | - Property mutations and checkpoints share a priority and replay by resource version.
 deltaTypeSortPriority :: String -> Int
 deltaTypeSortPriority dt
   | dt == "ConstructExternalRole" = 0
@@ -409,6 +486,7 @@ deltaTypeSortPriority dt
   | dt == "SetFirstBinding" = 4
   | dt == "AddProperty" = 5
   | dt == "SetProperty" = 5
+  | dt == "PropertyCheckpoint" = 5
   | dt == "UploadFile" = 5
   | dt == "MoveRoleInstancesToAnotherContext" = 5
   | dt == "RemoveRoleInstance" = 6
@@ -417,13 +495,14 @@ deltaTypeSortPriority dt
   | dt == "RetractRoleInstance" = 6
   | dt == "RemoveBinding" = 6
   | dt == "ReplaceBinding" = 6
-  | dt == "RemoveProperty" = 7
-  | dt == "DeleteProperty" = 7
+  | dt == "RemoveProperty" = 5
+  | dt == "DeleteProperty" = 5
   | true = 99
 
 -- | Sort the deltas in an array into the correct partial order for execution by peers.
--- | Uses the delta type priority as the primary sort key, followed by resource version
--- | and resource key for a deterministic stable order within the same priority level.
+-- | Uses the delta type priority as the primary sort key. Property histories
+-- | are grouped by resource key and replayed numerically, not lexicographically
+-- | and not grouped by operation (which would incorrectly move removals).
 -- | Deltas whose type cannot be determined are placed at the end.
 sortTransactionDeltas :: Array DeltaInTransaction -> Array DeltaInTransaction
 sortTransactionDeltas = sortBy compareDeltaInTransaction
@@ -443,5 +522,7 @@ sortTransactionDeltas = sortBy compareDeltaInTransaction
       key2 = maybe "" _.resourceKey mInfo2
     in
       compare priority1 priority2
--- <> compare version1 version2
--- <> compare key1 key2
+        <>
+          if priority1 == 5 && priority2 == 5 then
+            compare key1 key2 <> compare version1 version2
+          else compare 0 0

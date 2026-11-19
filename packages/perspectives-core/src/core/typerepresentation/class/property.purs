@@ -36,7 +36,7 @@ import Perspectives.Representation.ADT (ADT(..))
 import Perspectives.Representation.CalculatedProperty (CalculatedProperty)
 import Perspectives.Representation.Class.Identifiable (class Identifiable, identifier, identifier_)
 import Perspectives.Representation.Class.PersistentType (getCalculatedProperty, getEnumeratedProperty, getPerspectType)
-import Perspectives.Representation.EnumeratedProperty (EnumeratedProperty)
+import Perspectives.Representation.EnumeratedProperty (EnumeratedProperty, retainsFullHistory)
 import Perspectives.Representation.QueryFunction (QueryFunction(..))
 import Perspectives.Representation.Range (Range)
 import Perspectives.Representation.ThreeValuedLogic (bool2threeValued)
@@ -55,6 +55,7 @@ class (Identifiable r i) <= PropertyClass r i | r -> i, i -> r where
   functional :: r -> MonadPerspectives Boolean
   selfonly :: r -> MonadPerspectives Boolean
   authoronly :: r -> MonadPerspectives Boolean
+  fullhistory :: r -> MonadPerspectives Boolean
   isCalculated :: r -> MonadPerspectives Boolean
   calculation :: r -> MonadPerspectives QueryFunctionDescription
   constrainingFacets :: r -> Array PropertyFacet
@@ -75,6 +76,7 @@ instance calculatedPropertyPropertyClass :: PropertyClass CalculatedProperty Cal
   functional r = pure true
   authoronly r = pure false
   selfonly r = pure false
+  fullhistory _ = pure false
   isCalculated _ = pure true
   calculation r = case (unwrap r).calculation of
     Q calc -> pure calc
@@ -90,6 +92,7 @@ instance enumeratedPropertyPropertyClass :: PropertyClass EnumeratedProperty Enu
   mandatory r = pure (unwrap r).mandatory
   selfonly r = pure (unwrap r).selfonly
   authoronly r = pure (unwrap r).authoronly
+  fullhistory r = pure (retainsFullHistory r)
   isCalculated _ = pure false
   calculation r = do
     context <- enumeratedRoleContextType (role r)
@@ -143,6 +146,10 @@ propertyTypeIsAuthorOnly = getProperty >=>
       E r -> authoronly r
       C r -> authoronly r
   )
+
+-- | Pass the actual stored property type after resolving aspect replacements.
+enumeratedPropertyRetainsFullHistory :: EnumeratedPropertyType -> MonadPerspectives Boolean
+enumeratedPropertyRetainsFullHistory = getEnumeratedProperty >=> fullhistory
 
 propertyTypeIsCalculated :: PropertyType -> MonadPerspectives Boolean
 propertyTypeIsCalculated = getProperty >=>

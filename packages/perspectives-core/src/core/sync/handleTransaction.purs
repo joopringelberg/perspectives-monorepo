@@ -27,7 +27,7 @@ import Control.Monad.Error.Class (catchError, throwError, try)
 import Control.Monad.Except (lift, runExcept, runExceptT)
 import Control.Monad.State (StateT, gets, modify, runStateT) as ST
 import Crypto.Subtle.Key.Types (CryptoKey)
-import Data.Array (any, catMaybes, concat, filter, foldl, fromFoldable, null, nub, sortBy)
+import Data.Array (any, catMaybes, concat, filter, foldl, fromFoldable, last, null, nub, sortBy)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.FoldableWithIndex (forWithIndex_)
@@ -52,7 +52,7 @@ import Perspectives.Checking.Authorization (roleHasPerspectiveOnExternalRoleWith
 import Perspectives.ContextAndRole (defaultContextRecord, defaultRolRecord, getNextRolIndex)
 import Perspectives.CoreTypes (MonadPerspectivesTransaction, removeInternally, (###=), (###>>), (##=), (##>), (##>>))
 import Perspectives.Data.EncodableMap as ENCMAP
-import Perspectives.Deltas (addCorrelationIdentifiersToTransactie, addCreatedContextToTransaction, addCreatedRoleToTransaction)
+import Perspectives.Deltas (addCorrelationIdentifiersToTransactie, addCreatedContextToTransaction, addCreatedRoleToTransaction, deltaTypeSortPriority)
 import Perspectives.DependencyTracking.Dependency (findRoleRequests)
 import Perspectives.DomeinCache (retrieveDomeinFile)
 import Perspectives.Error.Pretty (renderPerspectivesError, renderPerspectivesWarning)
@@ -68,6 +68,7 @@ import Perspectives.Persistence.API (getAttachment)
 import Perspectives.Persistence.DeltaStore (deltaStoreDocIdWithDeltaId, extractDeltaInfo, findDeltaByDeltaId, getDeltasForResource, getDeltasForRoleInstance, safeKey, storeDelta, storeDeltaFromSignedDelta, updateDeltaApplied)
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
 import Perspectives.Persistence.PendingTransactionStore (MissingDelta, storePendingTransaction)
+import Perspectives.Persistence.PropertyHistoryStore (storeIncomingDeltaWithHistory)
 import Perspectives.Persistence.ResourceVersionStore (getResourceVersion, incrementResourceVersion, setResourceVersion)
 import Perspectives.Performance (timed)
 import Perspectives.Persistent (addAttachment, entityExists, forceSaveRole, getPerspectRol, saveEntiteit, saveEntiteit_, tryGetPerspectEntiteit, tryGetPerspectRol)
@@ -82,6 +83,7 @@ import Perspectives.SaveUserData (removeBinding, removeContextIfUnbound, replace
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.StrippedDelta (addPublicResourceScheme, addResourceSchemes, addSchemeToResourceIdentifier)
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
+import Perspectives.Sync.PropertyHistory (checkpoint, isCheckpoint, isPropertyOperation, propertyHistory, validateCheckpoint)
 import Perspectives.Sync.Transaction (PublicKeyInfo, Transaction(..))
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..), deduplicatePublicKeys, withoutPredefinedContextScaffolding)
 import Perspectives.Sync.VersionedDelta (DeltaEnvelope(..), parseIncomingDelta)
@@ -89,7 +91,7 @@ import Perspectives.Types.ObjectGetters (contextAspectsClosure, hasAspect, isPub
 import Perspectives.TypesForDeltas (ContextDelta(..), ContextDeltaType(..), DeltaRecord, RoleBindingDelta(..), RoleBindingDeltaType(..), RolePropertyDelta(..), RolePropertyDeltaType(..), UniverseContextDelta(..), UniverseContextDeltaType(..), UniverseRoleDelta(..), UniverseRoleDeltaType(..))
 import Perspectives.UnschemedIdentifiers (UnschemedResourceIdentifier, unschemePerspectivesUser)
 import Perspectives.Warning (PerspectivesWarning(..))
-import Prelude (class Eq, class Monad, class Ord, Unit, bind, compare, discard, flip, map, negate, not, pure, show, unit, void, ($), (*>), (+), (/=), (<), (<$>), (<<<), (<>), (==), (>), (>=), (>>=), (&&), (||), (>=>))
+import Prelude (class Eq, class Monad, class Ord, Unit, bind, compare, discard, flip, map, max, negate, not, pure, show, unit, void, when, ($), (*>), (+), (/=), (<), (<$>), (<<<), (<>), (==), (>), (>=), (>>=), (&&), (||), (>=>))
 import Simple.JSON (readJSON')
 
 -- TODO. Each of the executing functions must catch errors that arise from unknown types.
@@ -134,7 +136,22 @@ executeRoleBindingDelta (RoleBindingDelta { filled, filler, deltaType, subject }
 executeRolePropertyDelta :: RolePropertyDelta -> SignedDelta -> MonadPerspectivesTransaction Unit
 executeRolePropertyDelta d@(RolePropertyDelta { id, roleType, deltaType, values, property, subject }) signedDelta = do
   lift $ renderPerspectivesWarning >=> traceSync $ (ExecutingRolePropertyDelta deltaType id property)
-  case deltaType of
+  if isCheckpoint (unwrap signedDelta).encryptedDelta then do
+    -- Checkpoints certify state as disclosed by a peer, not a new authorised write.
+    -- Network entry verifies both the disclosure signature and original winner.
+    case (unwrap signedDelta).signature of
+      Nothing -> throwError (error "A peer property checkpoint must be signed")
+      Just _ -> pure unit
+    case validateCheckpoint signedDelta of
+      Left message -> throwError $ error message
+      Right _ -> pure unit
+    case checkpoint (unwrap signedDelta).encryptedDelta of
+      Just marker -> do
+        verified <- lift $ verifyDelta marker.winner
+        when (isNothing verified) $ throwError (error "Cannot verify checkpoint winner")
+      Nothing -> throwError (error "Missing property checkpoint marker")
+    setProperty [ id ] property (Just signedDelta) values
+  else case deltaType of
     AddProperty -> do
       -- we need not check whether the model is known if we assume valid transactions:
       -- a role instance creation delta must have preceded the property delta.
@@ -447,6 +464,7 @@ verifyTransaction (TransactionForPeer { deltas, publicKeys }) = do
         -- Verify public key informaton.
         -- Stop or throw if a key cannot be verified!
         forWithIndex_ (unwrap publicKeys) verifyPublicKey
+        for_ (unwrap publicKeys) \info -> for_ info.deltas verifyDelta_
         -- Verify all deltas, using the (now verified) public keys.
         -- Stop or throw if a delta cannot be verified!
         for_ deltas verifyDelta_
@@ -491,10 +509,22 @@ verifyTransaction (TransactionForPeer { deltas, publicKeys }) = do
   verifyDelta_ :: SignedDelta -> ST.StateT (Map.Map UnschemedResourceIdentifier CryptoKey) MonadPerspectivesTransaction Unit
   verifyDelta_ d@(SignedDelta { author }) = do
     cryptoKey <- ST.gets (Map.lookup $ unschemePerspectivesUser author)
-    lift $ lift $ verifyDelta' d cryptoKey >>=
+    (lift $ lift $ verifyDelta' d cryptoKey) >>=
       case _ of
         Nothing -> throwError (error $ "Cannot verify delta allegedly by author: " <> show author)
-        Just _ -> pure unit
+        Just _ -> do
+          case parseIncomingDelta (unwrap d).encryptedDelta of
+            Left message -> throwError $ error $ "Invalid incoming delta: " <> message
+            Right _ -> pure unit
+          case checkpoint (unwrap d).encryptedDelta of
+            Nothing -> pure unit
+            Just marker -> do
+              case (unwrap d).signature of
+                Nothing -> throwError (error "A peer property checkpoint must be signed")
+                Just _ -> pure unit
+              case validateCheckpoint d of
+                Left message -> throwError $ error message
+                Right _ -> verifyDelta_ marker.winner
 
 executeTransaction' :: Map.Map UnschemedResourceIdentifier CryptoKey -> TransactionForPeer -> MonadPerspectivesTransaction Unit
 executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) = do
@@ -523,11 +553,26 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
   let
     deltaInfos = filter (\d -> d.resourceKey /= "")
       (map (\d -> { resourceKey: d.resourceKey, resourceVersion: d.resourceVersion, author: d.author }) verifiedDeltas)
-  gaps <- checkForGaps deltaInfos
+  let
+    checkpointVersions = foldl
+      ( \versions d ->
+          if isCheckpoint d.stringified then Map.insertWith max (safeKey d.resourceKey) d.resourceVersion versions
+          else versions
+      )
+      Map.empty
+      verifiedDeltas
+  gaps <- checkForGapsWith
+    ( \key -> do
+        local <- lift $ getResourceVersion key
+        pure $ max local $ case Map.lookup (safeKey key) checkpointVersions of
+          Just version -> version
+          Nothing -> 0
+    )
+    deltaInfos
   case gaps of
     [] -> do
       -- No gaps: execute all deltas with version tracking.
-      void $ for verifiedDeltas \{ signedDelta, stringified, resourceKey, resourceVersion, author } ->
+      void $ for (sortBy compareForReplay verifiedDeltas) \{ signedDelta, stringified, resourceKey, resourceVersion, author } ->
         executeDeltaWithVersionTracking signedDelta stringified resourceKey resourceVersion author
     _ -> do
       -- Gaps detected: block the entire transaction.
@@ -535,6 +580,20 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
       lift $ traceSync $ "Missing peer delta versions: " <> show gaps
       lift $ storePendingTransaction t gaps
   where
+
+  compareForReplay left right =
+    let
+      priority d = case extractDeltaInfo d.stringified of
+        Just info -> deltaTypeSortPriority info.deltaType
+        Nothing -> 99
+      propertyOrder =
+        if priority left == 5 && priority right == 5 then
+          compare (safeKey left.resourceKey) (safeKey right.resourceKey)
+            <> compare (not $ isCheckpoint left.stringified) (not $ isCheckpoint right.stringified)
+            <> compare left.resourceVersion right.resourceVersion
+        else EQ
+    in
+      compare (priority left) (priority right) <> propertyOrder
 
   executeDeltaWithVersionTracking :: SignedDelta -> String -> String -> Int -> PerspectivesUser -> MonadPerspectivesTransaction Unit
   executeDeltaWithVersionTracking s stringified resourceKey resourceVersion author = do
@@ -550,7 +609,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
         Just info -> map safeKey info.contextInstance
         Nothing -> Nothing
       persistIncomingDelta applied disposition =
-        lift $ storeDelta $ DeltaStoreRecord
+        lift $ storeIncomingDeltaWithHistory $ DeltaStoreRecord
           { _id: deltaStoreDocIdWithDeltaId resourceKey resourceVersion author deltaId
           , _rev: Nothing
           , resourceKey
@@ -567,7 +626,13 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
       Just _ -> pure unit
       Nothing | resourceKey /= "" -> do
         localVersion <- lift $ getResourceVersion resourceKey
-        if resourceVersion < localVersion then do
+        if isCheckpoint stringified then do
+          -- Never overwrite a peer's equally new or newer state with a baseline.
+          when (resourceVersion > localVersion) do
+            executeDelta s (Just stringified)
+            lift $ setResourceVersion resourceKey resourceVersion
+            persistIncomingDelta true "Checkpoint"
+        else if resourceVersion < localVersion then do
           -- Outdated delta: version is behind local version. Store but don't execute.
           lift $ renderPerspectivesWarning >=> traceSync $ (SkippingOutdatedDelta resourceKey deltaType resourceVersion localVersion)
           persistIncomingDelta false "Outdated"
@@ -592,7 +657,14 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
               -- Incoming author wins: execute the delta (overwriting the current value).
               lift $ renderPerspectivesWarning >=> traceSync $ (VersionConflictIncomingWins resourceKey deltaType resourceVersion (show author))
               executeDelta s (Just stringified)
+              for_ sameVersionDeltas \(DeltaStoreRecord old) ->
+                when (not $ isCheckpoint (unwrap old.signedDelta).encryptedDelta)
+                  $ lift
+                  $ updateDeltaApplied old._id false
               persistIncomingDelta true "Applied"
+              when (isPropertyOperation deltaType) do
+                history <- lift $ getDeltasForResource resourceKey
+                restorePropertyFromHistory history
             else do
               -- Existing author wins: store but don't execute.
               lift $ renderPerspectivesWarning >=> traceSync $ (VersionConflictIncomingLoses resourceKey deltaType resourceVersion (show author))
@@ -712,15 +784,28 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
         filter (\d@(DeltaStoreRecord r) -> r.applied && not (isDeletionDeltaType r.deltaType) && isSubResourceDeltaOf roleInstanceId d) allDeltas
     for_ roleLevelDeltas \(DeltaStoreRecord { signedDelta: sd }) ->
       executeDelta sd (Just (unwrap sd).encryptedDelta)
-    for_ subResourceDeltas \(DeltaStoreRecord { signedDelta: sd }) ->
+    for_ (filter (\(DeltaStoreRecord r) -> not $ isPropertyOperation r.deltaType) subResourceDeltas) \(DeltaStoreRecord { signedDelta: sd }) ->
       executeDelta sd (Just (unwrap sd).encryptedDelta)
+    restorePropertyHistories subResourceDeltas
 
   -- | Returns true if any DeltaStoreRecord in the array has an author >= the given author.
   hasAuthorGreaterOrEqual :: PerspectivesUser -> Array DeltaStoreRecord -> Boolean
   hasAuthorGreaterOrEqual _ [] = false
-  hasAuthorGreaterOrEqual incomingAuthor records = case filter (\(DeltaStoreRecord r) -> r.author >= incomingAuthor) records of
-    [] -> false
-    _ -> true
+  hasAuthorGreaterOrEqual incomingAuthor records =
+    case
+      filter
+        ( \(DeltaStoreRecord r) ->
+            let
+              winner = case checkpoint (unwrap r.signedDelta).encryptedDelta of
+                Just marker -> (unwrap marker.winner).author
+                Nothing -> r.author
+            in
+              unschemePerspectivesUser winner >= unschemePerspectivesUser incomingAuthor
+        )
+        records
+      of
+      [] -> false
+      _ -> true
 
   -- | Check whether a resource key is a sub-resource key (i.e. it has a second "#").
   -- | Resource IDs have the form "scheme:#identifier" (one "#" from the scheme separator).
@@ -739,8 +824,12 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
   -- | (e.g. "def:#id"), so every delta resourceKey in a role's delta set also contains "#".
   isSubResourceDeltaOf :: String -> DeltaStoreRecord -> Boolean
   isSubResourceDeltaOf roleInstanceId (DeltaStoreRecord { resourceKey }) =
-    Str.length resourceKey > Str.length roleInstanceId
-      && Str.take (Str.length roleInstanceId + 1) resourceKey == roleInstanceId <> "#"
+    let
+      roleKey = safeKey roleInstanceId
+      key = safeKey resourceKey
+    in
+      Str.length key > Str.length roleKey
+        && Str.take (Str.length roleKey + 1) key == roleKey <> "#"
 
   -- | Extract the role instance ID from a sub-resource key.
   -- | A sub-resource key has the form: roleInstanceId <> "#" <> subResourceId,
@@ -759,16 +848,39 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
   executeDelta s Nothing = pure unit
   executeDelta s (Just stringifiedDelta) = do
     storageSchemes <- lift $ gets _.typeToStorage
-    catchError
-      ( case parseIncomingDelta stringifiedDelta of
-          Right (RolePropertyEnvelope d1) -> lift (addResourceSchemes storageSchemes d1) >>= flip executeRolePropertyDelta s
-          Right (RoleBindingEnvelope d2) -> lift (addResourceSchemes storageSchemes d2) >>= flip executeRoleBindingDelta s
-          Right (ContextEnvelope d3) -> lift (addResourceSchemes storageSchemes d3) >>= flip executeContextDelta s
-          Right (UniverseRoleEnvelope d4) -> lift (addResourceSchemes storageSchemes d4) >>= flip executeUniverseRoleDelta s
-          Right (UniverseContextEnvelope d5) -> lift (addResourceSchemes storageSchemes d5) >>= flip executeUniverseContextDelta s
-          Left _ -> lift $ renderPerspectivesError >=> warnSync $ (UnparseableIncomingDelta stringifiedDelta)
-      )
-      (\e -> lift $ renderPerspectivesError >=> warnSync $ (DeltaExecutionError (show e)))
+    let
+      execute = case parseIncomingDelta stringifiedDelta of
+        Right (RolePropertyEnvelope d1) -> lift (addResourceSchemes storageSchemes d1) >>= flip executeRolePropertyDelta s
+        Right (RoleBindingEnvelope d2) -> lift (addResourceSchemes storageSchemes d2) >>= flip executeRoleBindingDelta s
+        Right (ContextEnvelope d3) -> lift (addResourceSchemes storageSchemes d3) >>= flip executeContextDelta s
+        Right (UniverseRoleEnvelope d4) -> lift (addResourceSchemes storageSchemes d4) >>= flip executeUniverseRoleDelta s
+        Right (UniverseContextEnvelope d5) -> lift (addResourceSchemes storageSchemes d5) >>= flip executeUniverseContextDelta s
+        Left _ -> throwError (error "Cannot execute an unparseable incoming delta")
+    if isCheckpoint stringifiedDelta then execute
+    else catchError execute (\e -> lift $ renderPerspectivesError >=> warnSync $ (DeltaExecutionError (show e)))
+
+-- Reconstruct each property once, instead of treating retained history as a new
+-- sequence of writes. Baseline-boundary conflicts use the original author's ID.
+restorePropertyHistories :: Array DeltaStoreRecord -> MonadPerspectivesTransaction Unit
+restorePropertyHistories records = do
+  let
+    groups = foldl
+      (\acc record@(DeltaStoreRecord r) -> Map.insertWith (<>) (safeKey r.resourceKey) [ record ] acc)
+      Map.empty
+      (filter (\(DeltaStoreRecord r) -> isPropertyOperation r.deltaType) records)
+  for_ groups restorePropertyFromHistory
+
+restorePropertyFromHistory :: Array DeltaStoreRecord -> MonadPerspectivesTransaction Unit
+restorePropertyFromHistory records = case propertyHistory records of
+  Left message -> throwError $ error message
+  Right state -> case last state.changes of
+    Nothing -> pure unit
+    Just signed -> case parseIncomingDelta (unwrap signed).encryptedDelta of
+      Right (RolePropertyEnvelope propertyDelta) -> do
+        storageSchemes <- lift $ gets _.typeToStorage
+        RolePropertyDelta change <- lift $ addResourceSchemes storageSchemes propertyDelta
+        setProperty [ change.id ] change.property (Just signed) state.values
+      _ -> throwError (error "Property history contains a non-property delta")
 
 -- | All identifiers in deltas in a transaction have been stripped from their storage schemes, except for those with the pub: scheme.
 -- | This function adds public resource schemes for the given storageUrl or, when a different publishing point is found for an identifier,
@@ -811,12 +923,17 @@ executeDeltas deltas = do
   -- These deltas are applied on behalf of a public role; they must not be stored
   -- (the originating user's installation already stored them under the original author key).
   modify (over Transaction \tr -> tr { isExecutingIncomingDeltas = true })
-  void $ for deltas case _ of
+  -- File publication reads the final property metadata, after baseline/tail replay.
+  let ordered = filter (not <<< isFileUpload) deltas <> filter isFileUpload deltas
+  void $ for ordered case _ of
     UCD s d -> executeUniverseContextDelta d s
     URD s d -> executeUniverseRoleDelta d s
     CDD s d -> executeContextDelta d s
     RBD s d -> executeRoleBindingDelta d s
     RPD s d -> executeRolePropertyDelta d s
+  where
+  isFileUpload (RPD _ (RolePropertyDelta { deltaType: UploadFile })) = true
+  isFileUpload _ = false
 
 -----------------------------------------------------------
 -- COLLECTING DELTAS

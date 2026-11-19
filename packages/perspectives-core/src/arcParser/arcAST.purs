@@ -132,6 +132,7 @@ data PropertyPart
   | MandatoryAttribute' Boolean
   | SelfonlyAttribute
   | AuthoronlyAttribute
+  | FullhistoryAttribute
   -- The Boolean indicates whether the calculation can be considered to be functional.
   | Calculation' Step Boolean
   | Ran Range

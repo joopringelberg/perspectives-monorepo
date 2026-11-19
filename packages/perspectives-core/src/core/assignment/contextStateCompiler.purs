@@ -49,7 +49,7 @@ import Foreign.Object (singleton)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.ApiTypes (PropertySerialization(..), RolSerialization(..))
 import Perspectives.Assignment.SentenceCompiler (CompiledSentence, compileContextSentence)
-import Perspectives.Assignment.SerialiseAsDeltas (serialiseRoleInstancesAndProperties)
+import Perspectives.Assignment.SerialiseAsDeltas (serialiseRoleInstancesAndPropertiesForInitialVisibility)
 import Perspectives.Assignment.StateCache (CompiledContextState, cacheCompiledContextState, retrieveCompiledContextState)
 import Perspectives.Assignment.Update (ConditionResult(..), isUndetermined, setActiveContextState, setInActiveContextState)
 import Perspectives.CompileActionEffect (compileActionEffectWith)
@@ -226,7 +226,7 @@ enteringState contextId stateId = do
         Nothing -> pure unit
         Just u' ->
           if authorOnly then pure unit
-          else serialiseRoleInstancesAndProperties
+          else serialiseRoleInstancesAndPropertiesForInitialVisibility
             contextId
             u'
             objectQfd

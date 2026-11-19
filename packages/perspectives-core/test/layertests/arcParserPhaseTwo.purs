@@ -7,9 +7,11 @@ import Data.Array (elemIndex, head)
 import Data.Either (Either(..))
 import Data.List (List(..))
 import Data.Maybe (Maybe(..), fromJust, isJust)
+import Data.Newtype (unwrap)
 import Data.Tuple (Tuple(..))
 import Effect (Effect)
 import Effect.Aff (Aff)
+import Foreign (MultipleErrors)
 import Foreign.Object (lookup)
 import Parsing (ParseError)
 import Partial.Unsafe (unsafePartial)
@@ -29,6 +31,8 @@ import Perspectives.Representation.CalculatedProperty (CalculatedProperty(..))
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
 import Perspectives.Representation.Context (Context(..))
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
+import Perspectives.Representation.EnumeratedProperty (EnumeratedProperty(..), defaultEnumeratedProperty, retainsFullHistory)
+import Perspectives.Parsing.Arc.Position (ArcPosition(..))
 import Perspectives.Representation.QueryFunction (QueryFunction(..))
 import Perspectives.Representation.Range (Range(..))
 import Perspectives.Representation.State (State(..))
@@ -37,6 +41,9 @@ import Test.Parsing.DomeinFileSelectors (all, ensureERole, ensureEnumeratedPrope
 import Test.Unit (TestF, suite, test)
 import Test.Unit.Assert (assert)
 import Test.Unit.Main (runTest)
+import Record as Record
+import Simple.JSON (readJSON, writeJSON)
+import Type.Proxy (Proxy(..))
 
 evalPhaseTwo :: forall a. PhaseTwo a -> Aff (Either PerspectivesError a)
 -- evalPhaseTwo = unwrap <<< evalPhaseTwo'
@@ -46,6 +53,39 @@ evalPhaseTwo = evalPhaseTwo' >=> case _ of
 
 theSuite :: Free TestF Unit
 theSuite = suite "Perspectives.Parsing.Arc.PhaseTwo" do
+  test "fullhistory is compiled independently of cardinality and permissions" do
+    r <- runIndentParser
+      "domain model://example.org#History\n  thing Item\n    property Recorded (fullhistory, mandatory, relational, String)\n    property Ordinary (String)\n"
+      ARC.domain
+    case r of
+      Left e -> assert (show e) false
+      Right ctxt -> evalPhaseTwo (traverseDomain ctxt) >>= case _ of
+        Left e -> assert (show e) false
+        Right (DomeinFile { enumeratedProperties }) -> do
+          case lookup "model://example.org#History$Item$Recorded" enumeratedProperties of
+            Just p@(EnumeratedProperty metadata) -> do
+              assert "Stored metadata should request full history" (metadata.fullhistory == Just true && retainsFullHistory p)
+              assert "Other attributes should be preserved" (metadata.mandatory && not metadata.functional)
+              assert "History retention must not change visibility" (not metadata.selfonly && not metadata.authoronly)
+            Nothing -> assert "Missing Recorded property" false
+          case lookup "model://example.org#History$Item$Ordinary" enumeratedProperties of
+            Just p -> assert "An unmodified property should not retain full history" (not $ retainsFullHistory p)
+            Nothing -> assert "Missing Ordinary property" false
+
+  test "Older property metadata without fullhistory still decodes" do
+    let
+      original = defaultEnumeratedProperty "model://example.org#History$Item$Name" "Name"
+        "model://example.org#History$Item"
+        PString
+        (ArcPosition { line: 1, column: 1 })
+      legacy = Record.delete (Proxy :: Proxy "fullhistory") (unwrap original)
+    case (readJSON (writeJSON legacy) :: Either MultipleErrors EnumeratedProperty) of
+      Left e -> assert (show e) false
+      Right p -> assert "Missing metadata should mean bounded history" (not $ retainsFullHistory p)
+    case (readJSON (writeJSON $ EnumeratedProperty $ (unwrap original) { fullhistory = Just true }) :: Either MultipleErrors EnumeratedProperty) of
+      Left e -> assert (show e) false
+      Right p -> assert "Explicit fullhistory should survive serialization" (retainsFullHistory p)
+
   -- testOnly "Representing the Domain and a context with subcontext and role." do
   --   (r :: Either ParseError ContextE) <- {-pure $ unwrap $-} runIndentParser "Context : Domain : MyTestDomain\n  Context : Case : MyCase\n    Role : RoleInContext : MyRoleInContext" domain
   --   case r of

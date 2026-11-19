@@ -52,7 +52,8 @@ import Perspectives.Representation.InstanceIdentifiers (RoleInstance(..))
 import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), RoleType(..))
 import Perspectives.RunMonadPerspectivesTransaction (doNotShareWithPeers, runEmbeddedIfNecessary)
 import Perspectives.StrippedDelta (addResourceSchemes)
-import Perspectives.Sync.HandleTransaction (executeContextDelta, executeRoleBindingDelta, executeRolePropertyDelta, executeUniverseContextDelta, executeUniverseRoleDelta)
+import Perspectives.Sync.HandleTransaction (executeContextDelta, executeRoleBindingDelta, executeRolePropertyDelta, executeUniverseContextDelta, executeUniverseRoleDelta, restorePropertyHistories)
+import Perspectives.Sync.PropertyHistory (isPropertyOperation)
 import Perspectives.Sync.SignedDelta (SignedDelta)
 import Perspectives.TypesForDeltas (ContextDelta(..))
 import Perspectives.Sync.VersionedDelta (DeltaEnvelope(..), parseIncomingDelta)
@@ -101,8 +102,9 @@ restoreRoleFromDeltaStore roleInstanceId = do
       filter (\d@(DeltaStoreRecord r) -> r.applied && not (isDeletionDeltaType r.deltaType) && isSubResourceDeltaOf roleInstanceId d) allDeltas
   for_ roleLevelDeltas \(DeltaStoreRecord { signedDelta: sd }) ->
     applyDelta sd (Just (unwrap sd).encryptedDelta)
-  for_ subResourceDeltas \(DeltaStoreRecord { signedDelta: sd }) ->
+  for_ (filter (\(DeltaStoreRecord r) -> not $ isPropertyOperation r.deltaType) subResourceDeltas) \(DeltaStoreRecord { signedDelta: sd }) ->
     applyDelta sd (Just (unwrap sd).encryptedDelta)
+  restorePropertyHistories subResourceDeltas
 
 -- | Restore a deleted or missing context by:
 -- |   1. Restoring the external role first (required before ConstructEmptyContext can run).

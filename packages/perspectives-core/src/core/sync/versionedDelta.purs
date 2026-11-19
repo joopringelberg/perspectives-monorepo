@@ -51,6 +51,7 @@ import Perspectives.Representation.Class.PersistentType (getCalculatedRole, getC
 import Perspectives.ResourceIdentifiers (stripNonPublicIdentifiers)
 import Perspectives.Sync.LegacyDeltas (LegacyContextDelta, LegacyRoleBindingDelta, LegacyRolePropertyDelta, LegacyUniverseContextDelta, LegacyUniverseRoleDelta, toContextDelta, toRoleBindingDelta, toRolePropertyDelta, toUniverseContextDelta, toUniverseRoleDelta)
 import Perspectives.Sync.SignedDelta (SignedDelta)
+import Perspectives.Sync.PropertyHistory (isCheckpoint)
 import Perspectives.TypesForDeltas (ContextDelta(..), ContextDeltaType(..), RoleBindingDelta(..), RoleBindingDeltaType, RolePropertyDelta(..), RolePropertyDeltaType, UniverseContextDelta(..), UniverseContextDeltaType, UniverseRoleDelta(..), UniverseRoleDeltaType(..))
 import Simple.JSON (class ReadForeign, readJSON', writeJSON)
 
@@ -152,10 +153,13 @@ derive newtype instance ReadForeign WireRolePropertyDelta
 
 parseIncomingDelta :: String -> Either String DeltaEnvelope
 parseIncomingDelta stringifiedDelta =
-  if parseDeltaFormatVersion stringifiedDelta == currentDeltaFormatVersion then
+  if parseDeltaFormatVersion stringifiedDelta == 3 && isCheckpoint stringifiedDelta then
     parseVersion2 stringifiedDelta
-  else
+  else if parseDeltaFormatVersion stringifiedDelta == currentDeltaFormatVersion then
+    parseVersion2 stringifiedDelta
+  else if parseDeltaFormatVersion stringifiedDelta == 1 then
     parseLegacyCompatible stringifiedDelta
+  else Left "Unsupported delta format version"
 
 -- | Private bootstrap containers already exist at every receiver. Published copies do not.
 isPredefinedContextScaffolding :: String -> Boolean

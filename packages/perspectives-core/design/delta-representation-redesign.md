@@ -513,3 +513,30 @@ When this design is implemented, verify at least:
    `before` data.
 6. **Delete-versus-modify:** a deleted role is reconstructed and then modified
    correctly.
+
+## Implemented property-history policy
+
+The bounded-history portion is now implemented independently of the remaining
+representation changes in this proposal:
+
+- The default is one signed property checkpoint plus **ten recent logical
+  versions** per role-instance/property key.
+- A stored property's `fullhistory` attribute retains all legitimately recorded
+  local and received history. This does not change perspective permissions or
+  imply automatic recovery of history removed before opting in.
+- An authenticated disclosing peer may certify a baseline without being allowed
+  to replace the property's values. The certificate is a trusted state assertion;
+  original mutation signatures are preserved, not forged or rewritten.
+- Checkpoints cover version gaps for their own key, preserve boundary-conflict
+  authorship, and support reconstruction of incremental property operations.
+  Other-key gaps still block the whole transaction.
+- Ordinary updates send newly learned changes, not repeated archives. Persistent
+  peer-delivery knowledge advances only after outbox persistence. Newly gained
+  perspectives receive retained initialisation data.
+- Structural/binding history, key-establishment proofs, the latest file-upload
+  evidence and already queued encrypted transactions remain available.
+
+See [the runtime retention specification](../docsources/delta-ordering.md#10-property-history-retention)
+for checkpoint format 3, crash recovery, operational evidence, policy changes and
+rollout constraints. Other sections of this proposal remain proposals unless
+separately implemented.

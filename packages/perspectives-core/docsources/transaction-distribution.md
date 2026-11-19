@@ -48,10 +48,29 @@ data TransactionDestination
 
 ### Historical deltas and transaction membership
 
-Dependency serialization forwards all required DeltaStore history without hashing
-or storing those records again. Newly created deltas still follow the normal
-persistence path; incoming/public execution keeps its existing storage rules.
-This does not prune history or change replay semantics.
+Dependency serialization forwards retained history that has not already been
+durably queued for the destination. It does not hash or persist stored records
+again when their content IDs are available. Newly created deltas follow the
+normal persistence path, including property-history retention.
+
+The persistent `{systemIdentifier}_peerdelivery` database records content IDs per
+peer/resource pair only after the original encrypted packet is saved in the
+outbox. An assembly or outbox failure cannot suppress an unqueued change. Retries
+preserve the original packet. Conflicting and late historical changes are tracked
+by content ID, not merely by their version number. Knowledge IDs are intersected
+with retained history, so bounded properties do not acquire an unbounded delivery
+index.
+
+Newly gained perspectives explicitly initialise retained history even if the
+peer saw it during an earlier period of visibility. This includes empty/deleted
+property state. Ordinary known-visibility updates send only new changes; a new
+checkpoint is omitted when the destination already knows its covered version.
+Public-store distribution does not use peer-delivery knowledge.
+
+Stored properties retain a checkpoint plus ten recent logical versions by
+default; `fullhistory` disables audit-history pruning for that property. Identity
+key proofs remain intact, and the latest file-publication operation is retained
+as operational evidence. See [delta-ordering.md](delta-ordering.md#10-property-history-retention).
 
 Each transaction maintains an in-memory membership set alongside its ordered
 delta array. Membership compares the entire signed delta (author, payload and
@@ -173,7 +192,7 @@ Only then does it send the peer transactions. So a peer that learns about a publ
 
 ## 4. Sending to peers: `sendPeerTransactions`
 
-1. **Grouping.** Each `TransactionForPeer` is first stripped of public-key information for identities who do not occur in its deltas (`removeUnusedPublicKeys`). This comparison ignores storage schemes, so a public-locator bundle still supports an ordinary author identifier. Peer transactions with identical serialisations are grouped, so one encrypted message serves several recipients.
+1. **Grouping.** Each `TransactionForPeer` is first stripped of public-key information for identities who do not occur in its deltas or the original winners embedded in checkpoints (`removeUnusedPublicKeys`). This comparison ignores storage schemes, so a public-locator bundle still supports an ordinary author identifier. Peer transactions with identical serialisations are grouped, so one encrypted message serves several recipients.
 2. **Transport keys.** `recipientTransportKey` reads `TheWorld$PerspectivesUsers$TransportPublicKey` from the schemed `resource` carried in the `Peer` destination. If a recipient has no transport key, that recipient is skipped.
 3. **Encryption.** The payload is encrypted once with a symmetric key (`encryptForRecipients`). That key is wrapped for every recipient. Each wrapped key is labelled with the recipient's **unschemed** guid.
 4. **Sending.** `sendTransactieToUserUsingAMQP` publishes the `EncryptedTransactionForPeer` to the AMQP topic named by the unschemed guid. Each PDR's queue is bound to its own guid as routing key. The message is also stored in the `OutgoingTransactions` post database until the broker sends a receipt. If there is no broker connection, it is only stored and is sent later.

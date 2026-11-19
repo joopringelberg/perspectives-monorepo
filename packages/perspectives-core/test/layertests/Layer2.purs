@@ -54,6 +54,8 @@ import Test.Persistence.Recovery (theSuite) as PR
 import Test.PredefinedContexts (theSuite) as PC
 import Test.VerificationBundles (theSuite) as VB
 import Test.ModelPatches (theSuite) as MP
+import Test.PeerDelivery (theSuite) as PD
+import Test.PropertyHistory (theSuite) as PH
 
 -- import Test.ContextAndRole (theSuite) as CAR
 -- import Test.Queries (theSuite) as QR
@@ -67,3 +69,5 @@ main = runTest do
   PC.theSuite
   VB.theSuite
   MP.theSuite
+  PD.theSuite
+  PH.theSuite

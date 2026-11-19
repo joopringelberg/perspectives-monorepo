@@ -4,9 +4,9 @@ A property declaration defines a property of a role. A property can be either an
 A property declaration has the following syntax:
 ----
 property = enumerated-property | calculated-property
-enumerated-property = 'property' local-identifier '(' property-range [modifier] ')' 
+enumerated-property = 'property' local-identifier ['(' property-attribute (',' property-attribute)* ')']
 												constraining-facet* 
-modifier = ['mandatory'] ['relational'] ['functional'] ['authoronly'] ['selfonly']
+property-attribute = property-range | 'mandatory' | 'relational' | 'authoronly' | 'selfonly' | 'fullhistory'
 calculated-property = 'property' local-identifier ['functional'] '=' expression
 property-range = 'String' | 'Number' | 'Boolean' | 'DateTime' | 'Date' | 'Time' | 'Boolean' | 'Number' | 'Email' | 'File' | 'Year' | 'Month' | 'Week' | 'Day' | 'Hour' | 'Minute' | 'Second' | 'MilliSecond' | 'MarkDown'
 local-identifier = segment
@@ -147,6 +147,21 @@ E.g.:
 A property can be declared with the `authoronly` or `selfonly` modifier. The `authoronly` modifier indicates that only the author of a property value can see that value. The `selfonly` modifier indicates that only the user who himself is the object role instance bearing the property is informed of its value, *even if it is set by another user in another user role*. These modifiers are useful for properties that contain sensitive information, such as passwords or personal notes.
 
 Compare with the same-named modifiers of a perspective (<<keyword-selfonly>>, <<keyword-authoronly>>).
+
+[[keyword-fullhistory-property]]
+=== Full-history modifier
+
+The `fullhistory` modifier requests retention of all legitimate local and received changes for an enumerated (stored) property:
+
+[source,perspectivesarc]
+----
+property AuditTrail (String, fullhistory)
+property PrivateAuditTrail (relational, String, authoronly, fullhistory)
+----
+
+Without this modifier, the retention policy is a checkpoint plus ten recent changes. Omitted metadata in older compiled models has the same meaning as omitting the modifier: `fullhistory` is false. Attributes inside the parentheses are comma-separated and may occur before or after the range.
+
+`fullhistory` does not apply to calculated properties, roles, or perspectives. It controls history retention, not access: it grants no read, write, or synchronization permissions, and does not override `authoronly` or `selfonly`. Only legitimate changes enter the retained history. Authenticated peers entitled to disclose the property may certify checkpoints even without write permission; certification does not authorize new property changes.
 
 === Property declaration examples
 [source,perspectivesarc]
