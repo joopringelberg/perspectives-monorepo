@@ -2,6 +2,7 @@ module Test.VersionedDeltas where
 
 import Prelude
 
+import Control.Monad.Except (runExcept)
 import Data.Array (any)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
@@ -11,7 +12,9 @@ import Data.Newtype (unwrap)
 import Effect (Effect)
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
+import Foreign (Foreign)
 import Foreign.Object (insert, values)
+import Foreign.Object as Object
 import Perspectives.DomeinFile (DomeinFile(..), defaultDomeinFileRecord, stampDomeinFileTypeVersion)
 import Perspectives.Parsing.Arc.Position (ArcPosition(..))
 import Perspectives.Persistence.DeltaStore (deltaStoreDocIdWithDeltaId, safeKey)
@@ -27,7 +30,7 @@ import Test.Unit (TestF, suite, test)
 import Test.Unit.Assert as Assert
 import Test.Unit.Main (runTest)
 import Control.Monad.Free (Free)
-import Simple.JSON (writeJSON)
+import Simple.JSON (readJSON', write, writeJSON)
 
 main :: Effect Unit
 main = runTest theSuite
@@ -45,9 +48,83 @@ theSuite = suite "Versioned delta phase 0/1" do
     Assert.assert "same author and payload should yield the same delta id" (deltaId1 == deltaId2)
     Assert.assert "different payload bytes should yield a different delta id" (deltaId1 /= deltaId3)
 
-  test "delta format parser distinguishes legacy and v2" do
-    Assert.assert "missing version field should be treated as legacy format 1" (parseDeltaFormatVersion "{\"a\":1}" == 1)
+  test "delta format parser distinguishes unmarked and v2" do
+    Assert.assert "missing format marker should be treated as format 1" (parseDeltaFormatVersion "{\"a\":1}" == 1)
     Assert.assert "explicit version field should be treated as format 2" (parseDeltaFormatVersion "{\"deltaFormatVersion\":2}" == 2)
+
+  suite "pre-ordering formats are retired" do
+    let
+      subject = ENR (EnumeratedRoleType "model://example.org#Sales$User")
+      contextType = "model://example.org#Sales"
+      roleType = "model://example.org#Sales$Order"
+      property = "model://example.org#Sales$Order$Status"
+      fixtures =
+        [ { name: "context creation"
+          , key: "context"
+          , payload: writeJSON { subject, id: "context", contextType, deltaType: "ConstructEmptyContext" }
+          }
+        , { name: "role creation"
+          , key: "role"
+          , payload: writeJSON
+              { subject
+              , id: "context"
+              , contextType
+              , roleType
+              , authorizedRole: Nothing :: Maybe RoleType
+              , roleInstances: [ "role" ]
+              , deltaType: "ConstructEmptyRole"
+              }
+          }
+        , { name: "context membership"
+          , key: "role"
+          , payload: writeJSON
+              { subject
+              , contextInstance: "context"
+              , contextType
+              , roleType
+              , roleInstance: "role"
+              , destinationContext: Nothing :: Maybe String
+              , destinationContextType: Nothing :: Maybe String
+              , deltaType: "AddRoleInstancesToContext"
+              }
+          }
+        , { name: "binding"
+          , key: "role#binding"
+          , payload: writeJSON
+              { subject
+              , filled: "role"
+              , filledType: roleType
+              , filler: Just "filler"
+              , fillerType: Just roleType
+              , oldFiller: Nothing :: Maybe String
+              , oldFillerType: Nothing :: Maybe String
+              , deltaType: "SetFirstBinding"
+              }
+          }
+        , { name: "property"
+          , key: "role#" <> property
+          , payload: writeJSON
+              { subject, id: "role", roleType, property, values: [ "approved" ], deltaType: "SetProperty" }
+          }
+        ]
+    for_ fixtures \{ name, key, payload } ->
+      test ("rejects pre-ordering " <> name <> " but preserves ordered unmarked payloads") do
+        case parseIncomingDelta payload of
+          Left _ -> pure unit
+          Right _ -> Assert.assert "Pre-ordering payloads must not be converted to version zero" false
+        case runExcept $ readJSON' payload of
+          Left errors -> Assert.assert (show errors) false
+          Right (fields :: Object.Object Foreign) -> do
+            let
+              singular =
+                if Object.member "roleInstances" fields then
+                  Object.insert "roleInstance" (write "role") $ Object.delete "roleInstances" fields
+                else fields
+              ordered = Object.insert "resourceKey" (write key)
+                $ Object.insert "resourceVersion" (write 1) singular
+            case parseIncomingDelta (writeJSON ordered) of
+              Right _ -> pure unit
+              Left message -> Assert.assert ("Ordered payload must remain readable: " <> message) false
 
   test "v2 role-property deltas strip revision suffixes on parse" do
     let
@@ -139,8 +216,8 @@ theSuite = suite "Versioned delta phase 0/1" do
         ]
         $ gaps 0 [ delta localKey 1, delta propertyKey 2, delta otherKey 2 ]
 
-    test "ignores legacy and already applied versions" do
-      Assert.equal [] $ gaps 2 [ delta publicKey (-1), delta localKey 1, delta publicKey 3 ]
+    test "ignores already applied versions" do
+      Assert.equal [] $ gaps 2 [ delta publicKey 0, delta localKey 1, delta publicKey 3 ]
 
   test "compiled types are stamped with the model version" do
     let contextId = "model://example.org#Sales"

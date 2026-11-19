@@ -5,7 +5,7 @@
 > - `Perspectives.Persistence.DeltaStore` (`packages/perspectives-core/src/core/persistence/deltaStore.purs`)
 > - `Perspectives.Persistence.ResourceVersionStore` (`packages/perspectives-core/src/core/persistence/resourceVersionStore.purs`)
 > - `Perspectives.Persistence.PendingTransactionStore` (`packages/perspectives-core/src/core/persistence/pendingTransactionStore.purs`)
-> - `Perspectives.Sync.LegacyDeltas` (`packages/perspectives-core/src/core/sync/legacyDeltas.purs`)
+> - `Perspectives.Sync.VersionedDelta` (`packages/perspectives-core/src/core/sync/versionedDelta.purs`)
 > - `Perspectives.TypesForDeltas` (`packages/perspectives-core/src/core/sync/typesForDelta.purs`)
 >
 > **Related documentation**
@@ -128,7 +128,7 @@ When constructing a local delta the caller first calls `incrementResourceVersion
 
 ## 5. The central algorithm: `executeDeltaWithVersionTracking`
 
-The function `executeDeltaWithVersionTracking` is called for every non-legacy delta in an incoming transaction (after gap checking; see §6).  It implements the full conflict-resolution logic.
+The function `executeDeltaWithVersionTracking` is called for every ordinary delta in an incoming transaction (after gap checking; see §6).  It implements the conflict-resolution logic.
 
 ```
 executeDeltaWithVersionTracking signedDelta stringified resourceKey resourceVersion author
@@ -136,11 +136,11 @@ executeDeltaWithVersionTracking signedDelta stringified resourceKey resourceVers
 
 The function reads the local version `localVersion = getResourceVersion resourceKey` and branches on the relationship between `resourceVersion` and `localVersion`.
 
-### 5.1 Legacy delta (`resourceVersion < 0`)
+### 5.1 Required ordering information
 
-A delta with `resourceVersion = -1` is a *legacy delta* (see §7).  The function:
-1. Executes the delta unconditionally.
-2. Calls `incrementResourceVersion` to assign it the next version and stamps it in the DeltaStore with `applied = true`.
+All supported delta payloads contain sender-provided `resourceKey` and
+`resourceVersion` fields (see §7). The receiver does not invent versions or
+convert pre-ordering payloads into version-zero deltas.
 
 ### 5.2 Outdated delta (`resourceVersion < localVersion`)
 
@@ -188,7 +188,8 @@ In all other normal cases the delta is executed and stored with `applied = true`
 
 #### 5.4.2 No resourceKey
 
-If `resourceKey` is the empty string (a legacy delta that could not be parsed; see §7) the delta is executed without any version tracking.
+An empty `resourceKey` is excluded from gap checking and the ordinary execution
+path does not execute it. There is no unversioned execution fallback.
 
 ### 5.5 Role restoration from the DeltaStore
 
@@ -224,7 +225,8 @@ type MissingDelta =
   }
 ```
 
-Deltas with an empty resource key (legacy, no ordering info) are excluded from gap checking.
+Deltas with an empty resource key are excluded from gap checking; pre-ordering
+payloads with missing ordering fields are rejected during verification.
 
 ### 6.3 Storing blocked transactions
 
@@ -244,44 +246,22 @@ After a configurable period (the design specifies 24 hours as an example) a pend
 
 ---
 
-## 7. Legacy delta handling
+## 7. Supported delta representations
 
-### 7.1 What is a legacy delta?
+The pre-ordering compatibility layer was removed after the Perspectives Universe
+restart (issue #196). Payloads without `resourceKey` or `resourceVersion`, and
+old role deltas using plural `roleInstances`, are no longer converted or executed.
+Incoming transaction verification reports these payloads as invalid.
 
-Legacy deltas are deltas whose inner JSON payload does **not** contain the `resourceKey` and `resourceVersion` fields.  They were created by peers running an older version of the PDR, before the move to versioned resources.
+The following representations remain supported:
 
-The old `UniverseRoleDelta` also used a `roleInstances :: SerializableNonEmptyArray RoleInstance` field instead of a single `roleInstance :: RoleInstance`.
+- Ordered, unmarked payloads (format 1): the current delta record types, including
+  their ordering fields and singular `roleInstance`, without `deltaFormatVersion`.
+- Format 2: explicit format markers and revisioned type references.
+- Format 3: signed property checkpoints, as described in §10.
 
-### 7.2 Detection
-
-`executeTransaction'` (in `handleTransaction.purs`) tries to extract ordering fields from each verified delta string using `extractOrderingInfo`.  If that fails (the fields are absent), it falls back to `extractLegacyResourceKey` from `Perspectives.Sync.LegacyDeltas`.
-
-`extractLegacyResourceKey` attempts to parse the JSON string as each legacy delta type in sequence and derives the resource key using the same conventions as new deltas:
-
-| Legacy type | Derived resource key |
-|---|---|
-| `LegacyUniverseContextDelta` | `unwrap id` |
-| `LegacyUniverseRoleDelta` | `unwrap (head roleInstances)` |
-| `LegacyContextDelta` | `unwrap roleInstance` |
-| `LegacyRoleBindingDelta` | `unwrap filled <> "#binding"` |
-| `LegacyRolePropertyDelta` | `unwrap id <> "#" <> unwrap property` |
-
-If a resource key can be derived, the delta is tagged with `resourceVersion = -1` (a sentinel value).  If no key can be derived at all, it is tagged with `resourceKey = ""` and `resourceVersion = 0`.
-
-### 7.3 Execution
-
-When `executeDeltaWithVersionTracking` receives a delta with `resourceVersion < 0` (§5.1) it:
-- Executes the delta immediately (no conflict-resolution check).
-- Assigns the next available version via `incrementResourceVersion`.
-- Stores the delta in the DeltaStore with `applied = true`.
-
-Deltas with an empty resource key bypass all version tracking and are executed directly.
-
-### 7.4 Conversion types
-
-`Perspectives.Sync.LegacyDeltas` defines read-only counterparts of all five delta types (`LegacyUniverseContextDelta`, `LegacyUniverseRoleDelta`, `LegacyContextDelta`, `LegacyRoleBindingDelta`, `LegacyRolePropertyDelta`) and converter functions that produce new-format delta values with `resourceKey = ""` and `resourceVersion = 0`.
-
-Inside `executeDelta` (the innermost function that parses and dispatches a single delta) the same legacy types are used as the final fallback in the JSON-parsing cascade.
+This removes only obsolete pre-ordering compatibility. It does not add causal
+metadata to existing ordered deltas or resolve deletion/modification causality.
 
 ---
 
@@ -291,9 +271,9 @@ When an incoming `TransactionForPeer` is received:
 
 1. **Verify signatures** — `verifyTransaction` checks all public-key data and all delta signatures, building a map of `PerspectivesUser → CryptoKey`.
 2. **Execute key deltas** — key-management deltas from the `publicKeys` field are applied to establish author identities in the local store.
-3. **Extract ordering info** (step 1 in `executeTransaction'`) — for each delta the ordering fields are extracted; legacy deltas receive sentinel values.
+3. **Extract ordering info** (step 1 in `executeTransaction'`) — extract the sender-provided fields from each verified delta. Pre-ordering payloads have already been rejected.
 4. **Gap check** (step 2) — if any versioned delta has `resourceVersion > localVersion + 1`, the whole transaction is stored in the pending-transaction store and processing stops.
-5. **Execute with version tracking** (step 3) — if no gaps, each delta is handled by `executeDeltaWithVersionTracking`, which applies the rules of §5 (legacy, outdated, conflict, or normal).
+5. **Execute with version tracking** (step 3) — if no gaps, each delta is handled by `executeDeltaWithVersionTracking`, which applies the rules of §5 (outdated, conflict, or normal), with checkpoint handling described in §10.
 
 ---
 

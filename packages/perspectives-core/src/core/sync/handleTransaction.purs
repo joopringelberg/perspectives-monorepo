@@ -69,7 +69,7 @@ import Perspectives.Persistence.DeltaStore (deltaStoreDocIdWithDeltaId, extractD
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
 import Perspectives.Persistence.PendingTransactionStore (MissingDelta, storePendingTransaction)
 import Perspectives.Persistence.PropertyHistoryStore (storeIncomingDeltaWithHistory)
-import Perspectives.Persistence.ResourceVersionStore (getResourceVersion, incrementResourceVersion, setResourceVersion)
+import Perspectives.Persistence.ResourceVersionStore (getResourceVersion, setResourceVersion)
 import Perspectives.Performance (timed)
 import Perspectives.Persistent (addAttachment, entityExists, forceSaveRole, getPerspectRol, saveEntiteit, saveEntiteit_, tryGetPerspectEntiteit, tryGetPerspectRol)
 import Perspectives.Query.UnsafeCompiler (getRoleInstances)
@@ -243,14 +243,13 @@ checkForGaps = checkForGapsWith (lift <<< getResourceVersion)
 checkForGapsWith :: forall m. Monad m => (String -> m Int) -> Array { resourceKey :: String, resourceVersion :: Int, author :: PerspectivesUser } -> m (Array MissingDelta)
 checkForGapsWith lookupVersion deltaInfos = do
   let
-    nonLegacyInfos = filter (\d -> d.resourceVersion >= 0) deltaInfos
     -- Storage addresses may change on publication; version histories use safeKey identity.
-    resourceKeys = nub (map (safeKey <<< _.resourceKey) nonLegacyInfos)
+    resourceKeys = nub (map (safeKey <<< _.resourceKey) deltaInfos)
   gaps <- for resourceKeys \resourceKey -> do
     localVersion <- lookupVersion resourceKey
     let
       sortedInfos = sortBy (\d1 d2 -> compare d1.resourceVersion d2.resourceVersion)
-        (filter (\d -> safeKey d.resourceKey == resourceKey) nonLegacyInfos)
+        (filter (\d -> safeKey d.resourceKey == resourceKey) deltaInfos)
       result = foldl
         ( \acc d ->
             case acc.gap of

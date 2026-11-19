@@ -77,7 +77,7 @@ theSuite = suite "Predefined context scaffolding" do
       let deltas = scaffolding (PerspectivesUser "historical") id
       equal deltas (unwrap $ withoutPredefinedContextScaffolding $ peerTransaction deltas).deltas
 
-  test "recognizes legacy creation scaffolding for both predefined contexts" do
+  test "recognizes ordered unmarked scaffolding for both predefined contexts" do
     for_ [ "TheWorld", "TheSocialEnvironment" ] \id -> do
       let
         subject = ENR Binding.userType
@@ -85,12 +85,12 @@ theSuite = suite "Predefined context scaffolding" do
         roleType = externalRoleType contextType
         roleInstance = RoleInstance $ id <> "$External"
         payloads =
-          [ writeJSON { subject, id: ContextInstance id, contextType, deltaType: "ConstructEmptyContext" }
-          , writeJSON { subject, id: ContextInstance id, contextType, roleType, roleInstances: [ roleInstance ], deltaType: "ConstructExternalRole" }
-          , writeJSON { subject, contextInstance: ContextInstance id, contextType, roleType, roleInstance, deltaType: "AddExternalRole" }
+          [ writeJSON { subject, resourceKey: id, resourceVersion: 0, id: ContextInstance id, contextType, deltaType: "ConstructEmptyContext" }
+          , writeJSON { subject, resourceKey: unwrap roleInstance, resourceVersion: 0, id: ContextInstance id, contextType, roleType, roleInstance, deltaType: "ConstructExternalRole" }
+          , writeJSON { subject, resourceKey: unwrap roleInstance, resourceVersion: 0, contextInstance: ContextInstance id, contextType, roleType, roleInstance, deltaType: "AddExternalRole" }
           ]
       for_ payloads \payload ->
-        assert "Legacy scaffolding must be omitted too" $ isPredefinedContextScaffolding payload
+        assert "Ordered unmarked scaffolding must be omitted too" $ isPredefinedContextScaffolding payload
 
   test "preserves memberships, bindings, and external properties of predefined contexts" do
     let

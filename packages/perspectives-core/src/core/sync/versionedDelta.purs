@@ -49,7 +49,6 @@ import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), RoleType(..))
 import Perspectives.Representation.Class.PersistentType (getCalculatedRole, getContext, getEnumeratedProperty, getEnumeratedRole)
 import Perspectives.ResourceIdentifiers (stripNonPublicIdentifiers)
-import Perspectives.Sync.LegacyDeltas (LegacyContextDelta, LegacyRoleBindingDelta, LegacyRolePropertyDelta, LegacyUniverseContextDelta, LegacyUniverseRoleDelta, toContextDelta, toRoleBindingDelta, toRolePropertyDelta, toUniverseContextDelta, toUniverseRoleDelta)
 import Perspectives.Sync.SignedDelta (SignedDelta)
 import Perspectives.Sync.PropertyHistory (isCheckpoint)
 import Perspectives.TypesForDeltas (ContextDelta(..), ContextDeltaType(..), RoleBindingDelta(..), RoleBindingDeltaType, RolePropertyDelta(..), RolePropertyDeltaType, UniverseContextDelta(..), UniverseContextDeltaType, UniverseRoleDelta(..), UniverseRoleDeltaType(..))
@@ -158,7 +157,7 @@ parseIncomingDelta stringifiedDelta =
   else if parseDeltaFormatVersion stringifiedDelta == currentDeltaFormatVersion then
     parseVersion2 stringifiedDelta
   else if parseDeltaFormatVersion stringifiedDelta == 1 then
-    parseLegacyCompatible stringifiedDelta
+    parseOrderedUnmarked stringifiedDelta
   else Left "Unsupported delta format version"
 
 -- | Private bootstrap containers already exist at every receiver. Published copies do not.
@@ -251,8 +250,8 @@ parseVersion2 stringifiedDelta =
                 }
             Left err -> Left $ show err
 
-parseLegacyCompatible :: String -> Either String DeltaEnvelope
-parseLegacyCompatible stringifiedDelta =
+parseOrderedUnmarked :: String -> Either String DeltaEnvelope
+parseOrderedUnmarked stringifiedDelta =
   case runExcept $ readJSON' stringifiedDelta of
     Right delta -> Right $ RolePropertyEnvelope delta
     Left _ -> case runExcept $ readJSON' stringifiedDelta of
@@ -263,17 +262,7 @@ parseLegacyCompatible stringifiedDelta =
           Right delta -> Right $ UniverseRoleEnvelope delta
           Left _ -> case runExcept $ readJSON' stringifiedDelta of
             Right delta -> Right $ UniverseContextEnvelope delta
-            Left _ -> case runExcept $ readJSON' stringifiedDelta of
-              Right (delta :: LegacyRolePropertyDelta) -> Right $ RolePropertyEnvelope $ toRolePropertyDelta delta
-              Left _ -> case runExcept $ readJSON' stringifiedDelta of
-                Right (delta :: LegacyRoleBindingDelta) -> Right $ RoleBindingEnvelope $ toRoleBindingDelta delta
-                Left _ -> case runExcept $ readJSON' stringifiedDelta of
-                  Right (delta :: LegacyContextDelta) -> Right $ ContextEnvelope $ toContextDelta delta
-                  Left _ -> case runExcept $ readJSON' stringifiedDelta of
-                    Right (delta :: LegacyUniverseRoleDelta) -> Right $ UniverseRoleEnvelope $ toUniverseRoleDelta delta
-                    Left _ -> case runExcept $ readJSON' stringifiedDelta of
-                      Right (delta :: LegacyUniverseContextDelta) -> Right $ UniverseContextEnvelope $ toUniverseContextDelta delta
-                      Left err -> Left $ show err
+            Left err -> Left $ show err
 
 instance signVersionedUniverseContextDelta :: SignVersionedDelta UniverseContextDelta where
   signVersionedDelta (UniverseContextDelta delta) = do
