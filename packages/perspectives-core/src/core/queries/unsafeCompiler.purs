@@ -591,6 +591,8 @@ compileSequenceFunction (SQD dom (UnaryCombinator sequenceFunctionName) _ _ _) |
     CountF -> pure \things -> pure (show $ length things)
     MinimumF -> case dom of
       (VDOM RAN.PNumber _) -> pure smallestNumber
+      (VDOM RAN.PDate _) -> pure smallestNumber
+      (VDOM RAN.PDateTime _) -> pure smallestNumber
       (VDOM (RAN.PDuration _) _) -> pure smallestNumber
       (VDOM RAN.PString _) -> pure \strings -> ArrayT $ pure $ (maybe [] singleton) (minimum strings)
       (VDOM RAN.PBool _) -> pure \bools -> ArrayT do
@@ -599,6 +601,8 @@ compileSequenceFunction (SQD dom (UnaryCombinator sequenceFunctionName) _ _ _) |
       _ -> throwError (error $ "compileSequenceFunction cannot handle domain '" <> show dom <> "' for 'minimum'.")
     MaximumF -> case dom of
       (VDOM RAN.PNumber _) -> pure largestNumber
+      (VDOM RAN.PDate _) -> pure largestNumber
+      (VDOM RAN.PDateTime _) -> pure largestNumber
       (VDOM (RAN.PDuration _) _) -> pure largestNumber
       (VDOM RAN.PString _) -> pure \strings -> ArrayT $ pure $ (maybe [] singleton) (maximum strings)
       _ -> throwError (error $ "compileSequenceFunction cannot handle domain '" <> show dom <> "' for 'maximum'.")

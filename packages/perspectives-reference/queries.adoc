@@ -122,6 +122,8 @@ Explanation:
 2. See the section <<concept-publicidentifier, Public Identifiers>> for the definition of `publicidentifier`. These expressions result in a single role or context instance.
 3. See the section <<concept-identifier, Identifiers>> for the definition of `identifier`. `contextidentifier` and `roleidentifier` are merely syntactic sugar.
 
+For `Date` and `DateTime` values, `>>= minimum` returns the earliest value and `>>= maximum` returns the latest value. Both return no value for an empty query result.
+
 === Operator precedence
 Operator precedence is ruled by weights for each operator. Parentheses can be used to override these precedences. An operator with higher precedence prevails of an operator with lower precedence. Hence, 
 
