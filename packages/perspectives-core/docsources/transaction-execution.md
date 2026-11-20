@@ -125,6 +125,19 @@ When processing a peer transaction, `executeTransaction'` processes each `Signed
 
 Each delta execution can populate `createdContexts`, `createdRoles`, `rolesToExit`, `scheduledAssignments`, and `invertedQueryResults` in the running Transaction.
 
+Received role deletions and retractions use `scheduleReceivedRoleRemoval`: state
+evaluation and query updates still run, but no replacement local deletion is
+generated, signed, or assigned a resource version. Received context deletions
+likewise skip local deletion generation during scheduling and record
+`ReceivedDeletion` on their `ContextRemoval` assignment. Ordinary action
+scheduling records `LocallyInitiated`.
+
+This origin belongs to the individual deletion, not the transaction or its exit
+actions. It survives entry into the embedded sharing transaction: completing a
+received deletion must not echo it, while local effects produced by exit actions
+must still be shared. Origin is independent of `localRemovals`, whose semantics
+also make removals scheduled by exit actions local-only.
+
 ---
 
 ## Phase 1: Monotonic Actions and Exit Handling
@@ -174,11 +187,15 @@ Runs under `runSharing` for non-sharing transactions.
 
 For each `ContextRemoval` in `scheduledAssignments` whose context still has active states, `exitContext` is called:
 - Exits all root states via `exitingState`.
-- Calls `stateEvaluationAndQueryUpdatesForContext`, which schedules role-level query updates and adds role instances to `rolesToExit`. It also adds a `RemoveExternalRoleInstance` delta, unless the context is in `localRemovals`.
+- Calls `stateEvaluationAndQueryUpdatesForContext`, which handles role-level state/query bookkeeping and severs binding links. It adds a `RemoveExternalRoleInstance` delta only for a `LocallyInitiated` deletion whose context is not in `localRemovals`.
 
 If the context is in `localRemovals`, its exit actions run with `removingLocally` set (see [Local removal](#local-removal)).
 
 Runs under `runSharing` for non-sharing transactions. `localRemovals` is read from the outer transaction before `runSharing` is called, because an embedded transaction does not have it.
+
+The deletion origin is carried by the assignment itself. A received deletion
+does not suppress local exit-action property changes or deletions of other
+resources; those actions use the ordinary scheduling path.
 
 ### Step 1.7 – Update untouchable lists
 

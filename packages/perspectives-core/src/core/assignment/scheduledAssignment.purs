@@ -41,10 +41,22 @@ import Perspectives.Representation.TypeIdentifiers (RoleType, StateIdentifier)
 import Perspectives.Sync.SignedDelta (SignedDelta)
 import Perspectives.Utilities (class PrettyPrint, prettyPrint')
 
+data DeletionOrigin
+  = LocallyInitiated
+  | ReceivedDeletion
+
+derive instance genericDeletionOrigin :: Generic DeletionOrigin _
+
+instance eqDeletionOrigin :: Eq DeletionOrigin where
+  eq = genericEq
+
+instance showDeletionOrigin :: Show DeletionOrigin where
+  show = genericShow
+
 data ScheduledAssignment
   =
     -- The RoleType is the AuthorizedRole: a role of kind ContextRole that the modifying user is authorized for.
-    ContextRemoval ContextInstance (Maybe RoleType)
+    ContextRemoval ContextInstance (Maybe RoleType) DeletionOrigin
   | RoleRemoval RoleInstance
   -- The first RoleInstance has its binding modified; the second RoleInstance, if present, is the new binding.
   | RoleUnbinding RoleInstance (Maybe RoleInstance) (Maybe SignedDelta)
@@ -68,10 +80,10 @@ contextsToBeRemoved :: Array ScheduledAssignment -> Array ContextInstance
 contextsToBeRemoved assignments = unsafePartial getContext <$> filter isContextRemoval assignments
   where
   getContext :: Partial => ScheduledAssignment -> ContextInstance
-  getContext (ContextRemoval cid _) = cid
+  getContext (ContextRemoval cid _ _) = cid
 
   isContextRemoval :: ScheduledAssignment -> Boolean
-  isContextRemoval (ContextRemoval _ _) = true
+  isContextRemoval (ContextRemoval _ _ _) = true
   isContextRemoval _ = false
 
 -----------------------------------------------------------

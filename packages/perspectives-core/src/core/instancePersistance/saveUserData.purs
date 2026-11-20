@@ -36,6 +36,7 @@ module Perspectives.SaveUserData
   , removeAllRoleInstances
   , removeBinding
   , removeContextIfUnbound
+  , removeReceivedContextIfUnbound
   , removeContextInstance
   , removeRoleInstance
   , FillBindingMode(..)
@@ -46,6 +47,8 @@ module Perspectives.SaveUserData
   , scheduleLocalContextRemoval
   , scheduleLocalRoleRemoval
   , scheduleRoleRemoval
+  , scheduleReceivedContextRemoval
+  , scheduleReceivedRoleRemoval
   , setBinding
   , setBindingWithMode
   , setFirstBinding
@@ -98,7 +101,7 @@ import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), Rol
 import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedRoleType, RoleKind(..), RoleType(..), externalRoleType)
 import Perspectives.ResourceIdentifiers (isInPublicScheme)
 import Perspectives.RoleAssignment (filledNoLongerPointsTo, filledPointsTo, fillerNoLongerPointsTo, fillerPointsTo, lookForAlternativeMe, roleIsMe, roleIsNotMe)
-import Perspectives.ScheduledAssignment (ScheduledAssignment(..))
+import Perspectives.ScheduledAssignment (DeletionOrigin(..), ScheduledAssignment(..))
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.StrippedDelta (stripResourceSchemes)
 import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
@@ -128,16 +131,19 @@ data FillBindingMode
 scheduleRoleRemoval :: Boolean -> RoleInstance -> MonadPerspectivesTransaction (Array RoleInstance)
 scheduleRoleRemoval sync id = do
   local <- gets (\(Transaction { removingLocally }) -> removingLocally)
-  scheduleRoleRemoval_ sync local id
+  scheduleRoleRemoval_ LocallyInitiated sync local id
+
+scheduleReceivedRoleRemoval :: RoleInstance -> MonadPerspectivesTransaction (Array RoleInstance)
+scheduleReceivedRoleRemoval = scheduleRoleRemoval_ ReceivedDeletion synchronise false
 
 -- | Like scheduleRoleRemoval, but the removal is not shared with peers.
 scheduleLocalRoleRemoval :: RoleInstance -> MonadPerspectivesTransaction Unit
-scheduleLocalRoleRemoval = void <<< scheduleRoleRemoval_ synchronise true
+scheduleLocalRoleRemoval = void <<< scheduleRoleRemoval_ LocallyInitiated synchronise true
 
 -- | `sync` determines whether STATE EVALUATION and SYNCHRONISATION take place;
 -- | `local` suppresses SYNCHRONISATION only.
-scheduleRoleRemoval_ :: Boolean -> Boolean -> RoleInstance -> MonadPerspectivesTransaction (Array RoleInstance)
-scheduleRoleRemoval_ sync local id = do
+scheduleRoleRemoval_ :: DeletionOrigin -> Boolean -> Boolean -> RoleInstance -> MonadPerspectivesTransaction (Array RoleInstance)
+scheduleRoleRemoval_ origin sync local id = do
   -- It may happen that two public roles with the same address both have a perspective on this role instance.
   -- In that case, we remove the instance for the first public role (in a random order). 
   -- We should check whether it is still there before we try to remove it.
@@ -152,7 +158,7 @@ scheduleRoleRemoval_ sync local id = do
     contextIsScheduledToBeRemoved <- gets
       ( \(Transaction { scheduledAssignments }) -> isJust $ find
           ( case _ of
-              ContextRemoval ctxt _ -> ctxt == contextOfRole
+              ContextRemoval ctxt _ _ -> ctxt == contextOfRole
               _ -> false
           )
           scheduledAssignments
@@ -178,14 +184,17 @@ scheduleRoleRemoval_ sync local id = do
         )
       -- Remove now empty roles that may be on the clipboard, in recent contexts, in pinned contexts and in notifications.
       emptyRoles <- (lift $ emptyRolesToRemove id)
-      for_ emptyRoles (scheduleRoleRemoval_ false local)
+      for_ emptyRoles (scheduleRoleRemoval_ origin false local)
       if sync then (lift $ try $ (getPerspectRol id)) >>= handlePerspectRolError' "scheduleRoleRemoval" []
         \role@(PerspectRol { pspType: roleType, context: contextId, binding }) -> do
           -- STATE EVALUATION
           users <- statesAndPeersForRoleInstanceToRemove role
           -- SYNCHRONISATION ADDS DELTAS
           if local then pure []
-          else synchroniseRoleRemoval role users *> pure users
+          else do
+            if origin == ReceivedDeletion then pure unit
+            else synchroniseRoleRemoval role users
+            pure users
       else pure []
 
 -- | Schedules all roles in the context, including its external role, for removal.
@@ -196,21 +205,24 @@ scheduleRoleRemoval_ sync local id = do
 scheduleContextRemoval :: Maybe RoleType -> Array RoleInstance -> ContextInstance -> MonadPerspectivesTransaction Unit
 scheduleContextRemoval authorizedRole usersWithPerspectiveOnEmbeddingRole id = do
   local <- gets (\(Transaction { removingLocally }) -> removingLocally)
-  scheduleContextRemoval_ local authorizedRole usersWithPerspectiveOnEmbeddingRole id
+  scheduleContextRemoval_ LocallyInitiated local authorizedRole usersWithPerspectiveOnEmbeddingRole id
+
+scheduleReceivedContextRemoval :: Maybe RoleType -> ContextInstance -> MonadPerspectivesTransaction Unit
+scheduleReceivedContextRemoval authorizedRole = scheduleContextRemoval_ ReceivedDeletion false authorizedRole []
 
 -- | Like scheduleContextRemoval, but the removal of the context and its roles is not shared with peers.
 -- | Neither are removals scheduled by the exit actions of the context and its roles.
 scheduleLocalContextRemoval :: Maybe RoleType -> ContextInstance -> MonadPerspectivesTransaction Unit
-scheduleLocalContextRemoval authorizedRole = scheduleContextRemoval_ true authorizedRole []
+scheduleLocalContextRemoval authorizedRole = scheduleContextRemoval_ LocallyInitiated true authorizedRole []
 
-scheduleContextRemoval_ :: Boolean -> Maybe RoleType -> Array RoleInstance -> ContextInstance -> MonadPerspectivesTransaction Unit
-scheduleContextRemoval_ local authorizedRole usersWithPerspectiveOnEmbeddingRole id = do
+scheduleContextRemoval_ :: DeletionOrigin -> Boolean -> Maybe RoleType -> Array RoleInstance -> ContextInstance -> MonadPerspectivesTransaction Unit
+scheduleContextRemoval_ origin local authorizedRole usersWithPerspectiveOnEmbeddingRole id = do
   alreadyScheduled <- gets
     ( \(Transaction { scheduledAssignments, untouchableContexts }) ->
         isJust (elemIndex id untouchableContexts) || isJust
           ( find
               ( case _ of
-                  ContextRemoval ctxt _ -> ctxt == id
+                  ContextRemoval ctxt _ _ -> ctxt == id
                   _ -> false
               )
               scheduledAssignments
@@ -234,6 +246,7 @@ scheduleContextRemoval_ local authorizedRole usersWithPerspectiveOnEmbeddingRole
         allRoleInstances <- pure $ (cons br $ unlinkedInstances <> (concat $ values rolInContext))
         -- Removing a context locally means leaving it: retract the user roles I fill in it (if the removal is authorized by a context role).
         if local then maybe (pure unit) (retractMyUserRoles ctxt) authorizedRole
+        else if origin == ReceivedDeletion then pure unit
         else synchroniseContextRemoval ctxt
         -- If one of these roles is on the clipboard, schedule its removal as well.
         allItems <- lift $ allItemsOnClipboard
@@ -246,7 +259,7 @@ scheduleContextRemoval_ local authorizedRole usersWithPerspectiveOnEmbeddingRole
               else pure unit
         modify
           ( over Transaction \t@{ scheduledAssignments, rolesToExit, localRemovals } -> t
-              { scheduledAssignments = scheduledAssignments `union` [ (ContextRemoval id authorizedRole) ]
+              { scheduledAssignments = scheduledAssignments `union` [ (ContextRemoval id authorizedRole origin) ]
               , rolesToExit = nub $ rolesToExit <> allRoleInstances
               , localRemovals =
                   if local then foldr Set.insert localRemovals (cons (unwrap id) (unwrap <$> allRoleInstances))
@@ -315,10 +328,18 @@ scheduleContextRemoval_ local authorizedRole usersWithPerspectiveOnEmbeddingRole
 
 -- Only called when the external role is also 'bound' in a DBQ role.
 removeContextIfUnbound :: RoleInstance -> Maybe RoleType -> MonadPerspectivesTransaction Unit
-removeContextIfUnbound roleInstance@(RoleInstance rid) rtype = do
+removeContextIfUnbound = removeContextIfUnbound_ LocallyInitiated
+
+removeReceivedContextIfUnbound :: RoleInstance -> Maybe RoleType -> MonadPerspectivesTransaction Unit
+removeReceivedContextIfUnbound = removeContextIfUnbound_ ReceivedDeletion
+
+removeContextIfUnbound_ :: DeletionOrigin -> RoleInstance -> Maybe RoleType -> MonadPerspectivesTransaction Unit
+removeContextIfUnbound_ origin roleInstance@(RoleInstance rid) rtype = do
   mbinder <- lift (roleInstance ##> allRoleBinders)
   case mbinder of
-    Nothing -> scheduleContextRemoval rtype [] (ContextInstance $ deconstructBuitenRol rid)
+    Nothing -> case origin of
+      LocallyInitiated -> scheduleContextRemoval rtype [] (ContextInstance $ deconstructBuitenRol rid)
+      ReceivedDeletion -> scheduleReceivedContextRemoval rtype (ContextInstance $ deconstructBuitenRol rid)
     otherwise -> pure unit
 
 -- | Remove the context instance plus roles after detaching all its roles.

@@ -67,14 +67,14 @@ import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleIns
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), EnumeratedRoleType(..), RoleType(..))
 import Perspectives.RoleStateCompiler (enteringRoleState, evaluateRoleState, exitingRoleState)
 import Perspectives.SaveUserData (changeRoleBinding, removeContextInstance, removeRoleInstance, stateEvaluationAndQueryUpdatesForContext, queryUpdatesForRole)
-import Perspectives.ScheduledAssignment (ScheduledAssignment(..), StateEvaluation(..), contextsToBeRemoved)
+import Perspectives.ScheduledAssignment (DeletionOrigin(..), ScheduledAssignment(..), StateEvaluation(..), contextsToBeRemoved)
 import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.Sync.HandleTransaction (executeDeltas, expandDeltas)
 import Perspectives.Sync.InvertedQueryResult (InvertedQueryResult(..))
 import Perspectives.Sync.Transaction (Transaction(..), TransactionDestination(..), clearTransactionDeltas, createTransaction)
 import Perspectives.Types.ObjectGetters (contextRootStates, publicUrl_, roleRootStates)
 import Perspectives.Warning (PerspectivesWarning(..))
-import Prelude (Unit, bind, discard, flip, join, not, pure, show, unit, unless, void, ($), (&&), (*>), (<$>), (<<<), (<>), (>), (>=>), (>>=), (||), (/=))
+import Prelude (Unit, bind, discard, flip, join, not, pure, show, unit, unless, void, ($), (&&), (*>), (<$>), (<<<), (<>), (==), (>), (>=>), (>>=), (||), (/=))
 import Unsafe.Coerce (unsafeCoerce)
 
 -----------------------------------------------------------
@@ -258,7 +258,7 @@ phase1 share authoringRole r = do
   -- Exit the rootState of contexts that scheduled to be removed, unless we did so before.
   contextsThatHaveNotExited <- lift $ filterA
     ( \sa -> case sa of
-        ContextRemoval ctxt _ -> ctxt ##>> exists' getActiveStates
+        ContextRemoval ctxt _ _ -> ctxt ##>> exists' getActiveStates
         _ -> pure false
     )
     scheduledAssignments
@@ -299,7 +299,7 @@ phase1 share authoringRole r = do
     phase2 share authoringRole r
   where
   isContextRemoval :: ScheduledAssignment -> Boolean
-  isContextRemoval (ContextRemoval _ _) = true
+  isContextRemoval (ContextRemoval _ _ _) = true
   isContextRemoval _ = false
 
   criterium :: ScheduledAssignment -> Boolean
@@ -373,7 +373,7 @@ phase2 share authoringRole r = do
     AA.modify clearTransactionDeltas
     -- Now finally remove contexts and roles.
     void $ for scheduledAssignments case _ of
-      ContextRemoval ctxt authorizedRole -> lift (debugState (padding <> "Remove context " <> unwrap ctxt) *> removeContextInstance ctxt authorizedRole)
+      ContextRemoval ctxt authorizedRole _ -> lift (debugState (padding <> "Remove context " <> unwrap ctxt) *> removeContextInstance ctxt authorizedRole)
       RoleRemoval rid -> lift (debugState (padding <> "Remove role " <> unwrap rid) *> removeRoleInstance rid)
       _ -> pure unit
 
@@ -439,12 +439,12 @@ phase2 share authoringRole r = do
   hasPhysicalRemovals = not <<< null <<< filter isPhysicalRemoval
 
   isPhysicalRemoval :: ScheduledAssignment -> Boolean
-  isPhysicalRemoval (ContextRemoval _ _) = true
+  isPhysicalRemoval (ContextRemoval _ _ _) = true
   isPhysicalRemoval (RoleRemoval _) = true
   isPhysicalRemoval _ = false
 
   criterium :: ScheduledAssignment -> Boolean
-  criterium (ContextRemoval _ _) = true
+  criterium (ContextRemoval _ _ _) = true
   criterium (RoleUnbinding _ _ _) = true
   criterium (ExecuteDestructiveEffect _ _ _) = true
   criterium _ = false
@@ -513,7 +513,7 @@ isGuestRole (CalculatedRoleType cr) = cr `hasLocalName` "Guest"
 
 -- | The first argument holds the identifiers of the resources that are removed locally (see Transaction.localRemovals).
 exitContext :: Partial => Set.Set String -> ScheduledAssignment -> MonadPerspectivesTransaction Unit
-exitContext localRemovals (ContextRemoval ctxt authorizedRole) = do
+exitContext localRemovals (ContextRemoval ctxt authorizedRole origin) = do
   let local = Set.member (unwrap ctxt) localRemovals
   states <- lift (ctxt ##= contextType >=> liftToInstanceLevel contextRootStates)
   if null states then pure unit
@@ -537,9 +537,9 @@ exitContext localRemovals (ContextRemoval ctxt authorizedRole) = do
           }
       )
       t
-  -- Adds a RemoveExternalRoleInstance to the current transaction, unless the context is removed locally.
+  -- Received deletions retain their origin across the sharing transaction used for exit actions.
   -- Severes the link between the roles and their fillers.
-  stateEvaluationAndQueryUpdatesForContext (not local) ctxt authorizedRole
+  stateEvaluationAndQueryUpdatesForContext (not local && origin == LocallyInitiated) ctxt authorizedRole
 
 -- | While the exit actions of a locally removed context or role are executed, removals they schedule are local, too.
 withRemovingLocally :: forall a. Boolean -> MonadPerspectivesTransaction a -> MonadPerspectivesTransaction a

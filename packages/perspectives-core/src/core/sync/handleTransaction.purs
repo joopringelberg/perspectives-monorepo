@@ -82,7 +82,7 @@ import Perspectives.Representation.Verbs (PropertyVerb(..), RoleVerb(..)) as Ver
 import Perspectives.ResourceIdentifiers (createPublicIdentifier, isInPublicScheme, resourceIdentifier2DocLocator, resourceIdentifier2WriteDocLocator, takeGuid)
 import Perspectives.Sync.CanonicalJson (computeDeltaId)
 import Perspectives.Sync.Causal (causalRoleKey, currentCausalEpoch, validateCausalDelta)
-import Perspectives.SaveUserData (removeBinding, removeContextIfUnbound, replaceBinding, scheduleContextRemoval, scheduleRoleRemoval, setFirstBinding, synchronise)
+import Perspectives.SaveUserData (removeBinding, removeReceivedContextIfUnbound, replaceBinding, scheduleReceivedContextRemoval, scheduleReceivedRoleRemoval, setFirstBinding)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.StrippedDelta (addPublicResourceScheme, addResourceSchemes, addSchemeToResourceIdentifier)
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
@@ -351,18 +351,18 @@ executeUniverseRoleDelta delta@(UniverseRoleDelta { id, roleType, roleInstance, 
     RemoveRoleInstance -> do
       -- We justify the Delete verb with the reasoning that the user is allowed to delete all role instances, he certainly is allowed to delete one.
       -- Similarly, if the user is allowed to remove a contextrole with its filler (requiring RemoveContext), he is allowed to remove the contctrole instance.
-      withRemovalPermission $ void $ scheduleRoleRemoval synchronise roleInstance
+      withRemovalPermission $ void $ scheduleReceivedRoleRemoval roleInstance
 
     -- TODO Het lijkt niet nuttig om beide cases te behouden.
     RemoveUnboundExternalRoleInstance -> do
-      withRemovalPermission $ flip removeContextIfUnbound authorizedRole roleInstance
+      withRemovalPermission $ flip removeReceivedContextIfUnbound authorizedRole roleInstance
     RemoveExternalRoleInstance -> do
-      withRemovalPermission $ scheduleContextRemoval authorizedRole [] (ContextInstance $ deconstructBuitenRol $ unwrap roleInstance)
+      withRemovalPermission $ scheduleReceivedContextRemoval authorizedRole (ContextInstance $ deconstructBuitenRol $ unwrap roleInstance)
     -- The author removed the context locally and thereby leaves it. A user who may remove a context locally may leave it;
     -- RemoveContext and DeleteContext imply RemoveContextLocally.
     -- She can only retract role instances that she fills herself.
     RetractRoleInstance -> do
-      withRemovalPermission $ void $ scheduleRoleRemoval synchronise roleInstance
+      withRemovalPermission $ void $ scheduleReceivedRoleRemoval roleInstance
   where
   withRemovalPermission action = do
     result <- roleDeletionPermission delta s
