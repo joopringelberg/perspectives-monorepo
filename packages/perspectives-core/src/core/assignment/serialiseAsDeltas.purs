@@ -89,7 +89,7 @@ import Perspectives.ResourceIdentifiers (isInPublicScheme)
 import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
 import Perspectives.Sync.Transaction (Transaction(..), createTransaction)
-import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..), withoutPredefinedContextScaffolding)
+import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..), currentTransactionForPeer, withoutPredefinedContextScaffolding)
 import Perspectives.Types.ObjectGetters (isEnumeratedRoleType, perspectivesClosure_, propertiesInPerspective)
 import Perspectives.Warning (PerspectivesWarning(..))
 import Prelude (Unit, bind, discard, join, pure, show, unit, void, ($), (<$>), (<<<), (<>), (==), (>=>), (>>=), (||), (<), (*>), (&&))
@@ -123,7 +123,7 @@ serialisedAsDeltasForUserType cid userType = do
     ) >>= addPublicKeysToTransaction
   author <- getPerspectivesUser
   perspectivesSystem <- ContextInstance <$> getMySystem
-  tfp <- pure $ TransactionForPeer
+  tfp <- pure $ currentTransactionForPeer
     { author
     , perspectivesSystem
     , timeStamp

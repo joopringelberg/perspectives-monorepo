@@ -62,6 +62,7 @@ import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), Enum
 import Perspectives.ResourceIdentifiers (takeGuid)
 import Perspectives.RunMonadPerspectivesTransaction (detectPublicStateChanges, runMonadPerspectivesTransaction')
 import Perspectives.Sync.HandleTransaction (executeTransaction)
+import Perspectives.Sync.Causal (currentCausalEpoch)
 import Perspectives.Sync.OutgoingTransaction (OutgoingTransaction(..))
 import Perspectives.Sync.TransactionForPeer (EncryptedTransactionForPeer(..), TransactionForPeer)
 import Perspectives.TransactionQueue (TransactionPriority(..))
@@ -112,17 +113,15 @@ incomingPost = do
           _ -> lift $ warnBroker ("Perspectives.AMQP.IncomingPost.transactionConsumer: " <> show me)
         Right { body, messageId, ack, markHandled: markHandled_, pendingCount } -> do
           lift $ liftEffect $ traceTiming "consumer.receive" messageId
-          -- NOTE. Transaction execution seems to be so slow, that the connection can be lOst before we acknowledge.
-          -- In that case, the broker resends the message.
-          -- That is why we acknowledge first.
-          -- The risk is that the PDR may not handle the message fully and then it is lost.
-          lift $ timed "consumer.ack" messageId (acknowledge ack)
           lift $ timed "incoming.total" messageId do
             showPendingIncomingTransactions pendingCount
             padding <- transactionLevel
             debugBroker $ padding <> "Executing incoming post transaction from author " <> unwrap (unwrap body).author <> " and timestamp " <> show (unwrap body).timeStamp
             profileSession <- liftEffect captureSession
             transaction <- profile profileSession "decrypt" $ timed "incoming.decrypt" messageId (decryptTransaction profileSession body)
+            let currentEpoch = (unwrap transaction).causalEpoch == Just currentCausalEpoch
+            -- Keep early acknowledgement for current traffic; legacy traffic must be stored first.
+            when currentEpoch $ timed "consumer.ack" messageId (acknowledge ack)
             liftEffect $ traceTiming "incoming.admission.requested" messageId
             withTransactionPriority BackgroundTransaction do
               liftEffect $ traceTiming "incoming.admission.granted" messageId
@@ -134,6 +133,7 @@ incomingPost = do
                     (ENR $ EnumeratedRoleType sysUser)
                     (profile profileSession "executeTransaction" (executeTransaction transaction))
               profile profileSession "publicStates" $ timed "incoming.public-states" messageId detectPublicStateChanges
+            when (currentEpoch == false) $ timed "consumer.ack" messageId (acknowledge ack)
             remainingCount <- markHandled markHandled_
             showPendingIncomingTransactions remainingCount
 

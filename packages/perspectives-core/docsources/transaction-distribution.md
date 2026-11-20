@@ -140,6 +140,15 @@ This also applies to public-destination transactions, where the installation
 publishes on behalf of the public role. The encrypted AMQP envelope copies the
 same sender identity.
 
+New envelopes also carry `causalEpoch: "perspectives-causal-1"`. This marks a
+transaction assembled by the upgraded runtime, not the age of every retained
+delta it discloses. Old ordered history can therefore initialise a newly
+entitled peer as baseline evidence without rewriting original signatures.
+The complete transaction, including the epoch, is encrypted. Persisted old
+outbox packets retain their original framing and are quarantined on receipt
+after cutover; they are never automatically upgraded or replayed. See
+[the coordinated cutover procedure](delta-ordering.md#11-per-role-causality-and-coordinated-cutover).
+
 An envelope does not inherit the author of its first delta: reconstruction may
 forward historical deltas from other users, and filtering may remove that first
 delta altogether. Each signed delta retains its original author and signature.

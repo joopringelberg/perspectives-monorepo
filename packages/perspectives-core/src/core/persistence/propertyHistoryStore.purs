@@ -24,6 +24,7 @@ import Perspectives.Authenticate (signDeltaMP)
 import Perspectives.CoreTypes (MonadPerspectives)
 import Perspectives.Persistence.DeltaStore (deltaStoreDocIdWithDeltaId, extractDeltaInfo, getDeltasForResource, pruneDeltasThrough, safeKey, storeDelta, storeDeltaFromSignedDelta)
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
+import Perspectives.Persistence.CausalStore (recordCausalDelta)
 import Perspectives.Representation.Class.Property (enumeratedPropertyRetainsFullHistory)
 import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..))
 import Perspectives.Sync.CanonicalJson (computeDeltaId)
@@ -33,6 +34,7 @@ import Perspectives.Sync.SignedDelta (SignedDelta(..))
 storeLocalDeltaWithHistory :: SignedDelta -> MonadPerspectives Unit
 storeLocalDeltaWithHistory delta = do
   storeDeltaFromSignedDelta delta
+  recordCausalDelta delta
   retainPropertyHistory delta
 
 storeIncomingDeltaWithHistory :: DeltaStoreRecord -> MonadPerspectives Unit

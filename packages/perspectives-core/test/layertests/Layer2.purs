@@ -56,6 +56,7 @@ import Test.VerificationBundles (theSuite) as VB
 import Test.ModelPatches (theSuite) as MP
 import Test.PeerDelivery (theSuite) as PD
 import Test.PropertyHistory (theSuite) as PH
+import Test.CausalSync (theSuite) as CS
 
 -- import Test.ContextAndRole (theSuite) as CAR
 -- import Test.Queries (theSuite) as QR
@@ -71,3 +72,4 @@ main = runTest do
   MP.theSuite
   PD.theSuite
   PH.theSuite
+  CS.theSuite

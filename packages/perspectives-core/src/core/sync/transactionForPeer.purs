@@ -43,6 +43,7 @@ import Perspectives.Representation.InstanceIdentifiers (ContextInstance, Perspec
 import Perspectives.ResourceIdentifiers (isInPublicScheme)
 import Perspectives.UnschemedIdentifiers (UnschemedResourceIdentifier, unschemePerspectivesUser)
 import Perspectives.Sync.CanonicalJson (canonicalizeJsonString)
+import Perspectives.Sync.Causal (currentCausalEpoch)
 import Perspectives.Sync.DateTime (SerializableDateTime)
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
 import Perspectives.Sync.PropertyHistory (checkpoint)
@@ -55,11 +56,29 @@ import Simple.JSON (class ReadForeign, class WriteForeign)
 -- TRANSACTIE
 -----------------------------------------------------------
 newtype TransactionForPeer = TransactionForPeer
-  { author :: PerspectivesUser
+  { causalEpoch :: Maybe String
+  , author :: PerspectivesUser
   , perspectivesSystem :: ContextInstance
   , timeStamp :: SerializableDateTime
   , deltas :: Array SignedDelta
   , publicKeys :: ENCMAP.EncodableMap PerspectivesUser PublicKeyInfo
+  }
+
+currentTransactionForPeer
+  :: { author :: PerspectivesUser
+     , perspectivesSystem :: ContextInstance
+     , timeStamp :: SerializableDateTime
+     , deltas :: Array SignedDelta
+     , publicKeys :: ENCMAP.EncodableMap PerspectivesUser PublicKeyInfo
+     }
+  -> TransactionForPeer
+currentTransactionForPeer r = TransactionForPeer
+  { causalEpoch: Just currentCausalEpoch
+  , author: r.author
+  , perspectivesSystem: r.perspectivesSystem
+  , timeStamp: r.timeStamp
+  , deltas: r.deltas
+  , publicKeys: r.publicKeys
   }
 
 derive instance genericRepTransactionForPeer :: Generic TransactionForPeer _

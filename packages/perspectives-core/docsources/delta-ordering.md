@@ -177,12 +177,18 @@ If the incoming delta is a **role-deletion delta** (delta type is one of `Remove
 
 The function calls `isDeletionSuppressedByModifyWins`:
 - It retrieves all deltas for the role instance and its sub-resources from the DeltaStore.
-- If any sub-resource delta (property or binding) is stored with `applied = true`, a concurrent modification exists.
+- It compares each applied property's or binding's causal clock with the deletion's signed causal context.
+- An earlier, observed modification does not suppress deletion. An applied modification not covered by that context does: resource-version numbers alone cannot establish causality across keys.
 - When such a modification is found: the deletion is **suppressed**.  The local version is advanced to the incoming version and the delta is stored with `applied = false`.
 
 If the incoming delta is a **sub-resource modification** (binding or property) and the role instance does not exist:
-- If the role's resource version is > 0, the role existed and was subsequently deleted.
-- The function calls `restoreRoleFromDeltaStore` to reconstruct the role from the DeltaStore (see §5.5) before executing the property or binding modification.
+- If an authorised, persisted deletion already observed this modification, it remains historical evidence and does not resurrect the role. Its obsolete version gaps do not block the transaction.
+- Otherwise, if the role's resource version is > 0, the function calls `restoreRoleFromDeltaStore` (see §5.5) before executing the concurrent property or binding modification.
+
+The same causal check applies when an incoming deletion wins a same-version
+author conflict. Deletion permission is checked before recording a causal
+tombstone. `RetractRoleInstance` retains its existing, separate retraction
+semantics rather than using modify-wins suppression.
 
 In all other normal cases the delta is executed and stored with `applied = true`.
 
@@ -259,9 +265,12 @@ The following representations remain supported:
   their ordering fields and singular `roleInstance`, without `deltaFormatVersion`.
 - Format 2: explicit format markers and revisioned type references.
 - Format 3: signed property checkpoints, as described in §10.
+- Format 4: revisioned type references plus signed per-role causal metadata,
+  as described in §11. Context creation has no role clock.
 
-This removes only obsolete pre-ordering compatibility. It does not add causal
-metadata to existing ordered deltas or resolve deletion/modification causality.
+Older ordered deltas remain readable as the pre-transition baseline in retained
+history disclosed by an upgraded peer. This does not allow old transactions to
+bypass the coordinated cutover described in §11.
 
 ---
 
@@ -269,11 +278,12 @@ metadata to existing ordered deltas or resolve deletion/modification causality.
 
 When an incoming `TransactionForPeer` is received:
 
-1. **Verify signatures** — `verifyTransaction` checks all public-key data and all delta signatures, building a map of `PerspectivesUser → CryptoKey`.
-2. **Execute key deltas** — key-management deltas from the `publicKeys` field are applied to establish author identities in the local store.
-3. **Extract ordering info** (step 1 in `executeTransaction'`) — extract the sender-provided fields from each verified delta. Pre-ordering payloads have already been rejected.
-4. **Gap check** (step 2) — if any versioned delta has `resourceVersion > localVersion + 1`, the whole transaction is stored in the pending-transaction store and processing stops.
-5. **Execute with version tracking** (step 3) — if no gaps, each delta is handled by `executeDeltaWithVersionTracking`, which applies the rules of §5 (outdated, conflict, or normal), with checkpoint handling described in §10.
+1. **Check the causal epoch** — transactions without the current epoch are durably quarantined without applying keys, values or versions.
+2. **Verify signatures and causal metadata** — `verifyTransaction` checks all public-key data, delta signatures, actor ownership and causal metadata, building a map of `PerspectivesUser → CryptoKey`.
+3. **Execute key deltas** — key-management deltas from the `publicKeys` field are applied to establish author identities in the local store.
+4. **Extract ordering info** (step 1 in `executeTransaction'`) — extract the sender-provided fields from each verified delta. Pre-ordering payloads have already been rejected.
+5. **Gap check** (step 2) — uncovered version gaps block the whole transaction in the pending-transaction store.
+6. **Execute with version tracking** (step 3) — if no gaps, each delta is handled by `executeDeltaWithVersionTracking`, which applies the rules of §5 (outdated, conflict, or normal), with checkpoint handling described in §10.
 
 ---
 
@@ -283,7 +293,7 @@ When an incoming `TransactionForPeer` is received:
 |---|---|---|
 | Ordering unit | Single integer version per resource key | Lamport clock + per-author sequence number |
 | Conflict winner | Author with alphabetically highest ID | Last write wins on arrival order |
-| Modify vs. delete | Modification always wins | Last-writer wins / delete always wins |
+| Modify vs. delete | Concurrent modification wins; observed historical writes do not | Treating all historical changes as concurrent |
 | Gap response | Block entire transaction | Execute available deltas and patch later |
 | Persistence | PouchDB (survives restarts) | In-memory only |
 | Timeout | Planned: 24-hour threshold | No timeout (block forever) |
@@ -352,3 +362,67 @@ additional user-visible audit history.
 Only checkpoint-aware runtimes can consume compacted history. Do not mix this
 protocol with older PDR versions without a coordinated rollout; capability
 negotiation and historical backfill are not provided.
+
+## 11. Per-role causality and coordinated cutover
+
+Every newly signed role-affecting mutation contains `causal`:
+
+```
+{ epoch, dot: { actor, counter }, context: [{ actor, counter }, ...] }
+```
+
+The actor combines the canonical author identity with a persistent random
+installation nonce. Counters and observed clocks are shared across a role's
+creation, membership, binding and property keys, not across unrelated roles.
+Reservations are persisted before signing; unused counter gaps are harmless.
+Resource versions continue to order each individual key.
+
+The `{systemIdentifier}_causal` database stores the installation nonce, epoch,
+per-role observed clocks and a frontier of authorised deletions. A deletion
+observes a modification only if its context covers the modification's entire
+causal clock. Compacted checkpoints additionally carry `causalContext`, the
+union of their compacted prefix, never the live role clock or later retained
+tail. Older checkpoints without causal metadata represent baseline history.
+
+This is authenticated causal bookkeeping, not Byzantine proof: authenticated
+authors can assert observations, and checkpoint certifiers retain the trust
+described in §10.
+
+### Upgrade procedure
+
+The upgraded runtime activates `perspectives-causal-1` on its first causal
+reservation or incoming transaction. There is no separate activation switch.
+
+1. Stop model editing and other mutation-producing activity on **all**
+   installations. Keep them online until traffic has settled.
+2. Ensure outgoing messages have been **received and processed** by their
+   destinations, not merely sent or acknowledged by the broker. Drain incoming
+   queues and resolve pending version-gap transactions as well.
+3. Stop all old runtimes, back up their data, then upgrade all participants
+   before resuming activity. Do not run mixed old/new writers.
+
+Existing ordered history becomes the shared pre-transition baseline. Its
+missing causal information cannot be reconstructed, so this assumes that peers'
+mutually visible state has converged before cutover. Merely declaring divergent
+local states to be a baseline is insufficient. A fresh universe is not required.
+
+All newly assembled transactions include `causalEpoch`, including initial
+disclosures containing retained old history. Existing encrypted outbox packets
+are immutable and are **not** relabelled as current traffic.
+
+Transactions with a missing or unsupported epoch go to
+`{systemIdentifier}_quarantinedtransactions`. `getQuarantinedTransactions`
+enumerates the original decoded transactions and reasons; stable content IDs
+make redelivery idempotent. No key, instance or resource-version mutation from
+these transactions is executed. AMQP acknowledges them only after durable
+storage; the cleartext incoming-post path likewise removes its source document
+only after successful handling. Storage failures propagate.
+
+There is no automatic replay or quarantine UI. Investigate quarantined records,
+reconcile the intended change against current state, and reapply it through the
+upgraded runtime if appropriate. Do not add a current epoch to an old packet to
+force replay. Backups must include both databases and preserve the installation
+nonce: never operate two live copies of the same installation, because they
+would reuse causal counters.
+Local-to-remote and remote-to-local storage migration also copy the causal and
+quarantine databases before switching the runtime's storage location.

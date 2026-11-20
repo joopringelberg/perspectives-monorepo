@@ -45,7 +45,7 @@ import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
 import Perspectives.Sync.HandleTransaction (executeTransaction)
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
 import Perspectives.Sync.Transaction (Transaction(..), TransactionDestination(..))
-import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..), withoutPredefinedContextScaffolding)
+import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..), currentTransactionForPeer, withoutPredefinedContextScaffolding)
 import Perspectives.Sync.VersionedDelta (isPredefinedContextScaffolding)
 import Perspectives.UnschemedIdentifiers (unschemePerspectivesUser)
 import Simple.JSON (class WriteForeign, writeJSON)
@@ -309,7 +309,7 @@ scaffolding author id =
     ]
 
 peerTransaction :: Array SignedDelta -> TransactionForPeer
-peerTransaction deltas = TransactionForPeer
+peerTransaction deltas = currentTransactionForPeer
   { author: PerspectivesUser "def:#local"
   , perspectivesSystem: ContextInstance "def:#test-system"
   , timeStamp: SerializableDateTime bottom

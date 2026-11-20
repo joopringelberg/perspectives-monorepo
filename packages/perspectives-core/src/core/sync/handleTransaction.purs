@@ -27,7 +27,7 @@ import Control.Monad.Error.Class (catchError, throwError, try)
 import Control.Monad.Except (lift, runExcept, runExceptT)
 import Control.Monad.State (StateT, gets, modify, runStateT) as ST
 import Crypto.Subtle.Key.Types (CryptoKey)
-import Data.Array (any, catMaybes, concat, filter, foldl, fromFoldable, last, null, nub, sortBy)
+import Data.Array (any, catMaybes, concat, filter, filterA, foldl, fromFoldable, last, null, nub, sortBy)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.FoldableWithIndex (forWithIndex_)
@@ -67,6 +67,8 @@ import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (getAttachment)
 import Perspectives.Persistence.DeltaStore (deltaStoreDocIdWithDeltaId, extractDeltaInfo, findDeltaByDeltaId, getDeltasForResource, getDeltasForRoleInstance, safeKey, storeDelta, storeDeltaFromSignedDelta, updateDeltaApplied)
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
+import Perspectives.Persistence.CausalStore (coveredByDeletion, ensureCausalEpoch, observedByDeletion, recordCausalDelta)
+import Perspectives.Persistence.QuarantineStore (quarantineTransaction)
 import Perspectives.Persistence.PendingTransactionStore (MissingDelta, storePendingTransaction)
 import Perspectives.Persistence.PropertyHistoryStore (storeIncomingDeltaWithHistory)
 import Perspectives.Persistence.ResourceVersionStore (getResourceVersion, setResourceVersion)
@@ -79,6 +81,7 @@ import Perspectives.Representation.TypeIdentifiers (ResourceType(..), RoleType(.
 import Perspectives.Representation.Verbs (PropertyVerb(..), RoleVerb(..)) as Verbs
 import Perspectives.ResourceIdentifiers (createPublicIdentifier, isInPublicScheme, resourceIdentifier2DocLocator, resourceIdentifier2WriteDocLocator, takeGuid)
 import Perspectives.Sync.CanonicalJson (computeDeltaId)
+import Perspectives.Sync.Causal (causalRoleKey, currentCausalEpoch, validateCausalDelta)
 import Perspectives.SaveUserData (removeBinding, removeContextIfUnbound, replaceBinding, scheduleContextRemoval, scheduleRoleRemoval, setFirstBinding, synchronise)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.StrippedDelta (addPublicResourceScheme, addResourceSchemes, addSchemeToResourceIdentifier)
@@ -320,7 +323,7 @@ executeUniverseContextDelta (UniverseContextDelta { id, contextType, deltaType, 
 
 -- | Retrieves from the repository the model that holds the RoleType, if necessary.
 executeUniverseRoleDelta :: UniverseRoleDelta -> SignedDelta -> MonadPerspectivesTransaction Unit
-executeUniverseRoleDelta (UniverseRoleDelta { id, roleType, roleInstance, authorizedRole, deltaType, subject }) s = do
+executeUniverseRoleDelta delta@(UniverseRoleDelta { id, roleType, roleInstance, authorizedRole, deltaType, subject }) s = do
   lift $ renderPerspectivesWarning >=> traceSync $ (ExecutingUniverseRoleDelta deltaType id roleInstance roleType subject)
   void $ lift $ retrieveDomeinFile (ModelUri $ unsafePartial typeUri2ModelUri_ $ unwrap roleType)
   case deltaType of
@@ -348,32 +351,25 @@ executeUniverseRoleDelta (UniverseRoleDelta { id, roleType, roleInstance, author
     RemoveRoleInstance -> do
       -- We justify the Delete verb with the reasoning that the user is allowed to delete all role instances, he certainly is allowed to delete one.
       -- Similarly, if the user is allowed to remove a contextrole with its filler (requiring RemoveContext), he is allowed to remove the contctrole instance.
-      (lift $ roleHasPerspectiveOnRoleWithVerb subject roleType [ Verbs.Remove, Verbs.Delete, Verbs.RemoveContext, Verbs.DeleteContext ] Nothing Nothing) >>= case _ of
-        Left e -> handleError e
-        Right _ -> void $ scheduleRoleRemoval synchronise roleInstance
+      withRemovalPermission $ void $ scheduleRoleRemoval synchronise roleInstance
 
     -- TODO Het lijkt niet nuttig om beide cases te behouden.
     RemoveUnboundExternalRoleInstance -> do
-      (lift $ roleHasPerspectiveOnExternalRoleWithVerbs subject authorizedRole [ Verbs.DeleteContext, Verbs.RemoveContext ] Nothing Nothing) >>= case _ of
-        Left e -> handleError e
-        Right _ -> flip removeContextIfUnbound authorizedRole roleInstance
+      withRemovalPermission $ flip removeContextIfUnbound authorizedRole roleInstance
     RemoveExternalRoleInstance -> do
-      (lift $ roleHasPerspectiveOnExternalRoleWithVerbs subject authorizedRole [ Verbs.DeleteContext, Verbs.RemoveContext ] Nothing Nothing) >>= case _ of
-        Left e -> handleError e
-        -- As external roles are always stored the same as their contexts, we can reliably retrieve the context instance id from the role id.
-        Right _ -> scheduleContextRemoval authorizedRole [] (ContextInstance $ deconstructBuitenRol $ unwrap roleInstance)
+      withRemovalPermission $ scheduleContextRemoval authorizedRole [] (ContextInstance $ deconstructBuitenRol $ unwrap roleInstance)
     -- The author removed the context locally and thereby leaves it. A user who may remove a context locally may leave it;
     -- RemoveContext and DeleteContext imply RemoveContextLocally.
     -- She can only retract role instances that she fills herself.
     RetractRoleInstance -> do
-      (lift $ roleHasPerspectiveOnExternalRoleWithVerbs subject authorizedRole [ Verbs.RemoveContextLocally, Verbs.RemoveContext, Verbs.DeleteContext ] Nothing Nothing) >>= case _ of
-        Left e -> handleError e
-        Right _ -> do
-          let SignedDelta { author } = s
-          filler <- lift $ bottom_ roleInstance
-          if takeGuid (unwrap filler) == takeGuid (unwrap author) then void $ scheduleRoleRemoval synchronise roleInstance
-          else handleError $ Custom ("A user can only retract role instances that she fills herself. " <> show author <> " tried to retract " <> show roleInstance <> ".")
+      withRemovalPermission $ void $ scheduleRoleRemoval synchronise roleInstance
   where
+  withRemovalPermission action = do
+    result <- roleDeletionPermission delta s
+    case result of
+      Left e -> handleError e
+      Right _ -> action
+
   userCreatesThemselves :: Boolean
   userCreatesThemselves = case subject of
     ENR r -> r == roleType
@@ -432,6 +428,26 @@ executeUniverseRoleDelta (UniverseRoleDelta { id, roleType, roleInstance, author
 --     (ENR $ EnumeratedRoleType sysUser)
 --     (for_ deltas f))
 
+roleDeletionPermission :: UniverseRoleDelta -> SignedDelta -> MonadPerspectivesTransaction (Either PerspectivesError Unit)
+roleDeletionPermission (UniverseRoleDelta { roleType, roleInstance, authorizedRole, deltaType, subject }) (SignedDelta { author }) =
+  case deltaType of
+    RemoveRoleInstance ->
+      void <$> lift (roleHasPerspectiveOnRoleWithVerb subject roleType [ Verbs.Remove, Verbs.Delete, Verbs.RemoveContext, Verbs.DeleteContext ] Nothing Nothing)
+    RemoveUnboundExternalRoleInstance -> externalPermission
+    RemoveExternalRoleInstance -> externalPermission
+    RetractRoleInstance -> do
+      result <- lift $ roleHasPerspectiveOnExternalRoleWithVerbs subject authorizedRole [ Verbs.RemoveContextLocally, Verbs.RemoveContext, Verbs.DeleteContext ] Nothing Nothing
+      case result of
+        Left e -> pure $ Left e
+        Right _ -> do
+          filler <- lift $ bottom_ roleInstance
+          pure $
+            if takeGuid (unwrap filler) == takeGuid (unwrap author) then Right unit
+            else Left $ Custom ("A user can only retract role instances that she fills herself. " <> show author <> " tried to retract " <> show roleInstance <> ".")
+    _ -> pure $ Left $ Custom "Expected a role deletion"
+  where
+  externalPermission = void <$> lift (roleHasPerspectiveOnExternalRoleWithVerbs subject authorizedRole [ Verbs.DeleteContext, Verbs.RemoveContext ] Nothing Nothing)
+
 -- TODO #29 Refactor delta decoding for performance
 -- | Executes all deltas, which leads to a changed store of resources. 
 -- | Does not change anything if some of the information could not be verified.
@@ -440,6 +456,14 @@ executeUniverseRoleDelta (UniverseRoleDelta { id, roleType, roleInstance, author
 -- | re-verification during delta execution.
 executeTransaction :: TransactionForPeer -> MonadPerspectivesTransaction Unit
 executeTransaction t = do
+  void $ lift ensureCausalEpoch
+  if (unwrap t).causalEpoch /= Just currentCausalEpoch then do
+    id <- lift $ quarantineTransaction "Transaction is outside the active causal epoch" t
+    lift $ warnSync $ "Quarantined transaction " <> id <> ": missing or unsupported causal epoch; manual reconciliation required"
+  else executeCurrentTransaction t
+
+executeCurrentTransaction :: TransactionForPeer -> MonadPerspectivesTransaction Unit
+executeCurrentTransaction t = do
   transactionNumber <- gets \(Transaction tr) -> tr.transactionNumber
   -- Prevent addDelta/insertDelta from storing deltas in the DeltaStore.
   -- executeDeltaWithVersionTracking handles DeltaStore persistence directly;
@@ -515,6 +539,9 @@ verifyTransaction (TransactionForPeer { deltas, publicKeys }) = do
           case parseIncomingDelta (unwrap d).encryptedDelta of
             Left message -> throwError $ error $ "Invalid incoming delta: " <> message
             Right _ -> pure unit
+          case validateCausalDelta d of
+            Left message -> throwError $ error message
+            Right _ -> pure unit
           case checkpoint (unwrap d).encryptedDelta of
             Nothing -> pure unit
             Just marker -> do
@@ -534,6 +561,9 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
   for_ (unwrap publicKeys) \{ deltas: keyDeltas } -> void $ for keyDeltas \s@(SignedDelta { encryptedDelta }) -> do
     lift $ storeDeltaFromSignedDelta s
     executeDelta s (Just encryptedDelta)
+    case extractDeltaInfo encryptedDelta of
+      Just info | not $ isDeletionDeltaType info.deltaType -> lift $ recordCausalDelta s
+      _ -> pure unit
 
   -- STEP 1: Verify and extract ordering info from all deltas.
   -- Use the keys collected during verifyTransaction to avoid re-querying the entity store
@@ -544,14 +574,17 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
       Nothing -> lift $ verifyDelta s
     pure $ case mStringified of
       Nothing -> Nothing
+
       Just stringified -> case extractOrderingInfo stringified of
         Just { resourceKey, resourceVersion } -> Just { signedDelta: s, stringified, resourceKey, resourceVersion, author }
         Nothing -> Nothing
 
+  liveDeltas <- filterA (\d -> not <$> coveredWhileAbsent d.signedDelta d.resourceKey) verifiedDeltas
+
   -- STEP 2: Check for gaps. If any delta has resourceVersion > localVersion + 1, block the transaction.
   let
     deltaInfos = filter (\d -> d.resourceKey /= "")
-      (map (\d -> { resourceKey: d.resourceKey, resourceVersion: d.resourceVersion, author: d.author }) verifiedDeltas)
+      (map (\d -> { resourceKey: d.resourceKey, resourceVersion: d.resourceVersion, author: d.author }) liveDeltas)
   let
     checkpointVersions = foldl
       ( \versions d ->
@@ -621,11 +654,41 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
           , disposition: Just disposition
           , contextKey
           }
+      applyDeletion = do
+        storageSchemes <- lift $ gets _.typeToStorage
+        case parseIncomingDelta stringified of
+          Right (UniverseRoleEnvelope deletion) -> do
+            expanded <- lift $ addResourceSchemes storageSchemes deletion
+            permitted <- roleDeletionPermission expanded s
+            case permitted of
+              Left e -> do
+                message <- lift $ renderPerspectivesError e
+                throwError $ error message
+              Right _ -> pure unit
+          _ -> throwError $ error "Expected a role deletion payload"
+        lift $ recordCausalDelta s
+        suppressed <-
+          if deltaType == "RetractRoleInstance" then pure false
+          else isDeletionSuppressedByModifyWins s resourceKey
+        if suppressed then do
+          lift $ renderPerspectivesWarning >=> traceSync $ ModifyWinsOverDeleteSuppressed resourceKey
+          persistIncomingDelta false "ModifyWinsSuppressedDelete"
+          pure false
+        else do
+          executeDelta s (Just stringified)
+          persistIncomingDelta true "Applied"
+          pure true
     case mDuplicate of
       Just _ -> pure unit
       Nothing | resourceKey /= "" -> do
+        when (not $ isDeletionDeltaType deltaType) $ lift $ recordCausalDelta s
         localVersion <- lift $ getResourceVersion resourceKey
-        if isCheckpoint stringified then do
+        historical <- coveredWhileAbsent s resourceKey
+        if historical then do
+          -- Keep evidence available for a later concurrent modification's restoration.
+          lift $ setResourceVersion resourceKey (max localVersion resourceVersion)
+          persistIncomingDelta true "CoveredByDeletion"
+        else if isCheckpoint stringified then do
           -- Never overwrite a peer's equally new or newer state with a baseline.
           when (resourceVersion > localVersion) do
             executeDelta s (Just stringified)
@@ -655,15 +718,20 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
             if incomingAuthorWins then do
               -- Incoming author wins: execute the delta (overwriting the current value).
               lift $ renderPerspectivesWarning >=> traceSync $ (VersionConflictIncomingWins resourceKey deltaType resourceVersion (show author))
-              executeDelta s (Just stringified)
-              for_ sameVersionDeltas \(DeltaStoreRecord old) ->
-                when (not $ isCheckpoint (unwrap old.signedDelta).encryptedDelta)
-                  $ lift
-                  $ updateDeltaApplied old._id false
-              persistIncomingDelta true "Applied"
-              when (isPropertyOperation deltaType) do
-                history <- lift $ getDeltasForResource resourceKey
-                restorePropertyFromHistory history
+              applied <-
+                if isDeletionDeltaType deltaType then applyDeletion
+                else do
+                  executeDelta s (Just stringified)
+                  persistIncomingDelta true "Applied"
+                  pure true
+              when applied do
+                for_ sameVersionDeltas \(DeltaStoreRecord old) ->
+                  when (not $ isCheckpoint (unwrap old.signedDelta).encryptedDelta)
+                    $ lift
+                    $ updateDeltaApplied old._id false
+                when (isPropertyOperation deltaType) do
+                  history <- lift $ getDeltasForResource resourceKey
+                  restorePropertyFromHistory history
             else do
               -- Existing author wins: store but don't execute.
               lift $ renderPerspectivesWarning >=> traceSync $ (VersionConflictIncomingLoses resourceKey deltaType resourceVersion (show author))
@@ -673,19 +741,10 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
           -- (Gaps have already been ruled out by checkForGaps.)
           -- Apply modify-wins-over-delete logic before executing.
           -- A retraction is not suppressed: leaving a context wins over concurrent modifications.
-          if isDeletionDeltaType deltaType && deltaType /= "RetractRoleInstance" then do
+          if isDeletionDeltaType deltaType then do
             -- Incoming is a role deletion. Check for concurrent local modifications on sub-resources.
-            suppressedByModify <- isDeletionSuppressedByModifyWins resourceKey
-            if suppressedByModify then do
-              -- Modify wins over delete: suppress the deletion.
-              lift $ renderPerspectivesWarning >=> traceSync $ (ModifyWinsOverDeleteSuppressed resourceKey)
-              lift $ setResourceVersion resourceKey resourceVersion
-              persistIncomingDelta false "ModifyWinsSuppressedDelete"
-            else do
-              -- No concurrent modifications: apply deletion normally.
-              executeDelta s (Just stringified)
-              lift $ setResourceVersion resourceKey resourceVersion
-              persistIncomingDelta true "Applied"
+            void applyDeletion
+            lift $ setResourceVersion resourceKey resourceVersion
           else if isSubResourceKey resourceKey then do
             -- Incoming is a sub-resource modification (property or binding).
             -- Check whether the role instance was deleted and needs restoration.
@@ -740,14 +799,18 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
   -- | Returns true if an incoming deletion delta for `roleInstanceId` (a role instance ID)
   -- | should be suppressed because there are locally-applied modification deltas on
   -- | sub-resources (properties or bindings) of that role — modify-wins-over-delete.
-  isDeletionSuppressedByModifyWins :: String -> MonadPerspectivesTransaction Boolean
-  isDeletionSuppressedByModifyWins roleInstanceId = do
+  isDeletionSuppressedByModifyWins :: SignedDelta -> String -> MonadPerspectivesTransaction Boolean
+  isDeletionSuppressedByModifyWins deletion roleInstanceId = do
     allRoleDeltas <- lift $ getDeltasForRoleInstance roleInstanceId
-    let
-      hasAppliedSubResourceModification = any
-        (\d@(DeltaStoreRecord r) -> r.applied && isSubResourceDeltaOf roleInstanceId d)
-        allRoleDeltas
-    pure hasAppliedSubResourceModification
+    concurrent <- filterA (\(DeltaStoreRecord r) -> not <$> lift (observedByDeletion deletion r.signedDelta))
+      $ filter (\d@(DeltaStoreRecord r) -> r.applied && isSubResourceDeltaOf roleInstanceId d) allRoleDeltas
+    pure $ not $ null concurrent
+
+  coveredWhileAbsent signed key =
+    if not $ isSubResourceKey key then pure false
+    else do
+      role <- lift $ tryGetPerspectRol (RoleInstance $ extractRoleInstanceId key)
+      if isNothing role then lift $ coveredByDeletion signed else pure false
 
   -- | Restore a deleted role by re-applying its creation and property/binding deltas
   -- | from the delta-store, then marking the deletion delta(s) as not applied.

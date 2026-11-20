@@ -40,6 +40,7 @@ import Data.String as Str
 import Data.Traversable (traverse)
 import Perspectives.Authenticate (signDelta)
 import Perspectives.CoreTypes (MonadPerspectivesTransaction)
+import Perspectives.Persistence.CausalStore (reserveCausalStamp)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance, Value)
 import Perspectives.Representation.CalculatedProperty (CalculatedProperty(..))
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
@@ -58,7 +59,7 @@ defaultTypeVersion :: String
 defaultTypeVersion = "0.0"
 
 currentDeltaFormatVersion :: Int
-currentDeltaFormatVersion = 2
+currentDeltaFormatVersion = 4
 
 data DeltaEnvelope
   = ContextEnvelope ContextDelta
@@ -154,7 +155,7 @@ parseIncomingDelta :: String -> Either String DeltaEnvelope
 parseIncomingDelta stringifiedDelta =
   if parseDeltaFormatVersion stringifiedDelta == 3 && isCheckpoint stringifiedDelta then
     parseVersion2 stringifiedDelta
-  else if parseDeltaFormatVersion stringifiedDelta == currentDeltaFormatVersion then
+  else if parseDeltaFormatVersion stringifiedDelta == 2 || parseDeltaFormatVersion stringifiedDelta == currentDeltaFormatVersion then
     parseVersion2 stringifiedDelta
   else if parseDeltaFormatVersion stringifiedDelta == 1 then
     parseOrderedUnmarked stringifiedDelta
@@ -281,12 +282,14 @@ instance signVersionedUniverseContextDelta :: SignVersionedDelta UniverseContext
 
 instance signVersionedUniverseRoleDelta :: SignVersionedDelta UniverseRoleDelta where
   signVersionedDelta (UniverseRoleDelta delta) = do
+    causal <- lift $ reserveCausalStamp (unwrap delta.roleInstance)
     subject <- versionedRoleParts delta.subject
     contextType <- versionedContextType delta.contextType
     roleType <- versionedEnumeratedRoleType delta.roleType
     authorizedRole <- traverse versionedRoleParts delta.authorizedRole
     signDelta $ writeJSON
       { deltaFormatVersion: currentDeltaFormatVersion
+      , causal
       , subject: subject.reference
       , subjectKind: subject.kind
       , resourceKey: delta.resourceKey
@@ -302,12 +305,14 @@ instance signVersionedUniverseRoleDelta :: SignVersionedDelta UniverseRoleDelta 
 
 instance signVersionedContextDelta :: SignVersionedDelta ContextDelta where
   signVersionedDelta (ContextDelta delta) = do
+    causal <- lift $ reserveCausalStamp (unwrap delta.roleInstance)
     subject <- versionedRoleParts delta.subject
     contextType <- versionedContextType delta.contextType
     roleType <- versionedEnumeratedRoleType delta.roleType
     destinationContextType <- traverse versionedContextType delta.destinationContextType
     signDelta $ writeJSON
       { deltaFormatVersion: currentDeltaFormatVersion
+      , causal
       , subject: subject.reference
       , subjectKind: subject.kind
       , resourceKey: delta.resourceKey
@@ -323,12 +328,14 @@ instance signVersionedContextDelta :: SignVersionedDelta ContextDelta where
 
 instance signVersionedRoleBindingDelta :: SignVersionedDelta RoleBindingDelta where
   signVersionedDelta (RoleBindingDelta delta) = do
+    causal <- lift $ reserveCausalStamp (unwrap delta.filled)
     subject <- versionedRoleParts delta.subject
     filledType <- versionedEnumeratedRoleType delta.filledType
     fillerType <- traverse versionedEnumeratedRoleType delta.fillerType
     oldFillerType <- traverse versionedEnumeratedRoleType delta.oldFillerType
     signDelta $ writeJSON
       { deltaFormatVersion: currentDeltaFormatVersion
+      , causal
       , subject: subject.reference
       , subjectKind: subject.kind
       , resourceKey: delta.resourceKey
@@ -344,11 +351,13 @@ instance signVersionedRoleBindingDelta :: SignVersionedDelta RoleBindingDelta wh
 
 instance signVersionedRolePropertyDelta :: SignVersionedDelta RolePropertyDelta where
   signVersionedDelta (RolePropertyDelta delta) = do
+    causal <- lift $ reserveCausalStamp (unwrap delta.id)
     subject <- versionedRoleParts delta.subject
     roleType <- versionedEnumeratedRoleType delta.roleType
     property <- versionedEnumeratedPropertyType delta.property
     signDelta $ writeJSON
       { deltaFormatVersion: currentDeltaFormatVersion
+      , causal
       , subject: subject.reference
       , subjectKind: subject.kind
       , resourceKey: delta.resourceKey

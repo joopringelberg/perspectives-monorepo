@@ -24,6 +24,7 @@ import Perspectives.ModelDependencies (perspectivesUsersPublicKey, perspectivesU
 import Perspectives.Representation.InstanceIdentifiers (Value)
 import Perspectives.Representation.TypeIdentifiers (RoleType(..))
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
+import Perspectives.Sync.Causal (Clock, coversClock, deltaCausalClock, mergeClock, readCausalStamp, validateClock)
 import Perspectives.UnschemedIdentifiers (unschemePerspectivesUser)
 import Simple.JSON (readJSON', write, writeJSON)
 
@@ -33,6 +34,7 @@ defaultPropertyHistoryDepth = 10
 type Checkpoint =
   { beforeValues :: Array Value
   , winner :: SignedDelta
+  , causalContext :: Maybe Clock
   }
 
 type PropertyChange =
@@ -180,8 +182,10 @@ compactPropertyHistory records = do
               in
                 Right $ Object.insert "subject" (write subject.reference)
                   $ Object.insert "subjectKind" (write subject.kind) source
+        summaries <- traverse (\(DeltaStoreRecord r) -> deltaCausalClock r.signedDelta)
+          $ Array.filter (\(DeltaStoreRecord r) -> r.applied) prefix
         let
-          marker = { beforeValues: prior.values, winner }
+          marker = { beforeValues: prior.values, winner, causalContext: Just $ foldl mergeClock [] summaries }
           payload = Object.insert "deltaFormatVersion" (write 3)
             $ Object.insert "deltaType" (write "SetProperty")
             $ Object.insert "values" (write resolved.values)
@@ -193,6 +197,14 @@ validateCheckpoint signed@(SignedDelta { encryptedDelta }) = do
   marker <- readCheckpoint encryptedDelta >>= note "Missing property checkpoint marker"
   baseline <- readPropertyChange signed
   original <- readPropertyChange marker.winner
+  originalStamp <- readCausalStamp (unwrap marker.winner).encryptedDelta
+  originalClock <- deltaCausalClock marker.winner
+  case marker.causalContext, originalStamp of
+    Nothing, Just _ -> Left "Causal checkpoints require a causal summary"
+    Just summary, _ -> do
+      validateClock summary
+      if coversClock summary originalClock then pure unit else Left "Checkpoint omits its winner's causal history"
+    _, _ -> pure unit
   format <- case runExcept $ readJSON' encryptedDelta of
     Left errors -> Left $ "Invalid checkpoint format: " <> show errors
     Right (r :: { deltaFormatVersion :: Int }) -> Right r.deltaFormatVersion

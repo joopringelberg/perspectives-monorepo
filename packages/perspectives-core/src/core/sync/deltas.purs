@@ -78,7 +78,7 @@ import Perspectives.Sync.OutgoingTransaction (OutgoingTransaction(..))
 import Perspectives.Sync.PropertyHistory (checkpoint)
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
 import Perspectives.Sync.Transaction (PublicKeyInfo, Transaction(..), TransactionDestination(..), appendTransactionDelta)
-import Perspectives.Sync.TransactionForPeer (EncryptedTransactionForPeer(..), TransactionForPeer(..), addToTransactionForPeer, deduplicatePublicKeys, removeUnusedPublicKeys, transactieID, withoutPredefinedContextScaffolding)
+import Perspectives.Sync.TransactionForPeer (EncryptedTransactionForPeer(..), TransactionForPeer(..), addToTransactionForPeer, currentTransactionForPeer, deduplicatePublicKeys, removeUnusedPublicKeys, transactieID, withoutPredefinedContextScaffolding)
 import Perspectives.Types.ObjectGetters (isPublicProxy)
 import Perspectives.UnschemedIdentifiers (UnschemedResourceIdentifier, unschemePerspectivesUser)
 import Prelude (Unit, bind, compare, discard, eq, flip, map, not, pure, show, unit, void, when, ($), (&&), (*>), (<$>), (<<<), (<>), (==), (>=), (>=>), (>>=), (>>>), (||))
@@ -272,13 +272,13 @@ transactieForEachUser t@(Transaction tr@{ timeStamp, deltas, userRoleBottoms, pu
             trs <- get
             case Map.lookup peer trs of
               -- TODO: verwijder public key info voor deltas die er niet toe doen voor deze user.
-              Nothing -> put $ Map.insert peer (TransactionForPeer { author: sender, perspectivesSystem, timeStamp, deltas: [ d ], publicKeys }) trs
+              Nothing -> put $ Map.insert peer (currentTransactionForPeer { author: sender, perspectivesSystem, timeStamp, deltas: [ d ], publicKeys }) trs
               Just trans -> put $ Map.insert peer (addToTransactionForPeer d trans) trs
           else pure unit
         publicRole@(PublicDestination _) -> do
           trs <- get
           case Map.lookup publicRole trs of
-            Nothing -> put $ Map.insert publicRole (TransactionForPeer { author: sender, perspectivesSystem, timeStamp, deltas: [ d ], publicKeys }) trs
+            Nothing -> put $ Map.insert publicRole (currentTransactionForPeer { author: sender, perspectivesSystem, timeStamp, deltas: [ d ], publicKeys }) trs
             Just trans -> put $ Map.insert publicRole (addToTransactionForPeer d trans) trs
     )
 

@@ -32,6 +32,7 @@ import Perspectives.Instances.ObjectGetters (getProperty)
 import Perspectives.ModelDependencies as DEP
 import Perspectives.Persistence.DeltaStore (deltaStoreDocId, getDelta, getDeltasForResource, getDeltasForRoleInstance, safeKey)
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
+import Perspectives.Persistence.CausalStore (CausalRoleDoc(..), getCausalRole)
 import Perspectives.Persistence.PropertyHistoryStore (storeIncomingDeltaWithHistory, storeLocalDeltaWithHistory)
 import Perspectives.Persistence.PendingTransactionStore (getPendingTransactionsForResource)
 import Perspectives.Persistence.ResourceVersionStore (getResourceVersion)
@@ -48,10 +49,11 @@ import Perspectives.Representation.TypeIdentifiers (RoleType(..))
 import Perspectives.Representation.Verbs (PropertyVerb(..))
 import Perspectives.ResourceIdentifiers (takeGuid)
 import Perspectives.Sync.HandleTransaction (executeTransaction, restorePropertyHistories)
-import Perspectives.Sync.PropertyHistory (isCheckpoint, propertyHistory, readPropertyChange)
+import Perspectives.Sync.Causal (covers, currentCausalEpoch)
+import Perspectives.Sync.PropertyHistory (checkpoint, isCheckpoint, propertyHistory, readPropertyChange)
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
 import Perspectives.Sync.Transaction (Transaction(..))
-import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..))
+import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..), currentTransactionForPeer)
 import Perspectives.UnschemedIdentifiers (unschemePerspectivesUser)
 import Simple.JSON (writeJSON)
 import Test.BindingReplacement as Binding
@@ -102,6 +104,25 @@ theSuite = suite "Checkpointed property history" do
         assert "An opted-in property must not be compacted"
           $ not
           $ anyCheckpoint history
+
+  test "a checkpoint covers compacted causal history but not later retained mutations" $
+    Binding.withFixture Binding.localPeer [] [] do
+      for_ (range 2 35) \version ->
+        lift $ storeLocalDeltaWithHistory $ change version "SetProperty" [ Value $ show version ]
+      history <- lift $ getDeltasForResource propertyKey
+      CausalRoleDoc state <- lift $ getCausalRole (unwrap Binding.visibleId)
+      let actor = writeJSON [ "local", "history-fixture" ]
+      liftAff do
+        assert "The live role clock must include the latest write" $ covers state.clock { actor, counter: 35 }
+        case head $ filter (\(DeltaStoreRecord r) -> isCheckpoint (unwrap r.signedDelta).encryptedDelta) history of
+          Nothing -> assert "Expected a compacted causal checkpoint" false
+          Just (DeltaStoreRecord r) -> case checkpoint (unwrap r.signedDelta).encryptedDelta of
+            Just marker -> case marker.causalContext of
+              Just summary -> do
+                assert "Compacted writes must remain causally covered" $ covers summary { actor, counter: r.resourceVersion }
+                assert "A checkpoint must not claim to cover its later tail" $ not $ covers summary { actor, counter: 35 }
+              Nothing -> assert "Causal checkpoints need a causal summary" false
+            Nothing -> assert "Invalid checkpoint" false
 
   test "relative additions and removals survive repeated compaction and property reconstruction" $
     Binding.withFixture Binding.localPeer [] [] do
@@ -174,7 +195,7 @@ theSuite = suite "Checkpointed property history" do
             [ Tuple snapshot.author { key: snapshot.key, transportKey: "unused", deltas: [] }
             , Tuple (PerspectivesUser "local") { key: snapshot.key, transportKey: "unused", deltas: [] }
             ]
-          incoming = TransactionForPeer
+          incoming = currentTransactionForPeer
             { author: snapshot.author
             , perspectivesSystem: Binding.contextId
             , timeStamp: tr.timeStamp
@@ -220,13 +241,20 @@ propertyKey = unwrap Binding.visibleId <> "#" <> unwrap Binding.visibleProperty
 change :: Int -> String -> Array Value -> SignedDelta
 change version operation values = Binding.signed
   { resourceKey: propertyKey
+  , deltaFormatVersion: 4
   , resourceVersion: version
   , deltaType: operation
   , id: RoleInstance "visible"
   , roleType: Binding.visibleType
   , property: Binding.visibleProperty
   , values
-  , subject: ENR Binding.otherUserType
+  , subject: unwrap Binding.otherUserType
+  , subjectKind: "ENR"
+  , causal:
+      { epoch: currentCausalEpoch
+      , dot: { actor: writeJSON [ "local", "history-fixture" ], counter: version }
+      , context: if version > 1 then [ { actor: writeJSON [ "local", "history-fixture" ], counter: version - 1 } ] else []
+      }
   }
 
 signedChange :: Int -> MonadPerspectivesTransaction SignedDelta

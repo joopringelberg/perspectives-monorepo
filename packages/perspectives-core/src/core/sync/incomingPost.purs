@@ -78,8 +78,6 @@ incomingPost url = do
       Left me -> pure unit
       Right (Tuple _ Nothing) -> pure unit
       Right (Tuple id (Just t)) -> do
-        -- Delete the document
-        _ <- lift $ deleteDocument database id Nothing
         padding <- lift transactionLevel
         log $ padding <> "Executing incoming post transaction"
         lift
@@ -88,6 +86,7 @@ incomingPost url = do
               (ENR $ EnumeratedRoleType sysUser)
               (executeTransaction t)
           )
+        void $ lift $ deleteDocument database id Nothing
 
 -----------------------------------------------------------
 -- GETCOUCHDBBASEURLWITHCREDENTIALS

@@ -80,12 +80,14 @@ import Perspectives.InvertedQuery.Storable (StoredQueries, clearInvertedQueriesD
 import Perspectives.Logging (debugInstall, errorInstall, infoInstall, traceInstall, warnInstall)
 import Perspectives.ModelDependencies as DEP
 import Perspectives.Names (getMySystem, getUserIdentifier, lookupIndexedContext, lookupIndexedRole)
-import Perspectives.Persistence.API (DesignDocument(..), Keys(..), MonadPouchdb, addAttachment, addDocument_, createDatabase, deleteDatabase, getAttachment, getDocument, recoverFromRecoveryPoint, refreshRecoveryPoint, replicateDatabase, retrieveDocumentVersion, splitRepositoryFileUrl, toFile, tryGetDocument_, withDatabase)
+import Perspectives.Persistence.API (DesignDocument(..), Keys(..), MonadPouchdb, addAttachment, addDocument_, createDatabase, databaseInfo, deleteDatabase, getAttachment, getDocument, recoverFromRecoveryPoint, refreshRecoveryPoint, replicateDatabase, retrieveDocumentVersion, splitRepositoryFileUrl, toFile, tryGetDocument_, withDatabase)
 import Perspectives.Persistence.API (deleteDocument, documentsInDatabase, excludeDocs) as Persistence
 import Perspectives.Persistence.Authentication (addCredentials) as Authentication
 import Perspectives.Persistence.CouchdbFunctions (addRoleToUser, concatenatePathSegments, removeRoleFromUser, user2couchdbuser)
 import Perspectives.Persistence.CouchdbFunctions as CDB
 import Perspectives.Persistence.DeltaStore (storeDeltaFromSignedDelta)
+import Perspectives.Persistence.CausalStore (causalDatabaseName, ensureCausalEpoch)
+import Perspectives.Persistence.QuarantineStore (quarantineDatabaseName)
 import Perspectives.Persistence.State (getSystemIdentifier, getCouchdbBaseURL, getCouchdbCredentials)
 import Perspectives.Persistence.Types (Credential(..), UserName, Password)
 import Perspectives.Persistent (entitiesDatabaseName, forceSaveDomeinFile, getDomeinFile, getPerspectRol, saveEntiteit, saveEntiteit_, saveMarkedResources, tryGetPerspectContext, tryGetPerspectEntiteit, tryGetPerspectRol)
@@ -1355,17 +1357,25 @@ moveDataToRemote urls userNames passwords _ =
           let remoteInvertedQueries = url <> systemId <> "_invertedqueries"
           let deltastore = url <> systemId <> "_deltastore"
           let resourceversions = url <> systemId <> "_resourceversions"
+          void ensureCausalEpoch
+          causal <- causalDatabaseName
+          quarantine <- quarantineDatabaseName
+          void $ databaseInfo quarantine
           createDatabase remoteEntities
           createDatabase remotePost
           createDatabase remoteModels
           createDatabase remoteInvertedQueries
           createDatabase deltastore
+          createDatabase (url <> causal)
+          createDatabase (url <> quarantine)
           replicateDatabase (systemId <> "_entities") remoteEntities
           replicateDatabase (systemId <> "_post") remotePost
           replicateDatabase (systemId <> "_models") remoteModels
           replicateDatabase (systemId <> "_invertedqueries") remoteInvertedQueries
           replicateDatabase (systemId <> "_deltastore") deltastore
           replicateDatabase (systemId <> "_resourceversions") resourceversions
+          replicateDatabase causal (url <> causal)
+          replicateDatabase quarantine (url <> quarantine)
           modify \s -> s { couchdbUrl = Just url, databases = empty }
           liftAff $ idbSet "couchdbUrl" (write url)
           liftAff $ idbSet "userName" (write userName)
@@ -1395,12 +1405,18 @@ moveDataToLocal _ =
             case mcred of
               Nothing -> pure unit
               Just (Credential userName password) -> do
+                void ensureCausalEpoch
+                causal <- causalDatabaseName
+                quarantine <- quarantineDatabaseName
+                void $ databaseInfo quarantine
                 replicateDatabase (url <> systemId <> "_entities") (systemId <> "_entities")
                 replicateDatabase (url <> systemId <> "_post") (systemId <> "_post")
                 replicateDatabase (url <> systemId <> "_models") (systemId <> "_models")
                 replicateDatabase (url <> systemId <> "_invertedqueries") (systemId <> "_invertedqueries")
                 replicateDatabase (url <> systemId <> "_deltastore") (systemId <> "_deltastore")
                 replicateDatabase (url <> systemId <> "_resourceversions") (systemId <> "_resourceversions")
+                replicateDatabase (url <> causal) causal
+                replicateDatabase (url <> quarantine) quarantine
                 modify \s -> s { couchdbUrl = Nothing, databases = empty }
                 liftAff $ idbDel "couchdbUrl"
                 liftAff $ idbDel "userName"

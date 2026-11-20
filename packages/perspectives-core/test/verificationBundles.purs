@@ -44,7 +44,7 @@ import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
 import Perspectives.Sync.HandleTransaction (executeTransaction, verifyTransaction)
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
 import Perspectives.Sync.Transaction (PublicKeyInfo, Transaction(..))
-import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..), deduplicatePublicKeys, removeUnusedPublicKeys)
+import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..), currentTransactionForPeer, deduplicatePublicKeys, removeUnusedPublicKeys)
 import Perspectives.UnschemedIdentifiers (unschemePerspectivesUser)
 import Simple.JSON (unsafeStringify, writeJSON)
 import Test.BindingReplacement as Binding
@@ -197,7 +197,7 @@ bundle =
   }
 
 transaction :: Array SignedDelta -> EM.EncodableMap PerspectivesUser PublicKeyInfo -> TransactionForPeer
-transaction deltas publicKeys = TransactionForPeer
+transaction deltas publicKeys = currentTransactionForPeer
   { author: localAuthor
   , perspectivesSystem: ContextInstance "def:#test-system"
   , timeStamp: SerializableDateTime bottom

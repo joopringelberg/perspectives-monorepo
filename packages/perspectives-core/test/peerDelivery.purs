@@ -42,7 +42,7 @@ import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
 import Perspectives.Sync.OutgoingTransaction (OutgoingTransaction(..))
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
 import Perspectives.Sync.Transaction (Transaction(..))
-import Perspectives.Sync.TransactionForPeer (EncryptedTransactionForPeer(..), TransactionForPeer(..), removeUnusedPublicKeys)
+import Perspectives.Sync.TransactionForPeer (EncryptedTransactionForPeer(..), TransactionForPeer(..), currentTransactionForPeer, removeUnusedPublicKeys)
 import Perspectives.UnschemedIdentifiers (UnschemedResourceIdentifier, unschemePerspectivesUser)
 import Simple.JSON (writeJSON)
 import Test.BindingReplacement as Binding
@@ -257,7 +257,7 @@ theSuite = suite "Durable incremental peer delivery" do
       Transaction assembled <- lift $ addPublicKeysToTransaction $
         over Transaction (\t -> t { deltas = [ DeltaInTransaction { users: [ Binding.userId ], delta: baseline } ] }) transaction
       let
-        TransactionForPeer kept = removeUnusedPublicKeys $ TransactionForPeer
+        TransactionForPeer kept = removeUnusedPublicKeys $ currentTransactionForPeer
           { author: PerspectivesUser "local"
           , perspectivesSystem: Binding.contextId
           , timeStamp: assembled.timeStamp
