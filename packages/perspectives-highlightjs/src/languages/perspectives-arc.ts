@@ -219,7 +219,7 @@ const timeConstants: Mode = {
 
 // OPERATORS
 const alphabeticOperator: Mode = {
-    begin: /\b(either|both|binds|matches|and|or|not|exists|available|boundBy|binder|allfilledroles|context|extern|fills|filledBy|letE|letA|union|intersection|orElse|binding|this|me|indexedName|publicrole|publiccontext|isInState|contextinstance|roleinstance|specialisesRoleType|roleTypes|contextType|roleType|modelname|returns|translate)\b/,
+    begin: /\b(either|both|binds|matches|and|or|not|exists|available|boundBy|binder|allfilledroles|context|extern|fills|filledBy|letE|letA|union|intersection|difference|orElse|binding|this|me|indexedName|publicrole|publiccontext|isInState|contextinstance|roleinstance|specialisesRoleType|roleTypes|contextType|roleType|modelname|returns|translate)\b/,
     scope: base0C
 };
 

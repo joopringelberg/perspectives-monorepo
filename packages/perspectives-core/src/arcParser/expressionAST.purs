@@ -137,6 +137,7 @@ data Operator
   | Sequence ArcPosition
   | Union ArcPosition
   | Intersection ArcPosition
+  | Difference ArcPosition
   | OrElse ArcPosition
   | BindsOp ArcPosition
   | FillsOp ArcPosition
@@ -310,6 +311,7 @@ instance prettyPrintOperator :: PrettyPrint Operator where
   prettyPrint' t (Sequence _) = "Sequence"
   prettyPrint' t (Union _) = "Union"
   prettyPrint' t (Intersection _) = "Intersection"
+  prettyPrint' t (Difference _) = "Difference"
   prettyPrint' t (OrElse _) = "OrElse"
   prettyPrint' t (BindsOp _) = "FilledBy"
   prettyPrint' t (FillsOp _) = "Fills"

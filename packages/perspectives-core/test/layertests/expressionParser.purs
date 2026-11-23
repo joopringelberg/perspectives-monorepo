@@ -25,6 +25,24 @@ import Test.Unit.Assert (assert)
 
 theSuite :: Free TestF Unit
 theSuite = suite "Perspectives.Parsing.Arc.Expression" do
+  test "Difference binds less tightly than navigation" do
+    result <- runIndentParser "RoleA difference RoleB >> binding" step
+    case result of
+      Right (Binary (BinaryStep { operator: Difference _, left: Simple (ArcIdentifier _ "RoleA"), right: Binary (BinaryStep { operator: Compose _ }) })) -> pure unit
+      _ -> assert ("Expected difference with navigation on the right, got " <> show result) false
+
+  test "Parentheses group difference before navigation" do
+    result <- runIndentParser "(RoleA difference RoleB) >> binding" step
+    case result of
+      Right (Binary (BinaryStep { operator: Compose _, left: Binary (BinaryStep { operator: Difference _ }) })) -> pure unit
+      _ -> assert ("Expected navigation after difference, got " <> show result) false
+
+  test "Difference query function survives serialisation" do
+    let original = QF.BinaryCombinator DifferenceF
+    case readJSON (writeJSON original) of
+      Right parsed -> assert "Difference should round-trip" (parsed == original)
+      Left err -> assert (show err) false
+
   test "SimpleStep: allfilledroles" do
     result <- runIndentParser "allfilledroles" simpleStep
     case result of

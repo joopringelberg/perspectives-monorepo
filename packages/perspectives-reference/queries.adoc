@@ -102,7 +102,7 @@ operator =
 	'>>' | '>>' | '==' | '/=' | '<' | '<=' | '>' | '>=' 
 	| 'and' | 'or' 
   | '+' | '-' | '*' | '/' 
-	| 'union' | 'orElse' | 'intersection'
+	| 'union' | 'orElse' | 'intersection' | 'difference'
 	| 'filledBy' | 'fills'
 	| 'matches'
 
@@ -148,7 +148,7 @@ which is usually not what you expect. instead, write:
 |Operator|Precedence
 
 |>>|9
-|union, intersection, orElse|8
+|union, intersection, difference, orElse|8
 |>>=|7
 |*|6
 |/|5

@@ -24,6 +24,7 @@
 * <<concept-standard-variables,currentcontext>>
 * <<concept-standard-variables,currentactor>>
 * <<state_declarations-automatic-effects,do>>
+* <<keyword-difference,difference>>
 * <<keyword-filledBy,filledBy and fills>>
 * <<keyword-fillfrom,fillfrom>>
 * <<keyword-fullhistory-property,fullhistory (property)>>

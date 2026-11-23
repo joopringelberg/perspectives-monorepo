@@ -363,6 +363,8 @@ operator =
       <|>
         (Intersection <$> (getPosition <* reserved "intersection"))
       <|>
+        (Difference <$> (getPosition <* reserved "difference"))
+      <|>
         (BindsOp <$> (getPosition <* token.reserved "filledBy"))
       <|>
         (FillsOp <$> (getPosition <* token.reserved "fills"))
@@ -370,7 +372,7 @@ operator =
         -- NOTICE the trick here: we map "matches" to Compose, so we can use it as an infix operator while it
         -- builds on the result of the previous step.
         (Compose <$> (getPosition <* token.reserved "matches"))
-  ) <?> "with, >>=, >>, ==, /=, <, <=, >, >=, and, or, +, -, /, *, union, intersection, otherwise, filledBy. "
+  ) <?> "with, >>=, >>, ==, /=, <, <=, >, >=, and, or, +, -, /, *, union, intersection, difference, otherwise, filledBy. "
 
 durationOperator :: Partial => IP Operator
 durationOperator =
@@ -405,6 +407,7 @@ operatorPrecedence (Compose _) = 9
 
 operatorPrecedence (Union _) = 8
 operatorPrecedence (Intersection _) = 8
+operatorPrecedence (Difference _) = 8
 operatorPrecedence (OrElse _) = 8
 operatorPrecedence (Sequence _) = 7
 

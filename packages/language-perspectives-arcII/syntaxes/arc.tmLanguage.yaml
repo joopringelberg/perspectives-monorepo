@@ -188,7 +188,7 @@ patterns:
   ## OPERATORS
   # alphabetic operators (without `filter`).
   - name: support.function.operator.arc
-    match: \b(either|both|binds|matches|and|or|not|exists|available|boundBy|binder|allfilledroles|context|extern|selectFrom|just|runContextAction|runRoleAction|publicrole|publiccontext|translate)\b
+    match: \b(either|both|binds|matches|and|or|not|exists|available|boundBy|binder|allfilledroles|context|extern|selectFrom|just|runContextAction|runRoleAction|publicrole|publiccontext|translate|difference)\b
   # special pattern for `with` in `filter ... with`
   - match: \b(filter)(.*)(with)\b
     captures:

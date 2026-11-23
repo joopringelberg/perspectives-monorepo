@@ -913,6 +913,11 @@ compileBinaryStep currentDomain s@(BinaryStep { operator, left, right, end: bEnd
       -- TODO. Als de types een lege doorsnede hebben, een waarschuwing geven?
       if equalDomainKinds (range f1) (range f2) then pure $ BQD currentDomain (QF.BinaryCombinator IntersectionF) f1 f2 (unsafePartial $ fromJust $ productOfDomains (range f1) (range f2)) (THREE.and (functional f1) (functional f2)) (THREE.and (mandatory f1) (mandatory f2))
       else throwError $ IncompatibleDomains (startOf left) (endOf right)
+    Difference _ -> do
+      f1 <- compileStep currentDomain left
+      f2 <- compileStep currentDomain right
+      if equalDomainKinds (range f1) (range f2) then pure $ BQD currentDomain (QF.BinaryCombinator DifferenceF) f1 f2 (range f1) (functional f1) False
+      else throwError $ IncompatibleDomains (startOf left) (endOf right)
     OrElse pos -> do
       f1 <- compileStep currentDomain left
       f2 <- compileStep currentDomain right
@@ -1003,6 +1008,7 @@ compileBinaryStep currentDomain s@(BinaryStep { operator, left, right, end: bEnd
         TypeFilter _ -> throwError $ Custom "This case in compileBinaryStep should never be reached: TypeFilter"
         Union _ -> throwError $ Custom "This case in compileBinaryStep should never be reached: Union"
         Intersection _ -> throwError $ Custom "This case in compileBinaryStep should never be reached: Intersection"
+        Difference _ -> throwError $ Custom "This case in compileBinaryStep should never be reached: Difference"
         OrElse _ -> throwError $ Custom "This case in compileBinaryStep should never be reached: OrElse"
         BindsOp _ -> throwError $ Custom "This case in compileBinaryStep should never be reached: BindsOp"
         Matches _ -> throwError $ Custom "This case in compileBinaryStep should never be reached: Matches"

@@ -58,6 +58,7 @@ data FunctionName
   | ComposeSequenceF
   | UnionF
   | IntersectionF
+  | DifferenceF
   | OrElseF
   | GetRoleInstancesForContextFromDatabaseF
   | EqualsF
@@ -107,6 +108,7 @@ instance eqFunctionName :: Eq FunctionName where
   eq ComposeSequenceF ComposeSequenceF = true
   eq UnionF UnionF = true
   eq IntersectionF IntersectionF = true
+  eq DifferenceF DifferenceF = true
   eq OrElseF OrElseF = true
   eq GetRoleInstancesForContextFromDatabaseF GetRoleInstancesForContextFromDatabaseF = true
   eq EqualsF EqualsF = true
@@ -161,6 +163,7 @@ instance showFunctionName :: Show FunctionName where
   show ComposeSequenceF = "composeSequence"
   show UnionF = "union"
   show IntersectionF = "intersection"
+  show DifferenceF = "difference"
   show OrElseF = "otherwise"
   show GetRoleInstancesForContextFromDatabaseF = "GetRoleInstancesForContextFromDatabaseF"
   show EqualsF = "="
@@ -214,6 +217,7 @@ instance readForeignFunctionName :: ReadForeign FunctionName where
       "composeSequence" -> pure ComposeSequenceF
       "union" -> pure UnionF
       "intersection" -> pure IntersectionF
+      "difference" -> pure DifferenceF
       "otherwise" -> pure OrElseF
       "GetRoleInstancesForContextFromDatabaseF" -> pure GetRoleInstancesForContextFromDatabaseF
       "=" -> pure EqualsF
@@ -263,6 +267,7 @@ isFunctionalFunction fn = case fn of
   ComposeSequenceF -> True
   UnionF -> False
   IntersectionF -> False
+  DifferenceF -> False
   OrElseF -> False
   GetRoleInstancesForContextFromDatabaseF -> False
   EqualsF -> True
@@ -312,6 +317,7 @@ isMandatoryFunction fn = case fn of
   ComposeSequenceF -> Unknown
   UnionF -> False
   IntersectionF -> False
+  DifferenceF -> False
   OrElseF -> False
   GetRoleInstancesForContextFromDatabaseF -> False
   EqualsF -> True

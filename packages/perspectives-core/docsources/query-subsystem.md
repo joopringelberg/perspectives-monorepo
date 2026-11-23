@@ -145,7 +145,7 @@ data Step
 | `==`, `!=`, `<`, `<=`, `>`, `>=` | Comparison operators |
 | `&&`, `\|\|` | Logical AND / OR |
 | `+`, `-`, `*`, `/` | Arithmetic |
-| `union`, `intersection`, `orElse` | Set operations |
+| `union`, `intersection`, `difference`, `orElse` | Set operations |
 | `binds`, `fills`, `matches` | Role-binding tests |
 | `year`, `month`, `week`, `day`, ... | Duration arithmetic on date-time values |
 
@@ -328,6 +328,7 @@ compileStep :: Domain -> Step -> FD
 | `==`, `!=`, `<`, `<=`, `>`, `>=` | Comparison combinators |
 | `+`, `-`, `*`, `/` | Arithmetic combinators |
 | `union`, `intersection` | `BinaryCombinator UnionF`, `BinaryCombinator IntersectionF` |
+| `difference` | `BinaryCombinator DifferenceF`; retains the left range and functionality, but is not mandatory |
 | `orElse` | `BinaryCombinator OrElseF` |
 | `binds` | `BinaryCombinator FilledByF` |
 | `fills` | `BinaryCombinator FillsF` |
@@ -437,6 +438,7 @@ The type `String ~~> String` is deliberately untyped: at runtime, the same funct
 | `BinaryCombinator OrF` | Lazy OR (short-circuits on `"true"`) |
 | `BinaryCombinator UnionF` | Set union of results from both sub-queries |
 | `BinaryCombinator IntersectionF` | Set intersection |
+| `BinaryCombinator DifferenceF` | Left results absent from the right; both operands remain dependencies, but only the left anchors result properties |
 | `BinaryCombinator OrElseF` | Returns results of left if non-empty, else right |
 | `BinaryCombinator FilledByF` | Tests whether any of the left roles is filled by any of the right roles |
 | `BinaryCombinator FillsF` | Tests whether any of the left roles fills any of the right roles |

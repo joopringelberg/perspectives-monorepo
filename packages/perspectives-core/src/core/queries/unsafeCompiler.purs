@@ -56,7 +56,7 @@ import Perspectives.HumanReadableType (translateType)
 import Perspectives.Identifiers (isExternalRole, isUrl)
 import Perspectives.InstanceRepresentation (PerspectRol(..))
 import Perspectives.Instances.Combinators (available_, exists, logicalAnd, logicalOr, not)
-import Perspectives.Instances.Combinators (conjunction, intersection, orElse) as Combinators
+import Perspectives.Instances.Combinators (conjunction, difference, intersection, orElse) as Combinators
 import Perspectives.Instances.ObjectGetters (binding, binding_, completeRuntimeType, context, contextModelName, contextType, contextType_, externalRole, filledByCombinator, filledByOperator, fillsCombinator, fillsOperator, getActiveRoleStates_, getActiveStates_, getAllFilledRoles, getEnumeratedRoleInstances, getFilledRoles, getProperty, getRecursivelyFilledRoles', getUnlinkedRoleInstances, indexedContextName, indexedRoleName, roleModelName, roleType, roleType_)
 import Perspectives.Instances.Values (parseBool, parseNumber)
 import Perspectives.Logging (errorCompiler)
@@ -522,6 +522,11 @@ compileBQD (BQD _ (BinaryCombinator IntersectionF) f1 f2 _ _ _) = do
   f1' <- compileFunction f1
   f2' <- compileFunction f2
   pure $ Combinators.intersection f1' f2'
+
+compileBQD (BQD _ (BinaryCombinator DifferenceF) f1 f2 _ _ _) = do
+  f1' <- compileFunction f1
+  f2' <- compileFunction f2
+  pure $ Combinators.difference f1' f2'
 
 compileBQD (BQD _ (BinaryCombinator FilledByF) sourceOfFilledRoles sourceOfFillerRoles _ _ _) = do
   sourceOfFilledRoles' <- compileFunction sourceOfFilledRoles

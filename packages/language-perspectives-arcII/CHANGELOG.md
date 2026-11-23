@@ -6,6 +6,10 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+## [1.4.3]
+
+- Added syntax coloring for the `difference` set operator.
+
 ## [1.4.2]
 
 - Added syntax coloring for relative table column widths with `columnWeight`.

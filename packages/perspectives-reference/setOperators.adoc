@@ -18,6 +18,20 @@ thing A_Intersection = RoleA intersection RoleB
   -- result: a set containing all instances that are present in both RoleA and RoleB.
 ----
 
+[[keyword-difference]]
+=== difference
+The `difference` operator returns the results of its left operand that do not occur in its right operand. Both operands are evaluated from the same starting context or role and must return compatible kinds of results: roles, contexts, or values of the same range.
+
+[source,perspectivesarc]
+----
+thing A_Difference = RoleA difference RoleB
+  -- result: instances from RoleA that are not also in RoleB.
+----
+
+The result retains the type of the left operand, so its properties and navigation steps remain available. An empty right operand leaves the left result unchanged; an empty left operand, or subtracting a set from itself, gives an empty result.
+
+Unlike `union` and `intersection`, `difference` is not commutative: reversing the operands changes the meaning. It has the same precedence as those operators. Use parentheses to make grouping explicit when combining set operations, for example `(RoleA difference RoleB) difference RoleC`.
+
 [[keyword-orElse]]
 === orElse
 The `orElse` operator is used to provide an alternative set of instances when the first set is empty. This operator is useful for creating fallback queries, ensuring that you always have a set of instances to work with, even if the primary query yields no results. The following example illustrates how to use the `orElse` operator:

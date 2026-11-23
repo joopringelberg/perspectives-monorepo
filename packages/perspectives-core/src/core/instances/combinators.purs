@@ -26,6 +26,7 @@ import Control.Monad.Error.Class (class MonadError)
 import Control.Monad.Trans.Class (lift)
 import Control.Alternative (guard, map)
 import Data.Array (cons, elemIndex, foldM, foldMap, head, intersect, null, union)
+import Data.Array as Array
 import Data.HeytingAlgebra (not, (&&)) as HA
 import Data.Maybe (Maybe(..), maybe)
 import Data.Monoid.Conj (Conj(..))
@@ -136,6 +137,18 @@ intersection left right id = ArrayT do
   l <- runArrayT $ left id
   r <- runArrayT $ right id
   pure $ intersect l r
+
+difference
+  :: forall m s o
+   . Eq o
+  => Monad m
+  => (s -> ArrayT m o)
+  -> (s -> ArrayT m o)
+  -> (s -> ArrayT m o)
+difference left right id = ArrayT do
+  l <- runArrayT $ left id
+  r <- runArrayT $ right id
+  pure $ Array.filter (\value -> HA.not $ Array.elem value r) l
 
 logicalAnd
   :: forall m s

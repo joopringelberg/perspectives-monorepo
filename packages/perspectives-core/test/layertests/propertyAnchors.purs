@@ -89,6 +89,62 @@ main = runTest theSuite
 
 theSuite :: TestSuite
 theSuite = suite "Perspective property anchors" do
+  test "Difference tracks both operands but only the left anchors result properties" do
+    withInversions (BQD (domain source) (BinaryCombinator DifferenceF) source source itemDomain False False) \queries -> do
+      equal 2 (length queries)
+      equal [ [ PerspectiveResult ], [ Dependency ] ] (anchorMarkers <$> queries)
+
+  test "Navigation after difference keeps the excluded operand as a dependency" do
+    let
+      excludedDomain = RDOM (UET (RoleInContext { context: ContextType modelName, role: role "Excluded" }))
+      excluded = SQD (domain source) (RolGetter (ENR (role "Excluded"))) excludedDomain False False
+      difference = BQD (domain source) (BinaryCombinator DifferenceF) source excluded itemDomain False False
+      navigation = SQD itemDomain (DataTypeGetter FillerF) itemDomain True False
+    withInversions (makeComposition difference navigation) \queries -> do
+      assert "Excluded roles remain dependencies, not navigation sources" $
+        any (\q -> anchorMarkers q == [ Dependency ]) queries
+      assert "The left-side navigation still anchors result properties" $
+        any (\q -> head (anchorMarkers q) == Just PerspectiveResult) queries
+
+  test "Difference indexes exclusion conditions and left-side properties" $
+    withCompiledQueries "Attendees difference (filter Attendees with binding >> Eligible)" \queries -> do
+      assert "Changes in the excluded set remain indexed" $
+        hasPropertyKey (property "Dossier$External$Eligible") queries
+      assert "Left-side result properties remain indexed" $
+        hasPropertyKey (property "Dossier$External$ParticipantName") queries
+
+  test "Difference follows exclusion changes in compiled and interpreted role queries" $
+    withCompiledModel "Attendees difference (filter Attendees with binding >> Eligible)" \dfr _ ->
+      case Object.lookup (unwrap $ role "Meeting$OwnAttendees") dfr.calculatedRoles of
+        Just (CalculatedRole { calculation: Q query }) -> do
+          results <- runP do
+            void $ storeDomeinFileInCache (ModelUri modelName) (toStableDomeinFile $ DomeinFile dfr)
+            void $ cacheEntity meetingId $ PerspectContext defaultContextRecord
+              { id = meetingId
+              , pspType = ContextType (modelName <> "$Meeting")
+              , rolInContext = Object.singleton (unwrap $ role "Meeting$Attendees") [ attendeeId ]
+              }
+            void $ cacheEntity attendeeId $ PerspectRol defaultRolRecord
+              { id = attendeeId
+              , context = meetingId
+              , pspType = role "Meeting$Attendees"
+              , binding = Just dossierId
+              }
+            compiled <- compileFunction query
+            for [ false, true, false ] \eligible -> do
+              void $ cacheEntity dossierId $ PerspectRol defaultRolRecord
+                { id = dossierId
+                , context = ContextInstance "property-anchor-dossier"
+                , pspType = role "Dossier$External"
+                , properties = Object.singleton (unwrap $ property "Dossier$External$Eligible") [ Value $ show eligible ]
+                }
+              actual <- unwrap meetingId ##= compiled
+              paths <- singletonPath (C meetingId) ##= interpret query
+              pure { actual, interpreted: map _.head paths }
+          equal [ [ unwrap attendeeId ], [], [ unwrap attendeeId ] ] (map _.actual results)
+          equal [ [ R attendeeId ], [], [ R attendeeId ] ] (map _.interpreted results)
+        _ -> assert "Expected the compiled difference role" false
+
   test "allfilledroles does not invent a containing context from its inherited type" do
     Tuple result _ <- runP $ runPhaseTwo' $ compileExpression
       (FROLE (UET (RoleInContext { role: role "Person", context: ContextType modelName })))

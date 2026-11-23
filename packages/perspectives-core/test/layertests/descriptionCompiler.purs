@@ -42,12 +42,13 @@ import Perspectives.Parsing.Arc.PhaseTwo (traverseDomain)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (runPhaseTwo', toStableDomeinFile)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.PerspectivesState (getWarnings)
-import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), RoleInContext(..))
+import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), RoleInContext(..), range)
 import Perspectives.Representation.ADT (ADT(..))
 import Perspectives.Representation.CalculatedProperty (CalculatedProperty(..))
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
 import Perspectives.Representation.Range (Range(..))
+import Perspectives.Representation.ThreeValuedLogic as THREE
 import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..))
 import Perspectives.SideCar.PhantomTypedNewtypes (Stable)
 import Test.Perspectives.Utils (runP)
@@ -138,6 +139,34 @@ rejects title source matches = test title $
 
 theSuite :: Free TestF Unit
 theSuite = suite "Perspectives.Query.DescriptionCompiler" do
+  for_ [ { attributes: "(mandatory)", functional: THREE.True }, { attributes: "(relational, mandatory)", functional: THREE.False } ] \input ->
+    compiles ("Difference retains the left range and functionality for " <> input.attributes)
+      ("  thing Left " <> input.attributes <> "\n    property Name (String)\n  thing Right (relational)\n  thing Remaining = Left difference Right")
+      (roleQuery "Remaining")
+      case _ of
+        BQD _ (BinaryCombinator DifferenceF) left _ result functional mandatory ->
+          result == range left && functional == input.functional && mandatory == THREE.False
+        _ -> false
+
+  compiles "Difference preserves left-side property navigation"
+    "  thing Left (relational)\n    property Name (String)\n  thing Right (relational)\n  thing Holder\n    property Names = context >> (Left difference Right) >> Name"
+    (propertyQuery "Holder$Names")
+    \query -> case range query of
+      VDOM PString _ -> true
+      _ -> false
+
+  rejects "Difference rejects incompatible value ranges"
+    "  thing Holder\n    property Invalid = 1 difference \"one\""
+    case _ of
+      IncompatibleDomains _ _ -> true
+      _ -> false
+
+  rejects "Difference rejects mixing roles and contexts"
+    "  thing Left\n  thing Invalid = Left difference this"
+    case _ of
+      IncompatibleDomains _ _ -> true
+      _ -> false
+
   compiles "PublicRole retains its asserted role range"
     ("  case Box\n    thing Repository (mandatory)\n    thing ClaimedRepository = publicrole pub:cw_test#repository (" <> modelUri <> "$Box$Repository)")
     (roleQuery "Box$ClaimedRepository")

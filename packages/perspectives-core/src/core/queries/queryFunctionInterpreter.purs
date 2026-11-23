@@ -29,6 +29,7 @@ import Control.Monad.Trans.Class (lift)
 import Control.Monad.Writer (WriterT, execWriterT, tell)
 import Control.Plus (empty)
 import Data.Array (concat, elemIndex, foldl, head, index, intersect, length, null, union, unsafeIndex)
+import Data.Array as Array
 import Data.Either (Either(..))
 import Data.Foldable (any)
 import Data.List (List(..))
@@ -77,6 +78,7 @@ import Perspectives.Representation.Range (Range(..), isDateOrTime, isPDuration)
 import Perspectives.Representation.TypeIdentifiers (CalculatedPropertyType(..), CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), propertytype2string)
 import Perspectives.Types.ObjectGetters (allRoleTypesInContext, contextAspectsClosure, contextTypeModelName', equalsOrSpecialisesRoleInContext, propertyAliases, roleTypeModelName', generalisesRoleType)
 import Prelude (Unit, bind, discard, eq, flip, pure, show, unit, void, ($), (&&), (+), (<#>), (<$>), (<<<), (<=), (<>), (==), (>=>), (>>=), (||))
+import Prelude (not)
 import Simple.JSON (readJSON)
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -200,6 +202,14 @@ interpretBQD (BQD _ (BinaryCombinator UnionF) f1 f2 _ _ _) a = ArrayT do
   (l :: Array DependencyPath) <- runArrayT $ interpret f1 a
   (r :: Array DependencyPath) <- runArrayT $ interpret f2 a
   pure (l `union` r)
+
+interpretBQD (BQD _ (BinaryCombinator DifferenceF) f1 f2 _ _ _) a = ArrayT do
+  left <- runArrayT $ interpret f1 a
+  right <- runArrayT $ interpret f2 a
+  let
+    excluded = SET.fromFoldable (toString <$> right)
+    supporting = join (allPaths <$> right)
+  pure $ addAsSupportingPaths supporting <$> Array.filter (\path -> not $ SET.member (toString path) excluded) left
 
 interpretBQD (BQD _ (BinaryCombinator FilledByF) sourceOfFilledRoles sourceOfFillerRoles _ _ _) a = ArrayT do
   (filledRoles :: Array DependencyPath) <- runArrayT $ interpret sourceOfFilledRoles a

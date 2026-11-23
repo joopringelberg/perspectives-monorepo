@@ -85,7 +85,7 @@ Common operators include:
 - `filter <set-query> with <predicate>` filters the left-hand result set.
 - `exists <query>` and `not exists <query>` test non-emptiness and emptiness.
 - `and`, `or`, `not`, comparisons (`==`, `!=`, `<`, `<=`, `>`, `>=`), and arithmetic operate on compatible values.
-- `union`, `intersection`, and `orElse` combine query results with distinct semantics; do not substitute one for another.
+- `union`, `intersection`, `difference`, and `orElse` combine query results with distinct semantics; do not substitute one for another. `A difference B` keeps only results of `A` absent from `B`, retaining `A`'s type; use parentheses to make grouping explicit in mixed set expressions.
 - `filledBy`, `fills`, `binds`, `matches`, and type-reflection operations test bindings, values, or types.
 - `letE ... in ...` introduces read-only expression bindings; `letA ... in ...` binds query results for an action's staged statements.
 

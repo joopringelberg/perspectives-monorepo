@@ -235,6 +235,7 @@ perspectDef = LanguageDef
       -- Operators in expressions
       , "union"
       , "intersection"
+      , "difference"
       , "orElse"
       , "and"
       , "or"

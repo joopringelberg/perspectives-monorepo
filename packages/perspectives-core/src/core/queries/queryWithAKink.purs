@@ -192,6 +192,11 @@ invert_ q@(BQD dom (BinaryCombinator ComposeF) l r _ f m) = case l of
     o2 <- invert_ (makeComposition conj2 (replaceDomain r (range conj2)))
     pure $ combineIndependent o1 o2
 
+  (BQD _ (BinaryCombinator DifferenceF) left right _ _ _) -> do
+    results <- invert_ (makeComposition left r)
+    excluded <- invert_ right
+    pure $ combineIndependent results (excluded { candidates = markDependencies <$> excluded.candidates })
+
   (BQD _ (BinaryCombinator ComposeF) qfd1 qfd2 ran _ _) -> invert_ (BQD dom (BinaryCombinator ComposeF) qfd1 (BQD (range qfd1) (BinaryCombinator ComposeF) qfd2 r ran f m) ran f m)
 
   (BQD _ (BinaryCombinator FilledByF) conj1 conj2 _ _ _) -> do
@@ -304,6 +309,11 @@ invert_ q@(BQD dom (BinaryCombinator ComposeF) l r _ f m) = case l of
 --   makeComposition source $
 --     makeComposition (UQD (range source) FilterF criterium (range source) True False)
 --       criterium
+
+invert_ (BQD _ (BinaryCombinator DifferenceF) left right _ _ _) = do
+  results <- markOriginOperand left <$> invert_ left
+  excluded <- markOriginOperand right <$> invert_ right
+  pure $ combineIndependent results (excluded { candidates = markDependencies <$> excluded.candidates })
 
 invert_ (BQD _ (BinaryCombinator f) qfd1 qfd2 _ _ _) = do
   o1 <- markOriginOperand qfd1 <$> invert_ qfd1
