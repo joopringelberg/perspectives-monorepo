@@ -22,7 +22,7 @@ import React, { createRef } from "react"; // 2
 import PerspectivesComponent from "./perspectivesComponent";
 import TableCell from "./tablecell.js";
 import "././styles/components.css";
-import { Perspective, Roleinstancewithprops, SerialisedProperty, RoleInstanceT, RoleType, FilterValueEntry } from "perspectives-proxy";
+import { Perspective, Roleinstancewithprops, SerialisedProperty, RoleInstanceT, RoleType, FilterValueEntry, FieldDisplayConstraint } from "perspectives-proxy";
 import { WithOutBehavioursProps } from "./adorningComponentWrapper";
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -40,6 +40,7 @@ interface TableRowProps
   , orderedProperties: SerialisedProperty[]
   , showDetails?: boolean
   , typeAheadFillFromCandidates?: FilterValueEntry[]
+  , fieldConstraints?: FieldDisplayConstraint[]
   }
 
 export default class TableRow extends PerspectivesComponent<TableRowProps>
@@ -218,6 +219,7 @@ export default class TableRow extends PerspectivesComponent<TableRowProps>
                   readableName={roleInstanceWithProps.readableName}
                   cancelled={roleInstanceWithProps.cancelled}
                   typeAheadFillFromCandidates={serialisedProperty.id === component.props.cardcolumn ? component.props.typeAheadFillFromCandidates : undefined}
+                  fieldConstraint={component.props.fieldConstraints?.find(c => c.propertyType.value === serialisedProperty.id)}
                 /> )
             }</tr>;
   }

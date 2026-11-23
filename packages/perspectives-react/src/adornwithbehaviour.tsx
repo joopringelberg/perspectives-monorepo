@@ -86,6 +86,8 @@ export class AdornWithBehaviour extends React.Component<AdornWithBehaviourProps>
           aria-label={this.props["aria-label"]} 
           className={this.props.className}
           type={this.props.type}
+          minLines={this.props.minLines}
+          maxLines={this.props.maxLines}
           />
       </div>
     );

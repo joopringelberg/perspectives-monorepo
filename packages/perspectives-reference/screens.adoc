@@ -198,6 +198,8 @@ Displays the instances of `<RoleName>` in a table. The optional sub-clauses rest
 * `fillfrom <expression>` — determines (through a query expression) which candidates are offered when filling new role instances; it does not create fillers automatically.
 * `fields` — set display constraints (text line counts and relative column widths) for individual properties.
 
+For String properties, `minLines` renders a multiline text control with the requested number of rows; `maxLines` limits its height and allows vertical scrolling. These constraints also apply to the identifying column and to `master` tables, in both read-only display and editing.
+
 Example:
 [source, arc]
 ----

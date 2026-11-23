@@ -26,7 +26,7 @@ import RoleInstance from "./roleinstance.js";
 
 import "././styles/components.css";
 import { Dropdown } from "react-bootstrap";
-import { PropertyType, RoleInstanceT, RoleType, Perspective, PropertyValues, SerialisedProperty, mapRange, InputType, PDRproxy, FilterValueEntry } from "perspectives-proxy";
+import { PropertyType, RoleInstanceT, RoleType, Perspective, PropertyValues, SerialisedProperty, mapRange, InputType, PDRproxy, FilterValueEntry, FieldDisplayConstraint } from "perspectives-proxy";
 import { WithOutBehavioursProps } from "./adorningComponentWrapper";
 import ModelDependencies from "./modelDependencies";
 import {UserMessagingPromise} from "./userMessaging.js";
@@ -126,6 +126,7 @@ interface TableCellProps
   readableName: string;
   cancelled: boolean;
   typeAheadFillFromCandidates?: FilterValueEntry[];
+  fieldConstraint?: FieldDisplayConstraint;
 }
 
 interface TableCellState
@@ -580,6 +581,8 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
                   isselected={component.props.isselected}
                   contextinstance={component.props.perspective.contextInstance}
                   referenceValues={component.props.perspective.possiblePropertyValues?.[component.props.serialisedProperty.id]}
+                  minLines={component.props.fieldConstraint?.minLines}
+                  maxLines={component.props.fieldConstraint?.maxLines}
                 />
               </td>);
             }
@@ -604,6 +607,8 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
                     // The title is the value of the cell. It is picked up automatically.
                     {... (title !== undefined ? { title } : {})}
                     aria-label={ariaLabel}
+                    minLines={component.props.fieldConstraint?.minLines}
+                    maxLines={component.props.fieldConstraint?.maxLines}
                     // Other properties to pass on.
                     tabIndex={receiveFocusByKeyboard}
                     className={`shadow ${component.props.isselected ? 'card-selected' : ''} ${isPublic ? 'public-role' : ''} ${isCalculated ? 'calculated-role' : ''} ${isCancelled ? 'cancelled-peer' : ''}`}
@@ -627,6 +632,8 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
                 className={`shadow ${component.props.isselected ? 'card-selected' : ''}` + ` ${isPublic ? 'public-role' : ''} ${isCalculated ? 'calculated-role' : ''} ${isCancelled ? 'cancelled-peer' : ''}`}
                 onClick={component.handleClick}
                 aria-label={ariaLabel}
+                minLines={component.props.fieldConstraint?.minLines}
+                maxLines={component.props.fieldConstraint?.maxLines}
                 type={component.inputType == 'date' ? 'text' : component.inputType || 'text'}
               />
           </td>);
@@ -650,6 +657,8 @@ export default class TableCell extends PerspectivesComponent<TableCellProps, Tab
             isselected={component.props.isselected}
             contextinstance={component.props.perspective.contextInstance}
             referenceValues={component.props.perspective.possiblePropertyValues?.[component.props.serialisedProperty.id]}
+            minLines={component.props.fieldConstraint?.minLines}
+            maxLines={component.props.fieldConstraint?.maxLines}
           />
         </td>);
     }

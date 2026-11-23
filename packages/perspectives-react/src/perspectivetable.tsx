@@ -165,9 +165,14 @@ const RowContextMenu: React.FC<{
 
 
 const RoleCard: React.FC<CardProperties> = (props) => {
-
+  const multiline = (!props.type || props.type === 'text') && !!props.minLines;
   return  <Form.Control
             readOnly
+            as={multiline ? "textarea" : "input"}
+            {...(multiline ? {
+              rows: props.minLines,
+              ...(props.maxLines ? { style: { maxHeight: `${props.maxLines * 1.5}em`, overflowY: 'auto' as const } } : {})
+            } : {})}
             value={props.title}
             placeholder={props["aria-label"]}
             
@@ -524,6 +529,7 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
                     orderedProperties={component.orderedProperties}
                     showDetails={component.props.showDetails}
                     typeAheadFillFromCandidates={component.props.typeAheadFillFromCandidates}
+                    fieldConstraints={component.props.fieldConstraints}
                     />)
               }
             </tbody>

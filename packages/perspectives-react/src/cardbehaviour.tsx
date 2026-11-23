@@ -43,6 +43,8 @@ export interface InnerCardProperties {
   "aria-label": string;
   className?: string;
   type?: InputType
+  minLines?: number;
+  maxLines?: number;
 }
 
 export interface CardProperties extends InnerCardProperties{
