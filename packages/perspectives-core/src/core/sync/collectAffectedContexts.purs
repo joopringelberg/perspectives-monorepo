@@ -47,7 +47,7 @@ import Perspectives.Instances.ObjectGetters (context, contextType, roleType) as 
 import Perspectives.InvertedQuery (InvertedQuery(..), QueryWithAKink(..), backwards, backwardsQueryResultsInContext, backwardsQueryResultsInRole, forwardStartsWithFilter, forwards, isCalculatedUserQuery, shouldResultInContextStateQuery, shouldResultInRoleStateQuery, startsWithFilter, userRoleTypeOfInvertedQuery, invertedQueryIsForSynchronisation)
 import Perspectives.InvertedQuery.Storable (getContextQueries, getFilledQueries, getFillerQueries, getPropertyQueries, getRoleQueries)
 import Perspectives.InvertedQueryKey (RunTimeInvertedQueryKey(..))
-import Perspectives.Logging (debugSync, errorSync, infoDelta)
+import Perspectives.Logging (debugSync, errorSync, infoDelta, traceDelta)
 import Perspectives.Persistence.DeltaStore (getDeltasForResource)
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
 import Perspectives.Persistent (getPerspectContext, getPerspectRol, tryGetPerspectEntiteit)
@@ -1020,10 +1020,22 @@ addDeltasForPropertyChange roleWithPropertyValue property replacementProperty = 
       >>= getContextQueries compileBoth <<< unwrap
       >>= (filterA (invertedQueryHasRoleDomain cType rType))
       >>= pure <<< filter isPerspectiveObject
+    lift $ traceDelta $ "addDeltasForPropertyChange: " <> show (length contextCalculations)
+      <> " perspective queries for "
+      <> show property
+      <> " on "
+      <> show roleWithPropertyValue'
+      <> " in "
+      <> show contextInstance
     -- Then for each query: apply it to obtain users that have a perspective on the roleWithPropertyValue role. State is being taken into consideration here,
     -- but only for the context calculation itself. Not for the computation of the property!
-    nub <<< concat <$> for contextCalculations \iq@(InvertedQuery { statesPerProperty }) -> do
+    nub <<< concat <$> for contextCalculations \iq@(InvertedQuery { statesPerProperty, users: userTypes, selfOnly }) -> do
       cwus <- usersWithAnActivePerspective roleWithPropertyValue' iq
+      lift $ traceDelta $ "addDeltasForPropertyChange: subjects=" <> show userTypes
+        <> "; selfOnly="
+        <> show selfOnly
+        <> "; active recipients="
+        <> show cwus
       -- Then restrict the properties of the query to `property` and `replacementProperty` and, for the users computed, apply computeProperties in order to add roleWithPropertyValue role deltas and property deltas.
       -- Do so only when the subject state requirement of the inverted query is met by the actual state of the subjects.
       -- (computeProperties takes care of that)

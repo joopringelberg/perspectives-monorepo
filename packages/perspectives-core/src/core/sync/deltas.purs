@@ -53,7 +53,7 @@ import Perspectives.ErrorLogging (logPerspectivesError)
 import Perspectives.Identifiers (buitenRol)
 import Perspectives.Instances.Me (notIsMe)
 import Perspectives.Instances.ObjectGetters (deltaAuthor2ResourceIdentifier, getProperty, perspectivesUsersRole_, roleType_)
-import Perspectives.Logging (debugBroker, infoDelta)
+import Perspectives.Logging (debugBroker, infoDelta, traceDelta)
 import Perspectives.ModelDependencies (connectedToAMQPBroker, userChannel) as DEP
 import Perspectives.ModelDependencies (perspectivesUsersCancelled, perspectivesUsersPublicKey, perspectivesUsersTransportPublicKey)
 import Perspectives.Names (getMySystem)
@@ -376,14 +376,22 @@ addDeltaWithStorage shouldStore (DeltaInTransaction deltarecord@{ users, delta }
   -- in those paths the delta is either already stored (executeTransaction uses executeDeltaWithVersionTracking)
   -- or must not be stored at all (executeDeltas for public roles uses modified author identifiers).
   isExecuting <- AA.gets (\(Transaction tr) -> tr.isExecutingIncomingDeltas)
+  let SignedDelta { author, encryptedDelta } = delta
+  lift $ traceDelta $ "addDelta: isExecutingIncomingDeltas=" <> show isExecuting
+    <> "; recipients="
+    <> show users
+    <> "; delta="
+    <> show (extractDeltaInfo encryptedDelta)
   when (shouldStore && not isExecuting) $ lift $ storeLocalDeltaWithHistory delta
   -- NOTE. Even though we try not to create deltas with roles that represent me, on system installation this can go wrong.
   users' <- lift $ filterA notIsMe users
-  if null users' || isExecuting then pure unit
+  if null users' || isExecuting then
+    lift $ traceDelta $ "addDelta: not queued; isExecutingIncomingDeltas=" <> show isExecuting
+      <> "; recipients after excluding local user="
+      <> show users'
   else do
     newUserBottoms <- lift (concat <$> for users' computeUserRoleBottom)
     newDelta <- pure (DeltaInTransaction deltarecord { users = users' })
-    let SignedDelta { author, encryptedDelta } = delta
     lift $ infoDelta $ "Adding a delta to transaction for users " <> show users' <> " with user role bottoms " <> show newUserBottoms
       <> ", author "
       <> show author

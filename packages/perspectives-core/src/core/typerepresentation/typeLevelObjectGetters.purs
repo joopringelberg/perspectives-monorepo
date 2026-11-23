@@ -26,7 +26,7 @@ import Control.Monad.Error.Class (try)
 import Control.Monad.State (StateT, execStateT, get, put)
 import Control.Monad.Trans.Class (lift)
 import Control.Plus (map, (<|>), empty)
-import Data.Array (concat, cons, elemIndex, filter, filterA, findIndex, foldM, foldl, foldr, fromFoldable, null, singleton)
+import Data.Array (any, concat, cons, elemIndex, filter, filterA, findIndex, foldM, foldl, foldr, fromFoldable, null, singleton)
 import Data.Either (Either(..))
 import Data.FoldableWithIndex (foldWithIndexM)
 import Data.List (List, foldM, foldl) as LIST
@@ -85,6 +85,12 @@ isUnlinked_ et = getEnumeratedRole et >>= pure <<< _.unlinked <<< unwrap
 
 isUnlinked :: EnumeratedRoleType ~~~> Boolean
 isUnlinked = lift <<< isUnlinked_
+
+requiresPublicFiller :: EnumeratedRoleType -> MonadPerspectives Boolean
+requiresPublicFiller et = do
+  aspects <- et ###= roleAspectsClosure
+  roles <- traverse getEnumeratedRole aspects
+  pure $ any (eq (Just true) <<< _.publicFiller <<< unwrap) roles
 
 isFunctional_ :: EnumeratedRoleType -> MonadPerspectives Boolean
 isFunctional_ et = getEnumeratedRole et >>= pure <<< _.functional <<< unwrap

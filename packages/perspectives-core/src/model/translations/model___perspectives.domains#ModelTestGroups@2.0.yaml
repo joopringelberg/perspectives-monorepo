@@ -80,17 +80,17 @@ model://perspectives.domains#u3zg3zitqc:
                 orig: "### Manage your model test group\n
                   * Add participants on the left.\n
                   * [[action: CreateModel|Create a model role first]]\n
-                  * Then copy a Versions instance in a ModelManifest and fill the new Model role with it.\n
+                  * Then copy a **public instance** of a Versions instance in a ModelManifest and fill the new Model role with it.\n
                   Update the model in your participants installation with the context action [[action: UpdateParticipantsModel| Update model]]."
                 nl: "### Beheer uw model testgroep\n
                   * Voeg deelnemers toe aan de linkerkant.\n
-                  * [[action: CreateModel|Maak eerst een model rol aan]]\n
-                  * Kopieer vervolgens een Versions instantie in een ModelManifest en vul de nieuwe Model rol ermee.\n
-                  Werk het model in de installatie van uw deelnemers bij met de context actie [[action: UpdateParticipantsModel| Werk model bij]]."
+                  * [[action: CreateModel|Maak eerst een modelrol aan]]\n
+                  * Kopieer vervolgens een **publieke instantie** van een Versions-instantie in een ModelManifest en vul de nieuwe Modelrol ermee.\n
+                  Werk het model in de installatie van uw deelnemers bij met de contextactie [[action: UpdateParticipantsModel| Werk model bij]]."
                 en: "### Manage your model test group\n
                   * Add participants on the left.\n
                   * [[action: CreateModel|Create a model role first]]\n
-                  * Then copy a Versions instance in a ModelManifest and fill the new Model role with it.\n
+                  * Then copy a **public instance** of a Versions instance in a ModelManifest and fill the new Model role with it.\n
                   Update the model in your participants installation with the context action [[action: UpdateParticipantsModel| Update model]]."
       things:
         Model:

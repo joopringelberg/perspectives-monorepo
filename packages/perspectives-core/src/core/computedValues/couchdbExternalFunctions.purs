@@ -52,7 +52,7 @@ import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
 import Effect.Exception (error)
 import Foreign (unsafeToForeign)
-import Foreign.Object (empty, fromFoldable, insert, keys, singleton)
+import Foreign.Object (empty, fromFoldable, insert, keys, singleton, values)
 import IDBKeyVal (idbDel, idbSet)
 import JS.Iterable (toArray)
 import LRUCache (rvalues)
@@ -61,7 +61,7 @@ import Perspectives.ApiTypes (ContextSerialization(..), PropertySerialization(..
 import Perspectives.Assignment.StateCache (clearModelStates)
 import Perspectives.Assignment.Update (withAuthoringRole)
 import Perspectives.Authenticate (getMyPublicKey, getMyTransportPublicKey)
-import Perspectives.ContextAndRole (changeRol_isMe, context_id, rol_context, rol_id)
+import Perspectives.ContextAndRole (changeRol_isMe, context_id, rol_binding, rol_context, rol_id, rol_pspType)
 import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), InformedAssumption(..), MonadPerspectives, MonadPerspectivesTransaction, mkLibEffect1, mkLibEffect2, mkLibEffect3, mkLibFunc2, (##=), (##>), (##>>))
 import Perspectives.Couchdb (DatabaseName, SecurityDocument(..))
 import Perspectives.Couchdb.Revision (Revision_)
@@ -96,10 +96,11 @@ import Perspectives.PerspectivesState (clearQueryCache, contextCache, conversati
 import Perspectives.Query.UnsafeCompiler (getPropertyValues, getRoleInstances)
 import Perspectives.Representation.Class.Cacheable (CalculatedRoleType(..), ContextType(..), EnumeratedRoleType(..), cacheEntity)
 import Perspectives.Representation.Class.Identifiable (identifier)
+import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser(..), RoleInstance(..), Value(..), perspectivesUser2RoleInstance)
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
 import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..), PropertyType(..), RoleType(..))
-import Perspectives.ResourceIdentifiers (createDefaultIdentifier, resourceIdentifier2DocLocator, resourceIdentifier2WriteDocLocator, takeGuid)
+import Perspectives.ResourceIdentifiers (createDefaultIdentifier, isInPublicScheme, resourceIdentifier2DocLocator, resourceIdentifier2WriteDocLocator, takeGuid)
 import Perspectives.RoleAssignment (roleIsMe)
 import Perspectives.SaveUserData (scheduleLocalContextRemoval, scheduleLocalRoleRemoval, setFirstBinding)
 import Perspectives.SetupCouchdb (contextViewFilter, roleViewFilter, setContext2RoleView, setContextView, setCredentialsView, setFiller2FilledView, setFilled2FillerView, setRoleFromContextView, setRoleView, setRole2ContextView)
@@ -107,7 +108,7 @@ import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..), Readable, Stable
 import Perspectives.Sidecar.ToStable (toStable)
 import Perspectives.Sync.HandleTransaction (executeTransaction)
 import Perspectives.Sync.Transaction (Transaction(..), UninterpretedTransactionForPeer(..))
-import Prelude (Unit, bind, const, discard, eq, flip, pure, show, unit, unless, void, ($), (&&), (*>), (<$>), (/=), (<<<), (<>), (==), (>>=))
+import Prelude (Unit, bind, const, discard, eq, flip, not, pure, show, unit, unless, void, ($), (&&), (*>), (<$>), (/=), (<<<), (<>), (==), (>>=))
 import Simple.JSON (read_, write, writeJSON)
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -133,17 +134,33 @@ roleInstancesFromCouchdb roleTypes _ =
           Just rt -> do
             stableRt :: EnumeratedRoleType <- lift $ toStable (EnumeratedRoleType rt)
             (tell $ ArrayWithoutDoubles [ RoleAssumption (ContextInstance "def:AnyContext") stableRt ])
-            instancesInCouchdb <- (lift entitiesDatabaseName) >>= \db -> lift $ getSafeViewOnDatabase db "defaultViews/roleView" (Key stableRt)
-            instancesInCache <- lift
-              ( do
-                  cache <- roleCache
-                  cachedRoleAvars <- liftAff $ liftEffect (rvalues cache >>= pure <<< toArray)
-                  cachedRoles <- catMaybes <$> (liftAff $ traverse tryRead cachedRoleAvars)
-                  pure $ rol_id <$> filter (roleViewFilter stableRt) cachedRoles
-              )
-            pure $ instancesInCouchdb `union` instancesInCache
+            lift $ roleInstancesOfType stableRt
     )
     >>= handleExternalFunctionError "model://perspectives.domains#Couchdb$RoleInstances"
+
+roleInstancesOfType :: EnumeratedRoleType -> MonadPerspectives (Array RoleInstance)
+roleInstancesOfType rt = do
+  db <- entitiesDatabaseName
+  instancesInCouchdb <- getSafeViewOnDatabase db "defaultViews/roleView" (Key rt)
+  cache <- roleCache
+  cachedRoleAvars <- liftAff $ liftEffect (rvalues cache >>= pure <<< toArray)
+  cachedRoles <- catMaybes <$> (liftAff $ traverse tryRead cachedRoleAvars)
+  pure $ instancesInCouchdb `union` (rol_id <$> filter (roleViewFilter rt) cachedRoles)
+
+warnPrivateFillersForRoleType :: EnumeratedRoleType -> MonadPerspectives Unit
+warnPrivateFillersForRoleType rt = do
+  instances <- roleInstancesOfType rt
+  for_ instances \rid -> do
+    role <- getPerspectRol rid
+    case rol_binding role of
+      Just filler | not (isInPublicScheme $ unwrap filler) ->
+        warnInstall
+          ( "Role " <> unwrap rid <> " of type " <> unwrap (rol_pspType role)
+              <> " requires a public filler, but its existing binding "
+              <> unwrap filler
+              <> " is private. Remove and refill this binding explicitly."
+          )
+      _ -> pure unit
 
 contextInstancesFromCouchdb :: Array String -> (RoleInstance ~~> ContextInstance)
 contextInstancesFromCouchdb contextTypeArr _ =
@@ -458,6 +475,9 @@ installModelLocally (Tuple dfrecord@{ id, namespace, referredModels, invertedQue
   lift $ setModelUri namespace id
   -- Now uncache the DomeinFile, as it no longer holds the right revision, neither has the attachments.
   lift $ decache id
+  lift $ for_ (values dfrecord.enumeratedRoles) \(EnumeratedRole role) ->
+    if role.publicFiller == Just true then warnPrivateFillersForRoleType role.id
+    else pure unit
 
 createInitialInstances :: String -> String -> String -> String -> Maybe RoleInstance -> MonadPerspectivesTransaction Unit
 createInitialInstances unversionedModelname versionedModelName patch build versionedModelManifest = do

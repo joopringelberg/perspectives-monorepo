@@ -19,6 +19,7 @@ import Data.Foldable (for_)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), maybe)
 import Data.Newtype (over, unwrap)
+import Data.String (Pattern(..), contains)
 import Data.Tuple (Tuple(..))
 import Effect (Effect)
 import Effect.Aff (Aff)
@@ -31,23 +32,25 @@ import Foreign.Object as Object
 import Perspectives.ApiTypes (ApiEffect, ResponseWithWarnings(..))
 import Perspectives.Assignment.SerialiseAsDeltas (serialiseRoleInstancesAndProperties)
 import Perspectives.Assignment.Update (setPreferredUserRoleType)
+import Perspectives.Checking.PerspectivesTypeChecker (checkBinding)
 import Perspectives.ContextAndRole (defaultContextRecord, defaultRolRecord)
 import Perspectives.CompileAssignment (bindAllWithPermission)
-import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction, (##>))
+import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction, (##=), (##>))
 import Perspectives.Cuid2 (cuid2)
 import Perspectives.Data.EncodableMap as EM
 import Perspectives.Deltas (transactieForEachUser)
 import Perspectives.DependencyTracking.Dependency (registerSupportedEffect, unregisterSupportedEffect)
 import Perspectives.DomeinCache (storeDomeinFileInCache)
 import Perspectives.DomeinFile (DomeinFile(..), defaultDomeinFileRecord)
+import Perspectives.Extern.Couchdb (warnPrivateFillersForRoleType)
 import Perspectives.Identifiers (typeUri2ModelUri)
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..))
 import Perspectives.Instances.Me (getMyType, isMe)
-import Perspectives.Instances.ObjectGetters (binding_, getMe, roleType_)
+import Perspectives.Instances.ObjectGetters (binding_, getMe, getProperty, roleType_)
 import Perspectives.ModelDependencies (perspectivesUsers, perspectivesUsersPublicKey, perspectivesUsersTransportPublicKey)
 import Perspectives.Parsing.Arc.Position (ArcPosition(..))
 import Perspectives.Persistence.DeltaStore (storeDeltaFromSignedDelta)
-import Perspectives.Persistent (getPerspectContext)
+import Perspectives.Persistent (entitiesDatabaseName, getPerspectContext, getPerspectRol)
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..))
 import Perspectives.Query.QueryTypes (RoleInContext(..)) as QT
 import Perspectives.Representation.ADT (ADT(..))
@@ -68,7 +71,10 @@ import Perspectives.Representation.Verbs (PropertyVerb(..), RoleVerb(..), RoleVe
 import Perspectives.RoleAssignment (filledNoLongerPointsTo, filledPointsTo, fillerPointsTo, lookForAlternativeMe)
 import Perspectives.RunPerspectives (runPerspectivesWithoutCouchdb)
 import Perspectives.RunMonadPerspectivesTransaction (phase2)
-import Perspectives.SaveUserData (FillBindingMode(..), changeRoleBinding, setBindingWithMode)
+import Perspectives.SaveUserData (FillBindingMode(..), changeRoleBinding, findExactFiller, setBindingWithMode)
+import Perspectives.SetupCouchdb (setRoleView)
+import Perspectives.ResourceIdentifiers (createPublicIdentifier, takeGuid)
+import Perspectives.StrippedDelta (addResourceSchemes, stripResourceSchemes)
 import Perspectives.ScheduledAssignment (ScheduledAssignment(..))
 import Perspectives.SetupUser (setupInvertedQueryDatabase)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
@@ -76,6 +82,9 @@ import Perspectives.Sync.SignedDelta (SignedDelta(..))
 import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
 import Perspectives.Sync.Transaction (Transaction(..), TransactionDestination(..), createTransaction)
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..))
+import Perspectives.Sync.HandleTransaction (executeRoleBindingDelta)
+import Perspectives.Types.ObjectGetters (requiresPublicFiller)
+import Perspectives.TypesForDeltas (RoleBindingDelta(..), RoleBindingDeltaType(..))
 import Perspectives.UnschemedIdentifiers (unschemePerspectivesUser)
 import Simple.JSON (class WriteForeign, writeJSON)
 import Test.Unit (TestSuite, suite, test)
@@ -87,6 +96,123 @@ main = runTest theSuite
 
 theSuite :: TestSuite
 theSuite = suite "User-role filler replacement" do
+  test "a received public filler keeps its public identity despite an incomplete private counterpart" $
+    withFixture oldRemotePeer [] [] do
+      publicFiller <- preparePublicFiller
+      privateFiller <- lift $ getPerspectRol visibleId
+      lift $ void $ cacheEntity visibleId $ over PerspectRol (\role -> role { properties = Object.empty }) privateFiller
+      EnumeratedRole author <- lift $ getEnumeratedRole userType
+      let
+        grant (Perspective p) =
+          if p.roleTypes == [ ENR visibleType ] then Perspective p
+            { roleTypes = [ ENR hiddenType ]
+            , object = SQD (CDOM $ ST contextType) (RolGetter $ ENR hiddenType)
+                (RDOM $ ST $ QT.RoleInContext { context: contextType, role: hiddenType })
+                False
+                False
+            , roleVerbs = EM.singleton (ContextState $ StateIdentifier $ unwrap contextType) (Including [ Fill ])
+            }
+          else Perspective p
+      lift $ cacheInDomeinFile userType $ EnumeratedRole author { perspectives = grant <$> author.perspectives }
+      rawDelta <- pure $ stripResourceSchemes $ publicBindingDelta publicFiller
+      expanded@(RoleBindingDelta delta) <- lift $ addResourceSchemes Map.empty rawDelta
+      liftAff $ equal (Just publicFiller) delta.filler
+      executeRoleBindingDelta expanded (signed $ unwrap rawDelta)
+      actual <- lift $ binding_ hiddenId
+      liftAff $ equal (Just publicFiller) actual
+      publicVersion <- lift (publicFiller ##= getProperty visibleProperty)
+      privateVersion <- lift (visibleId ##= getProperty visibleProperty)
+      liftAff $ equal [ Value "2.0" ] publicVersion
+      liftAff $ equal [] privateVersion
+
+      hidden <- lift $ getEnumeratedRole hiddenType
+      lift $ cacheInDomeinFile hiddenType $ over EnumeratedRole
+        (\role -> role { publicFiller = Nothing })
+        hidden
+      RoleBindingDelta ordinary <- lift $ addResourceSchemes Map.empty rawDelta
+      liftAff $ equal (Just visibleId) ordinary.filler
+
+  for_ [ Tuple "required type" FillWithRequiredType, Tuple "provided type" FillWithProvidedType ] \(Tuple name mode) ->
+    test ("a public-required role rejects private fillers before first binding or replacement: " <> name) $
+      withFixture oldRemotePeer [] [] do
+        void preparePublicFiller
+        allowed <- lift $ checkBinding hiddenType visibleId
+        exact <- lift $ findExactFiller hiddenType visibleId
+        liftAff $ equal false allowed
+        liftAff $ equal Nothing exact
+        first <- try $ setBindingWithMode mode hiddenId visibleId Nothing
+        assertPrivateFillerRejected first
+        lift $ filledPointsTo hiddenId visibleId
+        replacement <- try $ setBindingWithMode mode hiddenId visibleId (Just $ signed $ unwrap $ publicBindingDelta visibleId)
+        assertPrivateFillerRejected replacement
+        deferred <- try $ changeRoleBinding hiddenId (Just visibleId)
+        assertPrivateFillerRejected deferred
+        Transaction { scheduledAssignments } <- AA.get
+        liftAff $ equal [] scheduledAssignments
+        remaining <- lift $ binding_ hiddenId
+        liftAff $ equal (Just visibleId) remaining
+
+  test "a legacy private binding is reported and can be explicitly replaced with a public filler" $
+    withFixture oldRemotePeer [] [] do
+      publicFiller <- preparePublicFiller
+      lift $ filledPointsTo hiddenId visibleId
+      lift do
+        hidden <- getPerspectRol hiddenId
+        void $ cacheEntity hiddenId $ over PerspectRol (\role -> role { allTypes = [ hiddenType ] }) hidden
+        entitiesDatabaseName >>= setRoleView
+        warnPrivateFillersForRoleType hiddenType
+      original <- lift $ binding_ hiddenId
+      liftAff $ equal (Just visibleId) original
+      void $ setBindingWithMode FillWithRequiredType hiddenId publicFiller Nothing
+      Transaction { scheduledAssignments } <- AA.get
+      case scheduledAssignments of
+        [ RoleUnbinding filled (Just filler) _ ] -> changeRoleBinding filled (Just filler)
+        _ -> liftAff $ assert "The explicit replacement must be scheduled" false
+      actual <- lift $ binding_ hiddenId
+      liftAff $ equal (Just publicFiller) actual
+
+  test "public-required bindings inherit aspect constraints and reject incompatible public types" $
+    withFixture oldRemotePeer [] [] do
+      publicFiller <- preparePublicFiller
+      bridge <- lift $ getEnumeratedRole bridgeType
+      lift $ cacheInDomeinFile bridgeType $ over EnumeratedRole (\role -> role { publicFiller = Just true }) bridge
+      hidden <- lift $ getEnumeratedRole hiddenType
+      lift $ cacheInDomeinFile hiddenType $ over EnumeratedRole
+        ( \role -> role
+            { publicFiller = Nothing
+            , roleAspects = [ QT.RoleInContext { context: contextType, role: bridgeType } ]
+            }
+        )
+        hidden
+      inherited <- lift $ requiresPublicFiller hiddenType
+      liftAff $ equal true inherited
+      publicAllowed <- lift $ checkBinding hiddenType publicFiller
+      liftAff $ equal true publicAllowed
+      exact <- lift $ findExactFiller hiddenType publicFiller
+      liftAff $ equal (Just publicFiller) exact
+      lift $ void $ cacheEntity publicFiller $ PerspectRol defaultRolRecord
+        { id = publicFiller, context = contextId, pspType = externalType }
+      result <- try $ setBindingWithMode FillWithProvidedType hiddenId publicFiller Nothing
+      case result of
+        Left err -> liftAff $ assert "The error must identify an incompatible public filler"
+          (contains (Pattern "does not satisfy the filler type restriction") $ Exception.message err)
+        Right _ -> liftAff $ assert "An incompatible public filler must be rejected" false
+      remaining <- lift $ binding_ hiddenId
+      liftAff $ equal Nothing remaining
+
+  test "bulk binding enforces a public filler before scheduling any replacement" $
+    withFixture oldRemotePeer [] [] do
+      EnumeratedRole author <- lift $ getEnumeratedRole userType
+      let grant (Perspective p) = Perspective p { roleVerbs = EM.singleton (ContextState $ StateIdentifier $ unwrap contextType) (Including [ Fill ]) }
+      lift $ cacheInDomeinFile userType $ EnumeratedRole author
+        { perspectives = grant <$> author.perspectives, publicFiller = Just true }
+      result <- try $ bindAllWithPermission newRemotePeer [ userId ]
+      case result of
+        Left _ -> pure unit
+        Right _ -> liftAff $ assert "Bulk binding must reject a private filler" false
+      Transaction { scheduledAssignments } <- AA.get
+      liftAff $ equal [] scheduledAssignments
+
   for_
     [ { name: "only the requested instance", users: NA.singleton userId, expected: [ userId ] }
     , { name: "multiple requested instances", users: NA.singleton userId <> NA.singleton remoteAlternativeId, expected: [ userId, remoteAlternativeId ] }
@@ -326,6 +452,45 @@ theSuite = suite "User-role filler replacement" do
       checkMeSubscriptions Nothing Nothing (changeRoleBinding userId Nothing)
       PerspectContext context <- lift $ getPerspectContext contextId
       liftAff $ equal Nothing context.preferredUserRoleType
+
+preparePublicFiller :: MonadPerspectivesTransaction RoleInstance
+preparePublicFiller = do
+  let publicFiller = RoleInstance $ createPublicIdentifier "https://example.org/instances/" (takeGuid $ unwrap visibleId)
+  hidden <- lift $ getEnumeratedRole hiddenType
+  lift $ cacheInDomeinFile hiddenType $ over EnumeratedRole
+    ( \role -> role
+        { publicFiller = Just true
+        , binding = Just $ ST $ QT.RoleInContext { context: contextType, role: visibleType }
+        }
+    )
+    hidden
+  lift $ void $ cacheEntity publicFiller $ PerspectRol defaultRolRecord
+    { id = publicFiller
+    , context = contextId
+    , pspType = visibleType
+    , properties = Object.singleton (unwrap visibleProperty) [ Value "2.0" ]
+    }
+  pure publicFiller
+
+publicBindingDelta :: RoleInstance -> RoleBindingDelta
+publicBindingDelta filler = RoleBindingDelta
+  { filled: hiddenId
+  , filledType: hiddenType
+  , filler: Just filler
+  , fillerType: Just visibleType
+  , oldFiller: Nothing
+  , oldFillerType: Nothing
+  , deltaType: SetFirstBinding
+  , subject: ENR userType
+  , resourceKey: unwrap hiddenId <> "#binding"
+  , resourceVersion: 1
+  }
+
+assertPrivateFillerRejected :: forall a. Either Exception.Error a -> MonadPerspectivesTransaction Unit
+assertPrivateFillerRejected = case _ of
+  Left err -> liftAff $ assert "The error must explain the public filler requirement"
+    (contains (Pattern "requires a public filler") $ Exception.message err)
+  Right _ -> liftAff $ assert "A private filler must be rejected" false
 
 checkMeSubscriptions
   :: Maybe RoleInstance

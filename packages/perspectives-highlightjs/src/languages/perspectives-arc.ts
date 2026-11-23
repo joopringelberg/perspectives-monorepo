@@ -43,6 +43,14 @@ const contexts: Mode = {
     match: /\b(domain|case|party|activity|public)\b/,
 };
 
+const publicFiller: Mode = {
+    match: [lex("filledBy"), whitespace, lex("public")],
+    scope: {
+        1: base0E,
+        3: base0E
+    }
+};
+
 // ROLE KINDS (NOT USER) (base0B)
 const roles: Mode = {
     begin: /(\n\s*)\b(external|thing|context)\b/,
@@ -290,6 +298,7 @@ const perspectivesArc: LanguageFn = function(hljs: HLJSApi): Language {
         , hljs.APOS_STRING_MODE
         , simpleComment
         , blockComment
+        , publicFiller
         , contexts
         , roles
         , user

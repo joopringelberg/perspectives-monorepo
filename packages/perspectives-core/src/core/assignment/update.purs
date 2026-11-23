@@ -69,7 +69,7 @@ import Perspectives.Identifiers (startsWithSegments, typeUri2LocalName_, typeUri
 import Perspectives.InstanceRepresentation (PerspectContext, PerspectRol(..))
 import Perspectives.Instances.ObjectGetters (binding_, contextType, getProperty, roleType, roleType_)
 import Perspectives.Instances.Values (parsePerspectivesFile, writePerspectivesFile)
-import Perspectives.Logging (debugResource, logWhen, warnResource)
+import Perspectives.Logging (debugResource, logWhen, traceDelta, warnResource)
 import Perspectives.Persistence.API (toFile)
 import Perspectives.Persistence.DeltaStore (getDeltasForResourceByDeltaType)
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
@@ -466,7 +466,12 @@ deleteProperty rids propertyName mdelta = case ARR.head rids of
 -- | QUERY UPDATES
 -- | CURRENTUSER: there can be no change to the current user.
 setProperty :: Array RoleInstance -> EnumeratedPropertyType -> Maybe SignedDelta -> (Updater (Array Value))
-setProperty rids propertyName mdelta values =
+setProperty rids propertyName mdelta values = do
+  lift $ traceDelta $ "setProperty: requested " <> show propertyName <> " = " <> show values
+    <> " for "
+    <> show rids
+    <> "; supplied delta="
+    <> show (isJust mdelta)
   if null rids then lift ((show <$> humanizePerspectivesWarning (NoRoleInstanceToSetProperty propertyName values)) >>= warnResource)
   else do
     rids' <- filterA hasDifferentValues rids
@@ -521,6 +526,7 @@ setProperty rids propertyName mdelta values =
                 -- Save the property values in the role instance. Do this now because it will affect computing the users.
                 lift $ void $ cacheAndSave rid (setRol_property pe replacementProperty values)
                 users <- aisInPropertyDelta rid' rid propertyName replacementProperty pspType
+                lift $ traceDelta $ "setProperty: recipients for " <> show replacementProperty <> " on " <> show rid <> " = " <> show users
                 addDelta (DeltaInTransaction { users, delta: signedDelta })
                 (lift $ findPropertyRequests rid propertyName) >>= addCorrelationIdentifiersToTransactie
                 (lift $ findPropertyRequests rid replacementProperty) >>= addCorrelationIdentifiersToTransactie

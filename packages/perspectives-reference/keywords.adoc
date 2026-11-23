@@ -53,6 +53,7 @@
 ** <<keyword-remove_property,remove property value>>
 ** <<keyword-remove-roleinstance,remove role instance>>
 * <<keyword-role,public>>
+* <<role-public-filler,filledBy public>>
 * <<keyword-role,thing>>
 * <<keyword-roleinstance,roleinstance>>
 * <<keyword-roleTypes,roleTypes>>

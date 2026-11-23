@@ -325,6 +325,8 @@ traverseEnumeratedRoleE_ role@(EnumeratedRole { id: rn, kindOfRole }) roleParts 
   --UNLINKEDATTRIBUTE
   handleParts roleName (EnumeratedRole roleUnderConstruction) UnlinkedAttribute = pure (EnumeratedRole $ roleUnderConstruction { unlinked = true })
 
+  handleParts roleName (EnumeratedRole roleUnderConstruction) PublicFillerAttribute = pure (EnumeratedRole $ roleUnderConstruction { publicFiller = Just true })
+
   -- FILLEDBYATTRIBUTE
   handleParts roleName (EnumeratedRole roleUnderConstruction@{ id, binding }) (FilledBySpecifications (spec :: TypeCombination)) = do
     spec' <-

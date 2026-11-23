@@ -528,7 +528,7 @@ enumeratedRole_
 enumeratedRole_ uname knd pos = do
   attributes <- option Nil roleAttributes
   filledBy' <- filledBy
-  pure { uname, knd, pos, parts: maybe attributes (flip (:) attributes) filledBy', isEnumerated: true }
+  pure { uname, knd, pos, parts: attributes <> filledBy', isEnumerated: true }
   where
   -- | We cannot use token.commaSep or sebBy to separate the role attributes;
   -- | it will cause looping as long as it is used
@@ -552,6 +552,7 @@ enumeratedRole_ uname knd pos = do
 
 -- | This parser always succeeds.
 -- | If it detects no filledBy clause, it leaves consumed state as it is and returns Nil.
+-- | filledBy public SomeRole requires a public instance as the immediate filler.
 -- | filledBy SomeRole, AnotherRole
 -- | Here `SomeRole` and `AnotherRole` are alternatives.
 -- | filledBy SomeRole + AnotherRole
@@ -561,9 +562,12 @@ enumeratedRole_ uname knd pos = do
 -- | the result is a disjunction of conjunctions.
 -- Implementation note: we cannot know, here, whether the filler is Calculated or
 -- Enumerated. This will be fixed in PhaseThree.
-filledBy :: IP (Maybe RolePart)
-filledBy = optionMaybe
-  (reserved "filledBy" *> (FilledBySpecifications <$> typeCombinations))
+filledBy :: IP (List RolePart)
+filledBy = option Nil do
+  void $ reserved "filledBy"
+  publicFiller <- option false (reserved "public" *> pure true)
+  specification <- FilledBySpecifications <$> typeCombinations
+  pure $ specification : if publicFiller then PublicFillerAttribute : Nil else Nil
 
 -- | rolePart =
 -- |   <perspectiveOn> |

@@ -53,7 +53,7 @@ import Perspectives.ApiTypes (ContextSerialization(..), ContextsSerialisation(..
 import Perspectives.Assignment.RunAction (runAction, runContextAction)
 import Perspectives.Assignment.SerialiseAsDeltas (noNewPeer, serialisedAsDeltasFor_)
 import Perspectives.Assignment.Update (RoleProp(..), addProperty, deleteProperty, getPropertyBearingRoleInstance, saveFile, setPreferredUserRoleType, setProperty)
-import Perspectives.Checking.PerspectivesTypeChecker (checkBinding)
+import Perspectives.Checking.PerspectivesTypeChecker (checkBinding, validatePublicFiller)
 import Perspectives.Conversation (getHelpConversation)
 import Perspectives.ContextSearch (getContextSearchModels, getContextSearchTypes, getContextSearchInstances)
 import Perspectives.CoreTypes (MP, MonadPerspectives, MonadPerspectivesTransaction, PropertyValueGetter, RoleGetter, liftToInstanceLevel, runMonadPerspectives, (##=), (##>), (##>>), (###=))
@@ -917,6 +917,7 @@ dispatchOnRequest r@{ request, subject, predicate, object, reactStateSetter, cor
     Api.GetMostGeneralAllowedBindingType -> catchError
       ( do
           filledType <- string2EnumeratedRoleType predicate
+          validatePublicFiller filledType (RoleInstance object)
           mfiller <- findExactFiller filledType (RoleInstance object)
           case mfiller of
             Nothing -> sendResponse (Result corrId []) setter

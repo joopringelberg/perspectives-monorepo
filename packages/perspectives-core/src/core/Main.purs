@@ -67,7 +67,7 @@ import Perspectives.External.CoreModules (addAllExternalFunctions)
 import Perspectives.Identifiers (buitenRol)
 import Perspectives.Instances.Builders (createAndAddRoleInstance)
 import Perspectives.Instances.ObjectGetters (context, externalRole)
-import Perspectives.Logging (debugInstall)
+import Perspectives.Logging (debugInstall, pdrLog)
 import Perspectives.ModelDependencies (backupAutomatically, indexedContext, indexedContextName, indexedRole, indexedRoleName, onStartUp, sysUser, userWithCredentialsAuthorizedDomain, userWithCredentialsPassword, userWithCredentialsUsername)
 import Perspectives.ModelTranslation (getCurrentLanguageFromIDB)
 import Perspectives.ModelUpgrade (runModelUpgrades)
@@ -1022,7 +1022,9 @@ runWithGlobalState action = do
 setLogLevelForTopic :: String -> String -> Effect Unit
 setLogLevelForTopic topicStr levelStr =
   runWithGlobalState $ case parseLogTopic topicStr, parseLogLevel levelStr of
-    Just topic, Just level -> setTopicLogLevel topic level
+    Just topic, Just level -> do
+      setTopicLogLevel topic level
+      pdrLog topic Debug ("Log threshold set to " <> show level)
     _, _ -> pure unit
 
 -- | Suppress all log output for a specific topic.
@@ -1050,6 +1052,11 @@ parseLogTopic "UPGRADE" = Just UPGRADE
 parseLogTopic "PARSER" = Just PARSER
 parseLogTopic "COMPILER" = Just COMPILER
 parseLogTopic "INSTALL" = Just INSTALL
+parseLogTopic "DELTA" = Just DELTA
+parseLogTopic "TEST" = Just TEST
+parseLogTopic "RESOURCE" = Just RESOURCE
+parseLogTopic "STARTUP" = Just STARTUP
+parseLogTopic "ACTION" = Just ACTION
 parseLogTopic "OTHER" = Just OTHER
 parseLogTopic _ = Nothing
 

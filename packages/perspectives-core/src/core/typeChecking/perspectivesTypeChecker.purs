@@ -27,6 +27,7 @@ import Control.Monad.Except (catchError, lift, throwError)
 import Data.Array (cons, elemIndex)
 import Data.Foldable (for_)
 import Data.Maybe (Maybe(..), isJust)
+import Data.Newtype (unwrap)
 import Data.Traversable (traverse)
 import Effect.Exception (error)
 import Perspectives.CoreTypes (MonadPerspectives, MP)
@@ -47,10 +48,11 @@ import Perspectives.Representation.Class.Role (completeDeclaredFillerRestriction
 import Perspectives.Representation.Context (Context)
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.InstanceIdentifiers (RoleInstance)
+import Perspectives.ResourceIdentifiers (isInPublicScheme)
 import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType, RoleKind(..), RoleType(..))
 import Perspectives.SideCar.PhantomTypedNewtypes (Readable)
-import Perspectives.Types.ObjectGetters (equalsOrGeneralisesRoleInContext)
-import Prelude (Unit, bind, discard, pure, unit, ($), (<<<), (==), (>=>), (>>=))
+import Perspectives.Types.ObjectGetters (equalsOrGeneralisesRoleInContext, requiresPublicFiller)
+import Prelude (Unit, bind, discard, not, pure, unit, ($), (&&), (<<<), (<>), (==), (>=>), (>>=))
 
 checkDomeinFile :: DomeinFile Readable -> MonadPerspectives (Array PerspectivesError)
 checkDomeinFile df = pure []
@@ -129,6 +131,12 @@ checkContext c = do
 -- | Retrieves from the repository the model that holds the RoleType, if necessary.
 checkBinding :: EnumeratedRoleType -> RoleInstance -> MP Boolean
 checkBinding filledType filler = do
+  publicRequired <- requiresPublicFiller filledType
+  if publicRequired && not (isInPublicScheme $ unwrap filler) then pure false
+  else checkBindingType filledType filler
+
+checkBindingType :: EnumeratedRoleType -> RoleInstance -> MP Boolean
+checkBindingType filledType filler = do
   -- Alternative using full on-the-fly expansion (semantically equivalent when completeType is correct):
   -- (mrestriction :: Maybe (CNF QT.RoleInContext)) <- getEnumeratedRole filledType >>= completeExpandedFillerRestriction <#> map toConjunctiveNormalForm
   -- (completeExpandedFillerRestriction from Perspectives.Representation.Class.Role,
@@ -139,3 +147,14 @@ checkBinding filledType filler = do
     -- restriction -> fillerType
     Just restriction -> pure (fillerType `equalsOrSpecialises_` restriction)
     Nothing -> pure true
+
+validatePublicFiller :: EnumeratedRoleType -> RoleInstance -> MP Unit
+validatePublicFiller filledType filler = do
+  publicRequired <- requiresPublicFiller filledType
+  if not publicRequired then pure unit
+  else if not (isInPublicScheme $ unwrap filler) then
+    throwError $ error ("Role " <> unwrap filledType <> " requires a public filler; " <> unwrap filler <> " is a private instance.")
+  else do
+    compatible <- checkBindingType filledType filler
+    if compatible then pure unit
+    else throwError $ error ("Public filler " <> unwrap filler <> " does not satisfy the filler type restriction of " <> unwrap filledType <> ".")

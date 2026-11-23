@@ -32,6 +32,38 @@ import Test.Unit.Main (runTest)
 -- | Supplementary phase-one regressions not covered by Arc.Syntax.
 theSuite :: Free TestF Unit
 theSuite = suite "Perspectives.Parsing.Arc regressions" do
+  for_ [ "thing Item filledBy public Person\n", "user Item filledBy public ((Person + Contact), Guest)\n", "context Item filledBy public Room\n" ] \source ->
+    test ("public filler qualifier: " <> source) do
+      result <- runIndentParser source (thingRoleE <|> userRoleE <|> contextRoleE)
+      case result of
+        Right (RE (RoleE { roleParts })) -> do
+          assert "Expected the public filler requirement" $
+            length
+              ( filter
+                  ( case _ of
+                      PublicFillerAttribute -> true
+                      _ -> false
+                  )
+                  roleParts
+              ) == 1
+          assert "Expected the type restriction to remain present" $
+            length
+              ( filter
+                  ( case _ of
+                      FilledBySpecifications _ -> true
+                      _ -> false
+                  )
+                  roleParts
+              ) == 1
+        Left err -> failure (show err)
+        _ -> failure "Expected an enumerated role"
+
+  test "public filler qualifier requires a filler type" do
+    result <- runIndentParser "thing Item filledBy public\n" thingRoleE
+    case result of
+      Left _ -> pure unit
+      Right _ -> failure "A public filler requirement without a type must fail"
+
   test "a failed nested context restores parser state after backtracking" do
     result <- runIndentParser "x" $
       try (inSubContext "Nested" (char 'x' *> fail "invalid nested context"))

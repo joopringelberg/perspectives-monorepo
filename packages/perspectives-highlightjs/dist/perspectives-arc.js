@@ -24,6 +24,13 @@ const contexts = {
     scope: base0A,
     match: /\b(domain|case|party|activity|public)\b/,
 };
+const publicFiller = {
+    match: [lex("filledBy"), whitespace, lex("public")],
+    scope: {
+        1: base0E,
+        3: base0E
+    }
+};
 // ROLE KINDS (NOT USER) (base0B)
 const roles = {
     begin: /(\n\s*)\b(external|thing|context)\b/,
@@ -233,6 +240,7 @@ const perspectivesArc = function (hljs) {
             hljs.APOS_STRING_MODE,
             simpleComment,
             blockComment,
+            publicFiller,
             contexts,
             roles,
             user,

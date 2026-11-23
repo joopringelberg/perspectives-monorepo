@@ -72,7 +72,7 @@ import Data.TraversableWithIndex (forWithIndex)
 import Foreign.Object (Object, values)
 import Perspectives.Assignment.SerialiseAsDeltas (newPeer, serialisedAsDeltasFor)
 import Perspectives.Assignment.Update (cacheAndSave, getSubject)
-import Perspectives.Checking.PerspectivesTypeChecker (checkBinding)
+import Perspectives.Checking.PerspectivesTypeChecker (checkBinding, validatePublicFiller)
 import Perspectives.CollectAffectedContexts (addDeltasForPerspectiveObjects, usersWithPerspectiveOnRoleBinding, usersWithPerspectiveOnRoleBinding', usersWithPerspectiveOnRoleInstance)
 import Perspectives.ContextAndRole (changeContext_me, context_buitenRol, context_pspType, modifyContext_rolInContext, rol_binding, rol_context, rol_isMe, rol_pspType)
 import Perspectives.CoreTypes (LogLevel(..), LogTopic(..), MonadPerspectives, MonadPerspectivesTransaction, Updater, (###=), (##=), (##>), (##>>))
@@ -108,7 +108,7 @@ import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
 import Perspectives.Sync.SignedDelta (SignedDelta)
 import Perspectives.Sync.VersionedDelta (signVersionedDelta)
 import Perspectives.Sync.Transaction (Transaction(..))
-import Perspectives.Types.ObjectGetters (allUnlinkedRoles, isUnlinked_)
+import Perspectives.Types.ObjectGetters (allUnlinkedRoles, isUnlinked_, requiresPublicFiller)
 import Perspectives.TypesForDeltas (RoleBindingDelta(..), RoleBindingDeltaType(..), UniverseRoleDelta(..), UniverseRoleDeltaType(..))
 import Perspectives.Warning (PerspectivesWarning(..))
 import Prelude (Unit, bind, discard, not, pure, unit, void, ($), (&&), (*>), (<$>), (<<<), (<>), (==), (>>=), (||), (/=))
@@ -592,6 +592,7 @@ replaceBindingWithMode :: FillBindingMode -> RoleInstance -> RoleInstance -> May
 replaceBindingWithMode mode roleId (newBindingId :: RoleInstance) msignedDelta = (lift $ try $ getPerspectRol roleId) >>=
   handlePerspectRolError' "replaceBinding" []
     \(originalRole :: PerspectRol) -> do
+      lift $ validatePublicFiller (rol_pspType originalRole) newBindingId
       actualNewBinding <- case mode of
         FillWithProvidedType -> pure newBindingId
         FillWithRequiredType -> case msignedDelta of
@@ -618,7 +619,12 @@ replaceBindingWithMode mode roleId (newBindingId :: RoleInstance) msignedDelta =
 -- | In practice binding chains are very short (1-3 hops), matching the pattern used
 -- | by `allFillers` and `bottom_` in instanceObjectGetters.purs.
 findExactFiller :: EnumeratedRoleType -> RoleInstance -> MonadPerspectives (Maybe RoleInstance)
-findExactFiller filledType startFiller = go Nothing startFiller
+findExactFiller filledType startFiller = do
+  publicRequired <- requiresPublicFiller filledType
+  if publicRequired then do
+    ok <- checkBinding filledType startFiller
+    pure $ if ok then Just startFiller else Nothing
+  else go Nothing startFiller
   where
   go :: Maybe RoleInstance -> RoleInstance -> MonadPerspectives (Maybe RoleInstance)
   go mDeepest candidate = do
@@ -647,6 +653,7 @@ setFirstBindingWithMode :: FillBindingMode -> RoleInstance -> RoleInstance -> Ma
 setFirstBindingWithMode mode filled filler msignedDelta = (lift $ try $ getPerspectRol filled) >>=
   handlePerspectRolError' "setFirstBinding, filled" []
     \(filledRole :: PerspectRol) -> do
+      lift $ validatePublicFiller (rol_pspType filledRole) filler
       actualFiller <- case mode of
         FillWithProvidedType -> pure filler
         FillWithRequiredType -> case msignedDelta of
@@ -883,6 +890,8 @@ changeRoleBinding filledId mNewFiller = (lift $ try $ getPerspectRol filledId) >
   handlePerspectRolError' "changeRoleBinding" unit
     \(filled :: PerspectRol) -> do
       roleWillBeRemoved <- gets \(Transaction { untouchableRoles }) -> isJust $ elemIndex filledId untouchableRoles
+      if roleWillBeRemoved then pure unit
+      else lift $ for_ mNewFiller (validatePublicFiller $ rol_pspType filled)
       -- If the role will be removed, we don't modify it (we don't remove its binding).
       -- However, regardless of that we'll have to modify the filler.
       -- If the role will not be removed and there is a new filler, we fill it with that filler

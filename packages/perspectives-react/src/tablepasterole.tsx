@@ -48,6 +48,7 @@ interface TablePasteRoleState
   roleOnClipboardName?: string;
   roleOnClipboard?: RoleInstanceT;
   showRemoveContextModal: boolean;
+  bindingError?: string;
 }
 
 export default class TablePasteRole extends PerspectivesComponent<TablePasteRoleProps, TablePasteRoleState>
@@ -91,8 +92,9 @@ export default class TablePasteRole extends PerspectivesComponent<TablePasteRole
                         , requiredTypeName: requiredType?.readableName
                         , roleOnClipboardName: clipboardContent.roleData.cardTitle
                         , roleOnClipboard: clipboardContent.roleData.rolinstance
+                        , bindingError: undefined
                         }))
-                    .catch(() =>
+                    .catch(error =>
                       component.setState(
                         { providedTypeCompatible: false
                         , requiredTypeCompatible: false
@@ -100,6 +102,7 @@ export default class TablePasteRole extends PerspectivesComponent<TablePasteRole
                         , requiredTypeName: undefined
                         , roleOnClipboardName: clipboardContent.roleData.cardTitle
                         , roleOnClipboard: clipboardContent.roleData.rolinstance
+                        , bindingError: String(error)
                         }));
                 }
               }
@@ -199,6 +202,7 @@ export default class TablePasteRole extends PerspectivesComponent<TablePasteRole
             {i18next.t("pasteRole_RequiredShort", {ns: "preact"})}
           </Button>
         </OverlayTrigger>
+        {component.state.bindingError && <span role="alert" className="text-danger">{component.state.bindingError}</span>}
       </div>;
     }
     else {

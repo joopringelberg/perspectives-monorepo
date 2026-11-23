@@ -72,6 +72,7 @@ type EnumeratedRoleRecord =
   , propertyAliases :: OBJ.Object (EnumeratedPropertyType)
 
   , binding :: Maybe (ADT RoleInContext)
+  , publicFiller :: Maybe Boolean
   , completeType :: CNF RoleInContext
 
   , functional :: Boolean
@@ -102,6 +103,7 @@ defaultEnumeratedRole qname dname kindOfRole context pos = EnumeratedRole
   , context: ContextType context
   -- This means: no restrictions. In order to prohibit a filler, the modeller should have specified "None"
   , binding: Nothing
+  , publicFiller: Nothing
   , completeType: DPROD [ DSUM [ RoleInContext { context: ContextType context, role: EnumeratedRoleType qname } ] ]
 
   , views: []

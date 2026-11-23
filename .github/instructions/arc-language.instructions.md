@@ -46,6 +46,8 @@ thing Vehicle filledBy Car, Bicycle
 
 In a filler type, `+` means both component types are required (a product/conjunction); comma-separated alternatives mean either type may fill it (a sum/disjunction). Parenthesize a product when it occurs among alternatives. This is a type constraint, not an instruction to create or bind a filler.
 
+`filledBy public <type-expression>` additionally requires the immediate filler to be a public resource. For example, `thing Model filledBy public cm:ModelManifest$Versions` retains the public reference even when a private counterpart exists locally. The qualifier applies to the whole type expression and is inherited from role aspects. It does not publish either instance or grant permissions. Private fillers are rejected; existing private bindings are reported during model installation/update and must be explicitly removed and refilled.
+
 Properties are declared under roles:
 
 ```arc

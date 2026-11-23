@@ -222,10 +222,12 @@ pdr.setLogLevelForTopic(topic, level)
 ```
 
 Sets the per-topic log threshold.
+A `DEBUG` confirmation is emitted when permitted by the new threshold.
 
 - `topic` — one of `"SYNC"`, `"BROKER"`, `"QUERY"`, `"PERSISTENCE"`,
   `"STATE"`, `"AUTH"`, `"MODEL"`, `"UPGRADE"`, `"PARSER"`, `"COMPILER"`,
-  `"INSTALL"`, `"OTHER"`.
+  `"INSTALL"`, `"DELTA"`, `"TEST"`, `"RESOURCE"`, `"STARTUP"`, `"ACTION"`,
+  `"OTHER"`.
 - `level` — one of `"TRACE"`, `"DEBUG"`, `"INFO"`, `"WARN"`, `"ERROR"`,
   `"SILENT"`.
 
@@ -269,6 +271,23 @@ pdr.disableLogging();
 > `handleClientRequest` in `proxy.js`, which calls the corresponding compiled
 > PureScript `Effect Unit` function (`pdr.setLogLevelForTopic`, etc.) in the
 > worker context.  No response is sent back.
+
+---
+
+### Diagnosing a missing property-update transaction
+
+Enable `DELTA` at `TRACE` to follow a property assignment before outgoing-delta
+filtering:
+
+```javascript
+pdr.setLogLevelForTopic("DELTA", "TRACE");
+```
+
+The trace records the `setProperty` request, perspective-query counts and their
+active recipients, the assignment's final recipients, and any `addDelta` skip
+because it is replaying incoming deltas or has no recipients other than the local
+user. The existing `INFO` message about adding a delta appears only after those
+gates; its absence alone does not establish that the assignment did not execute.
 
 ---
 

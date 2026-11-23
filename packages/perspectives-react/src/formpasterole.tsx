@@ -39,6 +39,7 @@ interface FormPasteRoleState {
   requiredTypeName?: string;
   roleOnClipboard: RoleInstanceT | undefined;
   roleOnClipboardName?: string;
+  bindingError?: string;
 }
 
 export default class FormPasteRole extends PerspectivesComponent<FormPasteRoleProps, FormPasteRoleState>
@@ -82,8 +83,9 @@ export default class FormPasteRole extends PerspectivesComponent<FormPasteRolePr
                         , requiredTypeName: requiredType?.readableName
                         , roleOnClipboard: clipboardContent.roleData.rolinstance
                         , roleOnClipboardName: clipboardContent.roleData.cardTitle
+                        , bindingError: undefined
                         }))
-                    .catch(() =>
+                    .catch(error =>
                       component.setState(
                         { providedTypeCompatible: false
                         , requiredTypeCompatible: false
@@ -91,6 +93,7 @@ export default class FormPasteRole extends PerspectivesComponent<FormPasteRolePr
                         , requiredTypeName: undefined
                         , roleOnClipboard: clipboardContent.roleData.rolinstance
                         , roleOnClipboardName: clipboardContent.roleData.cardTitle
+                        , bindingError: String(error)
                         }));
                 }
               }
@@ -167,6 +170,7 @@ export default class FormPasteRole extends PerspectivesComponent<FormPasteRolePr
             {i18next.t("pasteRole_RequiredShort", {ns: "preact"})}
           </Button>
         </OverlayTrigger>
+        {component.state.bindingError && <span role="alert" className="text-danger">{component.state.bindingError}</span>}
       </div>;
     }
     else {

@@ -1,4 +1,4 @@
--- Copyright Joop Ringelberg 2026. 
+-- Copyright Joop Ringelberg 2026.
 
 domain model://perspectives.domains#ModelTestGroups@2.0
   use sys for model://perspectives.domains#System
@@ -96,7 +96,7 @@ domain model://perspectives.domains#ModelTestGroups@2.0
             markdown <### Manage your model test group
                       * Add participants on the left.
                       * [[action: CreateModel|Create a model role first]]
-                      * Then copy a Versions instance in a ModelManifest and fill the new Model role with it. 
+                      * Then copy a **public instance** of a Versions instance in a ModelManifest and fill the new Model role with it. 
 
                       Update the model in your participants installation with the context action [[action: UpdateParticipantsModel| Update model]].
                      >
@@ -148,4 +148,4 @@ domain model://perspectives.domains#ModelTestGroups@2.0
             master
             detail
 
-    thing Model filledBy cm:ModelManifest$Versions
+    thing Model filledBy public cm:ModelManifest$Versions

@@ -92,6 +92,7 @@ data RolePart
   | FunctionalAttribute Boolean
   | MandatoryAttribute Boolean
   | UnlinkedAttribute
+  | PublicFillerAttribute
   | FilledBySpecifications TypeCombination
   | Calculation Step Boolean
   | RoleAspect String ArcPosition (Maybe PropertyMapping)

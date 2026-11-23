@@ -49,7 +49,7 @@ A role can be filled by another role. In the type declaration we can restrict th
 The syntax for a role declaration is as follows:
 ```
 roleDeclaration = enumerated-role | calculated-role
-enumerated-role = role-kind local-identifier ['relational'|'functional'] ['unlinked'] ['filledBy' filler]
+enumerated-role = role-kind local-identifier ['relational'|'functional'] ['unlinked'] ['filledBy' ['public'] filler]
 role-kind = 'user' | 'thing' | 'context' | 'external' | 'public'
 filler = fillingtype [, fillingtype]+ | fillingtype [+ fillingtype]+
 fillingtype = roletype ['in' contexttype] | contexttype
@@ -71,7 +71,34 @@ Explanation:
 8. The `local-identifier` is a unique identifier for the role within its lexical context. It should start with a captital. See the definition of `segment` in the <<lexical_structure,Lexical Structure>> section for more details.
 9. `identifier` is also taken from the section on <<lexical_structure,Lexical Structure>>.
 
+[[role-public-filler]]
+==== Requiring a public filler
+
+The optional `public` qualifier after `filledBy` requires the immediate filler to be a public resource of the specified type:
+
+[source,perspectivesarc]
+----
+thing Model filledBy public cm:ModelManifest$Versions
+----
+
+The qualifier applies to the entire filler-type expression, including alternatives and combinations:
+
+[source,perspectivesarc]
+----
+thing Contact filledBy public (Person, Organization)
+----
+
+It does not make `Model` or `Contact` public, require them to be filled, grant permissions, publish an instance, or guarantee that the public endpoint is reachable. It is distinct from declaring a `public` user role.
+
+Private fillers are rejected with an explicit error, even when a published counterpart exists. Public fillers must still satisfy the ordinary type restriction. These checks apply to first bindings, replacements, clipboard operations, bulk bindings, and bindings received from peers. A public reference is retained even when the installation already contains a private instance with the same underlying identifier; the private instance must not shadow the published resource.
+
+The requirement is inherited from role aspects and cannot be weakened by a concrete role. It constrains only the immediate filler, not every resource reachable through its bindings.
+
+Existing private bindings are not silently rewritten or removed when a model adds this qualifier. Model installation or update reports such bindings as invalid; remove and refill them explicitly with public instances. Without the qualifier, existing binding and preferred-storage resolution behavior is unchanged.
+
 [[keyword-aspect]]
+==== Role Aspects
+
 This restriction on context types from which to take role types only makes sense with the knowledge that a role type from one context can be added to another context. Such a role is called an <<keyword-aspect,aspect role>>. An example: a generic role Driver will make sense in the context of a Vehicle. We can then add that role as an aspect role to the contexts Lorry, Taxi, and so on (and these will themselves be specialisations of Vehicle - where the specialising is done by adding Vehicle as an aspect!). The aspect role is a role that is added to the context, but it is not declared in that context. If we want to fill another role with just Taxi Drivers, we can use the syntax `filledBy Driver in Taxi`. This means that the role must be filled by instances of type Driver that are attached to (context) instances of type Taxi.
 
 When a user role takes another user role as an aspect, it also inherits that aspect's perspectives. These are contextualised to applicable object roles in the current context. If the user role already declares a perspective on the same object role, the local and inherited property permissions are combined: a local permission on `P` and an inherited permission on `Q` give access to both properties, each with its own verbs and state conditions. The local declaration extends rather than overrides the inherited permissions; see <<perspectives-aspects,Perspectives inherited from aspects>>.

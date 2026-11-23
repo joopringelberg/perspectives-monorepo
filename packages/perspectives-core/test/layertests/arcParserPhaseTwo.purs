@@ -30,13 +30,14 @@ import Perspectives.Representation.ADT (ADT(..))
 import Perspectives.Representation.CalculatedProperty (CalculatedProperty(..))
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
 import Perspectives.Representation.Context (Context(..))
-import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
+import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..), defaultEnumeratedRole)
 import Perspectives.Representation.EnumeratedProperty (EnumeratedProperty(..), defaultEnumeratedProperty, retainsFullHistory)
 import Perspectives.Parsing.Arc.Position (ArcPosition(..))
 import Perspectives.Representation.QueryFunction (QueryFunction(..))
 import Perspectives.Representation.Range (Range(..))
 import Perspectives.Representation.State (State(..))
 import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..))
+import Perspectives.Representation.TypeIdentifiers as TI
 import Test.Parsing.DomeinFileSelectors (all, ensureERole, ensureEnumeratedProperty, ensureEnumeratedRoleHasProperty, ensureState, enumeratedPropertyHasRange, enumeratedPropertyIsFunctional, enumeratedPropertyIsMandatory, exists)
 import Test.Unit (TestF, suite, test)
 import Test.Unit.Assert (assert)
@@ -53,6 +54,36 @@ evalPhaseTwo = evalPhaseTwo' >=> case _ of
 
 theSuite :: Free TestF Unit
 theSuite = suite "Perspectives.Parsing.Arc.PhaseTwo" do
+  test "public filler metadata preserves the type restriction and ordinary defaults" do
+    result <- runIndentParser
+      "domain model://example.org#PublicFillers\n  thing Person\n  thing PublicItem filledBy public Person\n  thing OrdinaryItem filledBy Person\n"
+      ARC.domain
+    case result of
+      Left err -> assert (show err) false
+      Right ctxt -> evalPhaseTwo (traverseDomain ctxt) >>= case _ of
+        Left err -> assert (show err) false
+        Right (DomeinFile { enumeratedRoles }) ->
+          case lookup "model://example.org#PublicFillers$PublicItem" enumeratedRoles, lookup "model://example.org#PublicFillers$OrdinaryItem" enumeratedRoles of
+            Just (EnumeratedRole publicRole), Just (EnumeratedRole ordinaryRole) -> do
+              assert "The qualifier must be compiled" (publicRole.publicFiller == Just true)
+              assert "The ordinary role must remain unrestricted by publicness" (ordinaryRole.publicFiller == Nothing)
+              assert "The type restrictions must be identical" (publicRole.binding == ordinaryRole.binding && isJust publicRole.binding)
+            _, _ -> assert "Missing role definitions" false
+
+  test "older role metadata without publicFiller still decodes" do
+    let
+      original = defaultEnumeratedRole "model://example.org#PublicFillers$Item" "Item"
+        TI.RoleInContext
+        "model://example.org#PublicFillers"
+        (ArcPosition { line: 1, column: 1 })
+      legacy = Record.delete (Proxy :: Proxy "publicFiller") (unwrap original)
+    case (readJSON (writeJSON legacy) :: Either MultipleErrors EnumeratedRole) of
+      Left err -> assert (show err) false
+      Right (EnumeratedRole role) -> assert "Absent metadata must preserve ordinary binding behavior" (role.publicFiller == Nothing)
+    case (readJSON (writeJSON $ EnumeratedRole $ (unwrap original) { publicFiller = Just true }) :: Either MultipleErrors EnumeratedRole) of
+      Left err -> assert (show err) false
+      Right (EnumeratedRole role) -> assert "The public requirement must survive serialization" (role.publicFiller == Just true)
+
   test "fullhistory is compiled independently of cardinality and permissions" do
     r <- runIndentParser
       "domain model://example.org#History\n  thing Item\n    property Recorded (fullhistory, mandatory, relational, String)\n    property Ordinary (String)\n"

@@ -87,6 +87,17 @@
       "match": "^\\s*\\b(external|thing|context)\\b"
     },
     {
+      "match": "\\b(filledBy)\\s+(public)\\b",
+      "captures": {
+        "1": {
+          "name": "entity.other.inherited-class.rolekind.filledBy.arc"
+        },
+        "2": {
+          "name": "keyword.control.publicfiller.arc"
+        }
+      }
+    },
+    {
       "name": "entity.other.inherited-class.rolekind.filledBy.arc",
       "match": "\\bfilledBy\\b"
     },

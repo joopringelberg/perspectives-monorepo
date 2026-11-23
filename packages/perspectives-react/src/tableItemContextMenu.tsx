@@ -64,6 +64,7 @@ interface TableItemContextMenuState {
   providedTypeName?: string;
   requiredTypeName?: string;
   fillerTypes?: FillerType[];
+  bindingError?: string;
 }
 
 export default class TableItemContextMenu extends Component<TableItemContextMenuProps, TableItemContextMenuState>
@@ -125,7 +126,8 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
           providedTypeCompatible: false,
           requiredTypeCompatible: false,
           providedTypeName: undefined,
-          requiredTypeName: undefined
+          requiredTypeName: undefined,
+          bindingError: undefined
         }
       );
       return;
@@ -145,17 +147,19 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
             requiredTypeCompatible: requiredType !== undefined &&
               (!providedTypeCompatible || requiredType.roleInstance !== clipboardRole),
             providedTypeName,
-            requiredTypeName: requiredType?.readableName
+            requiredTypeName: requiredType?.readableName,
+            bindingError: undefined
           }
         );
       })
-      .catch(() =>
+      .catch(error =>
         this.setState(
           {
             providedTypeCompatible: false,
             requiredTypeCompatible: false,
             providedTypeName: undefined,
-            requiredTypeName: undefined
+            requiredTypeName: undefined,
+            bindingError: String(error)
           }
         ));
   }
@@ -344,6 +348,10 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
       if (items.length > 0)
       {
         return items;
+      }
+      if (this.state.bindingError)
+      {
+        return [<Dropdown.Item key="BindingError" disabled>{this.state.bindingError}</Dropdown.Item>];
       }
       if (this.state.fillerTypes && this.state.fillerTypes.length > 0)
       {

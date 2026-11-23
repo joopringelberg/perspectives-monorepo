@@ -41,9 +41,10 @@ import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), Rol
 import Perspectives.Representation.TypeIdentifiers (ResourceType(..))
 import Perspectives.ResourceIdentifiers (addPublicScheme, createDefaultIdentifier, createLocalIdentifier, createPublicIdentifier, createRemoteIdentifier, isInPublicScheme, stripNonPublicIdentifiers, takeGuid)
 import Perspectives.ResourceIdentifiers.Parser (ResourceIdentifier)
+import Perspectives.Types.ObjectGetters (requiresPublicFiller)
 
 import Perspectives.TypesForDeltas (ContextDelta(..), RoleBindingDelta(..), RolePropertyDelta(..), UniverseContextDelta(..), UniverseRoleDelta(..))
-import Prelude (Unit, bind, discard, pure, void, ($), (<$>), (<<<), (>>=))
+import Prelude (Unit, bind, discard, pure, void, ($), (&&), (<$>), (<<<), (>>=))
 
 -----------------------------------------------------------
 -- STRIPPING RESOURCE IDENTIFIERS IN A DELTA
@@ -135,10 +136,13 @@ instance StrippedDelta RoleBindingDelta where
     }
   addResourceSchemes storageSchemes (RoleBindingDelta r) = do
     filled <- RoleInstance <$> addSchemeToResourceIdentifier storageSchemes (RType r.filledType) (unwrap r.filled)
+    publicRequired <- requiresPublicFiller r.filledType
     filler <- case r.filler, r.fillerType of
+      Just f, Just _ | publicRequired && isInPublicScheme (unwrap f) -> pure $ Just f
       Just f, Just ft -> Just <<< RoleInstance <$> addSchemeToResourceIdentifier storageSchemes (RType ft) (unwrap f)
       _, _ -> pure Nothing
     oldFiller <- unsafePartial case r.oldFiller, r.oldFillerType of
+      Just f, Just _ | publicRequired && isInPublicScheme (unwrap f) -> pure $ Just f
       Just f, Just ft -> Just <<< RoleInstance <$> addSchemeToResourceIdentifier storageSchemes (RType ft) (unwrap f)
       _, _ -> pure Nothing
     pure $ RoleBindingDelta r

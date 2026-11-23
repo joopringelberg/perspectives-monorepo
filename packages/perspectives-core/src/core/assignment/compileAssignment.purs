@@ -45,7 +45,7 @@ import Partial.Unsafe (unsafePartial)
 import Perspectives.ApiTypes (ContextSerialization(..), PropertySerialization(..), RolSerialization(..), defaultContextSerializationRecord)
 import Perspectives.Assignment.Update (addProperty, deleteProperty, moveRoleInstanceToAnotherContext, removeProperty, roleContextualisations, saveFile, setProperty)
 import Perspectives.Checking.Authorization (roleHasPerspectiveOnRoleWithVerb)
-import Perspectives.Checking.PerspectivesTypeChecker (checkBinding)
+import Perspectives.Checking.PerspectivesTypeChecker (checkBinding, validatePublicFiller)
 import Perspectives.CoreTypes (type (~~>), LogLevel(..), LogTopic(..), MP, MPT, MonadPerspectivesTransaction, Updater, (###>>), (##=), (##>), (##>>))
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..))
 import Perspectives.Error.Boundaries (handlePerspectRolError)
@@ -101,6 +101,7 @@ bindAllWithPermission filler targets = do
         throwError $ error message
       Right false -> throwError $ error "bind_ allfilledroles: authorization returned an invalid result."
       Right true -> do
+        lift $ validatePublicFiller targetType filler
         valid <- lift $ checkBinding targetType filler
         if not valid then throwError $ error ("bind_ allfilledroles: replacement filler " <> unwrap filler <> " does not satisfy " <> show targetType <> ".")
         else if target == filler || elem target fillerChain then
