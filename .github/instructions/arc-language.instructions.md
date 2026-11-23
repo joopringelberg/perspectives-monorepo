@@ -110,6 +110,8 @@ user Manager = sys:Me
 
 Role verbs govern operations on roles and bindings; property verbs govern operations on property values. `view`/`props` declarations specify property access, while `only`, `except`, and `all roleverbs` constrain role operations. Explicitly grant only the verbs needed. `Consult` is read access; `SetPropertyValue`, `AddPropertyValue`, `RemovePropertyValue`, and `DeleteProperty` concern property values. Exact role verbs and defaults are defined by the parser/runtime; do not invent verbs. A screen is presentation, not an authorization boundary.
 
+Property permissions can extend through a selected object's actual filler chain, including disjunctive filler restrictions. If type-level authorisation cannot establish a received write's permission, the runtime requires a concrete witness linking the signed author, subject instance, perspective query result, and exact property-bearing instance after replacements. Query filters still apply, and `me` is evaluated for the original author. Historical received writes consider permissions in any declared state, not just the state active on receipt.
+
 ### `selfonly` and `authoronly`
 
 These modifiers have different purposes and can apply to a perspective or a property:

@@ -107,6 +107,46 @@ The `applied` flag records whether the delta was executed or was suppressed by c
 | `getDeltasForResourceByDeltaType resourceKey deltaType` | As above, filtered by `deltaType` |
 | `getDeltasForRoleInstance roleInstanceId` | All deltas for a role instance **and** all of its sub-resources (properties, binding) using a PouchDB range query from `safeKey` to `safeKey + U+FFFF`, then filtering to exclude accidental prefix matches |
 
+### 3.6 Inherited-property authorisation and rejected updates
+
+Ordinary property operations first retain the existing type-level permission
+check. If it cannot prove permission, `hasInstancePropertyPermission` looks for
+a concrete witness:
+
+1. Follow the signed author's inverse binding links, confirming every link
+   against the filled role's actual binding. Visit each role at most once.
+2. In those roles' contexts, evaluate the declared subject role and require its
+   result to include a role actually filled by that author.
+3. Evaluate the perspective's object query, including filters, with that actor
+   and context. Scoped query evaluation interprets `me` as the original author,
+   not the receiving installation.
+4. Require the requested property verb and resolve a permitted property through
+   the same property-bearing-role resolver used for writes. Both the resolved
+   storage instance and property must match the incoming operation. This also
+   respects aspect-property replacements and properties shadowing a filler.
+
+This permits a write through, for example, `Participant -> Persons ->
+NonPerspectivesUsers` even when `Persons` admits several alternative filler
+types. It does not weaken `isPerspectiveOnRoleFilledWithRoleType` from type
+implication to overlap. Static compilation continues using that type-level rule.
+As before, received historical operations consider permissions in any declared
+state; the editing state need not still be active on receipt. Property
+checkpoints retain their separate disclosure/winner verification.
+
+A rejected property execution logs an error and propagates failure before
+recording that operation's causal clock, advancing its resource version, or
+storing it as applied. Earlier successful operations in the transaction are not
+rolled back. The rejected operation can therefore be retried after its missing
+authorisation evidence is available.
+
+Older runtimes could warn about an unauthorised property but still store its
+delta as applied. Upgrading does not rewrite those historical records, and a
+plain resend will still be skipped as a duplicate. To repair such data, make a
+new authorised edit on the originating installation (change and restore the
+value if necessary), producing a new property version, or repeat the scenario
+with fresh instances. Do not remove history or bypass signature/conflict checks
+to force old deltas to replay.
+
 ---
 
 ## 4. Resource version tracking (the ResourceVersionStore)

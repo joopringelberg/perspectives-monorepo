@@ -791,27 +791,24 @@ hasPerspectiveOnPropertyWithVerb subjectType roleType property verb = do
         pure (a && (b || c))
     )
 
+-- | Disregarding state, returns true iff the perspective lets the user apply the
+-- | verb to the property. The property argument must be readable.
+supportsPropertyForVerb :: Perspective -> PropertyType -> PropertyVerb -> MonadPerspectives Boolean
+supportsPropertyForVerb (Perspective { propertyVerbs }) property' verb' = find $ Map.values $ unwrap propertyVerbs
   where
-
-  -- | Disregarding state, returns true iff the perspective lets the user apply the
-  -- | verb to the property.
-  -- | NOTE: the property should be readable.
-  supportsPropertyForVerb :: Perspective -> PropertyType -> PropertyVerb -> MonadPerspectives Boolean
-  supportsPropertyForVerb (Perspective { propertyVerbs }) property' verb' = find $ Map.values $ unwrap propertyVerbs
-    where
-    find :: LIST.List (Array PropertyVerbs) -> MonadPerspectives Boolean
-    find pvs = LIST.foldM
-      ( \found (pva :: Array PropertyVerbs) -> foldM
-          ( \acc (PropertyVerbs pset pverbs) -> do
-              readableProps <- traverse toReadable pset
-              if acc then pure true
-              else pure $ isElementOf property' readableProps && (isElementOf verb' pverbs)
-          )
-          found
-          pva
-      )
-      false
-      pvs
+  find :: LIST.List (Array PropertyVerbs) -> MonadPerspectives Boolean
+  find pvs = LIST.foldM
+    ( \found (pva :: Array PropertyVerbs) -> foldM
+        ( \acc (PropertyVerbs pset pverbs) -> do
+            readableProps <- traverse toReadable pset
+            if acc then pure true
+            else pure $ isElementOf property' readableProps && (isElementOf verb' pverbs)
+        )
+        found
+        pva
+    )
+    false
+    pvs
 
 -- | All role types in a context type that have a perspective on a given object role, with a perspective on the given property.
 rolesWithPerspectiveOnRoleAndProperty :: Partial => RoleType -> PropertyType -> ContextType ~~~> RoleType

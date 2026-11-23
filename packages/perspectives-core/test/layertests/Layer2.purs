@@ -57,6 +57,7 @@ import Test.ModelPatches (theSuite) as MP
 import Test.PeerDelivery (theSuite) as PD
 import Test.PropertyHistory (theSuite) as PH
 import Test.CausalSync (theSuite) as CS
+import Test.InheritedPropertyAuthorization (theSuite) as IPA
 
 -- import Test.ContextAndRole (theSuite) as CAR
 -- import Test.Queries (theSuite) as QR
@@ -73,3 +74,4 @@ main = runTest do
   PD.theSuite
   PH.theSuite
   CS.theSuite
+  IPA.theSuite

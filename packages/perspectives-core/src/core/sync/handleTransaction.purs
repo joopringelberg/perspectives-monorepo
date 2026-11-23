@@ -138,6 +138,11 @@ executeRoleBindingDelta (RoleBindingDelta { filled, filler, deltaType, subject }
 -- TODO. Wat met SetPropertyValue?
 executeRolePropertyDelta :: RolePropertyDelta -> SignedDelta -> MonadPerspectivesTransaction Unit
 executeRolePropertyDelta d@(RolePropertyDelta { id, roleType, deltaType, values, property, subject }) signedDelta = do
+  let
+    authorize = roleHasPerspectiveOnPropertyWithVerb (unwrap signedDelta).author subject id property
+    reject e = do
+      message <- lift $ renderPerspectivesError e
+      throwError $ error message
   lift $ renderPerspectivesWarning >=> traceSync $ (ExecutingRolePropertyDelta deltaType id property)
   if isCheckpoint (unwrap signedDelta).encryptedDelta then do
     -- Checkpoints certify state as disclosed by a peer, not a new authorised write.
@@ -158,22 +163,22 @@ executeRolePropertyDelta d@(RolePropertyDelta { id, roleType, deltaType, values,
     AddProperty -> do
       -- we need not check whether the model is known if we assume valid transactions:
       -- a role instance creation delta must have preceded the property delta.
-      (lift $ roleHasPerspectiveOnPropertyWithVerb subject id property Verbs.AddPropertyValue) >>= case _ of
+      (lift $ authorize Verbs.AddPropertyValue) >>= case _ of
         -- This is mainly for historical reasons: we used to set properties by first removing and then adding them.
         -- This means that there are, in fact, in the Perspectives Universe property deltas with AddProperty that 
         -- have been made with a perspective of SetPropertyValue.
-        Left e -> (lift $ roleHasPerspectiveOnPropertyWithVerb subject id property Verbs.SetPropertyValue) >>= case _ of
-          Left e1 -> handleError e1
+        Left _ -> (lift $ authorize Verbs.SetPropertyValue) >>= case _ of
+          Left e1 -> reject e1
           Right _ -> addProperty [ id ] property (flip Tuple (Just signedDelta) <$> values)
         Right _ -> addProperty [ id ] property (flip Tuple (Just signedDelta) <$> values)
-    RemoveProperty -> (lift $ roleHasPerspectiveOnPropertyWithVerb subject id property Verbs.RemovePropertyValue) >>= case _ of
-      Left e -> handleError e
+    RemoveProperty -> (lift $ authorize Verbs.RemovePropertyValue) >>= case _ of
+      Left e -> reject e
       Right _ -> removeProperty [ id ] property (Just signedDelta) values
-    DeleteProperty -> (lift $ roleHasPerspectiveOnPropertyWithVerb subject id property Verbs.DeleteProperty) >>= case _ of
-      Left e -> handleError e
+    DeleteProperty -> (lift $ authorize Verbs.DeleteProperty) >>= case _ of
+      Left e -> reject e
       Right _ -> deleteProperty [ id ] property (Just signedDelta)
-    SetProperty -> (lift $ roleHasPerspectiveOnPropertyWithVerb subject id property Verbs.SetPropertyValue) >>= case _ of
-      Left e -> handleError e
+    SetProperty -> (lift $ authorize Verbs.SetPropertyValue) >>= case _ of
+      Left e -> reject e
       Right _ -> setProperty [ id ] property (Just signedDelta) values
     UploadFile -> do
       -- Do this only when we're executing the Delta for a public role. 
@@ -640,7 +645,8 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
       contextKey = case mInfo of
         Just info -> map safeKey info.contextInstance
         Nothing -> Nothing
-      persistIncomingDelta applied disposition =
+      persistIncomingDelta applied disposition = do
+        when (isPropertyOperation deltaType) $ lift $ recordCausalDelta s
         lift $ storeIncomingDeltaWithHistory $ DeltaStoreRecord
           { _id: deltaStoreDocIdWithDeltaId resourceKey resourceVersion author deltaId
           , _rev: Nothing
@@ -681,7 +687,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
     case mDuplicate of
       Just _ -> pure unit
       Nothing | resourceKey /= "" -> do
-        when (not $ isDeletionDeltaType deltaType) $ lift $ recordCausalDelta s
+        when (not (isDeletionDeltaType deltaType) && not (isPropertyOperation deltaType)) $ lift $ recordCausalDelta s
         localVersion <- lift $ getResourceVersion resourceKey
         historical <- coveredWhileAbsent s resourceKey
         if historical then do
@@ -919,7 +925,11 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
         Right (UniverseContextEnvelope d5) -> lift (addResourceSchemes storageSchemes d5) >>= flip executeUniverseContextDelta s
         Left _ -> throwError (error "Cannot execute an unparseable incoming delta")
     if isCheckpoint stringifiedDelta then execute
-    else catchError execute (\e -> lift $ renderPerspectivesError >=> warnSync $ (DeltaExecutionError (show e)))
+    else catchError execute \e -> do
+      lift $ renderPerspectivesError >=> warnSync $ (DeltaExecutionError (show e))
+      case parseIncomingDelta stringifiedDelta of
+        Right (RolePropertyEnvelope _) -> throwError e
+        _ -> pure unit
 
 -- Reconstruct each property once, instead of treating retained history as a new
 -- sequence of writes. Baseline-boundary conflicts use the original author's ID.

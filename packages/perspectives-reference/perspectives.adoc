@@ -7,6 +7,12 @@ A _perspective_ defines what a user role can see and do with respect to other ro
 
 When a peer newly fills a user role, the runtime synchronises the contexts, roles and property values accessible through that role's perspectives. This also applies when replacing the previous filler. If that role already fills other user roles, their perspectives are synchronised recursively too, in their respective contexts, including through intermediate non-user roles. Each user role's own perspectives determine the data sent; a binding alone does not grant additional access to unrelated data.
 
+=== Properties inherited through fillers
+
+A perspective's property permissions also apply to properties inherited through the selected object's actual filler chain. For example, a perspective on a participant may permit editing a name stored on the non-Perspectives user filling that participant through an intermediate person role. This remains possible when the intermediate role allows either Perspectives users or non-Perspectives users: the concrete binding determines where the property is stored.
+
+When the declared types alone cannot establish permission for a received property change, the runtime checks the original signed author's concrete subject role, the perspective's selected object instances, and the exact property-bearing instance reached by the write. A compatible type or an unrelated instance is not sufficient. Perspective filters and property replacements still apply. Historical changes are checked against permissions declared in any state, rather than requiring the editing state to remain active when the change arrives.
+
 [[perspectives-aspects]]
 === Perspectives inherited from aspects
 

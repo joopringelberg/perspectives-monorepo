@@ -65,7 +65,7 @@ import Perspectives.Names (expandDefaultNamespaces, lookupIndexedContext, lookup
 import Perspectives.ObjectGetterLookup (lookupPropertyValueGetterByName, lookupRoleGetterByName, propertyGetterCacheInsert)
 import Perspectives.Parsing.Arc.Expression.RegExP (RegExP(..))
 import Perspectives.Persistent (getPerspectRol)
-import Perspectives.PerspectivesState (addBinding, addWarning, getPerspectivesUser, lookupVariableBinding, pushFrame, restoreFrame)
+import Perspectives.PerspectivesState (addBinding, addWarning, getPerspectivesUser, lookupVariableBinding, pushFrame, restoreFrame, withFrame)
 import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), Range, RoleInContext(..), domain, domain2PropertyRange, domain2contextType, domain2roleType, range, roleInContext2Role)
 import Perspectives.Representation.ADT (ADT(..), equalsOrSpecialises_)
 import Perspectives.Representation.CNF (toConjunctiveNormalForm)
@@ -88,6 +88,13 @@ import Perspectives.Utilities (prettyPrint)
 import Prelude (class Eq, class Ord, add, bind, discard, eq, identity, mul, negate, notEq, pure, show, sub, ($), (&&), (*), (+), (-), (/), (<), (<$>), (<*>), (<<<), (<=), (<>), (==), (>), (>=), (>=>), (>>=), (||))
 import Simple.JSON (readJSON)
 import Unsafe.Coerce (unsafeCoerce)
+
+-- | Evaluate a received author's perspective without interpreting `me` as the
+-- | receiving installation's user. The binding is not an ARC variable name.
+withQueryAuthor :: forall a. PerspectivesUser -> MP a -> MP a
+withQueryAuthor author action = withFrame do
+  addBinding "$queryAuthor" [ unwrap author ]
+  action
 
 compileFunction :: QueryFunctionDescription -> MP (String ~~> String)
 compileFunction qfd = case qfd of
@@ -195,7 +202,12 @@ compileSQD (SQD dom (DataTypeGetter ModelNameF) _ _ _) = case dom of
   _ -> throwError (error $ "UnsaveCompiler: cannot retrieve modelname from " <> show dom)
 
 compileSQD (SQD _ (DataTypeGetter MeF) _ _ _) = pure $ \_ -> do
-  PerspectivesUser pUser <- lift $ lift getPerspectivesUser
+  PerspectivesUser pUser <- lift $ lift do
+    author <- lookupVariableBinding "$queryAuthor"
+    case author of
+      Nothing -> getPerspectivesUser
+      Just [ identity ] -> pure $ PerspectivesUser identity
+      Just _ -> throwError $ error "Invalid scoped query author"
   unwrap <$> getFilledRoles (ContextType socialEnvironment) (EnumeratedRoleType socialEnvironmentPersons) (RoleInstance pUser)
 
 compileSQD (SQD _ (TypeGetter TypeOfContextF) _ _ _) = pure $ unsafeCoerce contextType

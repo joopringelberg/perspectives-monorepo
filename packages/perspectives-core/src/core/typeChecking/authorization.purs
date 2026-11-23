@@ -25,24 +25,34 @@ module Perspectives.Checking.Authorization where
 import Prelude
 
 import Control.Monad.State (StateT, get)
-import Data.Array (foldMap)
+import Data.Array (elem, filterA, foldMap, nub, uncons)
 import Data.Either (Either(..))
+import Data.Foldable (foldM)
 import Data.Maybe (Maybe(..), isJust)
 import Data.Monoid.Disj (Disj(..))
-import Data.Newtype (ala)
+import Data.Newtype (ala, unwrap)
+import Data.Traversable (traverse)
 import Partial.Unsafe (unsafePartial)
-import Perspectives.CoreTypes (MonadPerspectives, (##>>), (###=))
+import Perspectives.Assignment.Update (RoleProp(..), getPropertyBearingRoleInstance)
+import Perspectives.CoreTypes (MonadPerspectives, (##=), (##>>), (###=))
 import Perspectives.Error.Pretty (humanizePerspectivesError)
-import Perspectives.Instances.ObjectGetters (roleType)
+import Perspectives.Instances.ObjectGetters (binding_, context_, contextType_, deltaAuthor2ResourceIdentifier, getAllFilledRoles_, roleType)
 import Perspectives.Logging (warnAuth)
 import Perspectives.Parsing.Arc.Position (ArcPosition)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
-import Perspectives.Representation.Class.Role (adtOfRole, getRole)
-import Perspectives.Representation.InstanceIdentifiers (RoleInstance)
-import Perspectives.Representation.Perspective (perspectiveSupportsOneOfRoleVerbs)
+import Perspectives.PerspectivesState (addBinding, withFrame)
+import Perspectives.Persistent (entityExists)
+import Perspectives.Query.UnsafeCompiler (compileFunction, getRoleInstances, withQueryAuthor)
+import Perspectives.Representation.ADT (ADT(..))
+import Perspectives.Representation.Class.Role (adtOfRole, contextOfRoleType, getRole)
+import Perspectives.Representation.InstanceIdentifiers (PerspectivesUser(..), RoleInstance(..), perspectivesUser2RoleInstance, roleInstance2PerspectivesUser)
+import Perspectives.Representation.Perspective (Perspective(..), perspectiveSupportsOneOfRoleVerbs)
 import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType, EnumeratedRoleType, PropertyType(..), RoleType(..))
 import Perspectives.Representation.Verbs (PropertyVerb, RoleVerb)
-import Perspectives.Types.ObjectGetters (findPerspective, hasPerspectiveOnPropertyWithVerb, hasPerspectiveOnRoleWithVerbs, isPerspectiveOnADT)
+import Perspectives.Sidecar.ToReadable (toReadable)
+import Perspectives.Sidecar.ToStable (toStable)
+import Perspectives.Types.ObjectGetters (equalsOrGeneralisesContextADT, findPerspective, hasPerspectiveOnPropertyWithVerb, hasPerspectiveOnRoleWithVerbs, isPerspectiveOnADT, propertiesInPerspective, supportsPropertyForVerb)
+import Perspectives.UnschemedIdentifiers (unschemePerspectivesUser)
 
 type Found a = StateT Boolean MonadPerspectives a
 
@@ -53,12 +63,86 @@ hasBeenFound = get
 -- | on the RoleType (in any state) with PropertyVerbs
 -- |  * whose properties include the property,
 -- |  * whose verbs include the given Verb.
-roleHasPerspectiveOnPropertyWithVerb :: RoleType -> RoleInstance -> EnumeratedPropertyType -> PropertyVerb -> MonadPerspectives (Either PerspectivesError Boolean)
-roleHasPerspectiveOnPropertyWithVerb subject roleInstance property verb' = do
+roleHasPerspectiveOnPropertyWithVerb :: PerspectivesUser -> RoleType -> RoleInstance -> EnumeratedPropertyType -> PropertyVerb -> MonadPerspectives (Either PerspectivesError Boolean)
+roleHasPerspectiveOnPropertyWithVerb author subject roleInstance property verb' = do
   roleType' <- roleInstance ##>> roleType
-  (unsafePartial $ hasPerspectiveOnPropertyWithVerb subject roleType' property verb') >>=
-    if _ then pure $ Right true
-    else pure $ Left $ UnauthorizedForProperty "Auteur" subject (ENR roleType') (ENP property) verb' Nothing Nothing
+  typePermission <- unsafePartial $ hasPerspectiveOnPropertyWithVerb subject roleType' property verb'
+  permitted <-
+    if typePermission then pure true
+    else hasInstancePropertyPermission author subject roleInstance property verb'
+  if permitted then pure $ Right true
+  else pure $ Left $ UnauthorizedForProperty "Auteur" subject (ENR roleType') (ENP property) verb' Nothing Nothing
+
+-- | A disjunctive filler restriction cannot prove where a property is stored.
+-- | Instead, witness the signed author's subject role, its selected object and
+-- | the exact property storage reached by the same resolver used for writes.
+hasInstancePropertyPermission :: PerspectivesUser -> RoleType -> RoleInstance -> EnumeratedPropertyType -> PropertyVerb -> MonadPerspectives Boolean
+hasInstancePropertyPermission author subject storage property verb = do
+  let
+    identities = nub $ perspectivesUser2RoleInstance <<< deltaAuthor2ResourceIdentifier <$>
+      [ PerspectivesUser $ unwrap $ unschemePerspectivesUser author, author ]
+  roots <- filterA entityExists identities
+  let
+    queryAuthor = case uncons roots of
+      Nothing -> author
+      Just { head } -> roleInstance2PerspectivesUser head
+  authorRoles <- filledRolesClosure [] roots
+  contexts <- nub <<< join <$> traverse context_ authorRoles
+  subjectContexts <- contextOfRoleType subject
+  readableSubject <- toReadable subject
+  withQueryAuthor queryAuthor $ isJust <$> findPerspective readableSubject
+    ( \perspective@(Perspective p) -> do
+        properties <- propertiesInPerspective perspective
+        writableProperties <- filterA (\prop -> toReadable prop >>= \readable -> supportsPropertyForVerb perspective readable verb) properties
+        if writableProperties == [] then pure false
+        else anyM
+          ( \ctx -> do
+              contextType <- contextType_ ctx
+              compatible <- equalsOrGeneralisesContextADT subjectContexts (ST contextType)
+              if not compatible then pure false
+              else do
+                actors <- ctx ##= getRoleInstances subject
+                anyM
+                  ( \actor ->
+                      if not $ elem actor authorRoles then pure false
+                      else withFrame do
+                        addBinding "currentactor" [ unwrap actor ]
+                        addBinding "currentcontext" [ unwrap ctx ]
+                        getter <- compileFunction p.object
+                        objects <- unwrap ctx ##= getter
+                        anyM
+                          ( \object ->
+                              if p.selfOnly && object /= unwrap actor then pure false
+                              else anyM (resolvesToStorage $ RoleInstance object) writableProperties
+                          )
+                          objects
+                  )
+                  actors
+          )
+          contexts
+    )
+  where
+  anyM :: forall a. (a -> MonadPerspectives Boolean) -> Array a -> MonadPerspectives Boolean
+  anyM predicate = foldM (\found value -> if found then pure true else predicate value) false
+
+  resolvesToStorage :: RoleInstance -> PropertyType -> MonadPerspectives Boolean
+  resolvesToStorage object (ENP prop) = do
+    stableProperty <- toStable prop
+    resolved <- getPropertyBearingRoleInstance stableProperty object
+    pure $ case resolved of
+      Just (RoleProp target targetProperty) -> target == storage && targetProperty == property
+      Nothing -> false
+  resolvesToStorage _ (CP _) = pure false
+
+  filledRolesClosure :: Array RoleInstance -> Array RoleInstance -> MonadPerspectives (Array RoleInstance)
+  filledRolesClosure visited remaining = case uncons remaining of
+    Nothing -> pure visited
+    Just { head: role, tail } ->
+      if elem role visited then filledRolesClosure visited tail
+      else do
+        candidates <- getAllFilledRoles_ role
+        filled <- filterA (\candidate -> (_ == Just role) <$> binding_ candidate) candidates
+        filledRolesClosure (visited <> [ role ]) (tail <> filled)
 
 -- | True if the user role represented by the subject argument has a perspective
 -- | on the RoleType that includes an Action with the given Verb,
