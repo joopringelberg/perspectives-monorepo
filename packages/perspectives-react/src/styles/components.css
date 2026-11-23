@@ -5,6 +5,20 @@
   padding-bottom: 0.25rem;
 }
 
+.weighted-columns {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.weighted-columns > thead > tr > th,
+.weighted-columns > tbody > tr > td {
+  overflow-wrap: anywhere;
+}
+
+.weighted-columns > tbody > tr > td {
+  overflow-x: auto;
+}
+
 /* Ensure placeholders have good contrast */
 ::placeholder {
   color: var(--bs-input-placeholder-color) !important;

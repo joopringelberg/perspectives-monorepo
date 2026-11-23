@@ -6,6 +6,10 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+## [1.4.2]
+
+- Added syntax coloring for relative table column widths with `columnWeight`.
+
 ## [1.4.1]
 
 - Added syntax coloring for the `filledBy public` filler restriction.

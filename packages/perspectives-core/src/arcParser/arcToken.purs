@@ -267,6 +267,7 @@ perspectDef = LanguageDef
       , "fields"
       , "minLines"
       , "maxLines"
+      , "columnWeight"
 
       ]
   , caseSensitive: true

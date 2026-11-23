@@ -300,6 +300,7 @@ export type FieldDisplayConstraint = {
   propertyType: EnumeratedOrCalculatedProperty;
   minLines?: number;
   maxLines?: number;
+  columnWeight?: number;
 };
 
 export type WhoWhatWhereScreenDef = {

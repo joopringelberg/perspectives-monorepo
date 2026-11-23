@@ -32,6 +32,29 @@ import Test.Unit.Main (runTest)
 -- | Supplementary phase-one regressions not covered by Arc.Syntax.
 theSuite :: Free TestF Unit
 theSuite = suite "Perspectives.Parsing.Arc regressions" do
+  test "Table column weights coexist with textarea constraints" do
+    result <- runIndentParser
+      "Items\n  fields\n    Description\n      columnWeight = 3\n      minLines = 2\n      maxLines = 6\n    Status\n      columnWeight = 1\n"
+      (withPos tableE <* eof)
+    case result of
+      Right (TableE _ fields) ->
+        case fields.fieldConstraints of
+          description : status : Nil -> do
+            assert "Expected the specified column weights"
+              (description.columnWeight == Just 3 && status.columnWeight == Just 1)
+            assert "Line constraints must be retained"
+              (description.minLines == Just 2 && description.maxLines == Just 6)
+          _ -> failure "Expected both field constraints"
+      Left err -> failure (show err)
+
+  for_ [ "0", "-1", "1.5", "2147483648", "wide" ] \weight ->
+    test ("Invalid column weight: " <> weight) do
+      result <- runIndentParser ("Items\n  fields\n    Name\n      columnWeight = " <> weight <> "\n")
+        (withPos tableE <* eof)
+      case result of
+        Left _ -> pure unit
+        Right _ -> failure "columnWeight must be a positive integer"
+
   for_ [ "thing Item filledBy public Person\n", "user Item filledBy public ((Person + Contact), Guest)\n", "context Item filledBy public Room\n" ] \source ->
     test ("public filler qualifier: " <> source) do
       result <- runIndentParser source (thingRoleE <|> userRoleE <|> contextRoleE)

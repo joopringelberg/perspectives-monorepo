@@ -184,7 +184,8 @@ table <RoleName>
   [fields
     <PropertyName>
       [minLines = <N>]
-      [maxLines = <N>]]
+      [maxLines = <N>]
+      [columnWeight = <N>]]
 ----
 
 Displays the instances of `<RoleName>` in a table. The optional sub-clauses restrict which properties and operations are visible:
@@ -195,7 +196,7 @@ Displays the instances of `<RoleName>` in a table. The optional sub-clauses rest
 * `only (...)` / `no roleverbs` — limit or remove role-level buttons.
 [[keyword-fillfrom]]
 * `fillfrom <expression>` — determines (through a query expression) which candidates are offered when filling new role instances; it does not create fillers automatically.
-* `fields` — set display constraints (minimum and maximum number of text lines) for individual properties.
+* `fields` — set display constraints (text line counts and relative column widths) for individual properties.
 
 Example:
 [source, arc]
@@ -204,6 +205,32 @@ table Tasks
   with props (Title, Status)
   only (Create, Remove)
 ----
+
+[[keyword-columnWeight]]
+===== Relative column widths
+
+Use `columnWeight = <N>` under a property in `fields` to assign a positive integer weight to its table column:
+
+[source,perspectivesarc]
+----
+table Tasks
+  with props (Status, Title, Description)
+  fields
+    Status
+      columnWeight = 1
+    Title
+      columnWeight = 2
+    Description
+      columnWeight = 3
+      minLines = 2
+      maxLines = 6
+----
+
+The visible columns divide the available width in proportion to their weights. Here the proportions are 1:2:3, approximately 16.7%, 33.3%, and 50%. Weights need not sum to 12 or 100. A column without an explicit weight has weight 1; hidden properties do not participate in the distribution.
+
+Weights apply to all property ranges, not just String. Zero, negative, fractional, and out-of-range integer values are rejected. Only `minLines` and `maxLines` require String properties.
+
+Weights affect tables, including the `master` part of master-detail screens; they do not size form fields. If no visible column has an explicit weight, the existing automatic table layout is preserved. Weighted tables use fixed column proportions, wrapping text and allowing horizontal scrolling within cells when necessary.
 
 ==== `form`
 

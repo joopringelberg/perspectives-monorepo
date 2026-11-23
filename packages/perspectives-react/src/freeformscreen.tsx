@@ -415,6 +415,7 @@ export function buildTable(
         helpModeActive={helpModeActive}
         onHelpTarget={onHelpTarget}
         typeAheadFillFromCandidates={table.widgetCommonFields.typeAheadFillFromCandidates}
+        fieldConstraints={table.widgetCommonFields.fieldConstraints}
         />
     </>);
 }

@@ -66,7 +66,7 @@ import Perspectives.Representation.ExplicitSet (ExplicitSet(..))
 import Perspectives.Representation.Range (Range(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedRoleType(..), RoleKind(..), RoleType(..))
 import Perspectives.Representation.Verbs (RoleVerb(..), PropertyVerb(..), RoleVerbList(..))
-import Prelude (bind, discard, flip, not, pure, show, ($), (&&), (*>), (<$>), (<*), (<*>), (<<<), (<>), (==), (>>=), (||), (/=), (+))
+import Prelude (bind, discard, flip, not, pure, show, ($), (&&), (*>), (<$>), (<*), (<*>), (<<<), (<>), (==), (>>=), (||), (/=), (+), (<=))
 
 contextE :: IP ContextPart
 contextE = withPos do
@@ -1779,7 +1779,7 @@ widgetCommonFieldsFor isForm = do
   widgetFieldsBody perspective start title false isForm
 
 -- | Parses a single field constraint entry: a property name followed by optional
--- | minLines and maxLines sub-constraints.
+-- | line-count and relative column-width sub-constraints.
 fieldConstraintE :: IP FieldConstraintE
 fieldConstraintE = do
   start <- getPosition
@@ -1788,14 +1788,16 @@ fieldConstraintE = do
   end <- getPosition
   let minLines = findConstraintValue "minLines" subConstraints
   let maxLines = findConstraintValue "maxLines" subConstraints
-  pure { propertyName, minLines, maxLines, start, end }
+  let columnWeight = findConstraintValue "columnWeight" subConstraints
+  pure { propertyName, minLines, maxLines, columnWeight, start, end }
   where
   fieldSubConstraintItem :: IP (Tuple String Int)
   fieldSubConstraintItem = do
     kw <- reservedIdentifier
     reserved "="
     n <- token.integer
-    pure (Tuple kw n)
+    if kw == "columnWeight" && n <= 0 then fail "columnWeight must be a positive integer"
+    else pure (Tuple kw n)
 
   findConstraintValue :: String -> List (Tuple String Int) -> Maybe Int
   findConstraintValue key = foldl (\acc (Tuple k v) -> if k == key then Just v else acc) Nothing

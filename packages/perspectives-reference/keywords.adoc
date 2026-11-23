@@ -62,6 +62,7 @@
 * <<keyword-selfonly-property,selfonly (property)>>
 * <<keyword-specialisesRoleType,specialisesRoleType>>
 * <<concept-screen,screen>>
+* <<keyword-columnWeight,columnWeight>>
 * <<keyword-norolecard,norolecard>>
 * <<keyword-noidentifier,noidentifier>>
 * <<keyword-state,state>>

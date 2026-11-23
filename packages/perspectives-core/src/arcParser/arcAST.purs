@@ -523,6 +523,7 @@ type FieldConstraintE =
   { propertyName :: String
   , minLines :: Maybe Int
   , maxLines :: Maybe Int
+  , columnWeight :: Maybe Int
   , start :: ArcPosition
   , end :: ArcPosition
   }

@@ -122,11 +122,12 @@ type ChatDefFields f =
   | f
   }
 
--- | Per-property display constraints for widgets (minLines, maxLines for textarea).
+-- | Per-property display constraints for textareas and table columns.
 type FieldConstraintDef =
   { propertyType :: PropertyType
   , minLines :: Maybe Int
   , maxLines :: Maybe Int
+  , columnWeight :: Maybe Int
   }
 
 -----------------------------------------------------------

@@ -93,6 +93,8 @@ ARC is whitespace-sensitive at the block level. Query operator precedence and ac
 
 ## 4. Perspectives are the access model
 
+Screen table columns can use `fields` entries with `columnWeight = <positive integer>`. Widths are proportional across visible columns, with unspecified weights defaulting to 1. This also applies to master tables, not form widths. Weights support all property ranges; only `minLines`/`maxLines` require String properties. Without explicit visible weights, automatic table layout is unchanged.
+
 A perspective relates a user role (the subject) to a role or query of roles (the object) and specifies what that user can see and do. Model every intended access path; a type declaration, binding, aspect, screen, or property does not itself grant permission. Treat perspectives as the model's authorization and visibility policy, similar to RBAC but with query-selected objects, state-dependent rules, and synchronization semantics.
 
 Basic shape:

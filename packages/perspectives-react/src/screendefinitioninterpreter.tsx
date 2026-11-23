@@ -338,6 +338,7 @@ export default class ScreenDefinitionInterpreter extends PerspectivesComponent<S
         //roleRepresentation
         perspective={perspective}
         typeAheadFillFromCandidates={widgetCommonFields.typeAheadFillFromCandidates}
+        fieldConstraints={widgetCommonFields.fieldConstraints}
         />);
   }
   buildForm({widgetCommonFields} : FormElementDef)

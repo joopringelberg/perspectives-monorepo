@@ -14,6 +14,7 @@ import Effect (Effect)
 import Effect.Aff (Aff)
 import Effect.Aff.Class (liftAff)
 import Effect.Class.Console (logShow)
+import Foreign (MultipleErrors)
 import Foreign.Object (empty, insert, keys, lookup)
 import Node.Encoding as ENC
 import Node.FS.Aff (readTextFile)
@@ -48,7 +49,7 @@ import Perspectives.Representation.Perspective (Perspective(..), PropertyVerbs(.
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
 import Perspectives.Representation.QueryFunction (QueryFunction(..)) as QF
 import Perspectives.Representation.Range (Range(..))
-import Perspectives.Representation.ScreenDefinition (ScreenDefinition(..), WhoWhatWhereScreenDef(..), Who(..), TableFormOrWhenDef(..), TableFormDef(..), FormDef(..))
+import Perspectives.Representation.ScreenDefinition (ScreenDefinition(..), WhoWhatWhereScreenDef(..), Who(..), TableFormOrWhenDef(..), TableFormDef(..), FormDef(..), TableDef(..), RowDef(..), ScreenElementDef(..), FieldConstraintDef)
 import Simple.JSON as JSON
 import Record as Record
 import Type.Proxy (Proxy(..))
@@ -175,6 +176,9 @@ inheritedScreenPropertiesSuite = suite "Inherited screen properties" do
           <> "              with props ("
           <> property
           <> ")\n"
+          <> "              fields\n"
+          <> "                LastName\n"
+          <> "                  columnWeight = 2\n"
           <> "            detail\n"
           <> "              norolecard\n"
           <> "              noidentifier\n"
@@ -233,7 +237,9 @@ inheritedScreenPropertiesSuite = suite "Inherited screen properties" do
                       case head (fromFoldable $ EM.values screens) of
                         Just screen@(ScreenDefinition { whoWhatWhereScreen: Just (WhoWhatWhereScreenDef { who: Who { userRoles } }) }) -> do
                           case head userRoles of
-                            Just (PlainTableFormDef (TableFormDef { form: FormDef { widgetCommonFields } })) -> do
+                            Just (PlainTableFormDef (TableFormDef { table: TableDef { widgetCommonFields: tableFields }, form: FormDef { widgetCommonFields } })) -> do
+                              assert "Master tables retain column weights"
+                                (map (map _.columnWeight) tableFields.fieldConstraints == Just [ Just 2 ])
                               assert "Compiled detail forms retain both display options"
                                 (widgetCommonFields.noRoleCard == Just true && widgetCommonFields.noIdentifier == Just true)
                               let
@@ -252,13 +258,68 @@ inheritedScreenPropertiesSuite = suite "Inherited screen properties" do
                         _ -> assert "Expected a compiled who/what/where screen" false
 
 main :: Effect Unit
-main = runTest inheritedScreenPropertiesSuite
+main = runTest do
+  inheritedScreenPropertiesSuite
+  columnWeightsSuite
+
+columnWeightsSuite :: Free TestF Unit
+columnWeightsSuite = suite "Table column weights" do
+  for_ [ Tuple "String" false, Tuple "Number" false, Tuple "Boolean" false, Tuple "DateTime" false, Tuple "Number" true ] \(Tuple propertyRange withLines) ->
+    test ("Column weights for " <> propertyRange <> " properties (line constraint: " <> show withLines <> ")") do
+      let
+        model = "model://example.org#ColumnWeights"
+        source = "domain " <> model <> "\n"
+          <> "  thing Items (relational)\n"
+          <> "    property Value ("
+          <> propertyRange
+          <> ")\n"
+          <> "  user Viewer\n"
+          <> "    perspective on Items\n"
+          <> "      props (Value) verbs (Consult)\n"
+          <> "    screen\n"
+          <> "      row\n"
+          <> "        table Items\n"
+          <> "          fields\n"
+          <> "            Value\n"
+          <> "              columnWeight = 3\n"
+          <> (if withLines then "              minLines = 2\n" else "")
+      parsed <- runIndentParser source ARC.domain
+      case parsed of
+        Left err -> assert (show err) false
+        Right root -> do
+          Tuple result state <- runPhaseTwo' (traverseDomain root)
+          case result of
+            Left err -> assert (show err) false
+            Right (DomeinFile df) -> do
+              compiled <- runP $ phaseThree df state.postponedStateQualifiedParts Nil
+              case compiled of
+                Left err -> assert (show err) false
+                Right (Tuple corrected _) -> do
+                  Tuple screenResult screenState <- runP $
+                    runPhaseTwo_' (handleScreens state.screens) corrected empty empty Nil
+                  case screenResult of
+                    Left [ FieldConstraintRequiresStringRange _ _ _ ] ->
+                      assert "Only the Number property with minLines must be rejected" withLines
+                    Left err -> assert (show err) false
+                    Right _ | withLines -> assert "Line constraints on Number must still be rejected" false
+                    Right _ -> case head (fromFoldable $ EM.values screenState.dfr.screens) of
+                      Just (ScreenDefinition { rows: Just [ RowElementD (RowDef [ TableElementD (TableDef { widgetCommonFields: { fieldConstraints: Just [ constraint ] } }) ]) ] }) -> do
+                        assert "The compiled weight must be retained" (constraint.columnWeight == Just 3)
+                        let legacy = Record.delete (Proxy :: Proxy "columnWeight") constraint
+                        case (JSON.readJSON (JSON.writeJSON legacy) :: Either MultipleErrors FieldConstraintDef) of
+                          Right decoded -> assert "Older field constraints must decode without a weight" (decoded.columnWeight == Nothing)
+                          Left err -> assert (show err) false
+                        case (JSON.readJSON (JSON.writeJSON constraint) :: Either MultipleErrors FieldConstraintDef) of
+                          Right decoded -> assert "Weights survive serialization" (decoded == constraint)
+                          Left err -> assert (show err) false
+                      _ -> assert "Expected a compiled table with a column weight" false
 
 theSuite :: Free TestF Unit
 theSuite = suite "Perspectives.Parsing.Arc.PhaseThree" do
   completeTypeNormalisationSuite
   recursiveFillerComparisonSuite
   inheritedScreenPropertiesSuite
+  columnWeightsSuite
 
   test "Testing qualifyActionRoles." do
     (r :: Either ParseError ContextE) <- {-pure $ unwrap $-}  runIndentParser "domain model://example.org#MyTestDomain\n  thing Role (mandatory) filledBy YetAnotherRole\n  thing AnotherRole = Role >> binding\n  thing YetAnotherRole (mandatory)\n  user SomeUser\n    perspective on AnotherRole\n      all roleverbs" ARC.domain

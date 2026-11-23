@@ -13,7 +13,7 @@ import
 import "././styles/components.css";
 import { CardProperties } from "./cardbehaviour";
 import { CardWithFixedBehaviour, WithOutBehavioursProps } from "./adorningComponentWrapper";
-import { RoleInstanceT, Perspective, SerialisedProperty, PropertyType, Roleinstancewithprops, FilterValueEntry } from "perspectives-proxy";
+import { RoleInstanceT, Perspective, SerialisedProperty, PropertyType, Roleinstancewithprops, FilterValueEntry, FieldDisplayConstraint } from "perspectives-proxy";
 import { AppContext } from "./reactcontexts";
 import TableItemContextMenu from "./tableItemContextMenu";
 import { orderPropertiesByPerspective } from "./utilities";
@@ -201,6 +201,7 @@ interface PerspectiveTableProps
   , sortOnHiddenProperty?: PropertyType
   , sortAscending?: boolean
   , typeAheadFillFromCandidates?: FilterValueEntry[]
+  , fieldConstraints?: FieldDisplayConstraint[]
   , helpModeActive?: boolean
   , onHelpTarget?: (perspective: Perspective, anchor: HTMLElement) => void
   }
@@ -478,6 +479,12 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
     }
     const component = this,
       perspective = component.props.perspective;
+    const weightsByProperty = new Map(
+      (component.props.fieldConstraints ?? []).map(c => [c.propertyType.value as string, c.columnWeight])
+    );
+    const weighted = component.propertyNames.some(pn => weightsByProperty.get(pn) != null);
+    const weights = component.propertyNames.map(pn => weightsByProperty.get(pn) ?? 1);
+    const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
     return <Table
             key={perspective.id}
             responsive={!component.props.showAsAccordionItem}
@@ -485,7 +492,11 @@ export default class PerspectiveTable extends PerspectivesComponent<PerspectiveT
             bordered
             hover
             size="sm"
-            className="mb-0">
+            className={weighted ? "mb-0 weighted-columns" : "mb-0"}>
+            {weighted && <colgroup>
+              {component.propertyNames.map((pn, index) =>
+                <col key={pn} style={{ width: `${100 * weights[index] / totalWeight}%` }} />)}
+            </colgroup>}
             <thead>
               <tr>
               { component.propertyNames.map( pn =>

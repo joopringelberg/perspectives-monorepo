@@ -67,7 +67,7 @@ import Perspectives.Representation.View (View(..))
 import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.Types.ObjectGetters (equalsOrGeneralisesRoleType_, getContextActionFromUnqualifiedName)
 import Perspectives.PerspectivesState (addWarning)
-import Prelude (Unit, bind, discard, eq, flip, map, not, pure, show, unit, ($), (<>), (<#>), (<$>), (<*>), (<<<), (==), (>>=))
+import Prelude (Unit, bind, discard, eq, flip, map, not, pure, show, unit, ($), (<>), (<#>), (<$>), (<*>), (<<<), (==), (/=), (&&), (||), (>>=))
 
 -- | Extract action names from markdown text using the [[action: name| text]] syntax.
 extractMarkDownActionNames :: String -> Array String
@@ -421,7 +421,7 @@ handleScreens screenEs = do
         -- We can safely assume that the props per PropertyVerbE are disjunct.
         (propertyRestrictions :: Maybe PropertyRestrictions) <- Just <$> (execWriterT $ collectPropertyRestrictions withoutVerbs objectRoleType)
 
-        -- Compile field constraints: look up each property and validate it has String range.
+        -- Only line-count constraints require String properties.
         compiledFieldConstraints <- compileFieldConstraints (fromFoldable fieldConstraints') objectRoleType
 
         pure
@@ -516,16 +516,16 @@ handleScreens screenEs = do
       else Just <$> traverse (compileFieldConstraint objRoleType) constraints
 
     compileFieldConstraint :: RoleType -> AST.FieldConstraintE -> PhaseThree FieldConstraintDef
-    compileFieldConstraint objRoleType { propertyName, minLines, maxLines, start: fcStart, end: fcEnd } = do
+    compileFieldConstraint objRoleType { propertyName, minLines, maxLines, columnWeight, start: fcStart, end: fcEnd } = do
       candidates <- lookForUnqualifiedPropertyType_ propertyName objRoleType
       propertyType <- case head candidates of
         Nothing -> throwError $ UnknownProperty fcStart (endOfName fcStart propertyName) (ENP $ EnumeratedPropertyType propertyName) (ST objRoleType)
         Just t | length candidates == 1 -> pure t
         _ -> throwError $ NotUniquelyIdentifyingPropertyType fcStart (endOfName fcStart propertyName) (ENP $ EnumeratedPropertyType propertyName) candidates
-      -- Validate that the property has a String range.
       propRange <- lift2 $ rangeOfPropertyType propertyType
-      if propRange == PString then pure { propertyType, minLines, maxLines }
-      else throwError $ FieldConstraintRequiresStringRange fcStart fcEnd propertyType
+      if propRange /= PString && (isJust minLines || isJust maxLines) then
+        throwError $ FieldConstraintRequiresStringRange fcStart fcEnd propertyType
+      else pure { propertyType, minLines, maxLines, columnWeight }
 
 -- | Qualifies incomplete names and changes RoleType constructor to CalculatedRoleType if necessary.
 -- | The role type name (parameter `rt`) is always fully qualified, EXCEPT
