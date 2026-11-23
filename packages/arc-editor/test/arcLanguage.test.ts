@@ -34,6 +34,13 @@ test("ARC tokens are classified", () => {
   assert.equal(firstToken("markdown <### Title"), "keyword.perspective");
 });
 
+test("set operators are operator keywords, not identifier prefixes", () => {
+  for (const operator of ["union", "intersection", "difference"]) {
+    assert.equal(firstToken(`${operator} OtherRole`), "keyword.operator");
+    assert.equal(firstToken(`${operator}Count`), "identifier");
+  }
+});
+
 test("two-space soft-tab indentation and block indentation", () => {
   assert.equal(ARC_TAB_SIZE, 2);
   const inc = arcLanguageConfiguration.indentationRules.increaseIndentPattern;
