@@ -704,7 +704,7 @@ export default class TableItemContextMenu extends Component<TableItemContextMenu
     PDRproxy.then(
       function (pproxy)
       {
-        pproxy.restoreContextForUser(
+        return pproxy.restoreContextForUser(
           component.props.perspective.contextInstance,
           component.props.roleinstance,
           component.props.perspective.roleType);
