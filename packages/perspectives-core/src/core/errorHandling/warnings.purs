@@ -54,6 +54,7 @@ data PerspectivesWarning
   | TransactionBlockedByVersionGaps
   | SkippingOutdatedDelta String String Int Int
   | VersionConflictIncomingWins String String Int String
+  | LateWinnerRederivingProperty String String Int Int
   | VersionConflictIncomingLoses String String Int String
   | ModifyWinsOverDeleteSuppressed String
   | ModifyWinsOverDeleteRestoring String
@@ -109,6 +110,7 @@ instance showPerspectivesWarning :: Show PerspectivesWarning where
   show TransactionBlockedByVersionGaps = "(TransactionBlockedByVersionGaps) Transaction blocked: version gaps detected. Storing as pending."
   show (SkippingOutdatedDelta resourceKey deltaType resourceVersion localVersion) = "(SkippingOutdatedDelta) Skipping outdated delta for " <> resourceKey <> " (" <> deltaType <> ") (incoming version " <> show resourceVersion <> " < local " <> show localVersion <> ")"
   show (VersionConflictIncomingWins resourceKey deltaType resourceVersion author) = "(VersionConflictIncomingWins) Version conflict for " <> resourceKey <> " (" <> deltaType <> ") at version " <> show resourceVersion <> ": incoming author " <> author <> " wins."
+  show (LateWinnerRederivingProperty resourceKey deltaType resourceVersion localVersion) = "(LateWinnerRederivingProperty) Late delta for " <> resourceKey <> " (" <> deltaType <> ") wins at version " <> show resourceVersion <> " (local " <> show localVersion <> "); re-deriving the property from its history."
   show (VersionConflictIncomingLoses resourceKey deltaType resourceVersion author) = "(VersionConflictIncomingLoses) Version conflict for " <> resourceKey <> " (" <> deltaType <> ") at version " <> show resourceVersion <> ": incoming author " <> author <> " loses."
   show (ModifyWinsOverDeleteSuppressed resourceKey) = "(ModifyWinsOverDeleteSuppressed) Modify-wins-over-delete: suppressing deletion of " <> resourceKey <> " because concurrent sub-resource modifications exist."
   show (ModifyWinsOverDeleteRestoring roleInstanceId) = "(ModifyWinsOverDeleteRestoring) Modify-wins-over-delete: restoring role " <> roleInstanceId <> " to apply incoming modification."

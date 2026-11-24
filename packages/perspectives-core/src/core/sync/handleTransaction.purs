@@ -88,7 +88,7 @@ import Perspectives.SaveUserData (removeBinding, removeReceivedContextIfUnbound,
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.StrippedDelta (addPublicResourceScheme, addResourceSchemes, addSchemeToResourceIdentifier)
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
-import Perspectives.Sync.PropertyHistory (checkpoint, isCheckpoint, isPropertyOperation, propertyHistory, validateCheckpoint)
+import Perspectives.Sync.PropertyHistory (checkpoint, conflictPrecedence, isCheckpoint, isPropertyOperation, propertyHistory, validateCheckpoint)
 import Perspectives.Sync.Transaction (PublicKeyInfo, Transaction(..))
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..), deduplicatePublicKeys, withoutPredefinedContextScaffolding)
 import Perspectives.Sync.VersionedDelta (DeltaEnvelope(..), parseIncomingDelta)
@@ -797,6 +797,32 @@ executeTransaction' verifiedKeys original t@(TransactionForPeer { deltas, public
         local <- lift $ getResourceVersion resourceKey
         lift $ setResourceVersion resourceKey (max local b.version)
         persistIncomingDelta true "ConstructionBaseline"
+      -- A property delta below the local version may be the winner of a conflict at its
+      -- own version that arrived late (I-4), or fill a version this installation never
+      -- received. When it would win there, the property is re-derived from its full
+      -- version-ordered history, so every installation ends with the same fold of winners.
+      reconsiderLateProperty localVersion = do
+        existing <- lift $ getDeltasForResource resourceKey
+        let
+          floor = foldl
+            ( \v (DeltaStoreRecord r) ->
+                if isCheckpoint (unwrap r.signedDelta).encryptedDelta then max v r.resourceVersion else v
+            )
+            0
+            existing
+          sameVersionDeltas = filter (\(DeltaStoreRecord r) -> r.resourceVersion == resourceVersion) existing
+        if resourceVersion >= floor && not (existingDeltaWins (SignedDelta (unwrap s) { author = author }) sameVersionDeltas) then do
+          lift $ renderPerspectivesWarning >=> traceSync $ (LateWinnerRederivingProperty resourceKey deltaType resourceVersion localVersion)
+          for_ sameVersionDeltas \(DeltaStoreRecord old) ->
+            when (not $ isCheckpoint (unwrap old.signedDelta).encryptedDelta)
+              $ lift
+              $ updateDeltaApplied old._id false
+          persistIncomingDelta true "LateWinner"
+          history <- lift $ getDeltasForResource resourceKey
+          restorePropertyFromHistory history
+        else do
+          lift $ renderPerspectivesWarning >=> traceSync $ (SkippingOutdatedDelta resourceKey deltaType resourceVersion localVersion)
+          persistIncomingDelta false "Outdated"
     case baseline, baselineRecord, contextBaselineRecord, mDuplicate of
       Just b, true, _, _ -> applyBaseline b
       _, _, true, _ -> do
@@ -817,10 +843,12 @@ executeTransaction' verifiedKeys original t@(TransactionForPeer { deltas, public
             executeDelta s (Just stringified)
             lift $ setResourceVersion resourceKey resourceVersion
             persistIncomingDelta true "Checkpoint"
-        else if resourceVersion < localVersion then do
-          -- Outdated delta: version is behind local version. Store but don't execute.
-          lift $ renderPerspectivesWarning >=> traceSync $ (SkippingOutdatedDelta resourceKey deltaType resourceVersion localVersion)
-          persistIncomingDelta false "Outdated"
+        else if resourceVersion < localVersion then
+          if isPropertyOperation deltaType then reconsiderLateProperty localVersion
+          else do
+            -- Outdated delta: version is behind local version. Store but don't execute.
+            lift $ renderPerspectivesWarning >=> traceSync $ (SkippingOutdatedDelta resourceKey deltaType resourceVersion localVersion)
+            persistIncomingDelta false "Outdated"
         else if resourceVersion == localVersion then do
           -- Check for existing deltas at this version to distinguish a fresh creation from a genuine conflict.
           existingDeltas <- lift $ getDeltasForResource resourceKey
@@ -837,7 +865,7 @@ executeTransaction' verifiedKeys original t@(TransactionForPeer { deltas, public
             -- Resolve deterministically by lexicographic comparison of author IDs:
             -- the author with the highest ID wins on all installations.
             -- Check whether any already-stored delta at this version has an author >= the incoming author.
-            let incomingAuthorWins = not (hasAuthorGreaterOrEqual author sameVersionDeltas)
+            let incomingAuthorWins = not (existingDeltaWins (SignedDelta (unwrap s) { author = author }) sameVersionDeltas)
             if incomingAuthorWins then do
               -- Incoming author wins: execute the delta (overwriting the current value).
               lift $ renderPerspectivesWarning >=> traceSync $ (VersionConflictIncomingWins resourceKey deltaType resourceVersion (show author))
@@ -991,24 +1019,20 @@ executeTransaction' verifiedKeys original t@(TransactionForPeer { deltas, public
       executeDelta sd (Just (unwrap sd).encryptedDelta)
     restorePropertyHistories subResourceDeltas
 
-  -- | Returns true if any DeltaStoreRecord in the array has an author >= the given author.
-  hasAuthorGreaterOrEqual :: PerspectivesUser -> Array DeltaStoreRecord -> Boolean
-  hasAuthorGreaterOrEqual _ [] = false
-  hasAuthorGreaterOrEqual incomingAuthor records =
-    case
-      filter
-        ( \(DeltaStoreRecord r) ->
-            let
-              winner = case checkpoint (unwrap r.signedDelta).encryptedDelta of
-                Just marker -> (unwrap marker.winner).author
-                Nothing -> r.author
-            in
-              unschemePerspectivesUser winner >= unschemePerspectivesUser incomingAuthor
-        )
-        records
-      of
-      [] -> false
-      _ -> true
+  -- | Returns true if any DeltaStoreRecord in the array takes precedence over (or equals)
+  -- | the incoming delta according to `conflictPrecedence` (author first, signed content second).
+  -- | A checkpoint competes with the original winner it certifies.
+  existingDeltaWins :: SignedDelta -> Array DeltaStoreRecord -> Boolean
+  existingDeltaWins incoming records = any
+    ( \(DeltaStoreRecord r) ->
+        let
+          winner = case checkpoint (unwrap r.signedDelta).encryptedDelta of
+            Just marker -> marker.winner
+            Nothing -> SignedDelta (unwrap r.signedDelta) { author = r.author }
+        in
+          conflictPrecedence winner incoming /= LT
+    )
+    records
 
   -- | Check whether a resource key is a sub-resource key (i.e. it has a second "#").
   -- | Resource IDs have the form "scheme:#identifier" (one "#" from the scheme separator).
