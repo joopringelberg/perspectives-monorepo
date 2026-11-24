@@ -24,7 +24,7 @@
 This document started as a design and has been extended as features were
 added. It was reviewed against the code in November 2026 (issue #572) and
 restructured: §§1–9 describe **what the code does now**, §10 is the **design
-for unblocking** (phases 1–2 implemented, see §10.9), §11 lists **known issues
+for unblocking** (phases 1–3 implemented, see §10.9), §11 lists **known issues
 and gaps**.
 Where earlier versions described intended behaviour as if it existed, that has
 been corrected.
@@ -40,9 +40,9 @@ been corrected.
 | **Timeout** for blocked transactions | **Not implemented** — replaced by escalation design in §10.7 |
 | Property history retention and signed checkpoints | Implemented |
 | Construction baselines for (re)constructed roles and contexts | Implemented |
-| Peer delivery knowledge (suppress re-forwarding) | Implemented |
+| Peer delivery knowledge (suppress re-forwarding) | Implemented, with a contiguous watermark for checkpoints and a reset on key change (§3.4, §8.3) |
 | Per-role causal clocks, causal epoch, quarantine | Implemented |
-| Receiver-driven repair (requesting missing history) | Not implemented — design in §10.6 |
+| Receiver-driven repair (requesting missing history) | Implemented (§10.6) |
 
 ---
 
@@ -214,6 +214,9 @@ newtype PendingTransactionRecord = PendingTransactionRecord
   , status :: String                 -- "Blocked" | "Failed"
   , attempts :: Int                  -- number of failed executions
   , lastError :: Maybe String
+  , blockedSince :: Maybe Number     -- ms since the epoch, set when first stored
+  , historyRequestedAt :: Maybe Number -- ms since the epoch of the last history request (§10.6)
+  , historyRequests :: Int           -- number of history requests sent for this record
   }
 ```
 
@@ -223,7 +226,10 @@ newtype PendingTransactionRecord = PendingTransactionRecord
   (`pendingTransactionDocId`). Redelivery of the same transaction maps to the
   same record.
 - `storePendingTransaction` is an upsert: it replaces `missingDeltas`, sets the
-  status to `Blocked` and keeps `attempts` and `lastError`.
+  status to `Blocked` and keeps `attempts`, `lastError` and the history-request
+  bookkeeping; `blockedSince` is set only on the first store.
+- `recordHistoryRequest` sets `historyRequestedAt` and increments
+  `historyRequests`.
 - `recordFailedTransaction` increments `attempts` and records `lastError`; at
   `maxFailedAttempts` (5) the status becomes `Failed`.
 - `removePendingTransactionFor` / `removePendingTransactionById` delete a record
@@ -242,10 +248,26 @@ The store survives restarts. It is read by the drain
 ### 3.4 PeerDeliveryStore
 
 Records, per (destination peer, resource key), which stored deltas have been
-**durably queued** for that peer (`knownIds`) and the highest version queued
-(`maxVersion`). It is sender-side *belief*, not receiver acknowledgement:
-"queued" does not mean "received", let alone "applied". It is used to avoid
-forwarding the same retained history repeatedly (§8.3).
+**durably queued** for that peer (`knownIds`), the highest version queued
+(`maxVersion`) and the **contiguous watermark** (`contiguousVersion`): the
+highest version v such that the peer was queued a record at every retained
+version up to v, or a checkpoint at or above it. It is sender-side *belief*,
+not receiver acknowledgement: "queued" does not mean "received", let alone
+"applied". It is used to avoid forwarding the same retained history repeatedly
+(§8.3).
+
+- The document ID is the JSON array `[destination, resourceKey]` (both as safe
+  keys), so all documents of one peer form one ID range.
+- `recordQueuedPeerDeltas` (after the outbox write) adds the queued ids,
+  raises `maxVersion` and extends the watermark with `extendContiguousVersion`:
+  a known checkpoint lifts it to its version; above that it advances through
+  ascending retained versions as long as a known record exists at each.
+  Versions never retained locally are skipped; an unknown checkpoint bars it.
+- `forgetPeerDeliveryKnowledge` deletes all documents of a peer (I-7).
+- `lowerPeerDeliveryKnowledge` (on a history request) forgets the ids of
+  retained records at or above the requested version and lowers the watermark
+  below it. `maxVersion` is kept: it records what the peer has been entitled
+  to see and bounds history answers (§10.6).
 
 ### 3.5 Causal and quarantine stores
 
@@ -641,7 +663,11 @@ Baselines do not redefine historical property or binding contents.
 
 When retained history is forwarded through `addStoredDeltas`, records whose
 delivery id is in the peer's `knownIds` are skipped, and a checkpoint is skipped
-when the peer's `maxVersion` is at or beyond it. Knowledge is written after the
+when the peer's `contiguousVersion` is at or beyond it. (It used to be
+`maxVersion`. That is unsound: versions below it may have been withheld from
+the peer, for example by a filtered perspective, while a later version was
+shipped live, and then pruned. The checkpoint is then the only record that
+covers them; issue I-9.) Knowledge is written after the
 outgoing transaction has been durably queued. State entry that newly grants a
 perspective uses `addStoredDeltaForInitialVisibility`, which bypasses knowledge:
 a newly visible resource is always reinitialised.
@@ -674,16 +700,19 @@ is where the design is weak:
   "applied". Whenever the receiver did not apply the queued delta — it was
   quarantined, rejected for missing authorisation (§6.4), lost by an exception
   after the early AMQP acknowledgement, or lost because the peer was restored
-  from backup or reinstalled — the sender will never forward it or a covering
+  from backup or reinstalled — the sender will not forward it or a covering
   checkpoint again on the knowledge-based paths (state-dependent perspectives,
-  perspective assumptions in `collectAffectedContexts.purs`). The receiver is
-  then blocked on that key permanently (issues I-7, I-9).
-- **No receiver-driven repair.** The receiver knows exactly which versions it
-  misses (`MissingDelta`), but cannot ask for them.
+  perspective assumptions in `collectAffectedContexts.purs`). Without repair
+  the receiver would be blocked on that key permanently (issues I-7, I-9).
+- **Live paths do not consult knowledge.** A delta created now is shipped to
+  whoever has a perspective now (`addDelta`), whether or not the peer has the
+  versions before it. If those were withheld earlier, the peer blocks.
 
-The cut-off design is therefore sound as a *state transfer* mechanism, but
-incomplete as a *repair* mechanism. Unblocking (§10) must close both gaps:
-retry when the missing data arrives, and ask for it when it does not.
+The cut-off design is sound as a *state transfer* mechanism. It is completed as
+a *repair* mechanism by unblocking (§10): retry when the missing data arrives
+(§10.3), and ask for it when it does not (§10.6). Knowledge is reset when a
+peer's keys change (I-7), and a checkpoint is withheld only from peers that are
+known to have every version up to it (I-9).
 
 ---
 
@@ -926,12 +955,13 @@ Notes:
 
 ### 10.4 Triggers
 
-> **Implemented:** triggers 1 and 2. Both transport consumers
+> **Implemented:** all three. Both transport consumers
 > (`amqpTransport/incomingPost.purs`, `sync/incomingPost.purs`) call
 > `drainPendingTransactions AfterIncoming` after each message, outside the
 > message's admission and transaction, whatever its outcome; and
-> `drainPendingTransactions AtStartup` before the consumer starts. Trigger 3
-> (periodic) is not implemented. `ImportTransaction` and the identity document
+> `drainPendingTransactions AtStartup` before the consumer starts. `Main.purs`
+> forks a loop that drains every 10 minutes. Each drain ends by sending the
+> history requests that are due (§10.6). `ImportTransaction` and the identity document
 > import in `initSystem` store blocked transactions but do not trigger a drain;
 > the next incoming message or restart does.
 
@@ -945,8 +975,8 @@ Notes:
    `progress`.
 2. **At startup**, after the incoming queue consumer is running, so that
    records stored before a restart are reconsidered (R1).
-3. **Periodically** (e.g. every 15 minutes) while pending records exist, for
-   the time-based steps of §10.6 and §10.7.
+3. **Periodically** (every 10 minutes), for the time-based steps of §10.6 and
+   §10.7. A drain without pending records costs one range read.
 
 Local mutations are *not* a trigger. A local write on an awaited key raises the
 counter past the gap without supplying the missing delta, so the gap check would
@@ -969,49 +999,85 @@ exception are skipped on retry as duplicates.
 
 ### 10.6 Receiver-driven repair: history requests
 
+> **Implemented** in `Perspectives.Sync.HistoryRequest`
+> (`sync/historyRequest.purs`). Deviations from the original design are marked
+> *(deviation)*.
+
 Waiting suffices when the missing deltas are merely delayed. It does not when
 the sender believes they were delivered (§8.4). The receiver therefore asks.
 
-**When.** For a `Blocked` record whose gaps have not changed for a grace period
-(e.g. 10 minutes of connectivity, or two drain passes without progress), and
-with no request outstanding for the same (peer, key) within the back-off
-window (exponential, starting at 1 hour).
+**When** (`historyRequestDue`). For a `Blocked` record with recorded gaps
+(`missingDeltas` not empty): the first request 10 minutes after `blockedSince`;
+then after a back-off of 1 hour, doubling per request, at most 24 hours.
+Failed executions (no gaps) are never the subject of a request. Requests are
+sent at the end of every drain (§10.4), so also by the periodic drain. Records
+of our own transactions (another installation of ourselves) are skipped: we
+never ship deltas to ourselves.
 
-**Request.** A new signed message type over the existing transport (not a
-delta, so it never enters the DeltaStore):
+**Request.** All due records of one author are combined into one message:
 
 ```purescript
+type HistoryRange = { resourceKey :: String, fromVersion :: Int, toVersion :: Int }
+
 type HistoryRequest =
-  { requester :: PerspectivesUser
-  , requests :: Array { resourceKey :: String, fromVersion :: Int, toVersion :: Int }
-  , timeStamp :: SerializableDateTime
+  { requester :: String   -- unschemed PerspectivesUser
+  , addressee :: String   -- unschemed PerspectivesUser
+  , requests :: Array HistoryRange -- at most 100
+  , timeStamp :: Number   -- ms since the epoch
   }
 ```
 
-`fromVersion` is the receiver's floor + 1; `toVersion` is the first version in
-the pending transaction minus 1. It is sent to the author of the pending
-transaction, who necessarily applied those versions before building on them.
+Per missing delta (`historyRanges`), `fromVersion` is the expected version and
+`toVersion` is the lowest version of that key in the pending transaction minus
+1. The request is signed like a delta (`signDeltaMP`), wrapped as
+`HistoryRequestMessage { historyRequest :: SignedDelta }`, encrypted for the
+author's transport key and sent in an ordinary `EncryptedTransactionForPeer`
+envelope (with empty `publicKeys`). It is not a delta: it never enters the
+DeltaStore. It is sent to the author of the pending transaction, who
+necessarily applied those versions before building on them. The addressee is
+part of the signed content, so a request cannot be replayed to another peer.
 
-**Sender handling.**
+**Receiver of the request** (`answerHistoryRequest`, dispatched by the AMQP
+consumer when the decrypted payload is a `HistoryRequestMessage`; it is
+acknowledged and never stored as pending):
 
-1. Verify the signature and that the requester has a perspective under which
-   the resource is disclosed to it now (same selection as serialisation, see
-   `serialiseAsDeltas.purs`). Otherwise answer nothing (and log).
-2. **Reset delivery knowledge** for (requester, key): drop `knownIds` for
-   versions ≥ `fromVersion` and lower `maxVersion` to `fromVersion - 1`. This
-   repairs issue I-7 for this key.
-3. Answer with an ordinary transaction built as for initial visibility
-   (`addStoredDeltaForInitialVisibility`): for a property key the newest
-   checkpoint at or below `fromVersion - 1` (or the checkpoint certifying the
-   current boundary when the range was compacted) plus the retained tail; for a
-   binding key the retained binding history from `fromVersion`; for a role key
-   the construction baseline plus later membership, move and removal records.
-4. The answer is processed by the receiver's normal pipeline, after which the
+1. Require a signature, verify it, check that `requester` is the signer and
+   `addressee` is us, and that the requester is a known PerspectivesUser.
+   Otherwise log and answer nothing.
+2. *(deviation)* **Authorisation by delivery knowledge**, not by a perspective
+   check. Per range, the answer is capped at the requester's `maxVersion` for
+   that key: the highest version ever queued for it. A key never queued for the
+   requester is not answered. A history answer therefore never discloses more
+   than ordinary forwarding did. Re-evaluating perspectives for an isolated
+   resource key outside its context is not possible in general; the cost is
+   that a requester whose perspective was revoked can still obtain versions it
+   was earlier entitled to.
+3. *(deviation)* **Lower delivery knowledge** for (requester, key) with
+   `lowerPeerDeliveryKnowledge`: drop the ids of retained records with versions
+   ≥ `fromVersion` and lower the watermark below it; `maxVersion` is kept as the
+   authorisation bound of step 2. This repairs issue I-7 for this key.
+4. **Select** (`selectHistory`) from the retained records of the key: if the
+   record at `fromVersion` is retained, all non-checkpoint records in
+   [`fromVersion`, cap] (with the version-0 constructors if `fromVersion ≤ 1`);
+   otherwise (it was pruned) the newest checkpoint in the range plus the records
+   after it, up to cap.
+5. Answer with one ordinary, sharing transaction in which every selected
+   record is added with `addStoredDeltaForInitialVisibility` for the requester
+   only. It goes through the outbox, which records delivery knowledge again.
+6. The answer is processed by the requester's normal pipeline, after which the
    drain retries the pending transaction.
 
-If the author cannot answer (offline, perspective lost), the request can be
-repeated to any other peer that authored a delta on that key, as recorded in
-the receiver's DeltaStore.
+**Limitations.**
+
+- *No closure.* The answer contains the requested keys only. If the requester
+  also lacks, say, the constructor of the role whose property it asks for, that
+  surfaces as a new gap or a failed execution, and is asked for in turn.
+- *No fallback.* If the author cannot answer (offline, deleted, or it pruned
+  the range without a checkpoint), no other peer is asked. Escalation (§10.7)
+  is the remedy. Asking another author of the key, as recorded in the
+  requester's DeltaStore, remains possible.
+- *AMQP only.* The CouchDB channel (`sync/incomingPost.purs`) does not
+  dispatch history requests.
 
 ### 10.7 Escalation instead of timeout
 
@@ -1038,8 +1104,11 @@ only when the history is complete). Instead:
 
 `test/causalSync.purs` covers tests 1, 2, 4 and 7 and the startup drain of
 test 5 (with a record written in the same process, not across a restart), plus
-storing an exception as a pending record. Tests 3, 6 and 8 remain to be
-written. The original list:
+storing an exception as a pending record. `test/peerDelivery.purs` covers the
+contiguous watermark, the checkpoint rule of I-9, forgetting and lowering
+knowledge, rejection of unsigned history requests, and the pure parts of
+§10.6 (ranges, back-off, selection). Tests 3, 6 and 8 remain to be written.
+The original list:
 
 1. `T2` (v2) blocked; `T1` (v1) arrives → `T2` executes after `T1` settles and
    its record is removed.
@@ -1059,7 +1128,8 @@ written. The original list:
 1. **Done.** Store fixes (§10.2), outcome type, drain with triggers 1–2,
    tests 1, 2, 4 and 5 (in-process).
 2. **Done.** Failed executions as pending records (§10.5), test 7.
-3. History requests and knowledge reset (§10.6), test 8.
+3. **Done.** History requests and knowledge reset (§10.6); the two-PDR test 8
+   remains.
 4. Escalation UI (§10.7).
 
 ---
@@ -1078,15 +1148,15 @@ can cause wrong intermediate state or lost work under plausible conditions;
 | I-4 | H | **Fixed** (§5.1, `reconsiderLateProperty`, disposition `LateWinner`). A late property delta that wins at its version (or fills an unknown version above the checkpoint) re-derives the property from history. Below the checkpoint it remains `Outdated`; non-property deltas remain `Outdated` (absolute operations). **`Outdated` is not the same as stale.** A delta with `resourceVersion < localVersion` may be the *winner* of a conflict at its version that arrived late. Example: A and B write v4 concurrently, A > B; B then writes v5 = `AddProperty z`. At B, A's v4 arrives at local v5: `Outdated`, discarded. At A, B's v4 loses and B's v5 is applied on A's v4. For relative operations A ends with {x, z}, B with {y, z}. The same happens when a third peer's gap is "closed" by the losing v4, or by a local write on an awaited key. Absolute operations (set, bindings, role lifecycle) converge in their final state. | `executeDeltaWithVersionTracking`, outdated branch | For property operations: persist, and if the incoming delta would win at its version (or no record exists there and it is above the checkpoint), re-derive the property with `restorePropertyFromHistory`, exactly as the conflict-winner branch already does. |
 | I-5 | M | **Mitigated** (§6.1 invariant): with I-4 and I-13 fixed, every installation computes the same version-ordered fold of winners, so properties converge. Remaining: a v(n+1) built on a losing v(n) is rebased on the winner rather than merged by intent; this is the documented semantics. Resolving conflicts from causal stamps remains an option, not a correctness requirement. Version counters carry no causality. A v(n+1) built on a losing v(n) is applied as normal; per-role causal stamps exist but are not used for same-key conflicts. Combined with I-4 this is the root of property divergence. | §6.1, §7 | Short term: I-4's re-derivation. Long term: resolve property conflicts from the causal stamps (I-4 then becomes a special case). |
 | I-6 | M | Replay order only sorts by version within priority 5 (properties, moves). For one key, `SetFirstBinding` (4) runs before `RemoveBinding`/`ReplaceBinding` (6) regardless of version, and role `Move` (5) before `Remove` (6). A transaction `SetFirstBinding v1, RemoveBinding v2, SetFirstBinding v3` replays as v1, v3, v2: v2 becomes `Outdated` and its side effects (e.g. inverse binding cleanup) are skipped. | `compareForReplay`, `sortTransactionDeltas` | Keep the type priority across keys, but within one resource key order strictly by version (constructors at version 0 sort first naturally). |
-| I-7 | H | Peer delivery knowledge means "queued", never reset. A peer that lost or rejected a delta (restore from backup, reinstall, quarantine, rejected authorisation, exception after early ack) never receives it or a covering checkpoint again on knowledge-based paths → permanent gap. | `peerDeliveryStore.purs`, `addStoredDeltas` | Reset on history request (§10.6); also reset all knowledge for a peer when its installation nonce or key changes. |
-| I-8 | M | Binding, context and role-membership keys have no checkpoint. A single missed binding delta can only be repaired by resending exactly that delta. Baselines lift only the role key; property and binding gaps in the same transaction still block it. | §8.4 | Answering history requests with full binding history (§10.6) suffices; a binding checkpoint is optional. |
-| I-9 | M | Non-initial shipping paths (state-dependent or filtered perspectives, perspective assumptions in `collectAffectedContexts.purs`) can send version n+k to a peer that never received n..n+k-1, relying on knowledge (I-7). | `collectAffectedContexts.purs`, `serialiseAsDeltas.purs` | Same as I-7; optionally ship a checkpoint whenever knowledge's `maxVersion` is below the first shipped version - 1. |
+| I-7 | H | **Fixed** (§3.4, §10.6): knowledge is lowered per key on a history request, and forgotten for a peer when its signing or transport key changes (`executeRolePropertyDelta`). The installation nonce is deliberately not a trigger: one user may run several installations; a restore from backup keeps keys and is repaired by history requests. Peer delivery knowledge means "queued", never reset. A peer that lost or rejected a delta (restore from backup, reinstall, quarantine, rejected authorisation, exception after early ack) never receives it or a covering checkpoint again on knowledge-based paths → permanent gap. | `peerDeliveryStore.purs`, `addStoredDeltas` | Reset on history request (§10.6); also reset all knowledge for a peer when its installation nonce or key changes. |
+| I-8 | M | **Mitigated** (§10.6): history answers carry the retained binding history from the missing version. Binding, context and role-membership keys have no checkpoint. A single missed binding delta can only be repaired by resending exactly that delta. Baselines lift only the role key; property and binding gaps in the same transaction still block it. | §8.4 | Answering history requests with full binding history (§10.6) suffices; a binding checkpoint is optional. |
+| I-9 | M | **Fixed** for stored-history paths (§8.3): a checkpoint is withheld only from peers whose contiguous watermark reaches it. `addStoredDeltas` always receives the full retained history, so no other part of a range is skipped. Live `addDelta` paths still ship v(n+k) without v(n..); the resulting gap is repaired by a history request (§10.6). Non-initial shipping paths (state-dependent or filtered perspectives, perspective assumptions in `collectAffectedContexts.purs`) can send version n+k to a peer that never received n..n+k-1, relying on knowledge (I-7). | `collectAffectedContexts.purs`, `serialiseAsDeltas.purs` | Same as I-7; optionally ship a checkpoint whenever knowledge's `maxVersion` is below the first shipped version - 1. |
 | I-10 | H | **Fixed** for execution failures (§10.5); the early acknowledgement remains, so a failure to *write* the pending record, or to decrypt, still loses the message. Current-epoch AMQP messages are acknowledged before execution. If `storePendingTransaction` fails (I-3) or execution throws (§5.4, §6.4), the transaction is gone; only the sender's knowledge remains, which says "delivered". | `amqpTransport/incomingPost.purs` | Store failed executions as pending (§10.5); alternatively acknowledge only after execution or pending storage. |
 | I-11 | L | `setResourceVersion` is unconditional; most callers guard with `max`, some rely on the branch condition. A future caller can lower a counter and reopen applied versions. | `resourceVersionStore.purs` | Make `setResourceVersion` monotonic (`max`) and add an explicit `resetResourceVersion` if ever needed. |
 | I-12 | M | Still open; now that failed transactions are retried (§10.5), the suggested fix is possible, but it changes which transactions fail and must be evaluated per delta type. Non-property execution errors are swallowed: the delta is stored as `Applied` and the counter advanced although nothing happened. The peer silently diverges and later deltas build on a state that does not exist. | `executeDelta` | Treat like property errors: propagate, and rely on §10.5 for retry. |
 | I-13 | L | **Fixed** (§6.1, `conflictPrecedence`): signed content is the secondary tiebreak, shared by arrival-time resolution and history reconstruction. `hasAuthorGreaterOrEqual` used `>=`, so the same author at the same version counts as a winner over itself. Duplicates are normally caught by `deltaId`; of two *different* deltas of one author at one version (only possible after counter loss, e.g. restore from backup) the later arrival always loses, so the outcome depends on arrival order. | `executeDeltaWithVersionTracking` | Compare `deltaId` as a secondary tiebreak. |
 | I-14 | L | Concurrent version-0 constructors by different authors for the same deterministic identifier: the first is executed as "fresh", the second resolved by author tiebreak; context constructors carry no causal stamp. Constructors are idempotent so state converges, but the recorded winner may differ between peers. | §5.3 | Accept; document that constructor winners are not significant. |
-| I-15 | L | Restoring a peer from backup reuses its counters for new writes (resource versions and causal counters), creating same-author same-version deltas at its peers. The doc warns against two live copies, but not against restore-then-continue. | §9.3 | Rotate the installation nonce on restore and announce it, which triggers a knowledge reset (I-7). |
+| I-15 | L | **Partly mitigated**: what a restored peer lost is repaired by history requests (§10.6). Counter reuse remains. Restoring a peer from backup reuses its counters for new writes (resource versions and causal counters), creating same-author same-version deltas at its peers. The doc warns against two live copies, but not against restore-then-continue. | §9.3 | Rotate the installation nonce on restore and announce it, which triggers a knowledge reset (I-7). |
 | I-16 | L | The previous version of this document claimed every mutation increments the version, linked a non-existent `docs/transaction-execution.md`, omitted the `deltaId`/`disposition`/`contextKey` fields, and presented §6.4/§6.5 as existing behaviour. | this file | Corrected in this revision. |
 
 ### Priorities
@@ -1094,7 +1164,8 @@ can cause wrong intermediate state or lost work under plausible conditions;
 1. ~~I-1, I-3, I-10 (unblocking phases 1–2)~~ — done.
 2. ~~I-4 (+ I-5, I-13): divergence of multi-valued properties under ordinary
    concurrency~~ — done.
-3. I-7, I-9 (history requests): repair after data loss.
+3. ~~I-7, I-9 (history requests): repair after data loss~~ — done; the
+   two-PDR test remains.
 4. I-6, I-12: correctness of replay within a transaction.
 5. The rest.
 
@@ -1110,5 +1181,7 @@ can cause wrong intermediate state or lost work under plausible conditions;
 | Gap response | Block entire transaction | Execute available deltas and patch later |
 | Persistence | PouchDB (survives restarts) | In-memory only |
 | History bound | Signed property checkpoints + ten versions; baselines for construction | Full history everywhere |
-| Unblocking | Drain after settlement, full re-verification, loop until no progress (§10, *planned*) | Re-check saved `MissingDelta` snapshots only |
-| Long-blocked transactions | History request, then escalation to the user (§10.6–10.7, *planned*) | Execute anyway after 24 hours |
+| Unblocking | Drain after settlement, full re-verification, loop until no progress (§10) | Re-check saved `MissingDelta` snapshots only |
+| Long-blocked transactions | History request (§10.6), then escalation to the user (§10.7, *planned*) | Execute anyway after 24 hours |
+| History-request authorisation | Bounded by what was queued to the requester before (`maxVersion`) | Perspective evaluation per requested key |
+| Checkpoint redundancy | Contiguous delivery watermark | Highest queued version |
