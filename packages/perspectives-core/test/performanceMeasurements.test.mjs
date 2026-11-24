@@ -201,14 +201,23 @@ test("manager-sized history replay retains all delta-recipient pairs without rep
 
 test("stored history bypasses persistence while new and incoming deltas retain their storage rules", async t => {
   const { maybe, run, create, makeDelta } = await transactionDeltaFixture(t);
-  const [deltas, core, avar] = await Promise.all([
+  const [deltas, core, avar, map] = await Promise.all([
     import("../output/Perspectives.Deltas/index.js"),
     import("../output/Perspectives.CoreTypes/index.js"),
-    import("../output/Effect.AVar/index.js")
+    import("../output/Effect.AVar/index.js"),
+    import("../output/Data.Map/index.js")
   ]);
   const unavailableStorage = new Error("storage-unavailable");
-  const state = avar.empty();
-  avar.kill(unavailableStorage)(state)();
+  let storageAccesses = 0;
+  const state = avar.new({
+    logConfig: { defaultLevel: core.Silent.value, topicLevels: map.empty },
+    logColor: maybe.Nothing.value,
+    // Fail database-name resolution without disabling runtime state needed by logging.
+    get systemIdentifier() {
+      storageAccesses++;
+      throw unavailableStorage;
+    }
+  })();
   const transaction = avar.new(await create())();
   const incoming = avar.new({ ...await create(), isExecutingIncomingDeltas: true })();
   const delta = makeDelta(1, []);
@@ -221,9 +230,12 @@ test("stored history bypasses persistence while new and incoming deltas retain t
   };
   const execute = (scope, action) => run(core.runMonadPerspectives(action(scope))(state));
   await execute(transaction, deltas.addStoredDelta([])(record));
+  assert.equal(storageAccesses, 0);
   await assert.rejects(execute(transaction, deltas.addDelta(delta)),
     error => error === unavailableStorage);
+  assert.equal(storageAccesses, 1);
   await execute(incoming, deltas.addDelta(delta));
+  assert.equal(storageAccesses, 1);
 });
 
 function captureReport(run, publish = true) {
