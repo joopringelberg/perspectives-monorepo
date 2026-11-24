@@ -24,7 +24,8 @@
 This document started as a design and has been extended as features were
 added. It was reviewed against the code in November 2026 (issue #572) and
 restructured: §§1–9 describe **what the code does now**, §10 is the **design
-for unblocking** (not yet implemented), §11 lists **known issues and gaps**.
+for unblocking** (phases 1–2 implemented, see §10.9), §11 lists **known issues
+and gaps**.
 Where earlier versions described intended behaviour as if it existed, that has
 been corrected.
 
@@ -33,8 +34,9 @@ been corrected.
 | Per-key resource versions, deterministic conflict tiebreak | Implemented |
 | Modify-wins-over-delete, role restoration | Implemented |
 | Gap detection, blocking a whole transaction | Implemented |
-| Persisting blocked transactions (pending store) | Implemented, with defects (§7.3, §11) |
-| **Unblocking** blocked transactions | **Not implemented** — design in §10 |
+| Persisting blocked transactions (pending store) | Implemented (§3.3, §7.3) |
+| **Unblocking** blocked transactions | Implemented: drain after each incoming transaction and at startup (§10.3, §10.4) |
+| Keeping transactions whose execution failed | Implemented: stored as pending and retried (§10.5) |
 | **Timeout** for blocked transactions | **Not implemented** — replaced by escalation design in §10.7 |
 | Property history retention and signed checkpoints | Implemented |
 | Construction baselines for (re)constructed roles and contexts | Implemented |
@@ -200,20 +202,36 @@ safe key.
 ### 3.3 PendingTransactionStore
 
 `{systemIdentifier}_pendingtransactions` holds transactions blocked by version
-gaps (§7):
+gaps (§7) and transactions whose execution threw an exception (§10.5):
 
 ```purescript
 newtype PendingTransactionRecord = PendingTransactionRecord
-  { _id :: String                    -- "pending_" <> author <> "_" <> show timeStamp
+  { _id :: String                    -- pendingTransactionDocId (below)
   , _rev :: Maybe String
   , transaction :: TransactionForPeer -- the complete, still signed transaction
-  , missingDeltas :: Array MissingDelta
+  , missingDeltas :: Array MissingDelta -- gaps found at the last attempt; [] after a failure
+  , status :: String                 -- "Blocked" | "Failed"
+  , attempts :: Int                  -- number of failed executions
+  , lastError :: Maybe String
   }
 ```
 
-The store survives restarts. Nothing reads it back: `getAllPendingTransactions`
-is a placeholder returning `[]`. See §10 for the intended use and issue I-3 for
-the document-ID collision on redelivery.
+- The document ID is deterministic:
+  `pending_<author>_<timeStamp>_<shortHash>`, where `shortHash` is the first 16
+  hex digits of the SHA-256 of the canonicalised transaction
+  (`pendingTransactionDocId`). Redelivery of the same transaction maps to the
+  same record.
+- `storePendingTransaction` is an upsert: it replaces `missingDeltas`, sets the
+  status to `Blocked` and keeps `attempts` and `lastError`.
+- `recordFailedTransaction` increments `attempts` and records `lastError`; at
+  `maxFailedAttempts` (5) the status becomes `Failed`.
+- `removePendingTransactionFor` / `removePendingTransactionById` delete a record
+  with its current revision; removing an absent record is a no-op.
+- `getAllPendingTransactions` enumerates the `pending_` ID range; unreadable
+  documents are skipped.
+
+The store survives restarts. It is read by the drain
+(`Perspectives.Sync.PendingTransactions`, §10.3).
 
 ### 3.4 PeerDeliveryStore
 
@@ -239,8 +257,8 @@ are described in §9.
 - the AMQP consumer (`amqpTransport/incomingPost.purs`): **current-epoch
   messages are acknowledged before execution**; legacy-epoch messages only
   after they have been quarantined;
-- the post-database path (`sync/incomingPost.purs`): the source document is
-  deleted after successful handling;
+- the post-database path (`sync/incomingPost.purs`, via
+  `runIncomingTransaction`): the source document is deleted after handling;
 - `ImportTransaction` in `perspectivesAPI.purs`, and the transaction import in
   `couchdbExternalFunctions.purs`.
 
@@ -250,9 +268,16 @@ priority.
 Incoming execution does not forward deltas (`addDeltaWithStorage` queues
 nothing while `isExecutingIncomingDeltas`).
 
-Because current-epoch AMQP messages are acknowledged early, the pending store is
-the **only durable copy** of a blocked transaction, and a transaction whose
-execution throws is lost (issue I-10).
+Both transport entry points call `executeTransactionWithOutcome`, catch
+exceptions, and hand the result to `settleIncomingTransaction`
+(`sync/pendingTransactions.purs`): an exception stores the transaction as a
+pending record (§10.5), an executed or quarantined transaction removes any
+pending record for it. After each message they run the drain (§10.4). Because
+current-epoch AMQP messages are acknowledged early, the pending store is the
+**only durable copy** of a blocked or failed transaction. Only a failure to
+write that pending record itself still loses the transaction (and stops the
+consumer, as before). Decryption failures happen before this point and are not
+stored.
 
 ### 4.2 Processing sequence
 
@@ -416,9 +441,10 @@ their separate disclosure/winner verification.
 A rejected property execution logs an error and propagates failure before
 recording that operation's causal clock, advancing its resource version, or
 storing it as applied. Earlier successful operations in the transaction are not
-rolled back. In principle the operation can be retried once its missing
-authorisation evidence is available — **but no component retries it today**:
-the transaction is not stored anywhere (issue I-10; §10.5).
+rolled back. The exception propagates out of the transaction; the
+entry point then stores the whole transaction as a pending record and the
+drain retries it, up to `maxFailedAttempts` times (§10.5). Operations applied
+before the exception are skipped as duplicates on retry.
 
 Older runtimes could warn about an unauthorised property but still store its
 delta as applied. Upgrading does not rewrite those records, and a plain resend
@@ -466,12 +492,12 @@ therefore recompute gaps from the transaction itself (§10.3).
 ### 7.3 Storing blocked transactions
 
 The original (unfiltered) `TransactionForPeer` is stored with its gaps
-(`storePendingTransaction`). Key deltas have already been applied (§4.2 step 3).
-`storePendingTransaction` uses `addDocument_` without a revision: storing the
-same transaction twice (redelivery, or a future retry that blocks again) hits a
-document conflict (issue I-3).
+(`storePendingTransaction`, an upsert under a deterministic ID, §3.3), and
+`executeTransactionWithOutcome` returns `Blocked gaps`. Key deltas have already
+been applied (§4.2 step 3). Storing the same transaction again (redelivery, or a
+retry that blocks again) updates the existing record.
 
-Nothing unblocks a pending transaction (issue I-1). §10 gives the design.
+Pending transactions are retried by the drain (§10.3, §10.4).
 
 ---
 
@@ -732,6 +758,11 @@ plural `roleInstances`, are rejected (issue #196). Supported:
 
 ### 10.2 Store changes
 
+> **Implemented** (phase 1): deterministic ID, upsert, enumeration, removal,
+> and the fields `status`, `attempts` and `lastError` (§3.3). Not yet
+> implemented: `firstBlockedAt`, `lastAttemptAt`, `historyRequestedAt`, the
+> `Escalated` status and the in-memory index; they belong to phases 3–4.
+
 ```purescript
 newtype PendingTransactionRecord = PendingTransactionRecord
   { _id :: String
@@ -767,6 +798,30 @@ newtype PendingTransactionRecord = PendingTransactionRecord
   be added later.
 
 ### 10.3 Drain algorithm
+
+> **Implemented** in `Perspectives.Sync.PendingTransactions`
+> (`drainPendingTransactions`), with these deviations from the design below:
+>
+> - `executeTransactionWithOutcome` returns
+>   `Executed | Blocked gaps | Quarantined | Rejected reason`; `Rejected` covers
+>   a transaction that fails verification (nothing is changed).
+>   `executeTransaction` remains as a wrapper that discards the outcome.
+> - There is no separate signature-free `pendingGaps`. Instead the drain has two
+>   modes. `AfterIncoming` retries a `Blocked` record only if it has no recorded
+>   gaps (a failed execution) or if, for at least one recorded `MissingDelta`,
+>   the local version of its key has reached `expectedVersion`. A record whose
+>   recorded gaps have not moved cannot have become executable: local counters
+>   only rise when versions are applied in sequence. `AtStartup` retries every
+>   record once (including `Failed` ones), so records written by an older
+>   runtime, or blocked on keys that advanced for other reasons, are
+>   reconsidered. Later passes always use `AfterIncoming`. The full pipeline
+>   recomputes the gaps on every retry (R2).
+> - `Rejected` on a retry counts as a failed attempt; on first receipt it is
+>   dropped, as before.
+> - The re-entrancy guard (`PendingDrainGuard` in `PerspectivesState`) has
+>   `draining` and `dirty` flags; a drain requested during a drain sets `dirty`,
+>   which causes one more pass.
+> - `detectPublicStateChanges` runs after each retry, inside its admission.
 
 `executeTransaction` is changed to **return** an outcome instead of only
 storing it:
@@ -838,6 +893,15 @@ Notes:
 
 ### 10.4 Triggers
 
+> **Implemented:** triggers 1 and 2. Both transport consumers
+> (`amqpTransport/incomingPost.purs`, `sync/incomingPost.purs`) call
+> `drainPendingTransactions AfterIncoming` after each message, outside the
+> message's admission and transaction, whatever its outcome; and
+> `drainPendingTransactions AtStartup` before the consumer starts. Trigger 3
+> (periodic) is not implemented. `ImportTransaction` and the identity document
+> import in `initSystem` store blocked transactions but do not trigger a drain;
+> the next incoming message or restart does.
+
 1. **After settlement of an outermost incoming transaction** that executed
    (outcome `Executed`): schedule the drain after the transaction flag has been
    raised, e.g. as a `SettledTransaction` continuation
@@ -858,10 +922,13 @@ unblocking.
 
 ### 10.5 Failed executions become pending records
 
-Today a transaction whose execution throws (for example a property rejected
-for missing instance authorisation, §6.4) is lost after the early AMQP
-acknowledgement. The entry points should catch such exceptions and store the
-transaction with `status = "Blocked"`, `missingDeltas = []` and `lastError`.
+> **Implemented** (`settleIncomingTransaction`, `recordFailedTransaction`).
+
+A transaction whose execution throws (for example a property rejected for
+missing instance authorisation, §6.4) used to be lost after the early AMQP
+acknowledgement, and the exception stopped the AMQP consumer. The entry points
+now catch such exceptions and store the transaction with `status = "Blocked"`,
+`missingDeltas = []`, `attempts + 1` and `lastError`.
 The next drain retries it; if the authorisation evidence has arrived in the
 meantime it succeeds, otherwise it reaches `Failed` after N attempts. This makes
 the "can be retried" promise of §6.4 real. Deltas that were applied before the
@@ -935,7 +1002,10 @@ other peer has, and the later arrival of the missing delta is classified as
 
 ### 10.8 Tests
 
-In `test/layertests/versionedDeltas.purs` and `persistenceRecovery.purs`:
+`test/causalSync.purs` covers tests 1, 2, 4 and 7 and the startup drain of
+test 5 (with a record written in the same process, not across a restart), plus
+storing an exception as a pending record. Tests 3, 6 and 8 remain to be
+written. The original list:
 
 1. `T2` (v2) blocked; `T1` (v1) arrives → `T2` executes after `T1` settles and
    its record is removed.
@@ -952,10 +1022,9 @@ In `test/layertests/versionedDeltas.purs` and `persistenceRecovery.purs`:
 
 ### 10.9 Phasing
 
-1. Store fixes (§10.2), outcome type, drain with triggers 1–2, tests 1–6.
-   This is the part attempted in the closed PR #566; it must be redone against
-   the current `executeTransaction'` (baselines, `coveredWhileAbsent`).
-2. Failed executions as pending records (§10.5), test 7.
+1. **Done.** Store fixes (§10.2), outcome type, drain with triggers 1–2,
+   tests 1, 2, 4 and 5 (in-process).
+2. **Done.** Failed executions as pending records (§10.5), test 7.
 3. History requests and knowledge reset (§10.6), test 8.
 4. Escalation UI (§10.7).
 
@@ -969,18 +1038,18 @@ can cause wrong intermediate state or lost work under plausible conditions;
 
 | # | Sev | Issue | Where | Suggested fix |
 |---|---|---|---|---|
-| I-1 | H | Blocked transactions are never retried: `getAllPendingTransactions` returns `[]` and nothing calls it. Every gap is permanent; later transactions of the same peer touching the same keys block as well. | `pendingTransactionStore.purs` | §10.2–§10.4 |
+| I-1 | H | **Fixed** (§10.3, §10.4). Blocked transactions were never retried: `getAllPendingTransactions` returns `[]` and nothing calls it. Every gap is permanent; later transactions of the same peer touching the same keys block as well. | `pendingTransactionStore.purs` | §10.2–§10.4 |
 | I-2 | M | No timeout or escalation; the user cannot see waiting data. | — | §10.7 |
-| I-3 | M | Pending doc ID is `pending_<author>_<timeStamp>` and stored without `_rev`: redelivery of a blocked transaction (or any future re-store) conflicts and throws after the AMQP ack. | `storePendingTransaction` | Deterministic ID with content hash, upsert (§10.2) |
+| I-3 | M | **Fixed** (§3.3). Pending doc ID was `pending_<author>_<timeStamp>` and stored without `_rev`: redelivery of a blocked transaction (or any future re-store) conflicts and throws after the AMQP ack. | `storePendingTransaction` | Deterministic ID with content hash, upsert (§10.2) |
 | I-4 | H | **`Outdated` is not the same as stale.** A delta with `resourceVersion < localVersion` may be the *winner* of a conflict at its version that arrived late. Example: A and B write v4 concurrently, A > B; B then writes v5 = `AddProperty z`. At B, A's v4 arrives at local v5: `Outdated`, discarded. At A, B's v4 loses and B's v5 is applied on A's v4. For relative operations A ends with {x, z}, B with {y, z}. The same happens when a third peer's gap is "closed" by the losing v4, or by a local write on an awaited key. Absolute operations (set, bindings, role lifecycle) converge in their final state. | `executeDeltaWithVersionTracking`, outdated branch | For property operations: persist, and if the incoming delta would win at its version (or no record exists there and it is above the checkpoint), re-derive the property with `restorePropertyFromHistory`, exactly as the conflict-winner branch already does. |
 | I-5 | M | Version counters carry no causality. A v(n+1) built on a losing v(n) is applied as normal; per-role causal stamps exist but are not used for same-key conflicts. Combined with I-4 this is the root of property divergence. | §6.1, §7 | Short term: I-4's re-derivation. Long term: resolve property conflicts from the causal stamps (I-4 then becomes a special case). |
 | I-6 | M | Replay order only sorts by version within priority 5 (properties, moves). For one key, `SetFirstBinding` (4) runs before `RemoveBinding`/`ReplaceBinding` (6) regardless of version, and role `Move` (5) before `Remove` (6). A transaction `SetFirstBinding v1, RemoveBinding v2, SetFirstBinding v3` replays as v1, v3, v2: v2 becomes `Outdated` and its side effects (e.g. inverse binding cleanup) are skipped. | `compareForReplay`, `sortTransactionDeltas` | Keep the type priority across keys, but within one resource key order strictly by version (constructors at version 0 sort first naturally). |
 | I-7 | H | Peer delivery knowledge means "queued", never reset. A peer that lost or rejected a delta (restore from backup, reinstall, quarantine, rejected authorisation, exception after early ack) never receives it or a covering checkpoint again on knowledge-based paths → permanent gap. | `peerDeliveryStore.purs`, `addStoredDeltas` | Reset on history request (§10.6); also reset all knowledge for a peer when its installation nonce or key changes. |
 | I-8 | M | Binding, context and role-membership keys have no checkpoint. A single missed binding delta can only be repaired by resending exactly that delta. Baselines lift only the role key; property and binding gaps in the same transaction still block it. | §8.4 | Answering history requests with full binding history (§10.6) suffices; a binding checkpoint is optional. |
 | I-9 | M | Non-initial shipping paths (state-dependent or filtered perspectives, perspective assumptions in `collectAffectedContexts.purs`) can send version n+k to a peer that never received n..n+k-1, relying on knowledge (I-7). | `collectAffectedContexts.purs`, `serialiseAsDeltas.purs` | Same as I-7; optionally ship a checkpoint whenever knowledge's `maxVersion` is below the first shipped version - 1. |
-| I-10 | H | Current-epoch AMQP messages are acknowledged before execution. If `storePendingTransaction` fails (I-3) or execution throws (§5.4, §6.4), the transaction is gone; only the sender's knowledge remains, which says "delivered". | `amqpTransport/incomingPost.purs` | Store failed executions as pending (§10.5); alternatively acknowledge only after execution or pending storage. |
+| I-10 | H | **Fixed** for execution failures (§10.5); the early acknowledgement remains, so a failure to *write* the pending record, or to decrypt, still loses the message. Current-epoch AMQP messages are acknowledged before execution. If `storePendingTransaction` fails (I-3) or execution throws (§5.4, §6.4), the transaction is gone; only the sender's knowledge remains, which says "delivered". | `amqpTransport/incomingPost.purs` | Store failed executions as pending (§10.5); alternatively acknowledge only after execution or pending storage. |
 | I-11 | L | `setResourceVersion` is unconditional; most callers guard with `max`, some rely on the branch condition. A future caller can lower a counter and reopen applied versions. | `resourceVersionStore.purs` | Make `setResourceVersion` monotonic (`max`) and add an explicit `resetResourceVersion` if ever needed. |
-| I-12 | M | Non-property execution errors are swallowed: the delta is stored as `Applied` and the counter advanced although nothing happened. The peer silently diverges and later deltas build on a state that does not exist. | `executeDelta` | Treat like property errors: propagate, and rely on §10.5 for retry. |
+| I-12 | M | Still open; now that failed transactions are retried (§10.5), the suggested fix is possible, but it changes which transactions fail and must be evaluated per delta type. Non-property execution errors are swallowed: the delta is stored as `Applied` and the counter advanced although nothing happened. The peer silently diverges and later deltas build on a state that does not exist. | `executeDelta` | Treat like property errors: propagate, and rely on §10.5 for retry. |
 | I-13 | L | `hasAuthorGreaterOrEqual` uses `>=`, so the same author at the same version counts as a winner over itself. Duplicates are normally caught by `deltaId`; of two *different* deltas of one author at one version (only possible after counter loss, e.g. restore from backup) the later arrival always loses, so the outcome depends on arrival order. | `executeDeltaWithVersionTracking` | Compare `deltaId` as a secondary tiebreak. |
 | I-14 | L | Concurrent version-0 constructors by different authors for the same deterministic identifier: the first is executed as "fresh", the second resolved by author tiebreak; context constructors carry no causal stamp. Constructors are idempotent so state converges, but the recorded winner may differ between peers. | §5.3 | Accept; document that constructor winners are not significant. |
 | I-15 | L | Restoring a peer from backup reuses its counters for new writes (resource versions and causal counters), creating same-author same-version deltas at its peers. The doc warns against two live copies, but not against restore-then-continue. | §9.3 | Rotate the installation nonce on restore and announce it, which triggers a knowledge reset (I-7). |
@@ -988,8 +1057,7 @@ can cause wrong intermediate state or lost work under plausible conditions;
 
 ### Priorities
 
-1. I-1, I-3, I-10 (unblocking phases 1–2): without them every lost or delayed
-   delta degrades into permanent non-convergence.
+1. ~~I-1, I-3, I-10 (unblocking phases 1–2)~~ — done.
 2. I-4 (+ I-5): divergence of multi-valued properties under ordinary
    concurrency; the fix is local and reuses existing reconstruction code.
 3. I-7, I-9 (history requests): repair after data loss.

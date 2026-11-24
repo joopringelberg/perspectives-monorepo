@@ -96,7 +96,7 @@ import Perspectives.Types.ObjectGetters (contextAspectsClosure, hasAspect, isPub
 import Perspectives.TypesForDeltas (ContextDelta(..), ContextDeltaType(..), DeltaRecord, RoleBindingDelta(..), RoleBindingDeltaType(..), RolePropertyDelta(..), RolePropertyDeltaType(..), UniverseContextDelta(..), UniverseContextDeltaType(..), UniverseRoleDelta(..), UniverseRoleDeltaType(..))
 import Perspectives.UnschemedIdentifiers (UnschemedResourceIdentifier, unschemePerspectivesUser)
 import Perspectives.Warning (PerspectivesWarning(..))
-import Prelude (class Eq, class Monad, class Ord, Unit, bind, compare, discard, flip, map, max, negate, not, pure, show, unit, void, when, ($), (*>), (+), (/=), (<), (<$>), (<<<), (<>), (==), (>), (>=), (>>=), (&&), (||), (>=>))
+import Prelude (class Eq, class Monad, class Ord, class Show, Unit, bind, compare, discard, flip, map, max, negate, not, pure, show, unit, void, when, ($), (*>), (+), (/=), (<), (<$>), (<<<), (<>), (==), (>), (>=), (>>=), (&&), (||), (>=>))
 import Simple.JSON (readJSON')
 
 -- TODO. Each of the executing functions must catch errors that arise from unknown types.
@@ -462,14 +462,32 @@ roleDeletionPermission (UniverseRoleDelta { roleType, roleInstance, authorizedRo
 -- | so that keys of authors not yet in the entity store can still be used for
 -- | re-verification during delta execution.
 executeTransaction :: TransactionForPeer -> MonadPerspectivesTransaction Unit
-executeTransaction t = do
+executeTransaction = void <<< executeTransactionWithOutcome
+
+-- | The result of handling an incoming transaction.
+-- | * Executed: all deltas were handled (applied, recognised as duplicates, outdated or conflicting).
+-- | * Blocked: version gaps were found; the transaction has been stored in the PendingTransactionStore.
+-- | * Quarantined: the transaction is outside the active causal epoch and has been quarantined.
+-- | * Rejected: the transaction could not be verified; nothing has been changed.
+-- | Exceptions during execution are not an outcome: they propagate (see Perspectives.Sync.PendingTransactions).
+data TransactionOutcome = Executed | Blocked (Array MissingDelta) | Quarantined | Rejected String
+
+instance Show TransactionOutcome where
+  show Executed = "Executed"
+  show (Blocked gaps) = "Blocked " <> show gaps
+  show Quarantined = "Quarantined"
+  show (Rejected reason) = "Rejected " <> reason
+
+executeTransactionWithOutcome :: TransactionForPeer -> MonadPerspectivesTransaction TransactionOutcome
+executeTransactionWithOutcome t = do
   void $ lift ensureCausalEpoch
   if (unwrap t).causalEpoch /= Just currentCausalEpoch then do
     id <- lift $ quarantineTransaction "Transaction is outside the active causal epoch" t
     lift $ warnSync $ "Quarantined transaction " <> id <> ": missing or unsupported causal epoch; manual reconciliation required"
+    pure Quarantined
   else executeCurrentTransaction t
 
-executeCurrentTransaction :: TransactionForPeer -> MonadPerspectivesTransaction Unit
+executeCurrentTransaction :: TransactionForPeer -> MonadPerspectivesTransaction TransactionOutcome
 executeCurrentTransaction t = do
   transactionNumber <- gets \(Transaction tr) -> tr.transactionNumber
   -- Prevent addDelta/insertDelta from storing deltas in the DeltaStore.
@@ -484,7 +502,9 @@ executeCurrentTransaction t = do
         verifiedKeys <- verifyTransaction incoming
         pure $ Tuple verifiedKeys incoming
     ) >>= case _ of
-    Left e -> lift $ renderPerspectivesError >=> warnSync $ (IncomingTransactionFailed (show e))
+    Left e -> do
+      lift $ renderPerspectivesError >=> warnSync $ (IncomingTransactionFailed (show e))
+      pure $ Rejected (show e)
     Right (Tuple verifiedKeys incoming) -> timed "incoming.execute" (show transactionNumber) (executeTransaction' verifiedKeys incoming)
 
 verifyTransaction :: TransactionForPeer -> MonadPerspectivesTransaction (Map.Map UnschemedResourceIdentifier CryptoKey)
@@ -623,7 +643,7 @@ validatedConstructionBaselines history = do
       throwError $ error message
     Right _ -> pure unit
 
-executeTransaction' :: Map.Map UnschemedResourceIdentifier CryptoKey -> TransactionForPeer -> MonadPerspectivesTransaction Unit
+executeTransaction' :: Map.Map UnschemedResourceIdentifier CryptoKey -> TransactionForPeer -> MonadPerspectivesTransaction TransactionOutcome
 executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) = do
 
   -- Add all public key information (possibly leading to more TheWorld$PerspectivesUsers instances).
@@ -682,11 +702,13 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
       -- No gaps: execute all deltas with version tracking.
       void $ for (sortBy compareForReplay verifiedDeltas) \{ signedDelta, stringified, resourceKey, resourceVersion, author } ->
         executeDeltaWithVersionTracking baselines signedDelta stringified resourceKey resourceVersion author
+      pure Executed
     _ -> do
       -- Gaps detected: block the entire transaction.
       lift $ renderPerspectivesWarning >=> traceSync $ TransactionBlockedByVersionGaps
       lift $ traceSync $ "Missing peer delta versions: " <> show gaps
       lift $ storePendingTransaction t gaps
+      pure $ Blocked gaps
   where
 
   compareForReplay left right =

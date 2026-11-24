@@ -62,6 +62,7 @@ module Perspectives.CoreTypes
   , ObjectsGetter
   , OrderedDelta(..)
   , PendingSettledStack
+  , PendingDrainGuard(..)
   , PerspectivesExtraState
   , PerspectivesState
   , PropertyValueGetter
@@ -116,6 +117,7 @@ module Perspectives.CoreTypes
   , mkLibFunc5
   , modifyPS
   , newPendingSettledStack
+  , newPendingDrainGuard
   , pushPendingSettledFrame
   , appendPendingSettled
   , popPendingSettledFrame
@@ -337,6 +339,10 @@ type PerspectivesExtraState =
   -- | a "once settled" continuation is only handed to `transactionWithTiming` after the transaction that
   -- | scheduled it (including everything it triggered) has actually finished. See transaction-execution.md.
   , pendingSettledTransactions :: PendingSettledStack
+
+  -- | Re-entrancy guard for draining the PendingTransactionStore.
+  -- | See Perspectives.Sync.PendingTransactions and docsources/delta-ordering.md §10.3.
+  , pendingTransactionDrain :: PendingDrainGuard
   )
 
 type Warning = { message :: String, error :: String, externalRoleId :: String, contextName :: String }
@@ -486,6 +492,17 @@ popPendingSettledFrame (PendingSettledStack ref) = do
   case Array.uncons stack of
     Nothing -> pure []
     Just { head: frame, tail } -> Ref.write tail ref *> pure frame
+
+-----------------------------------------------------------
+-- PENDINGDRAINGUARD
+-----------------------------------------------------------
+-- | `draining` is true while a drain of the PendingTransactionStore is running; `dirty` is set
+-- | when another drain is requested meanwhile, so that the running drain makes another pass.
+newtype PendingDrainGuard = PendingDrainGuard (Ref { draining :: Boolean, dirty :: Boolean })
+
+-- | Creates a new guard. Takes a dummy argument to prevent the CAF from being shared.
+newPendingDrainGuard :: Unit -> PendingDrainGuard
+newPendingDrainGuard _ = unsafePerformEffect (PendingDrainGuard <$> Ref.new { draining: false, dirty: false })
 
 data JustInTimeModelLoad = LoadModel (ModelUri Stable) | ModelLoaded | LoadingFailed String | Stop | HotLine (AVar JustInTimeModelLoad)
 

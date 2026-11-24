@@ -12,7 +12,7 @@ import Control.Monad.AvarMonadAsk as AA
 import Control.Monad.Error.Class (throwError, try)
 import Control.Monad.Reader (runReaderT)
 import Control.Monad.Trans.Class (lift)
-import Data.Array (any, elem, find, head, length, mapMaybe, null)
+import Data.Array (any, elem, find, head, length, mapMaybe, null, (..))
 import Data.List.NonEmpty as NonEmptyList
 import Data.Either (Either(..), isLeft)
 import Data.Foldable (for_)
@@ -59,7 +59,7 @@ import Perspectives.Persistence.API (addDocument_, deleteDatabase, documentsInRa
 import Perspectives.Persistence.CausalStore (CausalInstallationDoc(..), CausalRoleDoc(..), causalDatabaseName, ensureCausalEpoch, getCausalRole, recordCausalDelta, reserveCausalStamp)
 import Perspectives.Persistence.DeltaStore (getDeltasForResource, pruneDeltasThrough, storeDeltaFromSignedDelta)
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
-import Perspectives.Persistence.PendingTransactionStore (pendingTransactionDatabaseName)
+import Perspectives.Persistence.PendingTransactionStore (PendingTransactionRecord(..), failedStatus, getAllPendingTransactions, maxFailedAttempts, pendingTransactionDatabaseName, recordFailedTransaction)
 import Perspectives.Persistence.QuarantineStore (QuarantinedTransaction(..), getQuarantinedTransactions, quarantineDatabaseName)
 import Perspectives.Persistence.ResourceVersionStore (getResourceVersion, setResourceVersion)
 import Perspectives.Persistent (forceSaveContext, forceSaveRole, getPerspectContext, getPerspectRol, saveEntiteit, tryGetPerspectContext, tryGetPerspectRol)
@@ -84,7 +84,8 @@ import Perspectives.Sync.Causal (CausalStamp, Clock, currentCausalEpoch, readCau
 import Perspectives.Sync.ConstructionBaseline (sameResource, selectRoleBaseline)
 import Perspectives.Query.Interpreter.Dependencies (Dependency(..))
 import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
-import Perspectives.Sync.HandleTransaction (Delta(..), executeDeltas, executeTransaction, executeUniverseRoleDelta)
+import Perspectives.Sync.HandleTransaction (Delta(..), TransactionOutcome(..), executeDeltas, executeTransaction, executeUniverseRoleDelta)
+import Perspectives.Sync.PendingTransactions (DrainMode(..), drainPendingTransactions, settleIncomingTransaction)
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
 import Perspectives.Sync.Transaction (Transaction(..), createTransaction)
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..), currentTransactionForPeer)
@@ -315,6 +316,92 @@ theSuite = suite "Causal role deletion and coordinated cutover" do
         equal 1 (length pending.rows)
         equal 1 roleVersion
         equal 1 propertyVersion
+
+  test "a blocked transaction is retried and removed once its gap has been filled" $
+    withSigningFixture true \key -> do
+      prepare key
+      third <- propertyChange "remote-old" 3 $ stamp "remote-old" 2 [ dot "remote-old" 1 ]
+      receive [ third ]
+      blocked <- lift getAllPendingTransactions
+      blockedVersion <- lift $ getResourceVersion History.propertyKey
+      liftAff do
+        equal 1 (length blocked)
+        equal 1 blockedVersion
+      second <- propertyChange "remote-old" 2 $ stamp "remote-old" 1 []
+      receive [ second ]
+      lift $ drainPendingTransactions AfterIncoming
+      remaining <- lift getAllPendingTransactions
+      version <- lift $ getResourceVersion History.propertyKey
+      liftAff do
+        equal 0 (length remaining)
+        equal 3 version
+
+  test "a chain of blocked transactions drains in a single call" $
+    withSigningFixture true \key -> do
+      prepare key
+      fourth <- propertyChange "remote-old" 4 $ stamp "remote-old" 3 [ dot "remote-old" 2 ]
+      third <- propertyChange "remote-old" 3 $ stamp "remote-old" 2 [ dot "remote-old" 1 ]
+      receive [ fourth ]
+      receive [ third ]
+      blocked <- lift getAllPendingTransactions
+      liftAff $ equal 2 (length blocked)
+      second <- propertyChange "remote-old" 2 $ stamp "remote-old" 1 []
+      receive [ second ]
+      lift $ drainPendingTransactions AfterIncoming
+      remaining <- lift getAllPendingTransactions
+      version <- lift $ getResourceVersion History.propertyKey
+      liftAff do
+        equal 0 (length remaining)
+        equal 4 version
+
+  test "a redelivered blocked transaction keeps a single pending record" $
+    withSigningFixture true \key -> do
+      prepare key
+      third <- propertyChange "remote-old" 3 $ stamp "remote-old" 2 [ dot "remote-old" 1 ]
+      incoming <- packet [ third ]
+      executeTransaction incoming
+      executeTransaction incoming
+      pending <- lift $ pendingTransactionDatabaseName >>= \db -> documentsInRange db "" "\xFFFF"
+      liftAff $ equal 1 (length pending.rows)
+
+  test "failed transactions are kept, stop being retried, and are retried at startup" $
+    withSigningFixture true \key -> do
+      prepare key
+      second <- propertyChange "remote-old" 2 $ stamp "remote-old" 1 []
+      incoming <- packet [ second ]
+      for_ (1 .. maxFailedAttempts) \_ -> lift $ recordFailedTransaction incoming "simulated failure"
+      failed <- lift getAllPendingTransactions
+      liftAff case failed of
+        [ PendingTransactionRecord r ] -> do
+          equal maxFailedAttempts r.attempts
+          equal failedStatus r.status
+          equal (Just "simulated failure") r.lastError
+        _ -> assert "Expected exactly one pending record" false
+      lift $ drainPendingTransactions AfterIncoming
+      notRetried <- lift $ getResourceVersion History.propertyKey
+      liftAff $ equal 1 notRetried
+      lift $ drainPendingTransactions AtStartup
+      remaining <- lift getAllPendingTransactions
+      version <- lift $ getResourceVersion History.propertyKey
+      liftAff do
+        equal 0 (length remaining)
+        equal 2 version
+
+  test "an execution failure is stored as a pending record instead of being lost" $
+    withSigningFixture true \key -> do
+      prepare key
+      second <- propertyChange "remote-old" 2 $ stamp "remote-old" 1 []
+      incoming <- packet [ second ]
+      done <- lift $ settleIncomingTransaction incoming (Left $ error "simulated crash")
+      stored <- lift getAllPendingTransactions
+      liftAff do
+        assert "A failed transaction must not be reported as handled" (not done)
+        equal 1 (length stored)
+      executed <- lift $ settleIncomingTransaction incoming (Right Executed)
+      remaining <- lift getAllPendingTransactions
+      liftAff do
+        assert "An executed transaction is handled" executed
+        equal 0 (length remaining)
 
   test "membership alone cannot establish a high-version construction baseline" $
     withSigningFixture true \key -> do
