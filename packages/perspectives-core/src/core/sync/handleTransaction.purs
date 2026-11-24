@@ -33,7 +33,7 @@ import Data.Foldable (for_)
 import Data.FoldableWithIndex (forWithIndex_)
 import Data.Generic.Rep (class Generic)
 import Data.Map as Map
-import Data.Maybe (Maybe(..), fromJust, isNothing)
+import Data.Maybe (Maybe(..), fromJust, isJust, isNothing)
 import Data.MediaType (MediaType(..))
 import Data.Newtype (over, unwrap)
 import Data.Ordering (Ordering(..))
@@ -67,13 +67,13 @@ import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (getAttachment)
 import Perspectives.Persistence.DeltaStore (deltaStoreDocIdWithDeltaId, extractDeltaInfo, findDeltaByDeltaId, getDeltasForResource, getDeltasForRoleInstance, safeKey, storeDelta, storeDeltaFromSignedDelta, updateDeltaApplied)
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
-import Perspectives.Persistence.CausalStore (coveredByDeletion, ensureCausalEpoch, observedByDeletion, recordCausalDelta)
+import Perspectives.Persistence.CausalStore (CausalRoleDoc(..), coveredByDeletion, ensureCausalEpoch, getCausalRole, observedByDeletion, recordCausalDelta)
 import Perspectives.Persistence.QuarantineStore (quarantineTransaction)
 import Perspectives.Persistence.PendingTransactionStore (MissingDelta, storePendingTransaction)
 import Perspectives.Persistence.PropertyHistoryStore (storeIncomingDeltaWithHistory)
 import Perspectives.Persistence.ResourceVersionStore (getResourceVersion, setResourceVersion)
 import Perspectives.Performance (timed)
-import Perspectives.Persistent (addAttachment, entityExists, forceSaveRole, getPerspectRol, saveEntiteit, saveEntiteit_, tryGetPerspectEntiteit, tryGetPerspectRol)
+import Perspectives.Persistent (addAttachment, entityExists, forceSaveRole, getPerspectRol, saveEntiteit, saveEntiteit_, tryGetPerspectContext, tryGetPerspectEntiteit, tryGetPerspectRol)
 import Perspectives.Query.UnsafeCompiler (getRoleInstances)
 import Perspectives.Representation.Class.Cacheable (EnumeratedRoleType(..), cacheEntity)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser(..), RoleInstance(..))
@@ -82,6 +82,8 @@ import Perspectives.Representation.Verbs (PropertyVerb(..), RoleVerb(..)) as Ver
 import Perspectives.ResourceIdentifiers (createPublicIdentifier, isInPublicScheme, resourceIdentifier2DocLocator, resourceIdentifier2WriteDocLocator, takeGuid)
 import Perspectives.Sync.CanonicalJson (computeDeltaId)
 import Perspectives.Sync.Causal (causalRoleKey, currentCausalEpoch, validateCausalDelta)
+import Perspectives.Sync.Causal (coversClock, stampClock)
+import Perspectives.Sync.ConstructionBaseline (ConstructionBaseline, causallyBefore, inferConstructionBaselines, sameResource, sameSignedContent, selectContextConstruction, selectRoleConstruction)
 import Perspectives.SaveUserData (removeBinding, removeReceivedContextIfUnbound, replaceBinding, scheduleReceivedContextRemoval, scheduleReceivedRoleRemoval, setFirstBinding)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.StrippedDelta (addPublicResourceScheme, addResourceSchemes, addSchemeToResourceIdentifier)
@@ -557,6 +559,70 @@ verifyTransaction (TransactionForPeer { deltas, publicKeys }) = do
                 Left message -> throwError $ error message
                 Right _ -> verifyDelta_ marker.winner
 
+validatedConstructionBaselines :: Array SignedDelta -> MonadPerspectivesTransaction (Map.Map String ConstructionBaseline)
+validatedConstructionBaselines history = do
+  inferred <- case inferConstructionBaselines history of
+    Left message -> throwError $ error message
+    Right baselines -> pure baselines
+  validated <- for inferred \baseline -> case baseline.causal of
+    Nothing -> pure Nothing
+    Just causal -> do
+      let UniverseRoleDelta creation = baseline.role
+      storageSchemes <- lift $ gets _.typeToStorage
+      UniverseRoleDelta expanded <- lift $ addResourceSchemes storageSchemes baseline.role
+      existing <- lift $ tryGetPerspectRol expanded.roleInstance
+      localVersion <- lift $ getResourceVersion (unwrap creation.roleInstance)
+      CausalRoleDoc known <- lift $ getCausalRole (unwrap creation.roleInstance)
+      let
+        newerThanDeletions = not $ any (\deletion -> not $ coversClock causal.context (stampClock deletion)) known.deletions
+        compatible = case existing of
+          Nothing -> newerThanDeletions && (localVersion == 0 || baseline.version > localVersion)
+          Just (PerspectRol role) ->
+            role.pspType == expanded.roleType && sameResource (unwrap role.context) (unwrap expanded.id)
+        complete = baseline.version > 0
+      if not (compatible && complete) then pure Nothing
+      else do
+        permission <-
+          if creation.deltaType == ConstructExternalRole then do
+            root <- lift $ creation.roleType ###>> hasAspect (EnumeratedRoleType rootContext)
+            if root then pure $ Right unit
+            else map (map (constUnit)) $ lift $
+              roleHasPerspectiveOnExternalRoleWithVerbs creation.subject creation.authorizedRole [ Verbs.CreateAndFill ] Nothing Nothing
+          else if creation.subject == ENR creation.roleType then pure $ Right unit
+          else map (map (constUnit)) $ lift $
+            roleHasPerspectiveOnRoleWithVerb creation.subject creation.roleType [ Verbs.Create, Verbs.CreateAndFill ] Nothing Nothing
+        requirePermission permission
+        case parseIncomingDelta (unwrap baseline.membership).encryptedDelta of
+          Right (ContextEnvelope (ContextDelta membership)) | creation.deltaType == ConstructEmptyRole -> do
+            membershipPermission <- lift $
+              roleHasPerspectiveOnRoleWithVerb membership.subject membership.roleType [ Verbs.Create, Verbs.CreateAndFill ] Nothing Nothing
+            requirePermission (map constUnit membershipPermission)
+          _ -> pure unit
+        pure $ Just $ Tuple (safeKey $ unwrap creation.roleInstance) baseline
+  let candidates = Map.fromFoldable $ catMaybes validated
+  complete <- filterA
+    ( \(Tuple _ baseline) -> do
+        storageSchemes <- lift $ gets _.typeToStorage
+        UniverseRoleDelta creation <- lift $ addResourceSchemes storageSchemes baseline.role
+        context <- lift $ tryGetPerspectContext creation.id
+        case context of
+          Just _ -> pure true
+          Nothing -> case Map.lookup (safeKey $ buitenRol $ unwrap creation.id) candidates of
+            Nothing -> pure false
+            Just external -> case selectContextConstruction external history of
+              Left message -> throwError $ error message
+              Right constructor -> pure $ isJust constructor
+    )
+    (catMaybes validated)
+  pure $ Map.fromFoldable complete
+  where
+  constUnit _ = unit
+  requirePermission = case _ of
+    Left failure -> do
+      message <- lift $ renderPerspectivesError failure
+      throwError $ error message
+    Right _ -> pure unit
+
 executeTransaction' :: Map.Map UnschemedResourceIdentifier CryptoKey -> TransactionForPeer -> MonadPerspectivesTransaction Unit
 executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) = do
 
@@ -584,6 +650,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
         Just { resourceKey, resourceVersion } -> Just { signedDelta: s, stringified, resourceKey, resourceVersion, author }
         Nothing -> Nothing
 
+  baselines <- validatedConstructionBaselines (map _.signedDelta verifiedDeltas)
   liveDeltas <- filterA (\d -> not <$> coveredWhileAbsent d.signedDelta d.resourceKey) verifiedDeltas
 
   -- STEP 2: Check for gaps. If any delta has resourceVersion > localVersion + 1, block the transaction.
@@ -601,7 +668,11 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
   gaps <- checkForGapsWith
     ( \key -> do
         local <- lift $ getResourceVersion key
-        pure $ max local $ case Map.lookup (safeKey key) checkpointVersions of
+        let
+          baselineVersion = case Map.lookup (safeKey key) baselines of
+            Just baseline -> baseline.version
+            Nothing -> 0
+        pure $ max baselineVersion $ max local $ case Map.lookup (safeKey key) checkpointVersions of
           Just version -> version
           Nothing -> 0
     )
@@ -610,7 +681,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
     [] -> do
       -- No gaps: execute all deltas with version tracking.
       void $ for (sortBy compareForReplay verifiedDeltas) \{ signedDelta, stringified, resourceKey, resourceVersion, author } ->
-        executeDeltaWithVersionTracking signedDelta stringified resourceKey resourceVersion author
+        executeDeltaWithVersionTracking baselines signedDelta stringified resourceKey resourceVersion author
     _ -> do
       -- Gaps detected: block the entire transaction.
       lift $ renderPerspectivesWarning >=> traceSync $ TransactionBlockedByVersionGaps
@@ -632,8 +703,8 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
     in
       compare (priority left) (priority right) <> propertyOrder
 
-  executeDeltaWithVersionTracking :: SignedDelta -> String -> String -> Int -> PerspectivesUser -> MonadPerspectivesTransaction Unit
-  executeDeltaWithVersionTracking s stringified resourceKey resourceVersion author = do
+  executeDeltaWithVersionTracking :: Map.Map String ConstructionBaseline -> SignedDelta -> String -> String -> Int -> PerspectivesUser -> MonadPerspectivesTransaction Unit
+  executeDeltaWithVersionTracking baselines s stringified resourceKey resourceVersion author = do
     deltaId <- liftAff $ computeDeltaId (unwrap author) stringified
     mDuplicate <- lift $ findDeltaByDeltaId deltaId
     -- Extract the deltaType and contextKey from the stringified delta content.
@@ -673,20 +744,42 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
               Right _ -> pure unit
           _ -> throwError $ error "Expected a role deletion payload"
         lift $ recordCausalDelta s
+        obsolete <- supersededByConstruction s resourceKey
         suppressed <-
-          if deltaType == "RetractRoleInstance" then pure false
+          if obsolete then pure true
+          else if deltaType == "RetractRoleInstance" then pure false
           else isDeletionSuppressedByModifyWins s resourceKey
         if suppressed then do
           lift $ renderPerspectivesWarning >=> traceSync $ ModifyWinsOverDeleteSuppressed resourceKey
-          persistIncomingDelta false "ModifyWinsSuppressedDelete"
+          persistIncomingDelta false (if obsolete then "SupersededByConstruction" else "ModifyWinsSuppressedDelete")
           pure false
         else do
           executeDelta s (Just stringified)
           persistIncomingDelta true "Applied"
           pure true
-    case mDuplicate of
-      Just _ -> pure unit
-      Nothing | resourceKey /= "" -> do
+      baseline = Map.lookup (safeKey resourceKey) baselines
+      baselineRecord = case baseline of
+        Just b -> sameSignedContent s b.construction || sameSignedContent s b.membership
+        Nothing -> false
+      contextBaseline = Map.lookup (safeKey $ buitenRol resourceKey) baselines
+      contextBaselineRecord = case contextBaseline of
+        Just b -> case selectContextConstruction b [ s ] of
+          Right (Just _) -> true
+          _ -> false
+        Nothing -> false
+      applyBaseline b = do
+        lift $ recordCausalDelta s
+        executeDelta s (Just stringified)
+        local <- lift $ getResourceVersion resourceKey
+        lift $ setResourceVersion resourceKey (max local b.version)
+        persistIncomingDelta true "ConstructionBaseline"
+    case baseline, baselineRecord, contextBaselineRecord, mDuplicate of
+      Just b, true, _, _ -> applyBaseline b
+      _, _, true, _ -> do
+        executeDelta s (Just stringified)
+        persistIncomingDelta true "ConstructionBaseline"
+      _, _, _, Just _ -> pure unit
+      _, _, _, Nothing | resourceKey /= "" -> do
         when (not (isDeletionDeltaType deltaType) && not (isPropertyOperation deltaType)) $ lift $ recordCausalDelta s
         localVersion <- lift $ getResourceVersion resourceKey
         historical <- coveredWhileAbsent s resourceKey
@@ -788,7 +881,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
             executeDelta s (Just stringified)
             lift $ setResourceVersion resourceKey resourceVersion
             persistIncomingDelta true "Applied"
-      Nothing -> pure unit
+      _, _, _, Nothing -> pure unit
 
   -- | Returns true if a deltaType string represents a role-instance deletion.
   isDeletionDeltaType :: String -> Boolean
@@ -811,6 +904,24 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
     concurrent <- filterA (\(DeltaStoreRecord r) -> not <$> lift (observedByDeletion deletion r.signedDelta))
       $ filter (\d@(DeltaStoreRecord r) -> r.applied && isSubResourceDeltaOf roleInstanceId d) allRoleDeltas
     pure $ not $ null concurrent
+
+  supersededByConstruction :: SignedDelta -> String -> MonadPerspectivesTransaction Boolean
+  supersededByConstruction deletion roleKey = case parseIncomingDelta (unwrap deletion).encryptedDelta of
+    Right (UniverseRoleEnvelope delta) -> do
+      storageSchemes <- lift $ gets _.typeToStorage
+      UniverseRoleDelta expanded <- lift $ addResourceSchemes storageSchemes delta
+      existing <- lift $ tryGetPerspectRol expanded.roleInstance
+      case existing of
+        Nothing -> pure false
+        Just (PerspectRol role) -> do
+          records <- lift $ getDeltasForResource roleKey
+          case selectRoleConstruction expanded.roleInstance role.pspType role.context (map (\(DeltaStoreRecord r) -> r.signedDelta) records) of
+            Left message -> throwError $ error message
+            Right Nothing -> pure false
+            Right (Just construction) -> case causallyBefore deletion construction of
+              Left message -> throwError $ error message
+              Right before -> pure before
+    _ -> pure false
 
   coveredWhileAbsent signed key =
     if not $ isSubResourceKey key then pure false

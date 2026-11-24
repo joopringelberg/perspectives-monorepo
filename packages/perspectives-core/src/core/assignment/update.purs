@@ -73,6 +73,7 @@ import Perspectives.Logging (debugResource, logWhen, traceDelta, warnResource)
 import Perspectives.Persistence.API (toFile)
 import Perspectives.Persistence.DeltaStore (getDeltasForResourceByDeltaType)
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
+import Perspectives.Persistence.PropertyHistoryStore (storeLocalDeltaWithHistory)
 import Perspectives.Persistence.ResourceVersionStore (incrementResourceVersion)
 import Perspectives.Persistent (addAttachment, getPerspectContext, getPerspectRol, saveEntiteit_)
 import Perspectives.Persistent (saveEntiteit) as Instances
@@ -86,6 +87,7 @@ import Perspectives.ResourceIdentifiers (databaseLocation, resourceIdentifier2Do
 import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.StrippedDelta (stripResourceSchemes)
 import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
+import Perspectives.Sync.ConstructionBaseline (selectRoleConstruction)
 import Perspectives.Sync.SignedDelta (SignedDelta)
 import Perspectives.Sync.VersionedDelta (signVersionedDelta)
 import Perspectives.Sync.Transaction (Transaction(..))
@@ -192,13 +194,20 @@ addRoleInstanceToContext contextId rolName (Tuple roleId receivedDelta) = do
     -- Notice that even though we compute the users for a single given RoleInstance, we can use that result
     -- for any other instance of the same RoleType. This will no longer hold when we add filtering to the inverted queries
     -- (because then the affected contexts found will depend on the properties of the RoleInstance, too).
+    isExecuting <- gets \(Transaction transaction) -> transaction.isExecutingIncomingDeltas
+    case receivedDelta of
+      Nothing | not isExecuting -> lift $ storeLocalDeltaWithHistory delta
+      _ -> pure unit
     users <- usersWithPerspectiveOnRoleInstance rolName roleId contextId true
     -- SYNCHRONISATION
     -- Retrieve and add the UniverseRoleDelta from the DeltaStore.
     -- It was stored there when the role was created by constructEmptyRole.
-    universeRoleDeltas <- lift $ getDeltasForResourceByDeltaType (unwrap roleId) "ConstructEmptyRole"
-    for_ universeRoleDeltas \(DeltaStoreRecord { signedDelta }) ->
-      addDelta $ DeltaInTransaction { users, delta: signedDelta }
+    unless isExecuting do
+      universeRoleDeltas <- lift $ getDeltasForResourceByDeltaType (unwrap roleId) "ConstructEmptyRole"
+      case selectRoleConstruction roleId rolName contextId (map (\(DeltaStoreRecord record) -> record.signedDelta) universeRoleDeltas) of
+        Left message -> throwError $ error message
+        Right Nothing -> throwError $ error $ "No role construction for " <> show roleId
+        Right (Just signedDelta) -> addDelta $ DeltaInTransaction { users, delta: signedDelta }
     -- Add the ContextDelta.
     addDelta $ DeltaInTransaction { users, delta }
     -- QUERY UPDATES

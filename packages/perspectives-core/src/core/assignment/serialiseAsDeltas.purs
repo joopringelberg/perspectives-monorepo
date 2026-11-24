@@ -60,7 +60,7 @@ import Perspectives.Data.EncodableMap (empty) as EM
 import Perspectives.Deltas (addDelta, addPublicKeysToTransaction, addStoredDeltas, addStoredDeltaForInitialVisibility)
 import Perspectives.DependencyTracking.Array.Trans (ArrayT(..), runArrayT)
 import Perspectives.DomeinFile (defaultDomeinFileRecord)
-import Perspectives.Error.Boundaries (handlePerspectContextError, handlePerspectRolError, handlePerspectRolError')
+import Perspectives.Error.Boundaries (handlePerspectRolError')
 import Perspectives.Error.Pretty (humanizePerspectivesWarning)
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..))
 import Perspectives.Instances.ObjectGetters (binding_, contextType_, roleType_)
@@ -88,11 +88,12 @@ import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..), 
 import Perspectives.ResourceIdentifiers (isInPublicScheme)
 import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
+import Perspectives.Sync.ConstructionHistory (getRoleConstructionHistory)
 import Perspectives.Sync.Transaction (Transaction(..), createTransaction)
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..), currentTransactionForPeer, withoutPredefinedContextScaffolding)
 import Perspectives.Types.ObjectGetters (isEnumeratedRoleType, perspectivesClosure_, propertiesInPerspective)
 import Perspectives.Warning (PerspectivesWarning(..))
-import Prelude (Unit, bind, discard, join, pure, show, unit, void, ($), (<$>), (<<<), (<>), (==), (>=>), (>>=), (||), (<), (*>), (&&))
+import Prelude (Unit, bind, discard, join, map, pure, show, unit, unless, void, ($), (<$>), (<<<), (<>), (==), (>=>), (>>=), (||), (<), (*>), (&&))
 import Simple.JSON (unsafeStringify, write)
 
 noNewPeer :: Boolean
@@ -373,7 +374,11 @@ serialiseDependencies :: Array RoleInstance -> NonEmptyList Dependency -> MonadP
 serialiseDependencies = serialiseDependenciesWith false
 
 serialiseDependenciesWith :: Boolean -> Array RoleInstance -> NonEmptyList Dependency -> MonadPerspectivesTransaction Unit
-serialiseDependenciesWith initialVisibility users deps = void $ runStateT (serialiseDependencies_ initialVisibility users deps) []
+serialiseDependenciesWith initialVisibility users deps = do
+  Transaction transaction <- AMA.get
+  unless transaction.isExecutingIncomingDeltas
+    $ void
+    $ runStateT (serialiseDependencies_ initialVisibility users deps) []
 
 serialiseDependencies_
   :: Boolean
@@ -458,33 +463,7 @@ serialiseDependency initialVisibility users mpreviousDependency currentDependenc
 
   -- | Query DeltaStore for creation deltas of this role and its context.
   addDeltasForRole :: RoleInstance -> MonadPerspectivesTransaction Unit
-  addDeltasForRole roleId@(RoleInstance r) = do
-    (liftToMPT $ try $ getPerspectRol roleId) >>=
-      handlePerspectRolError "addDeltasForRole"
-        \(PerspectRol { context }) ->
-          if isInPublicScheme (unwrap context) then do
-            -- Get creation deltas for this role.
-            roleDeltas <- lift $ getDeltasForResource (unwrap roleId)
-            -- We expect at least one delta for the role: the ConstructEmptyRole delta. If there are none, something is wrong.
-            if null roleDeltas then lift $ errorDelta ("No deltas found for role " <> show roleId) else pure unit
-            addHistory roleDeltas
-          else do
-            (liftToMPT $ try $ getPerspectContext context) >>=
-              handlePerspectContextError "addDeltasForRole"
-                \(PerspectContext { buitenRol }) -> do
-                  -- Get creation deltas for external role.
-                  extRoleDeltas <- lift $ getDeltasForResource (unwrap buitenRol)
-                  -- We expect at least two deltas for the external role: the ConstructExternalRole delta and the ContextDelta that links it to the context. If there are less than two, something is wrong.
-                  if length extRoleDeltas < 2 then lift $ errorDelta ("No deltas found for external role " <> show buitenRol) else pure unit
-                  -- Get creation deltas for context.
-                  contextDeltas <- lift $ getDeltasForResource (unwrap context)
-                  -- We expect at least one delta for the context: the ConstructEmptyContext delta. If there are none, something is wrong.
-                  if null contextDeltas then lift $ errorDelta ("No deltas found for context " <> show context) else pure unit
-                  -- Get creation deltas for this role.
-                  roleDeltas <- lift $ getDeltasForResource (unwrap roleId)
-                  -- We expect at least one delta for the role: the ConstructEmptyRole delta. If there are none, something is wrong.
-                  if null roleDeltas then lift $ errorDelta ("No deltas found for role " <> show roleId) else pure unit
-                  addHistory (extRoleDeltas <> contextDeltas <> roleDeltas)
+  addDeltasForRole roleId = lift (getRoleConstructionHistory roleId) >>= addHistory
 
   withContext :: Boolean
   withContext = true

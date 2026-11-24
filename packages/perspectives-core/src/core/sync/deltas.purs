@@ -73,6 +73,7 @@ import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..), 
 import Perspectives.ResourceIdentifiers (isInPublicScheme, takeGuid)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.Sync.DateTime (SerializableDateTime(..))
+import Perspectives.Sync.ConstructionHistory (getRoleBaselineHistory)
 import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
 import Perspectives.Sync.OutgoingTransaction (OutgoingTransaction(..))
 import Perspectives.Sync.PropertyHistory (checkpoint)
@@ -463,7 +464,7 @@ addPublicKeysToTransaction (Transaction tr@{ deltas }) = do
     let roleInstanceId = perspectivesUser2RoleInstance $ deltaAuthor2ResourceIdentifier perspectivesUser
     authorRole <- getPerspectRol roleInstanceId
     -- Get creation deltas for this role instance (UniverseRoleDelta + ContextDelta).
-    creationDeltas <- getDeltasForResource (unwrap roleInstanceId)
+    creationDeltas <- getRoleBaselineHistory roleInstanceId
     -- Get property deltas for the public key property.
     pkPropertyDeltas <- getDeltasForResource (unwrap roleInstanceId <> "#" <> unwrap (EnumeratedPropertyType perspectivesUsersPublicKey))
     transportPkPropertyDeltas <- getDeltasForResource (unwrap roleInstanceId <> "#" <> unwrap (EnumeratedPropertyType perspectivesUsersTransportPublicKey))

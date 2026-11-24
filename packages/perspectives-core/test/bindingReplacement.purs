@@ -556,17 +556,28 @@ addFilledContext name subjectType filler locallyFilled = do
       }
     constructRole role roleType = signed
       { resourceKey: unwrap role
-      , resourceVersion: 1
-      , deltaType: "ConstructEmptyRole"
+      , resourceVersion: 0
+      , deltaType: if roleType == externalType then "ConstructExternalRole" else "ConstructEmptyRole"
       , roleInstance: role
       , id: cid
       , contextType
+      , roleType
+      , authorizedRole: if roleType == externalType then Just $ ENR userType else Nothing
+      , subject: ENR userType
+      }
+    linkRole role roleType = signed
+      { resourceKey: unwrap role
+      , resourceVersion: 1
+      , deltaType: "AddRoleInstancesToContext"
+      , contextInstance: cid
+      , contextType
+      , roleInstance: role
       , roleType
       , subject: ENR userType
       }
     linkExternal = signed
       { resourceKey: unwrap external
-      , resourceVersion: 2
+      , resourceVersion: 1
       , deltaType: "AddExternalRole"
       , contextInstance: cid
       , contextType
@@ -624,15 +635,16 @@ addFilledContext name subjectType filler locallyFilled = do
     constructionDeltas =
       [ constructContext
       , constructRole rid subjectType
+      , linkRole rid subjectType
       , constructRole external externalType
       , linkExternal
       , bindingDelta
       ]
-    visibleDeltas = [ constructRole visible visibleType, propertyDelta ]
-    hiddenDelta = constructRole hidden hiddenType
+    visibleDeltas = [ constructRole visible visibleType, linkRole visible visibleType, propertyDelta ]
+    hiddenDeltas = [ constructRole hidden hiddenType, linkRole hidden hiddenType ]
     expected = constructionDeltas <> if subjectType == userType then visibleDeltas else []
-    excluded = [ hiddenDelta ] <> if subjectType == userType then [] else visibleDeltas
-  lift $ for_ (constructionDeltas <> visibleDeltas <> [ hiddenDelta ]) storeDeltaFromSignedDelta
+    excluded = hiddenDeltas <> if subjectType == userType then [] else visibleDeltas
+  lift $ for_ (constructionDeltas <> visibleDeltas <> hiddenDeltas) storeDeltaFromSignedDelta
   pure { role: rid, context: cid, expected, excluded }
 
 checkRecursiveInitialization :: Array FilledContext -> MonadPerspectivesTransaction Unit
@@ -727,8 +739,11 @@ withFixture oldFiller sameTypeAlternatives otherTypeAlternatives action = do
         , properties = if rid == visibleId then Object.singleton (unwrap visibleProperty) [ Value "visible-value" ] else Object.empty
         }
     for_
-      ( [ contextDelta, externalLinkDelta, visiblePropertyDelta ] <> map roleDelta
-          [ userId, visibleId, hiddenId, externalId, newRemotePeer, oldRemotePeer, localPeer, remoteAlternativeId, localAlternativeId, otherLocalId ]
+      ( [ contextDelta, externalLinkDelta, visiblePropertyDelta ]
+          <> map roleDelta
+            [ userId, visibleId, hiddenId, externalId, newRemotePeer, oldRemotePeer, localPeer, remoteAlternativeId, localAlternativeId, otherLocalId ]
+          <> map membershipDelta
+            [ userId, visibleId, hiddenId, newRemotePeer, oldRemotePeer, localPeer, remoteAlternativeId, localAlternativeId, otherLocalId ]
       )
       storeDeltaFromSignedDelta
     transaction <- liftAff $ createTransaction (ENR userType) true >>= new
@@ -827,7 +842,7 @@ contextDelta = signed
 externalLinkDelta :: SignedDelta
 externalLinkDelta = signed
   { resourceKey: unwrap externalId
-  , resourceVersion: 2
+  , resourceVersion: 1
   , deltaType: "AddExternalRole"
   , contextInstance: contextId
   , contextType
@@ -839,8 +854,8 @@ externalLinkDelta = signed
 roleDelta :: RoleInstance -> SignedDelta
 roleDelta rid = signed
   { resourceKey: unwrap rid
-  , resourceVersion: 1
-  , deltaType: "ConstructEmptyRole"
+  , resourceVersion: 0
+  , deltaType: if rid == externalId then "ConstructExternalRole" else "ConstructEmptyRole"
   , roleInstance: rid
   , id: contextId
   , contextType
@@ -848,6 +863,24 @@ roleDelta rid = signed
       if rid == visibleId then visibleType
       else if rid == hiddenId then hiddenType
       else if rid == externalId then externalType
+      else if elem rid [ localPeer, oldRemotePeer, newRemotePeer ] then EnumeratedRoleType perspectivesUsers
+      else if rid == otherLocalId then otherUserType
+      else userType
+  , subject: ENR userType
+  , authorizedRole: if rid == externalId then Just $ ENR userType else Nothing
+  }
+
+membershipDelta :: RoleInstance -> SignedDelta
+membershipDelta rid = signed
+  { resourceKey: unwrap rid
+  , resourceVersion: 1
+  , deltaType: "AddRoleInstancesToContext"
+  , contextInstance: contextId
+  , contextType
+  , roleInstance: rid
+  , roleType:
+      if rid == visibleId then visibleType
+      else if rid == hiddenId then hiddenType
       else if elem rid [ localPeer, oldRemotePeer, newRemotePeer ] then EnumeratedRoleType perspectivesUsers
       else if rid == otherLocalId then otherUserType
       else userType

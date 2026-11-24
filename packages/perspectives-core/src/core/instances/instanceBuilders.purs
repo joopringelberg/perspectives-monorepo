@@ -69,6 +69,7 @@ import Perspectives.Instances.Me (isMe)
 import Perspectives.Logging (debugInstall, traceResource, warnResource)
 import Perspectives.Names (expandDefaultNamespaces, getMySystem, lookupIndexedContext, lookupIndexedRole)
 import Perspectives.Parsing.Messages (PerspectivesError)
+import Perspectives.Persistence.PropertyHistoryStore (storeLocalDeltaWithHistory)
 import Perspectives.Persistent (saveEntiteit, tryGetPerspectEntiteit)
 import Perspectives.PerspectivesState (getIndexedResourceToCreate)
 import Perspectives.Query.UnsafeCompiler (getRoleInstances)
@@ -104,6 +105,8 @@ constructContext mbindingRoleType c@(ContextSerialization { id, ctype, rollen, e
       Nothing -> do
         -- RULE TRIGGERING
         { context: contextResource, universeContextDelta, externalUniverseRoleDelta, externalContextDelta } <- constructEmptyContext contextInstanceId ctype localName externeProperties mbindingRoleType
+        for_ [ universeContextDelta, externalUniverseRoleDelta, externalContextDelta ] \delta ->
+          lift $ lift $ storeLocalDeltaWithHistory delta
         let (PerspectContext { buitenRol }) = contextResource
         -- Add instances for each role type to the new empty context.
         (Tuple rolInstances users) <- runWriterT $ forWithIndex rollen \rolTypeId rolDescriptions -> do

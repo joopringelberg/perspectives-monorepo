@@ -97,6 +97,11 @@ In `handleTransaction.purs` (`executeTransaction`):
   **Block the entire transaction.** This is necessary because automatic actions
   (state-triggered effects) can be causally dependent on earlier deltas within
   the same transaction.
+- A verified, authorised causal construction baseline may cover preceding
+  versions of its role key using the selected membership version. It cannot
+  cover gaps on property or binding keys, and does not reset stored counters.
+  A missing context requires its compatible context template and external
+  baseline.
 - **Persistent storage:** blocked transactions are stored in a
   `pendingTransactions` PouchDB database, indexed by the
   `(author, resourceKey, expected version)` tuple that is missing. A session
@@ -137,6 +142,13 @@ resources themselves.
 `src/core/assignment/serialiseAsDeltas.purs` currently reads deltas from
 resources. Rewrite to query the delta-store per resource-key, sorted by
 `resourceVersion`.
+
+Construction disclosure selects a compatible, causally maximal constructor and
+the membership observing it, rather than replaying historical removals or older
+lifecycles. Compatible unstamped context constructors serve as structural
+templates. Selection uses existing signed records and causal clocks; it adds no
+persistent baseline administration. Ambiguous causal maxima require explicit
+reconciliation. See `docsources/delta-ordering.md`, §11.
 
 ### Adapt delta construction
 

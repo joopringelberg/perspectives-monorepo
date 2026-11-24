@@ -89,7 +89,7 @@ import Perspectives.Instances.Me (getMyType, isMe)
 import Perspectives.Instances.ObjectGetters (allRoleBinders, binding, binding_, context, contextType, contextType_, getRecursivelyAllFilledRoles, getUnlinkedRoleInstances, roleType_)
 import Perspectives.Logging (logWhen)
 import Perspectives.Names (findIndexedContextName, findIndexedRoleName, removeIndexedContext, removeIndexedRole)
-import Perspectives.Persistence.DeltaStore (getDeltasForResource, storeDeltaFromSignedDelta)
+import Perspectives.Persistence.DeltaStore (storeDeltaFromSignedDelta)
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
 import Perspectives.Persistence.ResourceVersionStore (incrementResourceVersion)
 import Perspectives.Persistent (getPerspectContext, getPerspectRol, removeEntiteit, tryGetPerspectContext, tryGetPerspectRol)
@@ -105,6 +105,7 @@ import Perspectives.ScheduledAssignment (DeletionOrigin(..), ScheduledAssignment
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.StrippedDelta (stripResourceSchemes)
 import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
+import Perspectives.Sync.ConstructionHistory (getRoleConstructionHistory)
 import Perspectives.Sync.SignedDelta (SignedDelta)
 import Perspectives.Sync.VersionedDelta (signVersionedDelta)
 import Perspectives.Sync.Transaction (Transaction(..))
@@ -733,18 +734,11 @@ setFirstBindingWithMode mode filled filler msignedDelta = (lift $ try $ getPersp
             lift $ storeDeltaFromSignedDelta signedDelta
             -- The peer also needs to know how to construct the new filler itself, even when no
             -- property value on that filler has been set yet.
-            if not (isInPublicScheme (unwrap actualFiller)) then do
-              let fillerContext = rol_context fillerRole
-              (lift $ try $ getPerspectContext fillerContext) >>=
-                handlePerspectContextError "setFirstBinding, filler"
-                  \(PerspectContext { buitenRol }) -> do
-                    contextDeltas <- lift $ getDeltasForResource (unwrap fillerContext)
-                    extRoleDeltas <- lift $ getDeltasForResource (unwrap buitenRol)
-                    fillerDeltas <- lift $ getDeltasForResource (unwrap actualFiller)
-                    for_ (contextDeltas <> extRoleDeltas <> fillerDeltas)
-                      ( \(DeltaStoreRecord { signedDelta: fillerDelta }) ->
-                          addDelta (DeltaInTransaction { users, delta: fillerDelta })
-                      )
+            incoming <- gets \(Transaction transaction) -> transaction.isExecutingIncomingDeltas
+            if not incoming && not (isInPublicScheme (unwrap actualFiller)) then do
+              construction <- lift $ getRoleConstructionHistory actualFiller
+              for_ construction \(DeltaStoreRecord { signedDelta: fillerDelta }) ->
+                addDelta (DeltaInTransaction { users, delta: fillerDelta })
             else pure unit
             -- Compute the deltas that must be sent to other users in case the filled role is a 
             -- perspective object.

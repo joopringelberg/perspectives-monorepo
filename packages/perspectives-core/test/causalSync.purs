@@ -12,7 +12,8 @@ import Control.Monad.AvarMonadAsk as AA
 import Control.Monad.Error.Class (throwError, try)
 import Control.Monad.Reader (runReaderT)
 import Control.Monad.Trans.Class (lift)
-import Data.Array (any, find, head, length, null)
+import Data.Array (any, elem, find, head, length, mapMaybe, null)
+import Data.List.NonEmpty as NonEmptyList
 import Data.Either (Either(..), isLeft)
 import Data.Foldable (for_)
 import Data.Maybe (Maybe(..), isJust, isNothing)
@@ -21,6 +22,7 @@ import Data.Newtype (unwrap)
 import Data.Set as Set
 import Data.Traversable (for)
 import Data.Tuple (Tuple(..))
+import Decacheable (decache)
 import Effect (Effect)
 import Effect.Aff.AVar (new)
 import Effect.Aff.Class (liftAff)
@@ -30,32 +32,40 @@ import Data.String (Pattern(..), contains)
 import Foreign.Object as Object
 import Partial.Unsafe (unsafePartial)
 import Perspectives.Assignment.StateCache (cacheCompiledContextState, clearModelStates)
+import Perspectives.Assignment.SerialiseAsDeltas (serialiseDependencies)
 import Perspectives.Assignment.Update (setProperty, withAuthoringRole)
 import Perspectives.Authenticate (signDelta)
-import Perspectives.ContextAndRole (defaultContextRecord)
-import Perspectives.CoreTypes (MonadPerspectivesTransaction, (##=))
+import Perspectives.CollectAffectedContexts (compileBoth, createDeltasFromAssumption, handleNewCalculatedUsersForBinding)
+import Perspectives.ContextAndRole (defaultContextRecord, defaultRolRecord)
+import Perspectives.CoreTypes (InformedAssumption(..), MonadPerspectivesTransaction, (##=))
 import Perspectives.Cuid2 (cuid2)
 import Perspectives.Data.EncodableMap as EM
 import Perspectives.DomeinFile (DomeinFile(..))
+import Perspectives.Deltas (sortTransactionDeltas)
 import Perspectives.Instances.ObjectGetters (getProperty)
+import Perspectives.Identifiers (deconstructBuitenRol)
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..))
 import Perspectives.ModelDependencies as DEP
 import Perspectives.Names (getMySystem)
 import Perspectives.InvertedQuery.Storable (saveInvertedQueries)
+import Perspectives.InvertedQuery (InvertedQuery(..))
 import Perspectives.Parsing.Arc (domain) as ARC
 import Perspectives.Parsing.Arc.IndentParser (runIndentParser)
 import Perspectives.Parsing.Arc.PhaseThree (phaseThree)
 import Perspectives.Parsing.Arc.PhaseTwo (traverseDomain)
 import Perspectives.Parsing.Arc.PhaseTwoDefs (runPhaseTwo')
 import Perspectives.Parsing.Arc.Position (ArcPosition(..))
-import Perspectives.Persistence.API (addDocument_)
-import Perspectives.Persistence.CausalStore (CausalInstallationDoc(..), CausalRoleDoc(..), causalDatabaseName, ensureCausalEpoch, getCausalRole, reserveCausalStamp)
+import Perspectives.Persistence.API (addDocument_, deleteDatabase, documentsInRange, getDocument, withDatabase)
+import Perspectives.Persistence.CausalStore (CausalInstallationDoc(..), CausalRoleDoc(..), causalDatabaseName, ensureCausalEpoch, getCausalRole, recordCausalDelta, reserveCausalStamp)
 import Perspectives.Persistence.DeltaStore (getDeltasForResource, pruneDeltasThrough, storeDeltaFromSignedDelta)
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
+import Perspectives.Persistence.PendingTransactionStore (pendingTransactionDatabaseName)
 import Perspectives.Persistence.QuarantineStore (QuarantinedTransaction(..), getQuarantinedTransactions, quarantineDatabaseName)
 import Perspectives.Persistence.ResourceVersionStore (getResourceVersion, setResourceVersion)
-import Perspectives.Persistent (getPerspectContext, getPerspectRol, saveEntiteit, tryGetPerspectContext, tryGetPerspectRol)
+import Perspectives.Persistent (forceSaveContext, forceSaveRole, getPerspectContext, getPerspectRol, saveEntiteit, tryGetPerspectContext, tryGetPerspectRol)
 import Perspectives.Representation.Class.Cacheable (cacheEntity)
+import Perspectives.Representation.ADT (ADT(..))
+import Perspectives.Query.QueryTypes (RoleInContext(..)) as QT
 import Perspectives.Representation.Class.PersistentType (cacheInDomeinFile, getEnumeratedRole)
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..), defaultEnumeratedRole)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser(..), RoleInstance(..), Value(..))
@@ -63,20 +73,23 @@ import Perspectives.Representation.Perspective (Perspective(..), StateSpec(..))
 import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..), EnumeratedRoleType(..), RoleKind(..), RoleType(..), StateIdentifier(..))
 import Perspectives.Representation.Verbs (RoleVerb(..), RoleVerbList(..))
 import Perspectives.ResourceIdentifiers (takeGuid)
+import Perspectives.RoleAssignment (filledPointsTo)
 import Perspectives.RunMonadPerspectivesTransaction (exitContext, phase2)
 import Perspectives.RunPerspectives (runPerspectivesWithoutCouchdb)
-import Perspectives.SaveUserData (removeContextInstance, scheduleContextRemoval, scheduleRoleRemoval, synchronise)
+import Perspectives.SaveUserData (removeContextInstance, scheduleContextRemoval, scheduleRoleRemoval, setFirstBinding, synchronise)
 import Perspectives.ScheduledAssignment (ScheduledAssignment(..))
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.StrippedDelta (stripResourceSchemes)
 import Perspectives.Sync.Causal (CausalStamp, Clock, currentCausalEpoch, readCausalStamp, validateCausalDelta)
+import Perspectives.Sync.ConstructionBaseline (sameResource, selectRoleBaseline)
+import Perspectives.Query.Interpreter.Dependencies (Dependency(..))
 import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
-import Perspectives.Sync.HandleTransaction (executeTransaction, executeUniverseRoleDelta)
+import Perspectives.Sync.HandleTransaction (Delta(..), executeDeltas, executeTransaction, executeUniverseRoleDelta)
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
 import Perspectives.Sync.Transaction (Transaction(..), createTransaction)
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..), currentTransactionForPeer)
 import Perspectives.Sync.VersionedDelta (DeltaEnvelope(..), parseIncomingDelta, signVersionedDelta)
-import Perspectives.TypesForDeltas (RoleBindingDelta(..), RoleBindingDeltaType(..), RolePropertyDelta(..), RolePropertyDeltaType(..), UniverseRoleDelta(..), UniverseRoleDeltaType(..))
+import Perspectives.TypesForDeltas (ContextDelta(..), RoleBindingDelta(..), RoleBindingDeltaType(..), RolePropertyDelta(..), RolePropertyDeltaType(..), UniverseContextDelta(..), UniverseRoleDelta(..), UniverseRoleDeltaType(..))
 import Simple.JSON (class WriteForeign, writeJSON)
 import Test.BindingReplacement as Binding
 import Test.PropertyHistory as History
@@ -92,6 +105,265 @@ main = runTest theSuite
 
 theSuite :: TestSuite
 theSuite = suite "Causal role deletion and coordinated cutover" do
+  test "construction serialisation excludes obsolete lifecycle removals and memberships" $
+    withSigningFixture true \key -> do
+      prepare key
+      lift $ filledPointsTo Binding.userId Binding.newRemotePeer
+      let
+        external = RoleInstance $ unwrap Binding.contextId <> "$External"
+      context <- signPayload "local"
+        { deltaFormatVersion: 4
+        , resourceKey: takeGuid $ unwrap Binding.contextId
+        , resourceVersion: 0
+        , deltaType: "ConstructEmptyContext"
+        , id: takeGuid $ unwrap Binding.contextId
+        , contextType: unwrap Binding.contextType
+        , subject: unwrap Binding.userType
+        , subjectKind: "ENR"
+        }
+      oldExternalCreation <- constructionFor external true "local" (stamp "local" 1 [])
+      oldExternalMembership <- membershipFor external true "local" 1 (stamp "local" 2 [ dot "local" 1 ])
+      oldExternalRemoval <- signPayload "local"
+        { deltaFormatVersion: 4
+        , resourceKey: takeGuid $ unwrap external
+        , resourceVersion: 2
+        , deltaType: "RemoveExternalRoleInstance"
+        , id: takeGuid $ unwrap Binding.contextId
+        , contextType: unwrap Binding.contextType
+        , roleType: unwrap Binding.externalType
+        , roleInstance: takeGuid $ unwrap external
+        , subject: unwrap Binding.userType
+        , subjectKind: "ENR"
+        , causal: stamp "local" 3 [ dot "local" 2 ]
+        }
+      externalCreation <- constructionFor external true "local" (stamp "local" 4 [ dot "local" 3 ])
+      externalMembership <- membershipFor external true "local" 38 (stamp "local" 5 [ dot "local" 4 ])
+      original <- constructionFor Binding.visibleId false "local" (stamp "local" 1 [])
+      oldMembership <- membershipFor Binding.visibleId false "local" 1 (stamp "local" 2 [ dot "local" 1 ])
+      deletion <- roleDeletion (stamp "local" 3 [ dot "local" 2 ])
+      recreated <- constructionFor Binding.visibleId false "local" (stamp "local" 4 [ dot "local" 3 ])
+      currentMembership <- membershipFor Binding.visibleId false "local" 38 (stamp "local" 5 [ dot "local" 4 ])
+      lift do
+        void $ cacheEntity external $ PerspectRol defaultRolRecord
+          { id = external, context = Binding.contextId, pspType = Binding.externalType }
+        for_ [ context, oldExternalCreation, oldExternalMembership, oldExternalRemoval, externalCreation, externalMembership, original, oldMembership, deletion, recreated, currentMembership ]
+          storeDeltaFromSignedDelta
+      serialiseDependencies [ Binding.newRemotePeer ] (NonEmptyList.singleton $ R Binding.visibleId)
+      Transaction serialized <- AA.get
+      let exported = map (\(DeltaInTransaction d) -> d.delta) $ sortTransactionDeltas serialized.deltas
+      liftAff do
+        assert "Current construction must be exported" $ any (_ == recreated) exported
+        assert "Current membership must be exported" $ any (_ == currentMembership) exported
+        assert "An old construction must not be exported" $ not $ any (_ == original) exported
+        assert "An old membership must not be exported" $ not $ any (_ == oldMembership) exported
+        assert "A lifecycle removal must not be exported" $ not $ any (_ == deletion) exported
+        assert "An obsolete context removal must not be exported" $ not $ any (_ == oldExternalRemoval) exported
+      retained <- lift $ getDeltasForResource (unwrap Binding.visibleId)
+      liftAff $ assert "Obsolete deletion evidence must remain stored" $
+        any (\(DeltaStoreRecord r) -> r.signedDelta == deletion) retained
+      for_
+        [ Tuple "perspective assumptions" $
+            createDeltasFromAssumption [ Binding.newRemotePeer ] (RoleAssumption Binding.contextId Binding.visibleType)
+        , Tuple "first binding" do
+            EnumeratedRole hidden <- lift $ getEnumeratedRole Binding.hiddenType
+            lift $ cacheInDomeinFile Binding.hiddenType $ EnumeratedRole hidden
+              { binding = Just $ ST $ QT.RoleInContext { context: Binding.contextType, role: Binding.visibleType } }
+            void $ installPerspectiveQueries $ "domain " <> Binding.model <> "\n"
+              <> "  case Context\n"
+              <> "    user User\n"
+              <> "      perspective on Hidden >> binding\n"
+              <> "        props (Value) verbs (Consult)\n"
+              <> "    thing Hidden filledBy Visible\n"
+              <> "    thing Visible\n"
+              <> "      property Value (String)\n"
+            void $ setFirstBinding Binding.hiddenId Binding.visibleId Nothing
+        , Tuple "calculated-user initialisation" do
+            queries <- installPerspectiveQueries $ "domain " <> Binding.model <> "\n"
+              <> "  case Context\n"
+              <> "    user User\n"
+              <> "    user CalculatedUser = Hidden >> binding >> context >> User\n"
+              <> "      perspective on Visible\n"
+              <> "        props (Value) verbs (Consult)\n"
+              <> "    thing Hidden filledBy Visible\n"
+              <> "    thing Visible\n"
+              <> "      property Value (String)\n"
+            calculated <- for queries \(InvertedQuery query) ->
+              if isJust query.calculatedUserRoleType then do
+                compiled <- lift $ compileBoth $ InvertedQuery query
+                handleNewCalculatedUsersForBinding Binding.visibleId Binding.hiddenId compiled
+                pure true
+              else pure false
+            liftAff $ assert "The model must supply calculated-user detection queries" $ elem true calculated
+        ]
+        \(Tuple path disclose) -> do
+          AA.modify \(Transaction transaction) -> Transaction transaction { deltas = [], deltaMembership = Set.empty }
+          disclose
+          Transaction disclosed <- AA.get
+          let selected = map (\(DeltaInTransaction d) -> d.delta) disclosed.deltas
+          liftAff do
+            let
+              expected = [ context, externalCreation, externalMembership ] <>
+                if path == "calculated-user initialisation" then [] else [ recreated, currentMembership ]
+            for_ expected \current ->
+              assert (path <> " must disclose " <> show current) $ elem current selected
+            for_ [ oldExternalCreation, oldExternalMembership, oldExternalRemoval, original, oldMembership, deletion ] \obsolete ->
+              assert (path <> " must exclude obsolete lifecycle evidence") $ not $ elem obsolete selected
+      Transaction bound <- AA.get
+      let
+        database = "https://construction.invalid/cw_construction_baseline/"
+        publicContext = ContextInstance $ "pub:" <> database <> "#replacement-context"
+        publicExternal = RoleInstance $ unwrap publicContext <> "$External"
+        publication = mapMaybe
+          ( \signed -> case parseIncomingDelta (unwrap signed).encryptedDelta of
+              Right (UniverseRoleEnvelope (UniverseRoleDelta role)) | sameResource (unwrap role.roleInstance) (unwrap external) ->
+                Just $ URD signed (UniverseRoleDelta $ role { id = publicContext, roleInstance = publicExternal })
+              Right (UniverseContextEnvelope (UniverseContextDelta creation)) ->
+                Just $ UCD signed (UniverseContextDelta $ creation { id = publicContext })
+              Right (ContextEnvelope (ContextDelta membership)) | sameResource (unwrap membership.roleInstance) (unwrap external) ->
+                Just $ CDD signed (ContextDelta $ membership { contextInstance = publicContext, roleInstance = publicExternal })
+              _ -> Nothing
+          )
+          (map (\(DeltaInTransaction d) -> d.delta) $ sortTransactionDeltas bound.deltas)
+      lift $ withDatabase "cw_construction_baseline" \db ->
+        AA.modify \state -> state { databases = Object.insert database db state.databases }
+      executeDeltas publication
+      Transaction published <- AA.get
+      liftAff $ assert "Publication must not schedule deletion of the new public representation"
+        $ not
+        $ any
+            ( case _ of
+                ContextRemoval contextId _ _ -> contextId == publicContext
+                RoleRemoval roleId -> roleId == publicExternal
+                _ -> false
+            )
+            published.scheduledAssignments
+      lift do
+        forceSaveContext publicContext
+        forceSaveRole publicExternal
+      PerspectContext publishedContext <- lift $ getDocument database "replacement-context"
+      PerspectRol publishedExternal <- lift $ getDocument database "replacement-context$External"
+      liftAff do
+        equal publicContext publishedContext.id
+        equal publicExternal publishedExternal.id
+      lift $ deleteDatabase "cw_construction_baseline"
+      lift do
+        decache Binding.contextId
+        decache external
+        setResourceVersion (unwrap external) 37
+        recordCausalDelta oldExternalRemoval
+      receive [ externalMembership, context, externalCreation ]
+      restoredContext <- lift $ tryGetPerspectContext Binding.contextId
+      restoredExternal <- lift $ tryGetPerspectRol external
+      restoredVersion <- lift $ getResourceVersion (unwrap external)
+      liftAff do
+        assert "An identical stored context template must reconstruct an absent context" $ isJust restoredContext
+        assert "Its external role must survive the retained old removal" $ isJust restoredExternal
+        equal 38 restoredVersion
+
+  test "concurrent constructions are not arbitrarily selected as a baseline" $
+    withSigningFixture true \_ -> do
+      local <- constructionFor Binding.visibleId false "local" (stamp "local" 1 [])
+      remote <- constructionFor Binding.visibleId false "remote-old" (stamp "remote-old" 1 [])
+      liftAff $ assert "Concurrent construction requires explicit reconciliation"
+        $ isLeft
+        $ selectRoleBaseline Binding.visibleId Binding.visibleType Binding.contextId [ local, remote ]
+
+  test "a fresh peer accepts a signed causal construction baseline above version one" $
+    withSigningFixture true \key -> do
+      prepare key
+      let fresh = RoleInstance "def:#fresh-baseline"
+      creation <- constructionFor fresh false "local" (stamp "local" 4 [ dot "local" 3 ])
+      membership <- membershipFor fresh false "local" 38 (stamp "local" 5 [ dot "local" 4 ])
+      receive [ membership, creation ]
+      present <- isJust <$> lift (tryGetPerspectRol fresh)
+      version <- lift $ getResourceVersion (unwrap fresh)
+      pending <- lift $ pendingTransactionDatabaseName >>= \db -> documentsInRange db "" "\xFFFF"
+      liftAff do
+        assert "The baseline must construct the fresh role" present
+        equal 38 version
+        equal 0 (length pending.rows)
+
+  test "a deleted peer accepts a newer version-zero construction without losing its counters" $
+    withSigningFixture true \key -> do
+      prepare key
+      deletion <- roleDeletion (stamp "local" 2 [ dot "local" 1 ])
+      receive [ deletion ]
+      creation <- constructionFor Binding.visibleId false "local" (stamp "local" 3 [ dot "local" 2 ])
+      membership <- membershipFor Binding.visibleId false "local" 38 (stamp "local" 4 [ dot "local" 3 ])
+      receive [ creation, membership ]
+      present <- isJust <$> lift (tryGetPerspectRol Binding.visibleId)
+      version <- lift $ getResourceVersion (unwrap Binding.visibleId)
+      liftAff do
+        assert "A causally newer baseline must recreate the deleted role" present
+        equal 38 version
+      receive [ creation, membership ]
+      afterReplay <- lift $ getResourceVersion (unwrap Binding.visibleId)
+      liftAff $ equal 38 afterReplay
+
+  test "a construction baseline does not bypass unrelated property gaps" $
+    withSigningFixture true \key -> do
+      prepare key
+      creation <- constructionFor Binding.visibleId false "local" (stamp "local" 3 [ dot "local" 2 ])
+      membership <- membershipFor Binding.visibleId false "local" 38 (stamp "local" 4 [ dot "local" 3 ])
+      modification <- propertyChange "local" 5 (stamp "local" 5 [ dot "local" 4 ])
+      incoming <- packet [ creation, membership, modification ]
+      executeTransaction incoming
+      pending <- lift $ pendingTransactionDatabaseName >>= \db -> documentsInRange db "" "\xFFFF"
+      roleVersion <- lift $ getResourceVersion (unwrap Binding.visibleId)
+      propertyVersion <- lift $ getResourceVersion History.propertyKey
+      liftAff do
+        equal 1 (length pending.rows)
+        equal 1 roleVersion
+        equal 1 propertyVersion
+
+  test "membership alone cannot establish a high-version construction baseline" $
+    withSigningFixture true \key -> do
+      prepare key
+      let fresh = RoleInstance "def:#membership-without-construction"
+      membership <- membershipFor fresh false "local" 38 (stamp "local" 5 [ dot "local" 4 ])
+      receive [ membership ]
+      pending <- lift $ pendingTransactionDatabaseName >>= \db -> documentsInRange db "" "\xFFFF"
+      role <- lift $ tryGetPerspectRol fresh
+      version <- lift $ getResourceVersion (unwrap fresh)
+      liftAff do
+        equal 1 (length pending.rows)
+        assert "An incomplete baseline must not create a role" $ isNothing role
+        equal 0 version
+
+  test "a missing context constructor cannot bootstrap an external role" $
+    withSigningFixture true \key -> do
+      prepare key
+      let external = RoleInstance "def:#missing-baseline-context$External"
+      creation <- constructionFor external true "local" (stamp "local" 4 [ dot "local" 3 ])
+      membership <- membershipFor external true "local" 38 (stamp "local" 5 [ dot "local" 4 ])
+      receive [ creation, membership ]
+      pending <- lift $ pendingTransactionDatabaseName >>= \db -> documentsInRange db "" "\xFFFF"
+      role <- lift $ tryGetPerspectRol external
+      version <- lift $ getResourceVersion (unwrap external)
+      liftAff do
+        equal 1 (length pending.rows)
+        assert "A context-less baseline must not create its external role" $ isNothing role
+        equal 0 version
+
+  test "received membership does not require an outgoing construction baseline" $
+    withSigningFixture true \key -> do
+      prepare key
+      let fresh = RoleInstance "def:#received-membership"
+      lift $ void $ cacheEntity fresh $ PerspectRol defaultRolRecord
+        { id = fresh, context = Binding.contextId, pspType = Binding.visibleType }
+      membership <- membershipFor fresh false "local" 1 (stamp "local" 2 [ dot "local" 1 ])
+      receive [ membership ]
+      PerspectContext context <- lift $ getPerspectContext Binding.contextId
+      version <- lift $ getResourceVersion (unwrap fresh)
+      Transaction transaction <- AA.get
+      liftAff do
+        assert "The received membership must still update the context" $
+          case Object.lookup (unwrap Binding.visibleType) context.rolInContext of
+            Just roles -> elem fresh roles
+            Nothing -> false
+        equal 1 version
+        assert "Receiving must not echo construction deltas" $ null transaction.deltas
+
   for_ [ RemoveRoleInstance, RetractRoleInstance ] \operation ->
     test ("receiving " <> show operation <> " does not reserve a local deletion version or causal dot") $
       withSigningFixture true \key -> do
@@ -462,6 +734,40 @@ roleDeletion causal = signPayload "local"
   , causal
   }
 
+constructionFor :: RoleInstance -> Boolean -> String -> CausalStamp -> MonadPerspectivesTransaction SignedDelta
+constructionFor role external author causal = signPayload author
+  { deltaFormatVersion: 4
+  , resourceKey: takeGuid $ unwrap role
+  , resourceVersion: 0
+  , deltaType: if external then "ConstructExternalRole" else "ConstructEmptyRole"
+  , id: takeGuid $ if external then deconstructBuitenRol $ unwrap role else unwrap Binding.contextId
+  , contextType: unwrap Binding.contextType
+  , roleType: unwrap $ if external then Binding.externalType else Binding.visibleType
+  , roleInstance: takeGuid $ unwrap role
+  , authorizedRole: if external then Just $ unwrap Binding.userType else Nothing
+  , authorizedRoleKind: if external then Just "ENR" else Nothing
+  , subject: unwrap Binding.userType
+  , subjectKind: "ENR"
+  , causal
+  }
+
+membershipFor :: RoleInstance -> Boolean -> String -> Int -> CausalStamp -> MonadPerspectivesTransaction SignedDelta
+membershipFor role external author version causal = signPayload author
+  { deltaFormatVersion: 4
+  , resourceKey: takeGuid $ unwrap role
+  , resourceVersion: version
+  , deltaType: if external then "AddExternalRole" else "AddRoleInstancesToContext"
+  , contextInstance: takeGuid $ if external then deconstructBuitenRol $ unwrap role else unwrap Binding.contextId
+  , contextType: unwrap Binding.contextType
+  , roleType: unwrap $ if external then Binding.externalType else Binding.visibleType
+  , roleInstance: takeGuid $ unwrap role
+  , destinationContext: Nothing :: Maybe String
+  , destinationContextType: Nothing :: Maybe String
+  , subject: unwrap Binding.userType
+  , subjectKind: "ENR"
+  , causal
+  }
+
 packet :: Array SignedDelta -> MonadPerspectivesTransaction TransactionForPeer
 packet deltas = do
   Transaction tr <- AA.get
@@ -491,7 +797,7 @@ prepare key = do
   EnumeratedRole metadata <- lift $ getEnumeratedRole Binding.userType
   let
     grant (Perspective p) = Perspective p
-      { roleVerbs = EM.singleton (ContextState $ StateIdentifier $ unwrap Binding.contextType) (Including [ Create, Remove ])
+      { roleVerbs = EM.singleton (ContextState $ StateIdentifier $ unwrap Binding.contextType) (Including [ Create, CreateAndFill, Remove ])
       }
   lift $ cacheInDomeinFile Binding.userType $ EnumeratedRole metadata { perspectives = map grant metadata.perspectives }
   mySystem <- lift getMySystem
@@ -504,7 +810,7 @@ prepare key = do
       defaultEnumeratedRole role role RoleInContext (unwrap Binding.contextType) (ArcPosition { line: 1, column: 1 })
   creation <- signPayload "local"
     { resourceKey: unwrap Binding.visibleId
-    , resourceVersion: 1
+    , resourceVersion: 0
     , deltaType: "ConstructEmptyRole"
     , id: ContextInstance $ takeGuid $ unwrap Binding.contextId
     , contextType: Binding.contextType
@@ -528,6 +834,7 @@ prepare key = do
     for_ (find (\(DeltaStoreRecord r) -> r.signedDelta == baseline.signed) records) \(DeltaStoreRecord r) ->
       lift $ pruneDeltasThrough baseline.key 1 r._id
     lift $ setResourceVersion baseline.key 1
+  lift $ storeDeltaFromSignedDelta $ Binding.membershipDelta Binding.visibleId
   lift $ void $ saveEntiteit Binding.contextId
   lift $ void $ saveEntiteit Binding.visibleId
 
@@ -569,6 +876,10 @@ installExitPerspectiveQueries = do
       <> "        props (Value) verbs (Consult, SetPropertyValue)\n"
       <> "    thing Visible\n"
       <> "      property Value (String)\n"
+  void $ installPerspectiveQueries source
+
+installPerspectiveQueries :: String -> MonadPerspectivesTransaction (Array InvertedQuery)
+installPerspectiveQueries source = do
   parsed <- liftAff $ runIndentParser source ARC.domain
   root <- case parsed of
     Left err -> throwError $ error $ show err
@@ -580,4 +891,6 @@ installExitPerspectiveQueries = do
   compiled <- liftAff $ runP $ phaseThree model state.postponedStateQualifiedParts state.screens
   case compiled of
     Left err -> throwError $ error $ show err
-    Right (Tuple _ queries) -> lift $ saveInvertedQueries queries
+    Right (Tuple _ queries) -> do
+      lift $ saveInvertedQueries queries
+      pure $ map _.query queries

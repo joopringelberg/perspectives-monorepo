@@ -392,7 +392,9 @@ workflow transitions.
 
 ### Operational evidence and compatibility
 
-Creation, membership, binding and deletion histories are unchanged. Public-key
+Creation, membership, binding and deletion histories remain stored. Construction
+disclosure selects the live causal baseline described in §11 rather than
+exporting every lifecycle record. Public-key
 and transport-key establishment proofs remain independently verifiable and are
 not compacted. The latest `UploadFile` operation remains available even before
 the checkpoint boundary; public publication processes it after property replay
@@ -427,6 +429,50 @@ tail. Older checkpoints without causal metadata represent baseline history.
 This is authenticated causal bookkeeping, not Byzantine proof: authenticated
 authors can assert observations, and checkpoint certifiers retain the trust
 described in §10.
+
+### Construction baselines for reused identifiers
+
+A model- or user-determined identifier can be recreated after deletion. Creation
+disclosure must not replay an earlier lifecycle's removals, especially when
+publishing its public representation.
+
+The runtime derives a baseline from existing signed DeltaStore records:
+
+- Select the causally maximal compatible role constructor. Its role type,
+  context and resource identity must match the live instance.
+- Select the compatible membership that observes that constructor. Context
+  type references must agree, including their revision; external membership
+  must also share its constructor's subject and author.
+- For a context, include a compatible `ConstructEmptyContext` template and its
+  external role's baseline. Context constructors have no causal stamp: equivalent
+  compatible templates are interchangeable, not evidence of lifecycle order.
+- Export these records, not earlier constructors, memberships or removals.
+  Keep historical evidence in the DeltaStore for conflict handling.
+
+`Perspectives.Sync.ConstructionHistory` retrieves these selected original
+records for dependency serialisation, first-binding filler disclosure,
+perspective-assumption disclosure, calculated-user initialisation and author
+verification bundles. Callers retain their own recipient and delivery policies;
+selection does not rewrite signed payloads or export historical removals.
+Incoming execution does not produce outgoing construction disclosures.
+
+Peer reception validates construction permissions before using a stamped,
+complete baseline's membership version as the gap-check floor **for that role
+key only**. Property and binding gaps still block the whole transaction. A
+missing context additionally requires its external baseline and a compatible
+context template. Version-zero constructors and identical stored context
+templates can reconstruct absent resources; counters never reset, and repeated
+disclosure remains idempotent.
+
+An absent role's new constructor must observe every known deletion and have a
+membership version beyond its local role counter. A deletion observed by a
+later live construction cannot remove that construction. Existing modify-wins
+handling still applies to genuinely concurrent changes.
+
+No baseline pointer, incarnation identifier or new persistent administration is
+added. Concurrent maximal constructors or memberships require explicit
+reconciliation. Unstamped historical records cannot establish causal recency.
+This selection does not redefine historical property or binding contents.
 
 ### Upgrade procedure
 

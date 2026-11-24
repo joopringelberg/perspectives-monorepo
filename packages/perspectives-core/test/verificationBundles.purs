@@ -12,6 +12,7 @@ import Crypto.Subtle.Constants.EC (ecdsa, p384)
 import Crypto.Subtle.Key.Generate (ec, generateKeyPair)
 import Crypto.Subtle.Key.Types (CryptoKeyPair(..), exportKey, jwk, sign, verify)
 import Data.Either (Either(..), isLeft)
+import Data.Array (elem)
 import Data.Foldable (for_)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), isJust)
@@ -30,6 +31,7 @@ import Perspectives.Deltas (addPublicKeysToTransaction)
 import Perspectives.InstanceRepresentation (PerspectRol(..))
 import Perspectives.ModelDependencies as DEP
 import Perspectives.Persistence.ResourceVersionStore (setResourceVersion)
+import Perspectives.Persistence.DeltaStore (storeDeltaFromSignedDelta)
 import Perspectives.Persistent (getPerspectRol)
 import Perspectives.Representation.Class.Cacheable (cacheEntity)
 import Perspectives.Representation.Class.PersistentType (cacheInDomeinFile, getEnumeratedRole)
@@ -37,12 +39,15 @@ import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.ExplicitSet (ExplicitSet(..))
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser(..), RoleInstance(..), Value(..))
 import Perspectives.Representation.Perspective (Perspective(..), PropertyVerbs(..), StateSpec(..))
-import Perspectives.Representation.TypeIdentifiers (PropertyType(..), RoleType(..), StateIdentifier(..))
+import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), PropertyType(..), RoleType(..), StateIdentifier(..))
 import Perspectives.Representation.Verbs (PropertyVerb(..))
 import Perspectives.Sync.DateTime (SerializableDateTime(..))
 import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
 import Perspectives.Sync.HandleTransaction (executeTransaction, verifyTransaction)
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
+import Perspectives.StrippedDelta (stripResourceSchemes)
+import Perspectives.Sync.VersionedDelta (signVersionedDelta)
+import Perspectives.TypesForDeltas (ContextDelta(..), ContextDeltaType(..), UniverseRoleDelta(..), UniverseRoleDeltaType(..))
 import Perspectives.Sync.Transaction (PublicKeyInfo, Transaction(..))
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..), currentTransactionForPeer, deduplicatePublicKeys, removeUnusedPublicKeys)
 import Perspectives.UnschemedIdentifiers (unschemePerspectivesUser)
@@ -98,11 +103,39 @@ theSuite = suite "Verification bundle identities" do
         assert "Conflicting aliases must not silently select a key" $ isLeft result
 
   test "collects one outgoing bundle for mixed public and ordinary delta authors" $
-    Binding.withFixture Binding.oldRemotePeer [] [] do
+    withSigningFixture true \_ -> do
       lift do
         PerspectRol role <- getPerspectRol Binding.localPeer
         void $ cacheEntity (RoleInstance $ unwrap publicAuthor) $
           PerspectRol role { id = RoleInstance $ unwrap publicAuthor }
+      let
+        role = UniverseRoleDelta
+          { id: Binding.contextId
+          , contextType: Binding.contextType
+          , roleType: EnumeratedRoleType DEP.perspectivesUsers
+          , roleInstance: Binding.localPeer
+          , authorizedRole: Nothing
+          , deltaType: RemoveRoleInstance
+          , subject: ENR Binding.userType
+          , resourceKey: unwrap Binding.localPeer
+          , resourceVersion: 2
+          }
+      removed <- signVersionedDelta $ stripResourceSchemes role
+      recreated <- signVersionedDelta $ stripResourceSchemes $
+        UniverseRoleDelta (unwrap role) { deltaType = ConstructEmptyRole, resourceVersion = 0 }
+      membership <- signVersionedDelta $ stripResourceSchemes $ ContextDelta
+        { contextInstance: Binding.contextId
+        , contextType: Binding.contextType
+        , roleType: EnumeratedRoleType DEP.perspectivesUsers
+        , roleInstance: Binding.localPeer
+        , destinationContext: Nothing
+        , destinationContextType: Nothing
+        , deltaType: AddRoleInstancesToContext
+        , subject: ENR Binding.userType
+        , resourceKey: unwrap Binding.localPeer
+        , resourceVersion: 38
+        }
+      lift $ for_ [ removed, recreated, membership ] storeDeltaFromSignedDelta
       input <- AA.get
       let
         deltas = map
@@ -118,6 +151,13 @@ theSuite = suite "Verification bundle identities" do
         equal deltas output.deltas
         equal 1 $ Map.size $ unwrap output.publicKeys
         assert "The public locator must remain available" $ isJust $ EM.lookup publicAuthor output.publicKeys
+        case EM.lookup publicAuthor output.publicKeys of
+          Nothing -> assert "The author needs a verification bundle" false
+          Just info -> do
+            assert "The bundle must include the current constructor" $ elem recreated info.deltas
+            assert "The bundle must include the current membership" $ elem membership info.deltas
+            assert "The bundle must exclude historical removal" $ not $ elem removed info.deltas
+            assert "The bundle must exclude the obsolete constructor" $ not $ elem (Binding.roleDelta Binding.localPeer) info.deltas
 
   for_ [ false, true ] \known ->
     for_ [ localAuthor, publicAuthor ] \bundleAuthor ->
