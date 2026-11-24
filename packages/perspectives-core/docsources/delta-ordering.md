@@ -1,27 +1,73 @@
 # Delta Ordering and Conflict Resolution
 
 > **Relevant modules**
-> - `Perspectives.Sync.HandleTransaction` (`packages/perspectives-core/src/core/sync/handleTransaction.purs`)
-> - `Perspectives.Persistence.DeltaStore` (`packages/perspectives-core/src/core/persistence/deltaStore.purs`)
-> - `Perspectives.Persistence.ResourceVersionStore` (`packages/perspectives-core/src/core/persistence/resourceVersionStore.purs`)
-> - `Perspectives.Persistence.PendingTransactionStore` (`packages/perspectives-core/src/core/persistence/pendingTransactionStore.purs`)
-> - `Perspectives.Sync.VersionedDelta` (`packages/perspectives-core/src/core/sync/versionedDelta.purs`)
-> - `Perspectives.TypesForDeltas` (`packages/perspectives-core/src/core/sync/typesForDelta.purs`)
+> - `Perspectives.Sync.HandleTransaction` (`src/core/sync/handleTransaction.purs`) — receive pipeline, gap check, version tracking
+> - `Perspectives.Sync.Deltas` (`src/core/sync/deltas.purs`) — outgoing distribution, history forwarding, replay order
+> - `Perspectives.Persistence.DeltaStore` (`src/core/persistence/deltaStore.purs`)
+> - `Perspectives.Persistence.ResourceVersionStore` (`src/core/persistence/resourceVersionStore.purs`)
+> - `Perspectives.Persistence.PendingTransactionStore` (`src/core/persistence/pendingTransactionStore.purs`)
+> - `Perspectives.Persistence.PeerDeliveryStore` (`src/core/persistence/peerDeliveryStore.purs`)
+> - `Perspectives.Sync.PropertyHistory` (`src/core/sync/propertyHistory.purs`) — property checkpoints and reconstruction
+> - `Perspectives.Sync.ConstructionBaseline`, `Perspectives.Sync.ConstructionHistory` (`src/core/sync/construction*.purs`)
+> - `Perspectives.Sync.Causal` (`src/core/sync/causal.purs`) — per-role causal clocks and the causal epoch
+> - `Perspectives.TypesForDeltas` (`src/core/sync/typesForDelta.purs`)
+>
+> All paths are relative to `packages/perspectives-core`.
 >
 > **Related documentation**
-> - `packages/perspectives-core/docs/transaction-execution.md` — transaction lifecycle and phase 1/2 processing (no duplication here)
-> - `packages/perspectives-core/design/deterministic-delta-ordering.md` — original design document
-> - `packages/perspectives-core/design/delta-representation-redesign.md` — proposed successor design for dropping legacy support, separating transport encryption from stored deltas, and preparing undo-oriented metadata
+> - `docsources/transaction-execution.md` — transaction lifecycle and phase 1/2 processing (not duplicated here)
+> - `design/deterministic-delta-ordering.md` — the original design document
+> - `design/delta-representation-redesign.md` — proposed successor design (transport encryption, dropping legacy support, undo metadata)
+
+### Reading guide and implementation status
+
+This document started as a design and has been extended as features were
+added. It was reviewed against the code in November 2026 (issue #572) and
+restructured: §§1–9 describe **what the code does now**, §10 is the **design
+for unblocking** (not yet implemented), §11 lists **known issues and gaps**.
+Where earlier versions described intended behaviour as if it existed, that has
+been corrected.
+
+| Mechanism | Status |
+|---|---|
+| Per-key resource versions, deterministic conflict tiebreak | Implemented |
+| Modify-wins-over-delete, role restoration | Implemented |
+| Gap detection, blocking a whole transaction | Implemented |
+| Persisting blocked transactions (pending store) | Implemented, with defects (§7.3, §11) |
+| **Unblocking** blocked transactions | **Not implemented** — design in §10 |
+| **Timeout** for blocked transactions | **Not implemented** — replaced by escalation design in §10.7 |
+| Property history retention and signed checkpoints | Implemented |
+| Construction baselines for (re)constructed roles and contexts | Implemented |
+| Peer delivery knowledge (suppress re-forwarding) | Implemented |
+| Per-role causal clocks, causal epoch, quarantine | Implemented |
+| Receiver-driven repair (requesting missing history) | Not implemented — design in §10.6 |
 
 ---
 
 ## 1. Problem: convergence in a distributed system
 
-Perspectives is a distributed system in which multiple peers can simultaneously modify the same resources — contexts, role instances, bindings, and properties.  Deltas describing those mutations are exchanged through a message queue (AMQP).  Because of transport delays and offline periods they can arrive at different installations in different orders.
+Perspectives is a distributed system in which multiple peers can simultaneously
+modify the same resources — contexts, role instances, bindings, and properties.
+Deltas describing those mutations are exchanged through a message queue
+(AMQP). Because of transport delays and offline periods they can arrive at
+different installations in different orders.
 
-Without additional coordination every installation would independently apply incoming deltas in its own arrival order and the peers would diverge over time.  The scheme described in this document guarantees that every installation converges to the **same final state** regardless of the order in which deltas arrive.
+Without additional coordination every installation would apply incoming deltas
+in its own arrival order and the peers would diverge over time. The scheme
+described here aims to make every installation converge to the **same final
+state** regardless of arrival order. It rests on three pillars:
 
-The central mechanism is *deterministic delta ordering*, implemented around the function `executeDeltaWithVersionTracking` in `Perspectives.Sync.HandleTransaction`.
+1. **Ordering per resource key** — every mutation carries a version number for
+   the key it changes (§2); receivers apply versions in order (§5) and
+   **block** transactions that skip versions (§7).
+2. **Deterministic conflict resolution** — concurrent mutations producing the
+   same version are resolved identically everywhere (§6).
+3. **History cut-offs** — retained history is bounded; signed checkpoints and
+   construction baselines let a peer start from a certified state instead of
+   the full history (§8).
+
+Pillar 1 requires that blocked transactions are eventually unblocked; this is
+the subject of §10.
 
 ---
 
@@ -29,7 +75,7 @@ The central mechanism is *deterministic delta ordering*, implemented around the 
 
 ### 2.1 Resource-key granularity
 
-Each delta operates on exactly one *resource key*.  The mapping from delta type to resource key is:
+Each delta operates on exactly one *resource key*:
 
 | Delta type | Resource key |
 |---|---|
@@ -39,75 +85,309 @@ Each delta operates on exactly one *resource key*.  The mapping from delta type 
 | `RoleBindingDelta` | `RoleInstance + "#binding"` |
 | `RolePropertyDelta` | `RoleInstance + "#" + PropertyType` |
 
-The `RoleBindingDelta` and `RolePropertyDelta` keys are called **sub-resource keys** because they extend a role-instance key with a `#`-separated suffix.  A sub-resource key always contains *two* `#` characters: the first is the scheme separator inside the role-instance identifier (e.g. `def:#somecuid`), the second separates the role from the sub-resource.
+The binding and property keys are **sub-resource keys**: they extend a
+role-instance key with a `#`-separated suffix. A sub-resource key contains two
+`#` characters: the first is the scheme separator inside the role-instance
+identifier (e.g. `def:#somecuid`), the second separates role and sub-resource.
+
+Note that `UniverseRoleDelta` (construction, removal) and `ContextDelta`
+(membership, move) share the role key: membership and lifecycle of a role are
+ordered on a single counter.
 
 ### 2.2 Version numbers
 
-Each resource key carries a single integer version number that counts the total number of applied mutations to that resource across all authors.
+Each resource key carries an integer counter in the ResourceVersionStore (§3.2).
+The counter is **local and monotonic**: it is never reset, also not when a role
+with the same identifier is deleted and constructed again.
 
-- When a resource is first created, its version starts at **0** (no mutations yet).
-- Every local mutation increments the version by 1 before the delta is stamped and distributed.  The delta carries the version number it produces, i.e. `resourceVersion = localVersion + 1`.
-- When a received delta is applied the local version for that key is set to the delta's `resourceVersion`.
+How the sender stamps deltas:
 
-Both `resourceVersion` and `resourceKey` are stored inside every `DeltaRecord` (the record type that is the underlying representation of all concrete delta types in `Perspectives.TypesForDeltas`).
+| Operation | Stamped `resourceVersion` |
+|---|---|
+| `ConstructEmptyContext`, `ConstructExternalRole`, `ConstructEmptyRole` | **0**, without incrementing the counter (`createContext.purs`, `createRole.purs`) |
+| `AddExternalRole`, `AddRoleInstancesToContext` (membership) | `incrementResourceVersion` → **1** for a new role, higher for a reconstructed one |
+| Move, removal, binding and property operations | `incrementResourceVersion`, i.e. local counter + 1 |
+| `PropertyCheckpoint` (format 3) | the version of the boundary it certifies (no increment) |
+
+A delta thus carries the version the key has *after* it is applied. On receipt,
+an applied delta sets the local counter to the delta's `resourceVersion`
+(never lower — see issue I-11).
+
+Consequences that matter later:
+
+- Constructors are version 0, so they never cause gaps and never win or lose a
+  version conflict against non-constructor deltas. Recreating an identifier
+  yields another version-0 constructor; the construction baseline (§8.2)
+  decides which constructor is current.
+- A version number does **not** identify a delta. Two authors can produce the
+  same version (a conflict), and the gap check only counts versions; it cannot
+  tell *whose* delta filled a version (issue I-4).
+
+Both `resourceVersion` and `resourceKey` are stored inside every `DeltaRecord`.
 
 ---
 
-## 3. Delta storage (the DeltaStore)
+## 3. Stores
 
-All deltas — both locally created and received from peers — are stored in a dedicated PouchDB database.  The module responsible is `Perspectives.Persistence.DeltaStore`.
+### 3.1 DeltaStore
 
-### 3.1 Database name
+All deltas — locally created and received — are kept in the PouchDB database
+`{systemIdentifier}_deltastore` (`Perspectives.Persistence.DeltaStore`).
 
-The database is named `{systemIdentifier}_deltastore`, where `systemIdentifier` is the local installation's identifier (obtained via `getSystemIdentifier`).
-
-### 3.2 Document ID format
-
-The PouchDB document ID for a stored delta is deterministic:
+**Document ID** (`deltaStoreDocIdWithDeltaId`):
 
 ```
-<safeResourceKey>_v<resourceVersion>_<safeAuthorGuid>
+<safeResourceKey>_v<resourceVersion>_<authorGuid>|<shortDeltaId>
 ```
 
-- **`safeResourceKey`** — the resource key converted to a URL-safe form by `safeKey`.  The function strips the URI scheme prefix (`def:`, `loc:`, `rem:`, `model://…#`) so that forward slashes and percent-encoded sequences that break CouchDB reverse proxies are eliminated, and shortens property-type URIs to `<firstSegment>$<lastSegment>`.
-- **`_v<resourceVersion>`** — the literal character `_v` followed by the decimal version number.
-- **`<safeAuthorGuid>`** — the CUID part of the author's `PerspectivesUser` identifier.
+- `safeResourceKey` — the key converted by `safeKey`: the URI scheme prefix
+  (`def:`, `loc:`, `rem:`, `model://…#`) is stripped and property-type URIs are
+  shortened to `<firstSegment>$<lastSegment>`. `safeKey` is idempotent, so raw
+  and already-safe keys normalise to the same identity.
+- `_v<resourceVersion>` — decimal version (not numerically sortable as a
+  string; readers sort numerically).
+- `authorGuid` — the GUID part of the author's `PerspectivesUser`.
+- `shortDeltaId` — the first 16 characters of the content hash
+  `computeDeltaId author payload`.
+  It distinguishes two different deltas of the same author at the same
+  version (e.g. a reconstruction constructor at version 0).
 
-`safeKey` is idempotent: it strips storage information only when the key starts with a URI scheme. Already-normalised binding and property keys retain their role-instance identifier (for example, `role#binding` and `role#Model$Name`). This allows version lookups and delta-store operations to normalise either raw or already-safe keys without changing resource identity.
-
-Because two deltas that conflict on the same resource version differ only in their authors, their document IDs differ in the final segment.  This makes all deltas uniquely addressable and allows range queries over a resource's version history.
-
-### 3.3 DeltaStoreRecord fields
+**Record:**
 
 ```purescript
 newtype DeltaStoreRecord = DeltaStoreRecord
-  { _id           :: String         -- deterministic document ID (see 3.2)
-  , _rev          :: Maybe String   -- PouchDB revision
-  , resourceKey   :: String         -- the resource key (URL-safe form)
-  , resourceVersion :: Int          -- version produced by this delta
-  , author        :: PerspectivesUser
-  , signedDelta   :: SignedDelta    -- the original, signed delta
-  , deltaType     :: String         -- serialised constructor name (for filtering)
-  , applied       :: Boolean        -- whether this delta was actually applied
+  { _id             :: String
+  , _rev            :: Maybe String
+  , resourceKey     :: String         -- safe form
+  , resourceVersion :: Int
+  , author          :: PerspectivesUser
+  , deltaId         :: Maybe String   -- content hash; used for duplicate detection
+  , signedDelta     :: SignedDelta    -- the original, signed delta
+  , deltaType       :: String         -- constructor name, for filtering
+  , applied         :: Boolean        -- executed, or suppressed by conflict resolution
+  , disposition     :: Maybe String   -- why: see §5.2
+  , contextKey      :: Maybe String   -- only for ContextDelta records
   }
 ```
 
-The `applied` flag records whether the delta was executed or was suppressed by conflict resolution (see §5).  It enables the modify-wins-over-delete restoration logic (see §5.3).
+`storeDelta` is idempotent (an existing ID is a no-op). Incoming deltas are
+persisted through `storeIncomingDeltaWithHistory`, local ones through
+`storeLocalDeltaWithHistory`; both also run property retention (§8.1).
+`findDeltaByDeltaId` detects exact duplicates.
 
-### 3.4 Storing deltas
-
-`storeDelta` checks for an existing document with the same ID and is a no-op if found, making storage idempotent.  `storeDeltaFromSignedDelta` extracts the ordering fields from the `encryptedDelta` JSON string and delegates to `storeDelta` with `applied = true` (used for locally created deltas).
-
-### 3.5 Retrieving deltas
-
-| Function | Returns |
+| Retrieval | Returns |
 |---|---|
-| `getDelta docId` | A single delta by exact document ID |
-| `getDeltasForResource resourceKey` | All retained deltas for a resource key, explicitly sorted by numeric version (decimal document IDs alone are not numerically ordered) |
-| `getDeltasForResourceByDeltaType resourceKey deltaType` | As above, filtered by `deltaType` |
-| `getDeltasForRoleInstance roleInstanceId` | All deltas for a role instance **and** all of its sub-resources (properties, binding) using a PouchDB range query from `safeKey` to `safeKey + U+FFFF`, then filtering to exclude accidental prefix matches |
+| `getDelta docId` | One record |
+| `getDeltasForResource key` | All retained records for a key, sorted numerically by version |
+| `getDeltasForResourceByDeltaType key type` | As above, filtered |
+| `getDeltasForRoleInstance role` | All records for a role and its sub-resources (range query) |
 
-### 3.6 Inherited-property authorisation and rejected updates
+### 3.2 ResourceVersionStore
+
+`{systemIdentifier}_resourceversions` holds `{ resourceVersion :: Int }` per
+safe key.
+
+| Function | Behaviour |
+|---|---|
+| `getResourceVersion key` | Current version; **0** if unknown |
+| `initResourceVersion key` | Sets 0 if untracked |
+| `setResourceVersion key v` | Sets `v` unconditionally (callers must guard with `max`) |
+| `incrementResourceVersion key` | Increments and returns the new value; 1 if unknown |
+
+`getResourceVersion` returns 0 both for unknown keys and for keys at version 0;
+§5.3 explains how this ambiguity is resolved for constructors.
+
+### 3.3 PendingTransactionStore
+
+`{systemIdentifier}_pendingtransactions` holds transactions blocked by version
+gaps (§7):
+
+```purescript
+newtype PendingTransactionRecord = PendingTransactionRecord
+  { _id :: String                    -- "pending_" <> author <> "_" <> show timeStamp
+  , _rev :: Maybe String
+  , transaction :: TransactionForPeer -- the complete, still signed transaction
+  , missingDeltas :: Array MissingDelta
+  }
+```
+
+The store survives restarts. Nothing reads it back: `getAllPendingTransactions`
+is a placeholder returning `[]`. See §10 for the intended use and issue I-3 for
+the document-ID collision on redelivery.
+
+### 3.4 PeerDeliveryStore
+
+Records, per (destination peer, resource key), which stored deltas have been
+**durably queued** for that peer (`knownIds`) and the highest version queued
+(`maxVersion`). It is sender-side *belief*, not receiver acknowledgement:
+"queued" does not mean "received", let alone "applied". It is used to avoid
+forwarding the same retained history repeatedly (§8.3).
+
+### 3.5 Causal and quarantine stores
+
+`{systemIdentifier}_causal` and `{systemIdentifier}_quarantinedtransactions`
+are described in §9.
+
+---
+
+## 4. The receive pipeline
+
+### 4.1 Entry points
+
+`executeTransaction` is called from:
+
+- the AMQP consumer (`amqpTransport/incomingPost.purs`): **current-epoch
+  messages are acknowledged before execution**; legacy-epoch messages only
+  after they have been quarantined;
+- the post-database path (`sync/incomingPost.purs`): the source document is
+  deleted after successful handling;
+- `ImportTransaction` in `perspectivesAPI.purs`, and the transaction import in
+  `couchdbExternalFunctions.purs`.
+
+The AMQP consumer runs each transaction in its own outermost, non-sharing
+transaction (`runMonadPerspectivesTransaction' false …`) with background
+priority.
+Incoming execution does not forward deltas (`addDeltaWithStorage` queues
+nothing while `isExecutingIncomingDeltas`).
+
+Because current-epoch AMQP messages are acknowledged early, the pending store is
+the **only durable copy** of a blocked transaction, and a transaction whose
+execution throws is lost (issue I-10).
+
+### 4.2 Processing sequence
+
+1. **Causal epoch** (`executeTransaction`) — a transaction without the current
+   epoch is quarantined (§9.3); nothing is executed.
+2. **Verification** (`verifyTransaction`) — public-key data, delta signatures,
+   actor ownership and causal metadata; payloads without ordering fields are
+   rejected. Produces a map `PerspectivesUser → CryptoKey`.
+3. **Key deltas** (`executeTransaction'`) — the deltas in `publicKeys` are
+   stored and executed **unconditionally**, before the gap check. They are
+   idempotent, so re-execution on retry is harmless.
+4. **Ordering info** — `resourceKey`, `resourceVersion` per verified delta.
+5. **Construction baselines** — `validatedConstructionBaselines` selects and
+   authorises baselines contained in the transaction (§8.2).
+6. **Historical filter** — deltas `coveredWhileAbsent` (observed by a persisted,
+   authorised deletion of an absent role) are excluded from the gap check.
+7. **Gap check** — `checkForGapsWith`, with per-key floor
+   `max(localVersion, baselineVersion, checkpointVersion)` (§7.2). Any gap
+   blocks the **whole** transaction: it is written to the pending store, and
+   steps 8–9 do not happen.
+8. **Replay order** — deltas are sorted by `compareForReplay`
+   (`deltaTypeSortPriority`; property-like deltas by key and version, checkpoint
+   first).
+9. **Version tracking** — `executeDeltaWithVersionTracking` per delta (§5).
+
+---
+
+## 5. The central algorithm: `executeDeltaWithVersionTracking`
+
+```
+executeDeltaWithVersionTracking baselines signedDelta stringified resourceKey resourceVersion author
+```
+
+### 5.1 Branches, in evaluation order
+
+1. **Construction baseline record** — the delta is the selected constructor or
+   membership of a baseline for this key (or the context template of a
+   baseline): execute, set the counter to `max(local, baseline.version)`,
+   disposition `ConstructionBaseline`.
+2. **Exact duplicate** (`findDeltaByDeltaId`) — ignored.
+3. **Empty resource key** — ignored (there is no unversioned fallback).
+4. **Covered while absent** — stored as historical evidence, counter raised,
+   disposition `CoveredByDeletion`, not executed.
+5. **Checkpoint** — executed only when `resourceVersion > localVersion`
+   (never overwrites equally new or newer state), disposition `Checkpoint`.
+6. **Outdated** (`resourceVersion < localVersion`) — stored with
+   `applied = false`, disposition `Outdated`, not executed. *See issue I-4: an
+   outdated delta is not necessarily stale.*
+7. **Same version** (`resourceVersion == localVersion`) — fresh creation or
+   conflict (§5.3).
+8. **Next version** (`resourceVersion > localVersion`; gaps were excluded in
+   §7) — deletions go through modify-wins (§6.2); sub-resource deltas for an
+   absent role may first restore the role (§6.3); otherwise execute and set the
+   counter.
+
+### 5.2 Dispositions
+
+| Disposition | `applied` | Meaning |
+|---|---|---|
+| `Applied` | true | Executed in the normal or winning-conflict path |
+| `ConflictLoser` | false | Lost the author tiebreak (§6.1) |
+| `Outdated` | false | Version below the local counter |
+| `Checkpoint` | true | Certified baseline state applied |
+| `ConstructionBaseline` | true | Selected constructor/membership/context template |
+| `CoveredByDeletion` | true | Historical evidence observed by an authorised deletion |
+| `ModifyWinsSuppressedDelete` | false | Deletion suppressed by a concurrent modification |
+| `SupersededByConstruction` | false | Deletion observed by a later live construction |
+
+When a conflict winner replaces earlier records at the same version, those are
+marked `applied = false` (`updateDeltaApplied`).
+
+### 5.3 Same version: fresh creation versus conflict
+
+`getResourceVersion` returns 0 for unknown keys. When `resourceVersion == 0`
+and no record exists at version 0 for the key, the delta is the first one ever
+seen here: it is executed directly.
+
+Otherwise it is a write-write conflict, resolved by the tiebreak (§6.1). When
+the incoming author wins: the delta is executed (deletions via the deletion
+rules), stored records at that version are marked not applied, and for
+property operations the property is re-derived from its history
+(`restorePropertyFromHistory`), so that a later version built on the loser is
+re-applied on top of the winner.
+
+### 5.4 Execution errors
+
+`executeDelta` catches errors of non-property deltas and only logs a warning;
+the delta is still stored as applied and the counter advanced (issue I-12).
+Property errors (including failed instance-level authorisation, §6.4) and
+checkpoint errors propagate: nothing of that delta is recorded, and the
+exception aborts the incoming transaction. Earlier deltas of that transaction
+are not rolled back.
+
+---
+
+## 6. Conflict rules
+
+### 6.1 Tiebreak
+
+Two deltas from different authors at the same version of the same key: the
+author whose `PerspectivesUser` identifier is **alphabetically highest** wins,
+identically on every installation (`hasAuthorGreaterOrEqual`).
+
+### 6.2 Modify wins over delete
+
+For an incoming role deletion (`RemoveRoleInstance`,
+`RemoveExternalRoleInstance`, `RemoveUnboundExternalRoleInstance`):
+
+- Deletion permission is checked and the causal tombstone recorded.
+- If a later live construction observed the deletion
+  (`supersededByConstruction`), the deletion is suppressed
+  (`SupersededByConstruction`).
+- Otherwise `isDeletionSuppressedByModifyWins` compares each applied property
+  or binding modification's causal clock with the deletion's signed causal
+  context. A modification **not covered** by that context is concurrent and
+  suppresses the deletion (`ModifyWinsSuppressedDelete`). Resource versions
+  alone cannot establish causality across keys.
+- `RetractRoleInstance` is never suppressed: leaving a context wins.
+
+The same rules apply when an incoming deletion wins a same-version conflict.
+
+### 6.3 Role restoration
+
+A property or binding delta for an absent role whose role counter is > 0
+triggers `restoreRoleFromDeltaStore`, unless the delta was observed by an
+authorised deletion (§5.1 step 4):
+
+1. Stored deletion records are marked `applied = false`.
+2. Role-level non-deletion records (constructor, membership) are re-executed.
+3. Applied binding records are replayed in version order; each property is
+   reconstructed from its newest checkpoint and applied tail
+   (`restorePropertyHistories`), resolving same-version conflicts by original
+   author.
+
+### 6.4 Inherited-property authorisation and rejected updates
 
 Ordinary property operations first retain the existing type-level permission
 check. If it cannot prove permission, `hasInstancePropertyPermission` looks for
@@ -129,216 +409,83 @@ This permits a write through, for example, `Participant -> Persons ->
 NonPerspectivesUsers` even when `Persons` admits several alternative filler
 types. It does not weaken `isPerspectiveOnRoleFilledWithRoleType` from type
 implication to overlap. Static compilation continues using that type-level rule.
-As before, received historical operations consider permissions in any declared
-state; the editing state need not still be active on receipt. Property
-checkpoints retain their separate disclosure/winner verification.
+Received historical operations consider permissions in any declared state; the
+editing state need not still be active on receipt. Property checkpoints retain
+their separate disclosure/winner verification.
 
 A rejected property execution logs an error and propagates failure before
 recording that operation's causal clock, advancing its resource version, or
 storing it as applied. Earlier successful operations in the transaction are not
-rolled back. The rejected operation can therefore be retried after its missing
-authorisation evidence is available.
+rolled back. In principle the operation can be retried once its missing
+authorisation evidence is available — **but no component retries it today**:
+the transaction is not stored anywhere (issue I-10; §10.5).
 
 Older runtimes could warn about an unauthorised property but still store its
-delta as applied. Upgrading does not rewrite those historical records, and a
-plain resend will still be skipped as a duplicate. To repair such data, make a
-new authorised edit on the originating installation (change and restore the
-value if necessary), producing a new property version, or repeat the scenario
-with fresh instances. Do not remove history or bypass signature/conflict checks
-to force old deltas to replay.
+delta as applied. Upgrading does not rewrite those records, and a plain resend
+is skipped as a duplicate. To repair such data, make a new authorised edit on
+the originating installation (change and restore the value if necessary), or
+repeat the scenario with fresh instances. Do not remove history or bypass
+signature/conflict checks to force old deltas to replay.
 
 ---
 
-## 4. Resource version tracking (the ResourceVersionStore)
+## 7. Gap detection and blocking
 
-Version numbers are kept in a second PouchDB database, named `{systemIdentifier}_resourceversions`.  The module is `Perspectives.Persistence.ResourceVersionStore`.
+### 7.1 Why entire transactions are blocked
 
-Each document stores a single `{ resourceVersion :: Int }` value keyed by the URL-safe form of the resource key.
+Deltas in one transaction can depend on each other: a sender's automatic action
+may have produced delta _B_ because of delta _A_. If any delta in an incoming
+transaction is out of sequence, the **entire transaction** is blocked rather
+than executed partially.
 
-| Function | Behaviour |
-|---|---|
-| `getResourceVersion key` | Returns the current version; **0** if the key is unknown |
-| `initResourceVersion key` | Sets version to 0 if not yet tracked; no-op otherwise |
-| `setResourceVersion key v` | Sets version to `v`; creates the document if absent |
-| `incrementResourceVersion key` | Atomically increments the version and returns the new value; starts at 1 if the key is unknown |
+### 7.2 Gap check
 
-When constructing a local delta the caller first calls `incrementResourceVersion` to obtain the next version, stamps the delta with that version, and distributes it.  This ensures that the delta's `resourceVersion` is always the version of the resource *after* the delta is applied.
-
----
-
-## 5. The central algorithm: `executeDeltaWithVersionTracking`
-
-The function `executeDeltaWithVersionTracking` is called for every ordinary delta in an incoming transaction (after gap checking; see §6).  It implements the conflict-resolution logic.
-
-```
-executeDeltaWithVersionTracking signedDelta stringified resourceKey resourceVersion author
-```
-
-The function reads the local version `localVersion = getResourceVersion resourceKey` and branches on the relationship between `resourceVersion` and `localVersion`.
-
-### 5.1 Required ordering information
-
-All supported delta payloads contain sender-provided `resourceKey` and
-`resourceVersion` fields (see §7). The receiver does not invent versions or
-convert pre-ordering payloads into version-zero deltas.
-
-### 5.2 Outdated delta (`resourceVersion < localVersion`)
-
-The incoming version is behind the local version.  The delta describes a state of the resource that was valid in the past but has since been superseded.  The function:
-- Stores the delta in the DeltaStore with `applied = false`.
-- Does **not** execute it.
-
-### 5.3 Conflict (`resourceVersion == localVersion`)
-
-Two deltas from different authors claim to produce the same version of the resource.  This is the classic write-write conflict.
-
-**Special case — fresh resource creation (`resourceVersion == 0`, no prior deltas):**
-`getResourceVersion` returns 0 both for resources that have never been tracked and for resources that are genuinely at version 0.  When the incoming `resourceVersion` is 0 *and* the DeltaStore contains no existing deltas for this resource key, the "conflict" is spurious: the incoming delta is simply the first mutation ever applied to this resource at the receiving installation.  In this situation the function executes the delta directly without any conflict-resolution check and stores it with `applied = true`.
-
-**General conflict resolution:**
-When there *are* existing deltas at version 0 for this resource (meaning another author already claimed version 0), or when `resourceVersion > 0` and both versions are equal, this is a genuine write-write conflict.
-
-**Tiebreaker rule:** the author whose `PerspectivesUser` identifier is *alphabetically highest* wins deterministically on all installations.
-
-The function queries the DeltaStore for all already-stored deltas at the same `resourceVersion` for the same `resourceKey`.  If any stored delta has an author ≥ the incoming author, the incoming delta loses; otherwise the incoming author wins.
-
-- **Winner:** execute the delta; store with `applied = true`.
-- **Loser:** store with `applied = false`; do not execute.
-
-Note: the same comparison is made independently by every installation.  Because PerspectivesUser identifiers are globally unique and compared by their full string value, the outcome is the same everywhere.
-
-### 5.4 Normal case (`resourceVersion > localVersion`)
-
-This is the expected case: the incoming delta is exactly `localVersion + 1` (gaps have already been ruled out by §6).  Two sub-rules apply before the delta is executed.
-
-#### 5.4.1 Modify-wins-over-delete
-
-If the incoming delta is a **role-deletion delta** (delta type is one of `RemoveRoleInstance`, `RemoveExternalRoleInstance`, or `RemoveUnboundExternalRoleInstance`):
-
-The function calls `isDeletionSuppressedByModifyWins`:
-- It retrieves all deltas for the role instance and its sub-resources from the DeltaStore.
-- It compares each applied property's or binding's causal clock with the deletion's signed causal context.
-- An earlier, observed modification does not suppress deletion. An applied modification not covered by that context does: resource-version numbers alone cannot establish causality across keys.
-- When such a modification is found: the deletion is **suppressed**.  The local version is advanced to the incoming version and the delta is stored with `applied = false`.
-
-If the incoming delta is a **sub-resource modification** (binding or property) and the role instance does not exist:
-- If an authorised, persisted deletion already observed this modification, it remains historical evidence and does not resurrect the role. Its obsolete version gaps do not block the transaction.
-- Otherwise, if the role's resource version is > 0, the function calls `restoreRoleFromDeltaStore` (see §5.5) before executing the concurrent property or binding modification.
-
-The same causal check applies when an incoming deletion wins a same-version
-author conflict. Deletion permission is checked before recording a causal
-tombstone. `RetractRoleInstance` retains its existing, separate retraction
-semantics rather than using modify-wins suppression.
-
-In all other normal cases the delta is executed and stored with `applied = true`.
-
-#### 5.4.2 No resourceKey
-
-An empty `resourceKey` is excluded from gap checking and the ordinary execution
-path does not execute it. There is no unversioned execution fallback.
-
-### 5.5 Role restoration from the DeltaStore
-
-`restoreRoleFromDeltaStore` re-applies creation and sub-resource deltas from the DeltaStore in version order:
-
-1. All stored deletion deltas for the role are marked `applied = false`.
-2. All non-deletion, role-level deltas (i.e. deltas whose resource key equals the role-instance ID, such as `ConstructEmptyRole` and `AddRoleInstancesToContext`) are re-executed regardless of their `applied` flag.  Role creation is idempotent, and these deltas may have been stored with `applied = false` when they arrived in the same transaction as a later modification (outdated path).
-3. Applied binding deltas are replayed in version order. Each property's effective state is reconstructed from its newest checkpoint and applied tail in numeric version order, resolving same-version conflicts by original author.
-
----
-
-## 6. Gap detection and stalled transactions
-
-### 6.1 Why entire transactions are blocked
-
-Automatic actions (state-triggered `on entry` / `on exit` blocks) within a transaction can be causally dependent on earlier deltas in the same transaction.  If delta _B_ was generated as a consequence of delta _A_, and _A_ has not yet been applied, then _B_ cannot safely be executed in isolation.  Therefore, if **any** delta in an incoming transaction is out of sequence, the **entire transaction** is blocked.
-
-### 6.2 Gap check
-
-Before executing any delta, `executeTransaction'` calls `checkForGaps`:
-
-```
-checkForGaps :: Array { resourceKey, resourceVersion, author } -> MonadPerspectivesTransaction (Array MissingDelta)
-```
-
-For each delta the function compares `resourceVersion` with `localVersion + 1`.  A gap exists when `resourceVersion > localVersion + 1`.  Each gap is recorded as a `MissingDelta`:
+`checkForGapsWith lookupFloor deltaInfos` groups the deltas by safe key, sorts
+each group by version and walks it from `floor + 1`: versions below the
+expected one are ignored (they will be outdated or conflicts), an equal version
+advances the expectation, a higher version is a gap. Per key at most one
+`MissingDelta` is reported:
 
 ```purescript
 type MissingDelta =
-  { author          :: PerspectivesUser
+  { author          :: PerspectivesUser  -- author of the delta that exposed the gap
   , resourceKey     :: String
-  , expectedVersion :: Int   -- localVersion + 1
+  , expectedVersion :: Int               -- first missing version
   }
 ```
 
-Deltas with an empty resource key are excluded from gap checking; pre-ordering
-payloads with missing ordering fields are rejected during verification.
+The floor per key is `max(localVersion, baselineVersion, checkpointVersion)`,
+where the last two only come from baselines and checkpoints **in the same
+transaction**. A baseline lifts the floor of its role key only; a checkpoint
+only of its own property key.
 
-### 6.3 Storing blocked transactions
+`MissingDelta` records only the first missing version, not the version the
+transaction actually needs (`firstVersionInTransaction - 1`); a retry must
+therefore recompute gaps from the transaction itself (§10.3).
 
-When gaps are detected the entire `TransactionForPeer` is written to a third PouchDB database, named `{systemIdentifier}_pendingtransactions`.  The module is `Perspectives.Persistence.PendingTransactionStore`.
+### 7.3 Storing blocked transactions
 
-A `PendingTransactionRecord` stores the full transaction together with the list of `MissingDelta` values that caused the block.  The document ID follows the pattern `pending_<authorId>_<timestamp>`.
+The original (unfiltered) `TransactionForPeer` is stored with its gaps
+(`storePendingTransaction`). Key deltas have already been applied (§4.2 step 3).
+`storePendingTransaction` uses `addDocument_` without a revision: storing the
+same transaction twice (redelivery, or a future retry that blocks again) hits a
+document conflict (issue I-3).
 
-Because the store is persistent the pending transaction survives a session restart.
-
-### 6.4 Unblocking
-
-Whenever a new delta is processed that advances a resource-key's version, the implementation should check whether any pending transaction is now unblocked (all its `MissingDelta` entries are satisfied).  `getAllPendingTransactions` in `PendingTransactionStore` is intended to support this; its full query-based implementation is currently a TODO (the placeholder returns an empty array).
-
-### 6.5 Timeout
-
-After a configurable period (the design specifies 24 hours as an example) a pending transaction may be executed anyway to prevent indefinite blocking.  When this happens the conflict-resolution rules of §5 handle any version mismatches that remain.  The timeout mechanism is not yet implemented in the current code.
-
----
-
-## 7. Supported delta representations
-
-The pre-ordering compatibility layer was removed after the Perspectives Universe
-restart (issue #196). Payloads without `resourceKey` or `resourceVersion`, and
-old role deltas using plural `roleInstances`, are no longer converted or executed.
-Incoming transaction verification reports these payloads as invalid.
-
-The following representations remain supported:
-
-- Ordered, unmarked payloads (format 1): the current delta record types, including
-  their ordering fields and singular `roleInstance`, without `deltaFormatVersion`.
-- Format 2: explicit format markers and revisioned type references.
-- Format 3: signed property checkpoints, as described in §10.
-- Format 4: revisioned type references plus signed per-role causal metadata,
-  as described in §11. Context creation has no role clock.
-
-Older ordered deltas remain readable as the pre-transition baseline in retained
-history disclosed by an upgraded peer. This does not allow old transactions to
-bypass the coordinated cutover described in §11.
+Nothing unblocks a pending transaction (issue I-1). §10 gives the design.
 
 ---
 
-## 8. Processing sequence summary
+## 8. History cut-offs
 
-When an incoming `TransactionForPeer` is received:
+Three mechanisms let peers avoid shipping or requiring a key's full history.
+They are cut-offs on two different axes:
 
-1. **Check the causal epoch** — transactions without the current epoch are durably quarantined without applying keys, values or versions.
-2. **Verify signatures and causal metadata** — `verifyTransaction` checks all public-key data, delta signatures, actor ownership and causal metadata, building a map of `PerspectivesUser → CryptoKey`.
-3. **Execute key deltas** — key-management deltas from the `publicKeys` field are applied to establish author identities in the local store.
-4. **Extract ordering info** (step 1 in `executeTransaction'`) — extract the sender-provided fields from each verified delta. Pre-ordering payloads have already been rejected.
-5. **Gap check** (step 2) — uncovered version gaps block the whole transaction in the pending-transaction store.
-6. **Execute with version tracking** (step 3) — if no gaps, each delta is handled by `executeDeltaWithVersionTracking`, which applies the rules of §5 (outdated, conflict, or normal), with checkpoint handling described in §10.
+- **Receiver side**: checkpoints and baselines raise the gap-check floor
+  (§7.2), so a receiver may start a key from a certified state.
+- **Sender side**: retention removes old property history; peer delivery
+  knowledge suppresses forwarding of what was already queued for a peer.
 
----
-
-## 9. Decision rationale
-
-| Decision | Chosen approach | Alternative considered |
-|---|---|---|
-| Ordering unit | Single integer version per resource key | Lamport clock + per-author sequence number |
-| Conflict winner | Author with alphabetically highest ID | Last write wins on arrival order |
-| Modify vs. delete | Concurrent modification wins; observed historical writes do not | Treating all historical changes as concurrent |
-| Gap response | Block entire transaction | Execute available deltas and patch later |
-| Persistence | PouchDB (survives restarts) | In-memory only |
-| Timeout | Planned: 24-hour threshold | No timeout (block forever) |
-
-## 10. Property history retention
+### 8.1 Property history retention and checkpoints
 
 Stored property keys retain a signed reconstruction checkpoint and the ten most
 recent subsequent logical versions. Conflicting deltas at a retained version
@@ -359,53 +506,133 @@ bounded default. Opting in preserves subsequently received history; it cannot
 recover already removed changes. The attribute grants no access rights and does
 not cause the archive to be resent on every ordinary update.
 
-### Checkpoint protocol and trust
+**Checkpoint protocol and trust.** A checkpoint uses delta format **3**, retains
+the property payload shape, and adds `historyCheckpoint` containing the values
+immediately before its boundary and the original signed winning change. Its
+outer signature certifies the resolved state at that boundary. Original changes
+retain their own signatures; the disclosing installation signs a new
+certificate rather than modifying them.
 
-A checkpoint uses delta format **3**, retains the property payload shape, and
-adds `historyCheckpoint` containing the values immediately before its boundary
-and the original signed winning change. Its outer signature certifies the
-resolved state at that boundary. Original changes retain their own signatures;
-the disclosing installation signs a new certificate rather than modifying them.
+An authenticated disclosing peer may certify state without replacement-write
+permission. This is a trusted state assertion by that peer, not a proof that
+every omitted historical operation was supplied. Ordinary perspective selection
+still determines which data is disclosed. Receivers verify the certificate and
+original winner, check their resource/type/version agreement, and reject
+unsigned, nested, malformed or identity-key checkpoints. The original winner's
+author, not the certifier, determines conflicts at the boundary.
 
-The chosen trust model allows an authenticated disclosing peer to certify state
-without replacement-write permission. This is a trusted state assertion by that
-peer, not a proof that every omitted historical operation was supplied. Ordinary
-perspective selection still determines which data is disclosed. Receivers verify
-the certificate and original winner, check their resource/type/version agreement,
-and reject unsigned, nested, malformed or identity-key checkpoints. The original
-winner's author, not the certifier, determines conflicts at the boundary.
-
-For gap checking, verified checkpoints cover earlier versions of their own key.
-They do not excuse gaps on another key: the whole transaction remains pending
-until all uncovered gaps are filled. No baseline is applied before this check.
-Execution starts with the baseline and then applies newer property versions
-numerically. An equally new or newer local state is never overwritten by a
-baseline. Recovery reconstructs property state from the checkpoint and effective
-tail, including relative additions/removals and boundary conflicts.
+For gap checking, verified checkpoints cover earlier versions of their own key
+only. Execution starts with the checkpoint and then applies newer property
+versions numerically. An equally new or newer local state is never overwritten.
+Recovery reconstructs property state from the checkpoint and effective tail,
+including relative additions/removals and boundary conflicts.
 
 The checkpoint is persisted before covered records are deleted. Interrupted
 pruning leaves redundant evidence that a later write can clean up. Delayed old
-packets cannot repopulate compacted history. This does not rewrite, delete or
-cancel pending/outgoing transactions: encrypted outbox packets remain intact.
-Initialisation transfers state, not a promise to re-execute discarded historical
-workflow transitions.
+packets cannot repopulate compacted history. Pending and outgoing transactions
+are not rewritten: encrypted outbox packets remain intact. Initialisation
+transfers state, not a promise to re-execute discarded historical workflow
+transitions.
 
-### Operational evidence and compatibility
+**Operational evidence.** Creation, membership, binding and deletion histories
+are not compacted. Public-key and transport-key establishment proofs remain
+independently verifiable. The latest `UploadFile` operation remains available
+even before the checkpoint boundary; public publication processes it after
+property replay so it reads final metadata.
 
-Creation, membership, binding and deletion histories remain stored. Construction
-disclosure selects the live causal baseline described in §11 rather than
-exporting every lifecycle record. Public-key
-and transport-key establishment proofs remain independently verifiable and are
-not compacted. The latest `UploadFile` operation remains available even before
-the checkpoint boundary; public publication processes it after property replay
-so it reads final metadata. These are operational-evidence exceptions, not
-additional user-visible audit history.
+Only checkpoint-aware runtimes can consume compacted history; there is no
+capability negotiation or historical backfill.
 
-Only checkpoint-aware runtimes can consume compacted history. Do not mix this
-protocol with older PDR versions without a coordinated rollout; capability
-negotiation and historical backfill are not provided.
+### 8.2 Construction baselines
 
-## 11. Per-role causality and coordinated cutover
+A model- or user-determined identifier can be recreated after deletion.
+Creation disclosure must not replay an earlier lifecycle's removals, especially
+when publishing a public representation. The runtime derives a baseline from
+existing signed DeltaStore records (`Perspectives.Sync.ConstructionBaseline`):
+
+- Select the causally maximal compatible role constructor. Its role type,
+  context and resource identity must match the live instance.
+- Select the compatible membership that observes that constructor. Context
+  type references must agree, including their revision; external membership
+  must also share its constructor's subject and author.
+- For a context, include a compatible `ConstructEmptyContext` template and its
+  external role's baseline. Context constructors have no causal stamp:
+  equivalent compatible templates are interchangeable.
+- Export these records, not earlier constructors, memberships or removals.
+  Historical evidence stays in the DeltaStore for conflict handling.
+
+`Perspectives.Sync.ConstructionHistory` retrieves the selected records for
+dependency serialisation, first-binding filler disclosure,
+perspective-assumption disclosure, calculated-user initialisation and author
+verification bundles. Callers keep their own recipient and delivery policies.
+
+On reception, construction permissions are validated before a stamped, complete
+baseline's membership version becomes the gap-check floor **for that role key
+only**. A missing context additionally requires its external baseline and a
+compatible context template. Version-zero constructors and identical stored
+context templates can reconstruct absent resources; counters never reset, and
+repeated disclosure is idempotent.
+
+An absent role's new constructor must observe every known deletion and have a
+membership version beyond its local role counter. A deletion observed by a
+later live construction cannot remove that construction. Concurrent maximal
+constructors or memberships are reported as ambiguous and require explicit
+reconciliation. Unstamped historical records cannot establish causal recency.
+Baselines do not redefine historical property or binding contents.
+
+### 8.3 Peer delivery knowledge
+
+When retained history is forwarded through `addStoredDeltas`, records whose
+delivery id is in the peer's `knownIds` are skipped, and a checkpoint is skipped
+when the peer's `maxVersion` is at or beyond it. Knowledge is written after the
+outgoing transaction has been durably queued. State entry that newly grants a
+perspective uses `addStoredDeltaForInitialVisibility`, which bypasses knowledge:
+a newly visible resource is always reinitialised.
+
+### 8.4 Evaluation
+
+A cut-off is sound when four conditions hold:
+
+1. **Completeness** — the cut-off record carries the complete state of its key
+   at the boundary.
+2. **Verifiability** — the receiver can authenticate and authorise it.
+3. **Monotonicity** — it is applied before the tail and never lowers newer
+   local state.
+4. **Availability** — whenever a receiver needs it, it can obtain it.
+
+Checkpoints satisfy 1–3 for property keys; baselines satisfy 1–3 for role keys
+(with the stated limitation for concurrent maximal constructors). Condition 4
+is where the design is weak:
+
+- **Asymmetric coverage.** Only property and role keys have cut-offs. Binding
+  keys, context keys and the `#binding` history of earlier lifecycles are always
+  shipped in full. That is correct (they are never compacted), but a receiver
+  that misses one binding delta has no way to skip past it (issue I-8).
+- **Floors are per transaction.** A checkpoint or baseline lifts the floor only
+  if it arrives in the same transaction as the tail, or was applied earlier.
+  If it arrives in an earlier transaction that is itself pending, the later
+  transaction blocks too. This is only acceptable if unblocking retries pending
+  transactions in a loop until no progress is made (§10.3).
+- **Knowledge is belief, not fact.** Delivery knowledge records "queued", not
+  "applied". Whenever the receiver did not apply the queued delta — it was
+  quarantined, rejected for missing authorisation (§6.4), lost by an exception
+  after the early AMQP acknowledgement, or lost because the peer was restored
+  from backup or reinstalled — the sender will never forward it or a covering
+  checkpoint again on the knowledge-based paths (state-dependent perspectives,
+  perspective assumptions in `collectAffectedContexts.purs`). The receiver is
+  then blocked on that key permanently (issues I-7, I-9).
+- **No receiver-driven repair.** The receiver knows exactly which versions it
+  misses (`MissingDelta`), but cannot ask for them.
+
+The cut-off design is therefore sound as a *state transfer* mechanism, but
+incomplete as a *repair* mechanism. Unblocking (§10) must close both gaps:
+retry when the missing data arrives, and ask for it when it does not.
+
+---
+
+## 9. Per-role causality, epoch and quarantine
+
+### 9.1 Causal stamps
 
 Every newly signed role-affecting mutation contains `causal`:
 
@@ -419,62 +646,21 @@ creation, membership, binding and property keys, not across unrelated roles.
 Reservations are persisted before signing; unused counter gaps are harmless.
 Resource versions continue to order each individual key.
 
-The `{systemIdentifier}_causal` database stores the installation nonce, epoch,
-per-role observed clocks and a frontier of authorised deletions. A deletion
-observes a modification only if its context covers the modification's entire
-causal clock. Compacted checkpoints additionally carry `causalContext`, the
-union of their compacted prefix, never the live role clock or later retained
-tail. Older checkpoints without causal metadata represent baseline history.
+`{systemIdentifier}_causal` stores the installation nonce, epoch, per-role
+observed clocks and a frontier of authorised deletions. A deletion observes a
+modification only if its context covers the modification's entire causal
+clock. Compacted checkpoints carry `causalContext`, the union of their
+compacted prefix. Older checkpoints without causal metadata represent baseline
+history. Context creation has no role clock.
+
+Causal stamps are used for deletion/modification and construction decisions
+only. Same-key conflicts (§6.1) and gap checks (§7) do not use them (issue I-5).
 
 This is authenticated causal bookkeeping, not Byzantine proof: authenticated
 authors can assert observations, and checkpoint certifiers retain the trust
-described in §10.
+described in §8.1.
 
-### Construction baselines for reused identifiers
-
-A model- or user-determined identifier can be recreated after deletion. Creation
-disclosure must not replay an earlier lifecycle's removals, especially when
-publishing its public representation.
-
-The runtime derives a baseline from existing signed DeltaStore records:
-
-- Select the causally maximal compatible role constructor. Its role type,
-  context and resource identity must match the live instance.
-- Select the compatible membership that observes that constructor. Context
-  type references must agree, including their revision; external membership
-  must also share its constructor's subject and author.
-- For a context, include a compatible `ConstructEmptyContext` template and its
-  external role's baseline. Context constructors have no causal stamp: equivalent
-  compatible templates are interchangeable, not evidence of lifecycle order.
-- Export these records, not earlier constructors, memberships or removals.
-  Keep historical evidence in the DeltaStore for conflict handling.
-
-`Perspectives.Sync.ConstructionHistory` retrieves these selected original
-records for dependency serialisation, first-binding filler disclosure,
-perspective-assumption disclosure, calculated-user initialisation and author
-verification bundles. Callers retain their own recipient and delivery policies;
-selection does not rewrite signed payloads or export historical removals.
-Incoming execution does not produce outgoing construction disclosures.
-
-Peer reception validates construction permissions before using a stamped,
-complete baseline's membership version as the gap-check floor **for that role
-key only**. Property and binding gaps still block the whole transaction. A
-missing context additionally requires its external baseline and a compatible
-context template. Version-zero constructors and identical stored context
-templates can reconstruct absent resources; counters never reset, and repeated
-disclosure remains idempotent.
-
-An absent role's new constructor must observe every known deletion and have a
-membership version beyond its local role counter. A deletion observed by a
-later live construction cannot remove that construction. Existing modify-wins
-handling still applies to genuinely concurrent changes.
-
-No baseline pointer, incarnation identifier or new persistent administration is
-added. Concurrent maximal constructors or memberships require explicit
-reconciliation. Unstamped historical records cannot establish causal recency.
-This selection does not redefine historical property or binding contents.
-
-### Upgrade procedure
+### 9.2 Upgrade procedure
 
 The upgraded runtime activates `perspectives-causal-1` on its first causal
 reservation or incoming transaction. There is no separate activation switch.
@@ -483,32 +669,344 @@ reservation or incoming transaction. There is no separate activation switch.
    installations. Keep them online until traffic has settled.
 2. Ensure outgoing messages have been **received and processed** by their
    destinations, not merely sent or acknowledged by the broker. Drain incoming
-   queues and resolve pending version-gap transactions as well.
+   queues and resolve pending version-gap transactions as well. *(With
+   unblocking unimplemented, pending transactions can only be resolved by
+   inspecting the pending database by hand.)*
 3. Stop all old runtimes, back up their data, then upgrade all participants
    before resuming activity. Do not run mixed old/new writers.
 
-Existing ordered history becomes the shared pre-transition baseline. Its
-missing causal information cannot be reconstructed, so this assumes that peers'
-mutually visible state has converged before cutover. Merely declaring divergent
-local states to be a baseline is insufficient. A fresh universe is not required.
+Existing ordered history becomes the shared pre-transition baseline; this
+assumes that peers' mutually visible state has converged before cutover.
 
-All newly assembled transactions include `causalEpoch`, including initial
-disclosures containing retained old history. Existing encrypted outbox packets
-are immutable and are **not** relabelled as current traffic.
+### 9.3 Quarantine
 
-Transactions with a missing or unsupported epoch go to
-`{systemIdentifier}_quarantinedtransactions`. `getQuarantinedTransactions`
-enumerates the original decoded transactions and reasons; stable content IDs
-make redelivery idempotent. No key, instance or resource-version mutation from
-these transactions is executed. AMQP acknowledges them only after durable
-storage; the cleartext incoming-post path likewise removes its source document
-only after successful handling. Storage failures propagate.
+All newly assembled transactions include `causalEpoch`. Transactions with a
+missing or unsupported epoch go to `{systemIdentifier}_quarantinedtransactions`.
+`getQuarantinedTransactions` enumerates the decoded transactions and reasons;
+stable content IDs make redelivery idempotent. No key, instance or
+resource-version mutation from these transactions is executed. AMQP
+acknowledges them only after durable storage; the cleartext incoming-post path
+removes its source document only after successful handling.
 
-There is no automatic replay or quarantine UI. Investigate quarantined records,
-reconcile the intended change against current state, and reapply it through the
-upgraded runtime if appropriate. Do not add a current epoch to an old packet to
-force replay. Backups must include both databases and preserve the installation
-nonce: never operate two live copies of the same installation, because they
-would reuse causal counters.
-Local-to-remote and remote-to-local storage migration also copy the causal and
-quarantine databases before switching the runtime's storage location.
+There is no automatic replay or quarantine UI. Do not add a current epoch to an
+old packet to force replay. Backups must include the causal and quarantine
+databases and preserve the installation nonce: never operate two live copies of
+the same installation. Storage migration copies these databases as well.
+
+### 9.4 Supported delta representations
+
+Payloads without `resourceKey`/`resourceVersion`, and old role deltas with
+plural `roleInstances`, are rejected (issue #196). Supported:
+
+- Format 1: ordered, unmarked payloads with singular `roleInstance`.
+- Format 2: explicit format markers and revisioned type references.
+- Format 3: signed property checkpoints (§8.1).
+- Format 4: revisioned type references plus signed per-role causal metadata.
+
+---
+
+## 10. Design: unblocking
+
+### 10.1 Requirements
+
+- **R1 Liveness** — a blocked transaction is retried as soon as the versions it
+  needs may have arrived, including after a restart.
+- **R2 Same rules** — a retry goes through the complete pipeline of §4.2
+  (epoch, verification, baselines, gap check). No shortcut through saved
+  `MissingDelta` snapshots: they only record the first missing version per key
+  and cannot reflect checkpoints or baselines that arrived since.
+- **R3 Transitivity** — unblocking one transaction may unblock others; retries
+  continue until a pass makes no progress.
+- **R4 Isolation** — each retry is its own outermost, non-sharing transaction,
+  admitted as background work. It never runs inside the transaction that
+  triggered it (embedded transactions keep their parent's admission; nesting a
+  retry would deadlock on the transaction flag and would merge unrelated
+  rule cascades).
+- **R5 Idempotence** — storing, re-storing and removing pending records are
+  safe under redelivery, crashes and concurrent triggers.
+- **R6 Repair** — when the missing versions do not arrive by themselves, the
+  receiver asks for them (§10.6).
+- **R7 Visibility** — the user and the modeller can see that data is waiting.
+- **R8 No blind execution** — a timeout never applies a transaction across a
+  gap silently.
+
+### 10.2 Store changes
+
+```purescript
+newtype PendingTransactionRecord = PendingTransactionRecord
+  { _id :: String
+  , _rev :: Maybe String
+  , transaction :: TransactionForPeer
+  , missingDeltas :: Array MissingDelta
+  , status :: String            -- "Blocked" | "Failed" | "Escalated"
+  , firstBlockedAt :: Number    -- epoch ms
+  , lastAttemptAt :: Number
+  , attempts :: Int
+  , lastError :: Maybe String
+  , historyRequestedAt :: Maybe Number
+  }
+```
+
+- **Deterministic ID** — `pending_<authorGuid>_<timeStamp>_<shortHash>`, where
+  `shortHash` is a content hash of the transaction (reuse `computeDeltaId`).
+  Sorting the IDs approximates arrival order per author.
+- **Upsert** — `storePendingTransaction` reads the existing record, keeps
+  `firstBlockedAt`, `attempts` and `historyRequestedAt`, updates
+  `missingDeltas`/`lastAttemptAt`, and writes with the current `_rev`. This
+  fixes issue I-3 and makes redelivery idempotent.
+- **Enumeration** — `getAllPendingTransactions` uses
+  `documentsInRange dbName "pending_" "pending_\xFFFF"` and returns records
+  with their `_rev`.
+- **Removal** — `removePendingTransaction` with the record's current `_rev`,
+  only after the retry's transaction has settled.
+- **In-memory index** (optional optimisation) — a set of *awaited keys*
+  (resource keys with a gap in any pending record), rebuilt at startup. A
+  finished incoming transaction triggers a drain only if it advanced an awaited
+  key. Without the index, a drain after every incoming transaction is still
+  cheap while the pending store is empty (one `allDocs` call), so the index can
+  be added later.
+
+### 10.3 Drain algorithm
+
+`executeTransaction` is changed to **return** an outcome instead of only
+storing it:
+
+```purescript
+data TransactionOutcome = Executed | Blocked (Array MissingDelta) | Quarantined
+```
+
+The entry points (and the drain) decide what to do with the outcome; the
+pending record is written in one place (`storePendingTransaction`, upsert).
+
+A cheap, signature-free pre-check is factored out of `executeTransaction'`:
+
+```purescript
+-- Recompute gaps from the transaction itself: ordering info is readable from
+-- the signed payloads; checkpoints and baselines in the transaction lift the
+-- floor exactly as in §7.2. Verification happens again on real execution.
+pendingGaps :: TransactionForPeer -> MonadPerspectivesTransaction (Array MissingDelta)
+```
+
+The drain:
+
+```
+drainPendingTransactions :: MonadPerspectives Unit
+drainPendingTransactions =
+  if draining then set dirty := true          -- re-entrancy guard
+  else do
+    draining := true
+    repeat
+      dirty := false
+      progress := false
+      records <- getAllPendingTransactions
+                 |> filter (status == "Blocked")
+                 |> sortBy (timeStamp, author)
+      for records \r ->
+        gaps <- pendingGaps r.transaction        -- cheap pre-check (R2)
+        unless (null gaps) (continue)            -- still blocked, nothing to do
+        outcome <- try $ withTransactionPriority BackgroundTransaction
+                       $ runMonadPerspectivesTransaction' false sysUser
+                       $ executeTransaction r.transaction   -- full pipeline (R2, R4)
+        case outcome of
+          Right Executed     -> removePendingTransaction r; progress := true
+          Right Quarantined  -> removePendingTransaction r; progress := true
+          Right (Blocked g)  -> storePendingTransaction r.transaction g   -- upsert
+          Left err           -> recordFailure r err   -- attempts+1, lastError; status Failed after N
+      detectPublicStateChanges
+    until not progress && not dirty
+    draining := false
+```
+
+Notes:
+
+- **Order.** Retrying in `(timeStamp, author)` order replays one author's
+  transactions in the order they were made, so chains `T3 → T2 → T1` unblock in
+  one pass when `T1` arrives; the loop (R3) handles chains across authors.
+- **Pre-check monotonicity.** A key that was gap-free stays gap-free: local
+  counters only rise, so lower versions become outdated, never gaps. Hence a
+  transaction whose `pendingGaps` is empty is worth a full retry, and one with
+  gaps is not.
+- **Key deltas** are re-executed on every retry; they are idempotent.
+- **Epoch.** The retry checks the epoch again; a transaction stored under an
+  older epoch is quarantined rather than executed.
+- **Failure.** An exception in a retry must not stop the drain. After N
+  (e.g. 5) failed attempts the record's status becomes `Failed` and it is no
+  longer retried automatically; it is shown to the user (§10.7).
+- **Concurrency.** The drain itself holds no transaction admission; each retry
+  is admitted separately with background priority, so user transactions
+  interleave.
+
+### 10.4 Triggers
+
+1. **After settlement of an outermost incoming transaction** that executed
+   (outcome `Executed`): schedule the drain after the transaction flag has been
+   raised, e.g. as a `SettledTransaction` continuation
+   (`PendingSettledStack`, dispatched by `runMonadPerspectivesTransaction'`) or
+   directly after `runMonadPerspectivesTransaction'` returns in the entry
+   points. It must never run inside the triggering transaction (R4). Retries
+   themselves do not trigger a new drain; the loop takes care of that via
+   `progress`.
+2. **At startup**, after the incoming queue consumer is running, so that
+   records stored before a restart are reconsidered (R1).
+3. **Periodically** (e.g. every 15 minutes) while pending records exist, for
+   the time-based steps of §10.6 and §10.7.
+
+Local mutations are *not* a trigger. A local write on an awaited key raises the
+counter past the gap without supplying the missing delta, so the gap check would
+pass for the wrong reason. That case is covered by the fix for issue I-4, not by
+unblocking.
+
+### 10.5 Failed executions become pending records
+
+Today a transaction whose execution throws (for example a property rejected
+for missing instance authorisation, §6.4) is lost after the early AMQP
+acknowledgement. The entry points should catch such exceptions and store the
+transaction with `status = "Blocked"`, `missingDeltas = []` and `lastError`.
+The next drain retries it; if the authorisation evidence has arrived in the
+meantime it succeeds, otherwise it reaches `Failed` after N attempts. This makes
+the "can be retried" promise of §6.4 real. Deltas that were applied before the
+exception are skipped on retry as duplicates.
+
+### 10.6 Receiver-driven repair: history requests
+
+Waiting suffices when the missing deltas are merely delayed. It does not when
+the sender believes they were delivered (§8.4). The receiver therefore asks.
+
+**When.** For a `Blocked` record whose gaps have not changed for a grace period
+(e.g. 10 minutes of connectivity, or two drain passes without progress), and
+with no request outstanding for the same (peer, key) within the back-off
+window (exponential, starting at 1 hour).
+
+**Request.** A new signed message type over the existing transport (not a
+delta, so it never enters the DeltaStore):
+
+```purescript
+type HistoryRequest =
+  { requester :: PerspectivesUser
+  , requests :: Array { resourceKey :: String, fromVersion :: Int, toVersion :: Int }
+  , timeStamp :: SerializableDateTime
+  }
+```
+
+`fromVersion` is the receiver's floor + 1; `toVersion` is the first version in
+the pending transaction minus 1. It is sent to the author of the pending
+transaction, who necessarily applied those versions before building on them.
+
+**Sender handling.**
+
+1. Verify the signature and that the requester has a perspective under which
+   the resource is disclosed to it now (same selection as serialisation, see
+   `serialiseAsDeltas.purs`). Otherwise answer nothing (and log).
+2. **Reset delivery knowledge** for (requester, key): drop `knownIds` for
+   versions ≥ `fromVersion` and lower `maxVersion` to `fromVersion - 1`. This
+   repairs issue I-7 for this key.
+3. Answer with an ordinary transaction built as for initial visibility
+   (`addStoredDeltaForInitialVisibility`): for a property key the newest
+   checkpoint at or below `fromVersion - 1` (or the checkpoint certifying the
+   current boundary when the range was compacted) plus the retained tail; for a
+   binding key the retained binding history from `fromVersion`; for a role key
+   the construction baseline plus later membership, move and removal records.
+4. The answer is processed by the receiver's normal pipeline, after which the
+   drain retries the pending transaction.
+
+If the author cannot answer (offline, perspective lost), the request can be
+repeated to any other peer that authored a delta on that key, as recorded in
+the receiver's DeltaStore.
+
+### 10.7 Escalation instead of timeout
+
+The earlier design executed a pending transaction after 24 hours "and let the
+conflict rules handle the rest". That is unsafe: relative property operations
+(`AddProperty`, `RemoveProperty`) applied across a gap produce a state that no
+other peer has, and the later arrival of the missing delta is classified as
+`Outdated` and discarded (issue I-4). Instead:
+
+1. After a configurable period (default 24 hours) with unanswered history
+   requests, or when a record becomes `Failed`, set its status to `Escalated`.
+2. Show a non-blocking system message (`pushSystemMessage`) with the number of
+   waiting transactions per peer.
+3. Expose `getPendingTransactions` through the API (analogous to
+   `getQuarantinedTransactions`) for a diagnostic screen: author, age, keys,
+   missing versions, last error.
+4. Offer two explicit user actions: **request again**, and **discard** (remove
+   the record; the user accepts that this peer's change is not applied).
+   Forcing execution across a gap is not offered as a default; if it is ever
+   added, it must re-derive each affected property from history afterwards.
+
+### 10.8 Tests
+
+In `test/layertests/versionedDeltas.purs` and `persistenceRecovery.purs`:
+
+1. `T2` (v2) blocked; `T1` (v1) arrives → `T2` executes after `T1` settles and
+   its record is removed.
+2. Chain: `T3`, `T2` arrive before `T1` → all execute in one drain, in order.
+3. Cross-author chain requiring two passes.
+4. Redelivery of a blocked transaction does not throw; one record remains.
+5. Restart: a pending record written before shutdown is drained at startup.
+6. A checkpoint arriving in a separate, later transaction unblocks a tail.
+7. A retry that throws records `lastError` and does not stop the drain; after N
+   attempts the status is `Failed`.
+8. Two-PDR test (`test/PDRInstance.purs` harness, fresh processes): delivery
+   knowledge claims a delta that the receiver lost; a history request repairs
+   it.
+
+### 10.9 Phasing
+
+1. Store fixes (§10.2), outcome type, drain with triggers 1–2, tests 1–6.
+   This is the part attempted in the closed PR #566; it must be redone against
+   the current `executeTransaction'` (baselines, `coveredWhileAbsent`).
+2. Failed executions as pending records (§10.5), test 7.
+3. History requests and knowledge reset (§10.6), test 8.
+4. Escalation UI (§10.7).
+
+---
+
+## 11. Known issues and gaps
+
+Severity: **H** can cause permanent divergence or permanent blocking; **M**
+can cause wrong intermediate state or lost work under plausible conditions;
+**L** robustness or clarity.
+
+| # | Sev | Issue | Where | Suggested fix |
+|---|---|---|---|---|
+| I-1 | H | Blocked transactions are never retried: `getAllPendingTransactions` returns `[]` and nothing calls it. Every gap is permanent; later transactions of the same peer touching the same keys block as well. | `pendingTransactionStore.purs` | §10.2–§10.4 |
+| I-2 | M | No timeout or escalation; the user cannot see waiting data. | — | §10.7 |
+| I-3 | M | Pending doc ID is `pending_<author>_<timeStamp>` and stored without `_rev`: redelivery of a blocked transaction (or any future re-store) conflicts and throws after the AMQP ack. | `storePendingTransaction` | Deterministic ID with content hash, upsert (§10.2) |
+| I-4 | H | **`Outdated` is not the same as stale.** A delta with `resourceVersion < localVersion` may be the *winner* of a conflict at its version that arrived late. Example: A and B write v4 concurrently, A > B; B then writes v5 = `AddProperty z`. At B, A's v4 arrives at local v5: `Outdated`, discarded. At A, B's v4 loses and B's v5 is applied on A's v4. For relative operations A ends with {x, z}, B with {y, z}. The same happens when a third peer's gap is "closed" by the losing v4, or by a local write on an awaited key. Absolute operations (set, bindings, role lifecycle) converge in their final state. | `executeDeltaWithVersionTracking`, outdated branch | For property operations: persist, and if the incoming delta would win at its version (or no record exists there and it is above the checkpoint), re-derive the property with `restorePropertyFromHistory`, exactly as the conflict-winner branch already does. |
+| I-5 | M | Version counters carry no causality. A v(n+1) built on a losing v(n) is applied as normal; per-role causal stamps exist but are not used for same-key conflicts. Combined with I-4 this is the root of property divergence. | §6.1, §7 | Short term: I-4's re-derivation. Long term: resolve property conflicts from the causal stamps (I-4 then becomes a special case). |
+| I-6 | M | Replay order only sorts by version within priority 5 (properties, moves). For one key, `SetFirstBinding` (4) runs before `RemoveBinding`/`ReplaceBinding` (6) regardless of version, and role `Move` (5) before `Remove` (6). A transaction `SetFirstBinding v1, RemoveBinding v2, SetFirstBinding v3` replays as v1, v3, v2: v2 becomes `Outdated` and its side effects (e.g. inverse binding cleanup) are skipped. | `compareForReplay`, `sortTransactionDeltas` | Keep the type priority across keys, but within one resource key order strictly by version (constructors at version 0 sort first naturally). |
+| I-7 | H | Peer delivery knowledge means "queued", never reset. A peer that lost or rejected a delta (restore from backup, reinstall, quarantine, rejected authorisation, exception after early ack) never receives it or a covering checkpoint again on knowledge-based paths → permanent gap. | `peerDeliveryStore.purs`, `addStoredDeltas` | Reset on history request (§10.6); also reset all knowledge for a peer when its installation nonce or key changes. |
+| I-8 | M | Binding, context and role-membership keys have no checkpoint. A single missed binding delta can only be repaired by resending exactly that delta. Baselines lift only the role key; property and binding gaps in the same transaction still block it. | §8.4 | Answering history requests with full binding history (§10.6) suffices; a binding checkpoint is optional. |
+| I-9 | M | Non-initial shipping paths (state-dependent or filtered perspectives, perspective assumptions in `collectAffectedContexts.purs`) can send version n+k to a peer that never received n..n+k-1, relying on knowledge (I-7). | `collectAffectedContexts.purs`, `serialiseAsDeltas.purs` | Same as I-7; optionally ship a checkpoint whenever knowledge's `maxVersion` is below the first shipped version - 1. |
+| I-10 | H | Current-epoch AMQP messages are acknowledged before execution. If `storePendingTransaction` fails (I-3) or execution throws (§5.4, §6.4), the transaction is gone; only the sender's knowledge remains, which says "delivered". | `amqpTransport/incomingPost.purs` | Store failed executions as pending (§10.5); alternatively acknowledge only after execution or pending storage. |
+| I-11 | L | `setResourceVersion` is unconditional; most callers guard with `max`, some rely on the branch condition. A future caller can lower a counter and reopen applied versions. | `resourceVersionStore.purs` | Make `setResourceVersion` monotonic (`max`) and add an explicit `resetResourceVersion` if ever needed. |
+| I-12 | M | Non-property execution errors are swallowed: the delta is stored as `Applied` and the counter advanced although nothing happened. The peer silently diverges and later deltas build on a state that does not exist. | `executeDelta` | Treat like property errors: propagate, and rely on §10.5 for retry. |
+| I-13 | L | `hasAuthorGreaterOrEqual` uses `>=`, so the same author at the same version counts as a winner over itself. Duplicates are normally caught by `deltaId`; of two *different* deltas of one author at one version (only possible after counter loss, e.g. restore from backup) the later arrival always loses, so the outcome depends on arrival order. | `executeDeltaWithVersionTracking` | Compare `deltaId` as a secondary tiebreak. |
+| I-14 | L | Concurrent version-0 constructors by different authors for the same deterministic identifier: the first is executed as "fresh", the second resolved by author tiebreak; context constructors carry no causal stamp. Constructors are idempotent so state converges, but the recorded winner may differ between peers. | §5.3 | Accept; document that constructor winners are not significant. |
+| I-15 | L | Restoring a peer from backup reuses its counters for new writes (resource versions and causal counters), creating same-author same-version deltas at its peers. The doc warns against two live copies, but not against restore-then-continue. | §9.3 | Rotate the installation nonce on restore and announce it, which triggers a knowledge reset (I-7). |
+| I-16 | L | The previous version of this document claimed every mutation increments the version, linked a non-existent `docs/transaction-execution.md`, omitted the `deltaId`/`disposition`/`contextKey` fields, and presented §6.4/§6.5 as existing behaviour. | this file | Corrected in this revision. |
+
+### Priorities
+
+1. I-1, I-3, I-10 (unblocking phases 1–2): without them every lost or delayed
+   delta degrades into permanent non-convergence.
+2. I-4 (+ I-5): divergence of multi-valued properties under ordinary
+   concurrency; the fix is local and reuses existing reconstruction code.
+3. I-7, I-9 (history requests): repair after data loss.
+4. I-6, I-12: correctness of replay within a transaction.
+5. The rest.
+
+---
+
+## 12. Decision rationale
+
+| Decision | Chosen approach | Alternative considered |
+|---|---|---|
+| Ordering unit | Single integer version per resource key | Lamport clock + per-author sequence number |
+| Conflict winner | Author with alphabetically highest ID | Last write wins on arrival order |
+| Modify vs. delete | Concurrent modification wins; observed historical writes do not | Treating all historical changes as concurrent |
+| Gap response | Block entire transaction | Execute available deltas and patch later |
+| Persistence | PouchDB (survives restarts) | In-memory only |
+| History bound | Signed property checkpoints + ten versions; baselines for construction | Full history everywhere |
+| Unblocking | Drain after settlement, full re-verification, loop until no progress (§10, *planned*) | Re-check saved `MissingDelta` snapshots only |
+| Long-blocked transactions | History request, then escalation to the user (§10.6–10.7, *planned*) | Execute anyway after 24 hours |

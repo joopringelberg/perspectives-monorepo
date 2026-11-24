@@ -148,7 +148,7 @@ the membership observing it, rather than replaying historical removals or older
 lifecycles. Compatible unstamped context constructors serve as structural
 templates. Selection uses existing signed records and causal clocks; it adds no
 persistent baseline administration. Ambiguous causal maxima require explicit
-reconciliation. See `docsources/delta-ordering.md`, §11.
+reconciliation. See `docsources/delta-ordering.md`, §8.2.
 
 ### Adapt delta construction
 

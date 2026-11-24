@@ -118,6 +118,7 @@ getPendingTransactionsForResource docId = do
 -- | Get all pending transactions.
 -- | TODO: Implement using allDocs or a view for efficiency.
 -- | For now, this is a placeholder that should be replaced with proper query logic.
+-- | Nothing retries pending transactions yet; see docsources/delta-ordering.md §10 (unblocking design).
 getAllPendingTransactions :: forall f. MonadPouchdb f (Array PendingTransactionRecord)
 getAllPendingTransactions = do
   -- TODO: Use allDocs to retrieve all documents from the pending transactions database.
