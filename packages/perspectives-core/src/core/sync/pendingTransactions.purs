@@ -57,6 +57,7 @@ import Perspectives.PerspectivesState (withTransactionPriority)
 import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), RoleType(..))
 import Perspectives.RunMonadPerspectivesTransaction (detectPublicStateChanges, runMonadPerspectivesTransaction')
 import Perspectives.Sync.HandleTransaction (TransactionOutcome(..), executeTransactionWithOutcome)
+import Perspectives.Sync.HistoryRequest (requestMissingHistory)
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer)
 import Perspectives.TransactionQueue (TransactionPriority(..))
 
@@ -104,6 +105,7 @@ settleIncomingTransaction t = case _ of
 -- | Each retry is its own outermost background transaction that goes through the complete
 -- | receive pipeline (epoch, verification, baselines, gap check).
 -- | If a drain is requested while one is running, the running drain makes another pass.
+-- | Finally, history is requested for transactions that have been blocked for too long.
 drainPendingTransactions :: DrainMode -> MonadPerspectives Unit
 drainPendingTransactions mode = do
   PendingDrainGuard guard <- gets _.pendingTransactionDrain
@@ -112,9 +114,14 @@ drainPendingTransactions mode = do
   else do
     liftEffect $ Ref.write { draining: true, dirty: false } guard
     result <- try (pass guard mode)
+    -- What is still blocked after the passes may need a history request (§10.6).
+    requested <- try requestMissingHistory
     liftEffect $ Ref.write { draining: false, dirty: false } guard
     case result of
       Left e -> warnSync $ "Draining pending transactions failed: " <> show e
+      Right _ -> pure unit
+    case requested of
+      Left e -> warnSync $ "Requesting missing history failed: " <> show e
       Right _ -> pure unit
 
   where

@@ -42,6 +42,7 @@ module Perspectives.Persistence.PendingTransactionStore
   , blockedStatus
   , failedStatus
   , maxFailedAttempts
+  , recordHistoryRequest
   ) where
 
 import Prelude
@@ -49,7 +50,9 @@ import Prelude
 import Data.Array (catMaybes)
 import Data.Either (hush)
 import Data.Maybe (Maybe(..), fromMaybe)
+import Data.DateTime.Instant (unInstant)
 import Data.Newtype (unwrap)
+import Effect.Now (now)
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
 import Foreign (Foreign)
@@ -88,14 +91,21 @@ newtype PendingTransactionRecord = PendingTransactionRecord
   , status :: String
   , attempts :: Int
   , lastError :: Maybe String
+  -- | Bookkeeping for history requests (§10.6), in milliseconds since the epoch:
+  -- | when the transaction was first stored, when history was last requested for it,
+  -- | and how often.
+  , blockedSince :: Maybe Number
+  , historyRequestedAt :: Maybe Number
+  , historyRequests :: Int
   }
 
 derive newtype instance WriteForeign PendingTransactionRecord
 -- | Records written before status, attempts and lastError existed are read as blocked,
--- | without failed attempts, so that the drain still retries them.
+-- | without failed attempts, so that the drain still retries them. Records without
+-- | history-request bookkeeping are read as never requested.
 instance ReadForeign PendingTransactionRecord where
   readImpl f = do
-    (r :: { _id :: String, _rev :: Maybe String, transaction :: TransactionForPeer, missingDeltas :: Array MissingDelta, status :: Maybe String, attempts :: Maybe Int, lastError :: Maybe String }) <- readImpl f
+    (r :: { _id :: String, _rev :: Maybe String, transaction :: TransactionForPeer, missingDeltas :: Array MissingDelta, status :: Maybe String, attempts :: Maybe Int, lastError :: Maybe String, blockedSince :: Maybe Number, historyRequestedAt :: Maybe Number, historyRequests :: Maybe Int }) <- readImpl f
     pure $ PendingTransactionRecord
       { _id: r._id
       , _rev: r._rev
@@ -104,6 +114,9 @@ instance ReadForeign PendingTransactionRecord where
       , status: fromMaybe blockedStatus r.status
       , attempts: fromMaybe 0 r.attempts
       , lastError: r.lastError
+      , blockedSince: r.blockedSince
+      , historyRequestedAt: r.historyRequestedAt
+      , historyRequests: fromMaybe 0 r.historyRequests
       }
 
 blockedStatus :: String
@@ -134,26 +147,42 @@ pendingTransactionDatabaseName = getSystemIdentifier >>= pure <<< (_ <> "_pendin
 -- | An existing record for the same transaction is updated in place: its attempts and
 -- | lastError are kept, its missing deltas replaced and its status reset to blocked.
 -- | Storing the same transaction twice (redelivery) is therefore safe.
+-- | History-request bookkeeping is kept: a retry that blocks again does not restart the clock.
 storePendingTransaction :: forall f. TransactionForPeer -> Array MissingDelta -> MonadPouchdb f Unit
-storePendingTransaction txn missingDeltas = upsert txn \existing -> case existing of
-  Nothing -> { missingDeltas, status: blockedStatus, attempts: 0, lastError: Nothing }
-  Just (PendingTransactionRecord r) -> { missingDeltas, status: blockedStatus, attempts: r.attempts, lastError: r.lastError }
+storePendingTransaction txn missingDeltas = do
+  time <- currentTime
+  upsert txn \existing -> case existing of
+    Nothing -> { missingDeltas, status: blockedStatus, attempts: 0, lastError: Nothing, blockedSince: Just time, historyRequestedAt: Nothing, historyRequests: 0 }
+    Just (PendingTransactionRecord r) -> (bookkeeping r) { missingDeltas = missingDeltas, status = blockedStatus, blockedSince = Just $ fromMaybe time r.blockedSince }
 
 -- | Store (upsert) a transaction whose execution failed with an exception.
 -- | Increments attempts and records the error; after maxFailedAttempts the status becomes failed.
 recordFailedTransaction :: forall f. TransactionForPeer -> String -> MonadPouchdb f Unit
-recordFailedTransaction txn reason = upsert txn \existing ->
-  let
-    previous = case existing of
-      Nothing -> { missingDeltas: [], attempts: 0 }
-      Just (PendingTransactionRecord r) -> { missingDeltas: r.missingDeltas, attempts: r.attempts }
-    attempts = previous.attempts + 1
-  in
-    { missingDeltas: previous.missingDeltas
-    , status: if attempts >= maxFailedAttempts then failedStatus else blockedStatus
-    , attempts
-    , lastError: Just reason
-    }
+recordFailedTransaction txn reason = do
+  time <- currentTime
+  upsert txn \existing ->
+    let
+      previous = case existing of
+        Nothing -> { missingDeltas: [], status: blockedStatus, attempts: 0, lastError: Nothing, blockedSince: Just time, historyRequestedAt: Nothing, historyRequests: 0 }
+        Just (PendingTransactionRecord r) -> bookkeeping r
+      attempts = previous.attempts + 1
+    in
+      previous
+        { status = if attempts >= maxFailedAttempts then failedStatus else blockedStatus
+        , attempts = attempts
+        , lastError = Just reason
+        }
+
+-- | Note that history was requested for the pending record with this document id, at `time`.
+recordHistoryRequest :: forall f. String -> Number -> MonadPouchdb f Unit
+recordHistoryRequest docId time = do
+  dbName <- pendingTransactionDatabaseName
+  existing <- tryGetDocument_ dbName docId
+  case existing of
+    Nothing -> pure unit
+    Just (PendingTransactionRecord r) -> void $ addDocument_ dbName
+      (PendingTransactionRecord r { historyRequestedAt = Just time, historyRequests = r.historyRequests + 1 })
+      docId
 
 -- | Remove a pending transaction after it has been executed.
 removePendingTransaction :: forall f. String -> Revision_ -> MonadPouchdb f Unit
@@ -196,10 +225,34 @@ getAllPendingTransactions = do
 -- HELPERS
 -----------------------------------------------------------
 
+type Bookkeeping =
+  { missingDeltas :: Array MissingDelta
+  , status :: String
+  , attempts :: Int
+  , lastError :: Maybe String
+  , blockedSince :: Maybe Number
+  , historyRequestedAt :: Maybe Number
+  , historyRequests :: Int
+  }
+
+bookkeeping :: forall r. { missingDeltas :: Array MissingDelta, status :: String, attempts :: Int, lastError :: Maybe String, blockedSince :: Maybe Number, historyRequestedAt :: Maybe Number, historyRequests :: Int | r } -> Bookkeeping
+bookkeeping r =
+  { missingDeltas: r.missingDeltas
+  , status: r.status
+  , attempts: r.attempts
+  , lastError: r.lastError
+  , blockedSince: r.blockedSince
+  , historyRequestedAt: r.historyRequestedAt
+  , historyRequests: r.historyRequests
+  }
+
+currentTime :: forall f. MonadPouchdb f Number
+currentTime = liftEffect $ unwrap <<< unInstant <$> now
+
 upsert
   :: forall f
    . TransactionForPeer
-  -> (Maybe PendingTransactionRecord -> { missingDeltas :: Array MissingDelta, status :: String, attempts :: Int, lastError :: Maybe String })
+  -> (Maybe PendingTransactionRecord -> Bookkeeping)
   -> MonadPouchdb f Unit
 upsert txn update = do
   dbName <- pendingTransactionDatabaseName
@@ -219,6 +272,9 @@ upsert txn update = do
         , status: fields.status
         , attempts: fields.attempts
         , lastError: fields.lastError
+        , blockedSince: fields.blockedSince
+        , historyRequestedAt: fields.historyRequestedAt
+        , historyRequests: fields.historyRequests
         }
     )
     docId

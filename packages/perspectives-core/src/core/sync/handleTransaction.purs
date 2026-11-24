@@ -27,7 +27,7 @@ import Control.Monad.Error.Class (catchError, throwError, try)
 import Control.Monad.Except (lift, runExcept, runExceptT)
 import Control.Monad.State (StateT, gets, modify, runStateT) as ST
 import Crypto.Subtle.Key.Types (CryptoKey)
-import Data.Array (any, catMaybes, concat, filter, filterA, foldl, fromFoldable, last, null, nub, sortBy)
+import Data.Array (any, catMaybes, concat, filter, filterA, foldl, fromFoldable, last, null, nub, sort, sortBy)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.FoldableWithIndex (forWithIndex_)
@@ -62,7 +62,7 @@ import Perspectives.Instances.Builders (lookupOrCreateContextInstance, lookupOrC
 import Perspectives.Instances.ObjectGetters (bottom_, getProperty, roleType)
 import Perspectives.Instances.Values (parsePerspectivesFile)
 import Perspectives.Logging (traceSync, warnSync)
-import Perspectives.ModelDependencies (rootContext)
+import Perspectives.ModelDependencies (perspectivesUsersPublicKey, perspectivesUsersTransportPublicKey, rootContext)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (getAttachment)
 import Perspectives.Persistence.DeltaStore (deltaStoreDocIdWithDeltaId, extractDeltaInfo, findDeltaByDeltaId, getDeltasForResource, getDeltasForRoleInstance, safeKey, storeDelta, storeDeltaFromSignedDelta, updateDeltaApplied)
@@ -94,7 +94,8 @@ import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..), deduplicate
 import Perspectives.Sync.VersionedDelta (DeltaEnvelope(..), parseIncomingDelta)
 import Perspectives.Types.ObjectGetters (contextAspectsClosure, hasAspect, isPublic, roleAspectsClosure, publicUserRole)
 import Perspectives.TypesForDeltas (ContextDelta(..), ContextDeltaType(..), DeltaRecord, RoleBindingDelta(..), RoleBindingDeltaType(..), RolePropertyDelta(..), RolePropertyDeltaType(..), UniverseContextDelta(..), UniverseContextDeltaType(..), UniverseRoleDelta(..), UniverseRoleDeltaType(..))
-import Perspectives.UnschemedIdentifiers (UnschemedResourceIdentifier, unschemePerspectivesUser)
+import Perspectives.UnschemedIdentifiers (UnschemedResourceIdentifier, unschemePerspectivesUser, unschemeRoleInstance)
+import Perspectives.Persistence.PeerDeliveryStore (forgetPeerDeliveryKnowledge)
 import Perspectives.Warning (PerspectivesWarning(..))
 import Prelude (class Eq, class Monad, class Ord, class Show, Unit, bind, compare, discard, flip, map, max, negate, not, pure, show, unit, void, when, ($), (*>), (+), (/=), (<), (<$>), (<<<), (<>), (==), (>), (>=), (>>=), (&&), (||), (>=>))
 import Simple.JSON (readJSON')
@@ -137,9 +138,24 @@ executeRoleBindingDelta (RoleBindingDelta { filled, filler, deltaType, subject }
       RemoveBinding -> void $ removeBinding filled
       ReplaceBinding -> void $ replaceBinding filled (unsafePartial $ fromJust filler) (Just signedDelta)
 
--- TODO. Wat met SetPropertyValue?
+-- | When a peer's signing or transport key changes, the peer has (most likely) reinstalled:
+-- | it has lost the deltas we have shipped to it before. Forget what we know about its
+-- | delivery state, so that knowledge-based forwarding ships complete histories again (I-7).
+-- | A changed installation nonce does not trigger this: one user may legitimately run several
+-- | installations. A restore from an older backup is repaired by history requests (§10.6).
 executeRolePropertyDelta :: RolePropertyDelta -> SignedDelta -> MonadPerspectivesTransaction Unit
-executeRolePropertyDelta d@(RolePropertyDelta { id, roleType, deltaType, values, property, subject }) signedDelta = do
+executeRolePropertyDelta d@(RolePropertyDelta { id, property }) signedDelta =
+  if unwrap property == perspectivesUsersPublicKey || unwrap property == perspectivesUsersTransportPublicKey then do
+    before <- lift (id ##= getProperty property)
+    executeRolePropertyDelta_ d signedDelta
+    after <- lift (id ##= getProperty property)
+    when (not (null before) && sort before /= sort after)
+      (lift $ forgetPeerDeliveryKnowledge (unschemeRoleInstance id))
+  else executeRolePropertyDelta_ d signedDelta
+
+-- TODO. Wat met SetPropertyValue?
+executeRolePropertyDelta_ :: RolePropertyDelta -> SignedDelta -> MonadPerspectivesTransaction Unit
+executeRolePropertyDelta_ d@(RolePropertyDelta { id, roleType, deltaType, values, property, subject }) signedDelta = do
   let
     authorize = roleHasPerspectiveOnPropertyWithVerb (unwrap signedDelta).author subject id property
     reject e = do
