@@ -505,7 +505,7 @@ executeCurrentTransaction t = do
     Left e -> do
       lift $ renderPerspectivesError >=> warnSync $ (IncomingTransactionFailed (show e))
       pure $ Rejected (show e)
-    Right (Tuple verifiedKeys incoming) -> timed "incoming.execute" (show transactionNumber) (executeTransaction' verifiedKeys incoming)
+    Right (Tuple verifiedKeys incoming) -> timed "incoming.execute" (show transactionNumber) (executeTransaction' verifiedKeys t incoming)
 
 verifyTransaction :: TransactionForPeer -> MonadPerspectivesTransaction (Map.Map UnschemedResourceIdentifier CryptoKey)
 verifyTransaction (TransactionForPeer { deltas, publicKeys }) = do
@@ -643,8 +643,10 @@ validatedConstructionBaselines history = do
       throwError $ error message
     Right _ -> pure unit
 
-executeTransaction' :: Map.Map UnschemedResourceIdentifier CryptoKey -> TransactionForPeer -> MonadPerspectivesTransaction TransactionOutcome
-executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) = do
+-- | `original` is the transaction as received; it is what a pending record stores, so that a
+-- | blocked and a failed attempt of the same transaction share one pending record.
+executeTransaction' :: Map.Map UnschemedResourceIdentifier CryptoKey -> TransactionForPeer -> TransactionForPeer -> MonadPerspectivesTransaction TransactionOutcome
+executeTransaction' verifiedKeys original t@(TransactionForPeer { deltas, publicKeys }) = do
 
   -- Add all public key information (possibly leading to more TheWorld$PerspectivesUsers instances).
   -- Key deltas are executed directly (not through executeDeltaWithVersionTracking),
@@ -707,7 +709,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
       -- Gaps detected: block the entire transaction.
       lift $ renderPerspectivesWarning >=> traceSync $ TransactionBlockedByVersionGaps
       lift $ traceSync $ "Missing peer delta versions: " <> show gaps
-      lift $ storePendingTransaction t gaps
+      lift $ storePendingTransaction original gaps
       pure $ Blocked gaps
   where
 

@@ -228,7 +228,12 @@ newtype PendingTransactionRecord = PendingTransactionRecord
 - `removePendingTransactionFor` / `removePendingTransactionById` delete a record
   with its current revision; removing an absent record is a no-op.
 - `getAllPendingTransactions` enumerates the `pending_` ID range; unreadable
-  documents are skipped.
+  documents are skipped. Records written before `status`/`attempts` existed
+  (old ID format) are read as `Blocked` with 0 attempts, so they are retried
+  too.
+- The stored transaction is always the transaction *as received* (before
+  scaffolding deltas and duplicate keys are filtered out), so a blocked and a
+  failed attempt of the same transaction share one record.
 
 The store survives restarts. It is read by the drain
 (`Perspectives.Sync.PendingTransactions`, §10.3).

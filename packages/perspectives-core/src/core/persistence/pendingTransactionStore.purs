@@ -48,7 +48,7 @@ import Prelude
 
 import Data.Array (catMaybes)
 import Data.Either (hush)
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Newtype (unwrap)
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
@@ -60,7 +60,7 @@ import Perspectives.Persistence.Types (MonadPouchdb)
 import Perspectives.Representation.InstanceIdentifiers (PerspectivesUser)
 import Perspectives.Sync.CanonicalJson (canonicalizeJsonString, computeDeltaId, shortDeltaId)
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer)
-import Simple.JSON (class ReadForeign, class WriteForeign, read, writeJSON)
+import Simple.JSON (class ReadForeign, class WriteForeign, read, readImpl, writeJSON)
 
 -----------------------------------------------------------
 -- TYPES
@@ -91,7 +91,20 @@ newtype PendingTransactionRecord = PendingTransactionRecord
   }
 
 derive newtype instance WriteForeign PendingTransactionRecord
-derive newtype instance ReadForeign PendingTransactionRecord
+-- | Records written before status, attempts and lastError existed are read as blocked,
+-- | without failed attempts, so that the drain still retries them.
+instance ReadForeign PendingTransactionRecord where
+  readImpl f = do
+    (r :: { _id :: String, _rev :: Maybe String, transaction :: TransactionForPeer, missingDeltas :: Array MissingDelta, status :: Maybe String, attempts :: Maybe Int, lastError :: Maybe String }) <- readImpl f
+    pure $ PendingTransactionRecord
+      { _id: r._id
+      , _rev: r._rev
+      , transaction: r.transaction
+      , missingDeltas: r.missingDeltas
+      , status: fromMaybe blockedStatus r.status
+      , attempts: fromMaybe 0 r.attempts
+      , lastError: r.lastError
+      }
 
 blockedStatus :: String
 blockedStatus = "Blocked"

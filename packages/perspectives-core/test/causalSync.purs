@@ -59,7 +59,7 @@ import Perspectives.Persistence.API (addDocument_, deleteDatabase, documentsInRa
 import Perspectives.Persistence.CausalStore (CausalInstallationDoc(..), CausalRoleDoc(..), causalDatabaseName, ensureCausalEpoch, getCausalRole, recordCausalDelta, reserveCausalStamp)
 import Perspectives.Persistence.DeltaStore (getDeltasForResource, pruneDeltasThrough, storeDeltaFromSignedDelta)
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
-import Perspectives.Persistence.PendingTransactionStore (PendingTransactionRecord(..), failedStatus, getAllPendingTransactions, maxFailedAttempts, pendingTransactionDatabaseName, recordFailedTransaction)
+import Perspectives.Persistence.PendingTransactionStore (PendingTransactionRecord(..), blockedStatus, failedStatus, getAllPendingTransactions, maxFailedAttempts, pendingTransactionDatabaseName, recordFailedTransaction)
 import Perspectives.Persistence.QuarantineStore (QuarantinedTransaction(..), getQuarantinedTransactions, quarantineDatabaseName)
 import Perspectives.Persistence.ResourceVersionStore (getResourceVersion, setResourceVersion)
 import Perspectives.Persistent (forceSaveContext, forceSaveRole, getPerspectContext, getPerspectRol, saveEntiteit, tryGetPerspectContext, tryGetPerspectRol)
@@ -386,6 +386,21 @@ theSuite = suite "Causal role deletion and coordinated cutover" do
       liftAff do
         equal 0 (length remaining)
         equal 2 version
+
+  test "a failed transaction that turns out to be blocked keeps a single pending record" $
+    withSigningFixture true \key -> do
+      prepare key
+      third <- propertyChange "remote-old" 3 $ stamp "remote-old" 2 [ dot "remote-old" 1 ]
+      incoming <- packet [ third ]
+      lift $ recordFailedTransaction incoming "simulated failure"
+      lift $ drainPendingTransactions AfterIncoming
+      records <- lift getAllPendingTransactions
+      liftAff case records of
+        [ PendingTransactionRecord r ] -> do
+          equal blockedStatus r.status
+          equal 1 r.attempts
+          assert "The retry must record the gap" (not $ null r.missingDeltas)
+        _ -> assert "Expected exactly one pending record" false
 
   test "an execution failure is stored as a pending record instead of being lost" $
     withSigningFixture true \key -> do
