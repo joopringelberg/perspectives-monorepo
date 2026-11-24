@@ -124,13 +124,15 @@ type VersionCoverage = { version :: Int, checkpoint :: Boolean, known :: Boolean
 -- | its version, so it lifts the watermark to that version. Above it, the watermark
 -- | advances through consecutive retained versions as long as the peer knows a record
 -- | at each. Versions that were never retained locally do not exist and are skipped;
--- | version 0 (constructors) never counts. The watermark never decreases.
+-- | version 0 (constructors) never counts. An unknown checkpoint stands for pruned
+-- | versions, so it bars the watermark (unless the peer knows a record at its version).
+-- | The watermark never decreases.
 extendContiguousVersion :: Int -> Array VersionCoverage -> Int
 extendContiguousVersion start coverage =
   let
     lifted = foldl (\k c -> if c.checkpoint && c.known then max k c.version else k) start coverage
-    versions = sort $ nub $ map _.version $ filter (\c -> not c.checkpoint && c.version > lifted) coverage
-    knownAt v = any (\c -> not c.checkpoint && c.known && c.version == v) coverage
+    versions = sort $ nub $ map _.version $ filter (\c -> c.version > lifted) coverage
+    knownAt v = any (\c -> c.known && c.version == v) coverage
   in
     foldl (\{ k, open } v -> if open && knownAt v then { k: v, open } else { k, open: false }) { k: lifted, open: true } versions # _.k
 

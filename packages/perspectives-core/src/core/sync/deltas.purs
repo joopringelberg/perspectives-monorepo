@@ -357,9 +357,9 @@ addStoredDeltas users records = do
                   Just peer ->
                     not (Set.member deltaId peer.knownIds) &&
                       -- A checkpoint is redundant only if the peer was queued every version up to it.
-                    -- maxVersion is not enough: versions below it may have been withheld (e.g. a
-                    -- filtered perspective) and pruned since (I-9).
-                    not (deltaType == "PropertyCheckpoint" && maybe false (\version -> version >= resourceVersion) peer.contiguousVersion)
+                      -- maxVersion is not enough: versions below it may have been withheld (e.g. a
+                      -- filtered perspective) and pruned since (I-9).
+                      not (deltaType == "PropertyCheckpoint" && maybe false (\version -> version >= resourceVersion) peer.contiguousVersion)
               )
               known
           )

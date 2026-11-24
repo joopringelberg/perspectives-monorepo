@@ -11,7 +11,7 @@ import Prelude
 import Control.Monad.AvarMonadAsk as AA
 import Control.Monad.Error.Class (try)
 import Control.Monad.Trans.Class (lift)
-import Data.Array (elem, length)
+import Data.Array (elem, filter, length)
 import Data.Array.NonEmpty as NA
 import Data.Either (isLeft)
 import Data.Foldable (for_)
@@ -28,8 +28,11 @@ import Perspectives.Data.EncodableMap as EM
 import Perspectives.Deltas (addPublicKeysToTransaction, addStoredDeltas, savePeerTransactionInOutgoingPost, sortTransactionDeltas)
 import Perspectives.InstanceRepresentation (PerspectRol(..))
 import Perspectives.Persistence.API (tryGetDocument_)
-import Perspectives.Persistence.DeltaStore (getDeltasForResource, pruneDeltasThrough, storeDeltaFromSignedDelta)
-import Perspectives.Persistence.PeerDeliveryStore (PeerDeliveryDoc(..), peerDeliveryDatabaseName, peerDeliveryDocId, retainedKnowledge, signedDeltaDeliveryId, unknownToPeer)
+import Perspectives.Persistence.DeltaStore (getDeltasForResource, pruneDeltasThrough, safeKey, storeDeltaFromSignedDelta)
+import Perspectives.Persistence.PeerDeliveryStore (PeerDeliveryDoc(..), extendContiguousVersion, forgetPeerDeliveryKnowledge, lowerPeerDeliveryKnowledge, peerDeliveryDatabaseName, peerDeliveryDocId, peerDeliveryKnowledge, retainedKnowledge, signedDeltaDeliveryId, unknownToPeer)
+import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
+import Perspectives.Persistence.PendingTransactionStore (PendingTransactionRecord(..), blockedStatus)
+import Perspectives.Sync.HistoryRequest (answerHistoryRequest, historyRanges, historyRequestBackoff, historyRequestDue, historyRequestGrace, selectHistory)
 import Perspectives.Persistent (getPerspectRol, postDatabaseName)
 import Perspectives.Query.QueryTypes (Domain(..), QueryFunctionDescription(..), RoleInContext(..))
 import Perspectives.Representation.ADT (ADT(..))
@@ -288,6 +291,124 @@ theSuite = suite "Durable incremental peer delivery" do
       unsorted = [ deletion, change 10 "SetProperty", change 5 "DeleteProperty", change 4 "AddProperty", baseline, creation, change 3 "RemoveProperty" ]
       sorted = sortTransactionDeltas $ map (\delta -> DeltaInTransaction { users: [], delta }) unsorted
     equal expected $ map (\(DeltaInTransaction d) -> d.delta) sorted
+
+  test "the contiguous watermark only advances through versions the peer has" do
+    let
+      plain version known = { version, checkpoint: false, known }
+      checkpointAt version known = { version, checkpoint: true, known }
+    equal 3 $ extendContiguousVersion 0 [ plain 1 true, plain 2 true, plain 3 true ]
+    equal 1 $ extendContiguousVersion 0 [ plain 1 true, plain 2 false, plain 3 true ]
+    equal 0 $ extendContiguousVersion 0 [ plain 1 false, plain 20 true ]
+    -- Versions never retained locally do not exist and are skipped.
+    equal 20 $ extendContiguousVersion 0 [ plain 1 true, plain 20 true ]
+    -- Two records at one version (a conflict): one known record suffices.
+    equal 2 $ extendContiguousVersion 0 [ plain 1 true, plain 2 false, plain 2 true ]
+    -- A known checkpoint carries the complete state at its version.
+    equal 5 $ extendContiguousVersion 0 [ checkpointAt 4 true, plain 5 true, plain 7 false ]
+    -- An unknown checkpoint stands for pruned versions the peer may lack.
+    equal 0 $ extendContiguousVersion 0 [ checkpointAt 4 false, plain 5 true ]
+    equal 5 $ extendContiguousVersion 0 [ checkpointAt 4 false, plain 4 true, plain 5 true ]
+    -- Constructors (version 0) never count, and the watermark never decreases.
+    equal 6 $ extendContiguousVersion 6 [ plain 0 true, plain 1 false ]
+
+  test "a checkpoint is shipped when the peer was only queued a newer version (I-9)" $
+    Binding.withFixture Binding.newRemotePeer [] [] do
+      let
+        newest = propertyChange 20 "SetProperty" "newest" (PerspectivesUser "local")
+        originalWinner = propertyChange 2 "SetProperty" "boundary" (PerspectivesUser "remote-old")
+        baseline = checkpointChange originalWinner
+      lift $ storeDeltaFromSignedDelta newest
+      encrypted <- packet
+      -- Only the newest version was queued: version 1 was withheld from this peer.
+      lift $ savePeerTransactionInOutgoingPost destination "only-newest" encrypted [ newest ]
+      lift $ storeDeltaFromSignedDelta baseline
+      knowledge <- lift $ peerDeliveryKnowledge destination propertyKey
+      records <- lift $ getDeltasForResource propertyKey
+      addStoredDeltas [ Binding.userId ] records
+      deltas <- transactionDeltas
+      liftAff do
+        equal (Just 20) knowledge.maxVersion
+        equal (Just 0) knowledge.contiguousVersion
+        assert "A checkpoint below an unknown version is not redundant" $ elem baseline deltas
+        assert "Known retained history must not be retransmitted" $ not $ elem newest deltas
+
+  test "a key change forgets, and a history request lowers, delivery knowledge (I-7)" $
+    Binding.withFixture Binding.newRemotePeer [] [] do
+      let newest = propertyChange 20 "SetProperty" "newest" (PerspectivesUser "local")
+      lift $ storeDeltaFromSignedDelta newest
+      encrypted <- packet
+      lift $ savePeerTransactionInOutgoingPost destination "both" encrypted [ Binding.visiblePropertyDelta, newest ]
+      lift $ lowerPeerDeliveryKnowledge destination propertyKey 20
+      lowered <- lift $ peerDeliveryKnowledge destination propertyKey
+      visibleId <- lift $ signedDeltaDeliveryId Binding.visiblePropertyDelta
+      newestId <- lift $ signedDeltaDeliveryId newest
+      liftAff do
+        assert "Knowledge below the requested version is kept" $ Set.member visibleId lowered.knownIds
+        assert "Knowledge from the requested version on is dropped" $ not $ Set.member newestId lowered.knownIds
+        equal (Just 19) lowered.contiguousVersion
+        equal (Just 20) lowered.maxVersion
+      -- Unsigned history requests are ignored and leave knowledge intact.
+      lift $ answerHistoryRequest $ SignedDelta { author: PerspectivesUser "remote-new", signature: Nothing, encryptedDelta: "{}" }
+      unchanged <- lift $ peerDeliveryKnowledge destination propertyKey
+      liftAff $ assert "An unsigned request changes nothing" $ Set.member visibleId unchanged.knownIds
+      lift $ forgetPeerDeliveryKnowledge destination
+      forgotten <- lift $ peerDeliveryKnowledge destination propertyKey
+      liftAff do
+        equal Nothing forgotten.maxVersion
+        assert "A forgotten peer knows nothing" $ Set.isEmpty forgotten.knownIds
+
+  test "history requests: missing ranges, back-off and selection" $
+    Binding.withFixture Binding.newRemotePeer [] [] do
+      Transaction { timeStamp } <- AA.get
+      let
+        v2 = propertyChange 2 "AddProperty" "two" (PerspectivesUser "local")
+        v3 = propertyChange 3 "SetProperty" "three" (PerspectivesUser "local")
+        v5 = propertyChange 5 "SetProperty" "five" (PerspectivesUser "local")
+        v7 = propertyChange 7 "SetProperty" "seven" (PerspectivesUser "local")
+        baseline = checkpointChange v2
+        record = PendingTransactionRecord
+          { _id: "pending"
+          , _rev: Nothing
+          , transaction: currentTransactionForPeer
+              { author: PerspectivesUser "remote-new"
+              , perspectivesSystem: Binding.contextId
+              , timeStamp
+              , deltas: [ v7, v5 ]
+              , publicKeys: EM.empty
+              }
+          , missingDeltas: [ { author: PerspectivesUser "remote-new", resourceKey: propertyKey, expectedVersion: 2 } ]
+          , status: blockedStatus
+          , attempts: 1
+          , lastError: Nothing
+          , blockedSince: Just 0.0
+          , historyRequestedAt: Nothing
+          , historyRequests: 0
+          }
+        requested n at = modifyRecord (_ { historyRequestedAt = Just at, historyRequests = n }) record
+        hour = 3600000.0
+        modifyRecord f (PendingTransactionRecord r) = PendingTransactionRecord (f r)
+      liftAff do
+        equal [ { resourceKey: safeKey propertyKey, fromVersion: 2, toVersion: 4 } ] $ historyRanges record
+        assert "Wait for the grace period" $ not $ historyRequestDue (historyRequestGrace - 1.0) record
+        assert "Ask after the grace period" $ historyRequestDue historyRequestGrace record
+        assert "Back off for an hour after the first request" $ not $ historyRequestDue (hour - 1.0) (requested 1 0.0)
+        assert "Ask again after an hour" $ historyRequestDue hour (requested 1 0.0)
+        assert "The back-off doubles" $ not $ historyRequestDue (3.0 * hour) (requested 3 0.0)
+        equal (24.0 * hour) $ historyRequestBackoff 10
+        assert "A failed record has nothing to ask" $ not $ historyRequestDue hour
+          (modifyRecord (_ { missingDeltas = [] }) record)
+      lift $ for_ [ v2, v3, v5, baseline ] storeDeltaFromSignedDelta
+      records <- lift $ getDeltasForResource propertyKey
+      let
+        selected from cap rs = map (\(DeltaStoreRecord r) -> r.signedDelta) $ selectHistory from cap rs
+        pruned = filter (\(DeltaStoreRecord r) -> r.signedDelta /= v2) records
+      liftAff do
+        equal 2 $ length $ selected 2 3 records
+        assert "Retained versions are sent as they are" $ elem v2 (selected 2 3 records) && elem v3 (selected 2 3 records)
+        assert "Nothing above the cap is sent" $ not $ elem v5 (selected 2 3 records)
+        equal 3 $ length $ selected 2 5 pruned
+        assert "A pruned start is covered by the newest checkpoint" $ elem baseline (selected 2 5 pruned)
+        equal [] $ selected 4 3 records
 
 destination :: UnschemedResourceIdentifier
 destination = unschemePerspectivesUser $ PerspectivesUser "def:#remote-new"
