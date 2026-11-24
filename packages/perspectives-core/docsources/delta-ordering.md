@@ -31,7 +31,7 @@ been corrected.
 
 | Mechanism | Status |
 |---|---|
-| Per-key resource versions, deterministic conflict tiebreak | Implemented |
+| Per-key resource versions, deterministic conflict tiebreak | Implemented; late property winners re-derive from history (§5.1, §6.1) |
 | Modify-wins-over-delete, role restoration | Implemented |
 | Gap detection, blocking a whole transaction | Implemented |
 | Persisting blocked transactions (pending store) | Implemented (§3.3, §7.3) |
@@ -123,7 +123,8 @@ Consequences that matter later:
   decides which constructor is current.
 - A version number does **not** identify a delta. Two authors can produce the
   same version (a conflict), and the gap check only counts versions; it cannot
-  tell *whose* delta filled a version (issue I-4).
+  tell *whose* delta filled a version. Property deltas below the local
+  counter are therefore re-examined rather than discarded (§5.1, issue I-4).
 
 Both `resourceVersion` and `resourceKey` are stored inside every `DeltaRecord`.
 
@@ -328,9 +329,19 @@ executeDeltaWithVersionTracking baselines signedDelta stringified resourceKey re
    disposition `CoveredByDeletion`, not executed.
 5. **Checkpoint** — executed only when `resourceVersion > localVersion`
    (never overwrites equally new or newer state), disposition `Checkpoint`.
-6. **Outdated** (`resourceVersion < localVersion`) — stored with
-   `applied = false`, disposition `Outdated`, not executed. *See issue I-4: an
-   outdated delta is not necessarily stale.*
+6. **Below the local counter** (`resourceVersion < localVersion`).
+   - *Property operations* (`reconsiderLateProperty`): the delta may be the
+     winner of a conflict at its own version that arrived late, or fill a
+     version this installation never received. If its version is at or above
+     the key's checkpoint and no stored record at that version takes
+     precedence (§6.1), the records at that version are marked not applied,
+     the delta is stored as applied with disposition `LateWinner`, and the
+     property is re-derived from its full history
+     (`restorePropertyFromHistory`). The counter is not changed. Otherwise it
+     is stored with `applied = false`, disposition `Outdated`.
+   - *Other deltas*: stored with `applied = false`, disposition `Outdated`,
+     not executed. Their operations are absolute (bindings, role lifecycle,
+     membership), so the later version already determines the final state.
 7. **Same version** (`resourceVersion == localVersion`) — fresh creation or
    conflict (§5.3).
 8. **Next version** (`resourceVersion > localVersion`; gaps were excluded in
@@ -344,7 +355,8 @@ executeDeltaWithVersionTracking baselines signedDelta stringified resourceKey re
 |---|---|---|
 | `Applied` | true | Executed in the normal or winning-conflict path |
 | `ConflictLoser` | false | Lost the author tiebreak (§6.1) |
-| `Outdated` | false | Version below the local counter |
+| `LateWinner` | true | Property delta below the local counter that wins at its version; the property was re-derived from history |
+| `Outdated` | false | Version below the local counter (and, for properties, losing at its version or below the checkpoint) |
 | `Checkpoint` | true | Certified baseline state applied |
 | `ConstructionBaseline` | true | Selected constructor/membership/context template |
 | `CoveredByDeletion` | true | Historical evidence observed by an authorised deletion |
@@ -382,9 +394,23 @@ are not rolled back.
 
 ### 6.1 Tiebreak
 
-Two deltas from different authors at the same version of the same key: the
-author whose `PerspectivesUser` identifier is **alphabetically highest** wins,
-identically on every installation (`hasAuthorGreaterOrEqual`).
+Two different deltas at the same version of the same key: the author whose
+(unschemed) `PerspectivesUser` identifier is **alphabetically highest** wins;
+two different deltas of one author at one version (possible only after counter
+loss, §9.3) are ordered by their signed content. The order is a total order
+on signed deltas (`conflictPrecedence` in `propertyHistory.purs`), used both by
+`existingDeltaWins` when a delta arrives and by `propertyHistory` when a
+property is reconstructed, so both agree on every installation. A checkpoint
+competes with the original winner it certifies.
+
+**Resulting invariant for properties.** The value of a property is the fold,
+in version order, of the winners per version, starting from the newest
+checkpoint. Every path that applies a property delta either extends that fold
+(next version, winning same-version conflict on the newest version) or
+re-derives it from history (winning conflict, late winner). Installations that
+hold the same records therefore hold the same value, whatever the arrival
+order. A v(n+1) that its author built on a losing v(n) is replayed on top of
+the winner of v(n): its intention is rebased, not preserved (issue I-5).
 
 ### 6.2 Modify wins over delete
 
@@ -685,7 +711,9 @@ compacted prefix. Older checkpoints without causal metadata represent baseline
 history. Context creation has no role clock.
 
 Causal stamps are used for deletion/modification and construction decisions
-only. Same-key conflicts (§6.1) and gap checks (§7) do not use them (issue I-5).
+only. Same-key conflicts (§6.1) and gap checks (§7) do not use them; for
+properties, convergence comes from the version-ordered fold of winners (§6.1,
+issue I-5).
 
 This is authenticated causal bookkeeping, not Byzantine proof: authenticated
 authors can assert observations, and checkpoint certifiers retain the trust
@@ -922,8 +950,8 @@ Notes:
 
 Local mutations are *not* a trigger. A local write on an awaited key raises the
 counter past the gap without supplying the missing delta, so the gap check would
-pass for the wrong reason. That case is covered by the fix for issue I-4, not by
-unblocking.
+pass for the wrong reason. That case is covered by the late-winner rule for
+property deltas (§5.1, issue I-4), not by unblocking.
 
 ### 10.5 Failed executions become pending records
 
@@ -991,7 +1019,8 @@ The earlier design executed a pending transaction after 24 hours "and let the
 conflict rules handle the rest". That is unsafe: relative property operations
 (`AddProperty`, `RemoveProperty`) applied across a gap produce a state that no
 other peer has, and the later arrival of the missing delta is classified as
-`Outdated` and discarded (issue I-4). Instead:
+`Outdated` (issue I-4: for properties now re-derived as a late winner, but
+only when the history is complete). Instead:
 
 1. After a configurable period (default 24 hours) with unanswered history
    requests, or when a record becomes `Failed`, set its status to `Escalated`.
@@ -1046,8 +1075,8 @@ can cause wrong intermediate state or lost work under plausible conditions;
 | I-1 | H | **Fixed** (§10.3, §10.4). Blocked transactions were never retried: `getAllPendingTransactions` returns `[]` and nothing calls it. Every gap is permanent; later transactions of the same peer touching the same keys block as well. | `pendingTransactionStore.purs` | §10.2–§10.4 |
 | I-2 | M | No timeout or escalation; the user cannot see waiting data. | — | §10.7 |
 | I-3 | M | **Fixed** (§3.3). Pending doc ID was `pending_<author>_<timeStamp>` and stored without `_rev`: redelivery of a blocked transaction (or any future re-store) conflicts and throws after the AMQP ack. | `storePendingTransaction` | Deterministic ID with content hash, upsert (§10.2) |
-| I-4 | H | **`Outdated` is not the same as stale.** A delta with `resourceVersion < localVersion` may be the *winner* of a conflict at its version that arrived late. Example: A and B write v4 concurrently, A > B; B then writes v5 = `AddProperty z`. At B, A's v4 arrives at local v5: `Outdated`, discarded. At A, B's v4 loses and B's v5 is applied on A's v4. For relative operations A ends with {x, z}, B with {y, z}. The same happens when a third peer's gap is "closed" by the losing v4, or by a local write on an awaited key. Absolute operations (set, bindings, role lifecycle) converge in their final state. | `executeDeltaWithVersionTracking`, outdated branch | For property operations: persist, and if the incoming delta would win at its version (or no record exists there and it is above the checkpoint), re-derive the property with `restorePropertyFromHistory`, exactly as the conflict-winner branch already does. |
-| I-5 | M | Version counters carry no causality. A v(n+1) built on a losing v(n) is applied as normal; per-role causal stamps exist but are not used for same-key conflicts. Combined with I-4 this is the root of property divergence. | §6.1, §7 | Short term: I-4's re-derivation. Long term: resolve property conflicts from the causal stamps (I-4 then becomes a special case). |
+| I-4 | H | **Fixed** (§5.1, `reconsiderLateProperty`, disposition `LateWinner`). A late property delta that wins at its version (or fills an unknown version above the checkpoint) re-derives the property from history. Below the checkpoint it remains `Outdated`; non-property deltas remain `Outdated` (absolute operations). **`Outdated` is not the same as stale.** A delta with `resourceVersion < localVersion` may be the *winner* of a conflict at its version that arrived late. Example: A and B write v4 concurrently, A > B; B then writes v5 = `AddProperty z`. At B, A's v4 arrives at local v5: `Outdated`, discarded. At A, B's v4 loses and B's v5 is applied on A's v4. For relative operations A ends with {x, z}, B with {y, z}. The same happens when a third peer's gap is "closed" by the losing v4, or by a local write on an awaited key. Absolute operations (set, bindings, role lifecycle) converge in their final state. | `executeDeltaWithVersionTracking`, outdated branch | For property operations: persist, and if the incoming delta would win at its version (or no record exists there and it is above the checkpoint), re-derive the property with `restorePropertyFromHistory`, exactly as the conflict-winner branch already does. |
+| I-5 | M | **Mitigated** (§6.1 invariant): with I-4 and I-13 fixed, every installation computes the same version-ordered fold of winners, so properties converge. Remaining: a v(n+1) built on a losing v(n) is rebased on the winner rather than merged by intent; this is the documented semantics. Resolving conflicts from causal stamps remains an option, not a correctness requirement. Version counters carry no causality. A v(n+1) built on a losing v(n) is applied as normal; per-role causal stamps exist but are not used for same-key conflicts. Combined with I-4 this is the root of property divergence. | §6.1, §7 | Short term: I-4's re-derivation. Long term: resolve property conflicts from the causal stamps (I-4 then becomes a special case). |
 | I-6 | M | Replay order only sorts by version within priority 5 (properties, moves). For one key, `SetFirstBinding` (4) runs before `RemoveBinding`/`ReplaceBinding` (6) regardless of version, and role `Move` (5) before `Remove` (6). A transaction `SetFirstBinding v1, RemoveBinding v2, SetFirstBinding v3` replays as v1, v3, v2: v2 becomes `Outdated` and its side effects (e.g. inverse binding cleanup) are skipped. | `compareForReplay`, `sortTransactionDeltas` | Keep the type priority across keys, but within one resource key order strictly by version (constructors at version 0 sort first naturally). |
 | I-7 | H | Peer delivery knowledge means "queued", never reset. A peer that lost or rejected a delta (restore from backup, reinstall, quarantine, rejected authorisation, exception after early ack) never receives it or a covering checkpoint again on knowledge-based paths → permanent gap. | `peerDeliveryStore.purs`, `addStoredDeltas` | Reset on history request (§10.6); also reset all knowledge for a peer when its installation nonce or key changes. |
 | I-8 | M | Binding, context and role-membership keys have no checkpoint. A single missed binding delta can only be repaired by resending exactly that delta. Baselines lift only the role key; property and binding gaps in the same transaction still block it. | §8.4 | Answering history requests with full binding history (§10.6) suffices; a binding checkpoint is optional. |
@@ -1055,7 +1084,7 @@ can cause wrong intermediate state or lost work under plausible conditions;
 | I-10 | H | **Fixed** for execution failures (§10.5); the early acknowledgement remains, so a failure to *write* the pending record, or to decrypt, still loses the message. Current-epoch AMQP messages are acknowledged before execution. If `storePendingTransaction` fails (I-3) or execution throws (§5.4, §6.4), the transaction is gone; only the sender's knowledge remains, which says "delivered". | `amqpTransport/incomingPost.purs` | Store failed executions as pending (§10.5); alternatively acknowledge only after execution or pending storage. |
 | I-11 | L | `setResourceVersion` is unconditional; most callers guard with `max`, some rely on the branch condition. A future caller can lower a counter and reopen applied versions. | `resourceVersionStore.purs` | Make `setResourceVersion` monotonic (`max`) and add an explicit `resetResourceVersion` if ever needed. |
 | I-12 | M | Still open; now that failed transactions are retried (§10.5), the suggested fix is possible, but it changes which transactions fail and must be evaluated per delta type. Non-property execution errors are swallowed: the delta is stored as `Applied` and the counter advanced although nothing happened. The peer silently diverges and later deltas build on a state that does not exist. | `executeDelta` | Treat like property errors: propagate, and rely on §10.5 for retry. |
-| I-13 | L | `hasAuthorGreaterOrEqual` uses `>=`, so the same author at the same version counts as a winner over itself. Duplicates are normally caught by `deltaId`; of two *different* deltas of one author at one version (only possible after counter loss, e.g. restore from backup) the later arrival always loses, so the outcome depends on arrival order. | `executeDeltaWithVersionTracking` | Compare `deltaId` as a secondary tiebreak. |
+| I-13 | L | **Fixed** (§6.1, `conflictPrecedence`): signed content is the secondary tiebreak, shared by arrival-time resolution and history reconstruction. `hasAuthorGreaterOrEqual` used `>=`, so the same author at the same version counts as a winner over itself. Duplicates are normally caught by `deltaId`; of two *different* deltas of one author at one version (only possible after counter loss, e.g. restore from backup) the later arrival always loses, so the outcome depends on arrival order. | `executeDeltaWithVersionTracking` | Compare `deltaId` as a secondary tiebreak. |
 | I-14 | L | Concurrent version-0 constructors by different authors for the same deterministic identifier: the first is executed as "fresh", the second resolved by author tiebreak; context constructors carry no causal stamp. Constructors are idempotent so state converges, but the recorded winner may differ between peers. | §5.3 | Accept; document that constructor winners are not significant. |
 | I-15 | L | Restoring a peer from backup reuses its counters for new writes (resource versions and causal counters), creating same-author same-version deltas at its peers. The doc warns against two live copies, but not against restore-then-continue. | §9.3 | Rotate the installation nonce on restore and announce it, which triggers a knowledge reset (I-7). |
 | I-16 | L | The previous version of this document claimed every mutation increments the version, linked a non-existent `docs/transaction-execution.md`, omitted the `deltaId`/`disposition`/`contextKey` fields, and presented §6.4/§6.5 as existing behaviour. | this file | Corrected in this revision. |
@@ -1063,8 +1092,8 @@ can cause wrong intermediate state or lost work under plausible conditions;
 ### Priorities
 
 1. ~~I-1, I-3, I-10 (unblocking phases 1–2)~~ — done.
-2. I-4 (+ I-5): divergence of multi-valued properties under ordinary
-   concurrency; the fix is local and reuses existing reconstruction code.
+2. ~~I-4 (+ I-5, I-13): divergence of multi-valued properties under ordinary
+   concurrency~~ — done.
 3. I-7, I-9 (history requests): repair after data loss.
 4. I-6, I-12: correctness of replay within a transaction.
 5. The rest.
@@ -1076,7 +1105,7 @@ can cause wrong intermediate state or lost work under plausible conditions;
 | Decision | Chosen approach | Alternative considered |
 |---|---|---|
 | Ordering unit | Single integer version per resource key | Lamport clock + per-author sequence number |
-| Conflict winner | Author with alphabetically highest ID | Last write wins on arrival order |
+| Conflict winner | Author with alphabetically highest ID, then signed content; properties re-derived as a version-ordered fold of winners | Last write wins on arrival order |
 | Modify vs. delete | Concurrent modification wins; observed historical writes do not | Treating all historical changes as concurrent |
 | Gap response | Block entire transaction | Execute available deltas and patch later |
 | Persistence | PouchDB (survives restarts) | In-memory only |
