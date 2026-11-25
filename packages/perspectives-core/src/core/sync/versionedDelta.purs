@@ -23,6 +23,7 @@
 module Perspectives.Sync.VersionedDelta
   ( DeltaEnvelope(..)
   , class SignVersionedDelta
+  , isPredefinedContext
   , isPredefinedContextScaffolding
   , parseIncomingDelta
   , parseDeltaFormatVersion
@@ -161,6 +162,15 @@ parseIncomingDelta stringifiedDelta =
     parseOrderedUnmarked stringifiedDelta
   else Left "Unsupported delta format version"
 
+-- | TheWorld and TheSocialEnvironment are constructed locally by every installation, with the same
+-- | identifier. Their construction history is never shipped. Published copies are not predefined.
+isPredefinedContext :: String -> Boolean
+isPredefinedContext id =
+  let
+    localId = stripNonPublicIdentifiers id
+  in
+    localId == "TheWorld" || localId == "TheSocialEnvironment"
+
 -- | Private bootstrap containers already exist at every receiver. Published copies do not.
 isPredefinedContextScaffolding :: String -> Boolean
 isPredefinedContextScaffolding stringifiedDelta = case parseIncomingDelta stringifiedDelta of
@@ -172,11 +182,7 @@ isPredefinedContextScaffolding stringifiedDelta = case parseIncomingDelta string
     isExternal (unwrap contextInstance) (unwrap roleInstance)
   _ -> false
   where
-  isPredefined id =
-    let
-      localId = stripNonPublicIdentifiers id
-    in
-      localId == "TheWorld" || localId == "TheSocialEnvironment"
+  isPredefined = isPredefinedContext
 
   isExternal id roleId =
     isPredefined id && stripNonPublicIdentifiers roleId == stripNonPublicIdentifiers id <> "$External"
