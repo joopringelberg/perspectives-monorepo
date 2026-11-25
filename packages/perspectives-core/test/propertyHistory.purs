@@ -34,7 +34,7 @@ import Perspectives.Persistence.DeltaStore (deltaStoreDocId, getDelta, getDeltas
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
 import Perspectives.Persistence.CausalStore (CausalRoleDoc(..), getCausalRole)
 import Perspectives.Persistence.PropertyHistoryStore (storeIncomingDeltaWithHistory, storeLocalDeltaWithHistory)
-import Perspectives.Persistence.PendingTransactionStore (getPendingTransactionsForResource)
+import Perspectives.Persistence.PendingTransactionStore (getPendingTransactionsForResource, pendingTransactionDocId)
 import Perspectives.Persistence.ResourceVersionStore (getResourceVersion)
 import Perspectives.PerspectivesState (getPerspectivesUser)
 import Perspectives.Persistent (getPerspectRol)
@@ -215,8 +215,7 @@ theSuite = suite "Checkpointed property history" do
           blocked = TransactionForPeer (unwrap incoming) { deltas = (unwrap incoming).deltas <> [ missing ] }
         executeTransaction blocked
         blockedVersion <- lift $ getResourceVersion propertyKey
-        pending <- lift $ getPendingTransactionsForResource $
-          "pending_" <> unwrap snapshot.author <> "_" <> show tr.timeStamp
+        pending <- lift $ pendingTransactionDocId blocked >>= getPendingTransactionsForResource
         liftAff do
           equal 0 blockedVersion
           case pending of

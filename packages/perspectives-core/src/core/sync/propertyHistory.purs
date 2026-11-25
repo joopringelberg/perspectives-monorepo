@@ -136,8 +136,17 @@ propertyHistory records = do
     change <- readPropertyChange r.signedDelta
     pure { signed: r.signedDelta, change }
   chooseWinner left right =
-    if unschemePerspectivesUser (unwrap left.signed).author >= unschemePerspectivesUser (unwrap right.signed).author then left
+    if conflictPrecedence left.signed right.signed /= LT then left
     else right
+
+-- | Deterministic total order between two deltas that claim the same resource version.
+-- | The author with the highest (unschemed) identifier wins; for two different deltas of
+-- | one author at one version (only after counter loss) the signed content decides.
+-- | Every installation uses this order, so the outcome does not depend on arrival order.
+conflictPrecedence :: SignedDelta -> SignedDelta -> Ordering
+conflictPrecedence (SignedDelta left) (SignedDelta right) =
+  compare (unschemePerspectivesUser left.author) (unschemePerspectivesUser right.author)
+    <> compare left.encryptedDelta right.encryptedDelta
 
 -- Return a baseline immediately before the ten retained logical versions.
 -- Several conflicting records at one version count as one history position.

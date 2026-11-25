@@ -70,7 +70,7 @@ Public-store distribution does not use peer-delivery knowledge.
 Stored properties retain a checkpoint plus ten recent logical versions by
 default; `fullhistory` disables audit-history pruning for that property. Identity
 key proofs remain intact, and the latest file-publication operation is retained
-as operational evidence. See [delta-ordering.md](delta-ordering.md#10-property-history-retention).
+as operational evidence. See [delta-ordering.md](delta-ordering.md#81-property-history-retention-and-checkpoints).
 
 Each transaction maintains an in-memory membership set alongside its ordered
 delta array. Membership compares the entire signed delta (author, payload and
@@ -147,7 +147,7 @@ entitled peer as baseline evidence without rewriting original signatures.
 The complete transaction, including the epoch, is encrypted. Persisted old
 outbox packets retain their original framing and are quarantined on receipt
 after cutover; they are never automatically upgraded or replayed. See
-[the coordinated cutover procedure](delta-ordering.md#11-per-role-causality-and-coordinated-cutover).
+[the coordinated cutover procedure](delta-ordering.md#92-upgrade-procedure).
 
 An envelope does not inherit the author of its first delta: reconstruction may
 forward historical deltas from other users, and filtering may remove that first

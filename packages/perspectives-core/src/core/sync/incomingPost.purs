@@ -39,18 +39,14 @@ import Effect.Exception (error)
 import Foreign (MultipleErrors)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.CoreTypes (MonadPerspectives, PerspectivesExtraState)
-import Perspectives.ModelDependencies (sysUser)
 import Perspectives.Persistence.API (MonadPouchdb, deleteDocument)
 import Perspectives.Persistence.State (getCouchdbCredentials)
 import Perspectives.Persistence.Types (Credential(..))
 import Perspectives.Persistent.ChangesFeed (DocProducer, EventSource, createEventSource, docProducer)
-import Perspectives.PerspectivesState (transactionLevel, withTransactionPriority)
-import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), RoleType(..))
-import Perspectives.RunMonadPerspectivesTransaction (runMonadPerspectivesTransaction')
+import Perspectives.PerspectivesState (transactionLevel)
 import Perspectives.Sync.Channel (postDbName)
-import Perspectives.Sync.HandleTransaction (executeTransaction)
+import Perspectives.Sync.PendingTransactions (DrainMode(..), drainPendingTransactions, runIncomingTransaction)
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer)
-import Perspectives.TransactionQueue (TransactionPriority(..))
 import Prelude (Unit, bind, discard, pure, unit, void, ($), (<>), (<))
 
 type URL = String
@@ -67,6 +63,8 @@ incomingPost url = do
   void $ modify \s -> s { post = Just es }
   -- Produce new Transaction documents
   (transactionProducer :: DocProducer (PerspectivesExtraState) TransactionForPeer) <- pure $ docProducer es
+  -- Retry transactions that were stored as pending in an earlier session.
+  drainPendingTransactions AtStartup
   -- Handle them.
   void $ runProcess $ transactionProducer $$ transactionConsumer post
   where
@@ -80,13 +78,11 @@ incomingPost url = do
       Right (Tuple id (Just t)) -> do
         padding <- lift transactionLevel
         log $ padding <> "Executing incoming post transaction"
-        lift
-          ( withTransactionPriority BackgroundTransaction $ runMonadPerspectivesTransaction'
-              false
-              (ENR $ EnumeratedRoleType sysUser)
-              (executeTransaction t)
-          )
+        -- runIncomingTransaction stores the transaction for a retry if it fails or is blocked,
+        -- so it is safe to delete it from the post database.
+        lift $ runIncomingTransaction t
         void $ lift $ deleteDocument database id Nothing
+        lift $ drainPendingTransactions AfterIncoming
 
 -----------------------------------------------------------
 -- GETCOUCHDBBASEURLWITHCREDENTIALS

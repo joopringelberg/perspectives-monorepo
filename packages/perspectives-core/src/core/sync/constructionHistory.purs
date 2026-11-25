@@ -24,6 +24,7 @@ import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleIns
 import Perspectives.ResourceIdentifiers (isInPublicScheme)
 import Perspectives.Sync.ConstructionBaseline (ConstructionBaseline, selectContextConstruction, selectRoleBaseline)
 import Perspectives.Sync.SignedDelta (SignedDelta)
+import Perspectives.Sync.VersionedDelta (isPredefinedContext)
 
 getRoleBaselineHistory :: RoleInstance -> MonadPerspectives (Array DeltaStoreRecord)
 getRoleBaselineHistory role = do
@@ -33,7 +34,12 @@ getRoleBaselineHistory role = do
     (\(DeltaStoreRecord record) -> record.signedDelta == baseline.construction || record.signedDelta == baseline.membership)
     records
 
+-- | TheWorld and TheSocialEnvironment (and their external roles) exist at every receiver, constructed
+-- | locally on installation. Their construction history is never shipped (see
+-- | `withoutPredefinedContextScaffolding`), and the local DeltaStore may hold several constructions
+-- | of them (one per installation), so no unique baseline can be selected. Return no history.
 getContextConstructionHistory :: ContextInstance -> MonadPerspectives (Array DeltaStoreRecord)
+getContextConstructionHistory context | isPredefinedContext (unwrap context) = pure []
 getContextConstructionHistory context = do
   PerspectContext { buitenRol } <- getPerspectContext context
   externalRecords <- getDeltasForResource (unwrap buitenRol)

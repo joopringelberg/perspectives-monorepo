@@ -536,7 +536,7 @@ representation changes in this proposal:
 - Structural/binding history, key-establishment proofs, the latest file-upload
   evidence and already queued encrypted transactions remain available.
 
-See [the runtime retention specification](../docsources/delta-ordering.md#10-property-history-retention)
+See [the runtime retention specification](../docsources/delta-ordering.md#81-property-history-retention-and-checkpoints)
 for checkpoint format 3, crash recovery, operational evidence, policy changes and
 rollout constraints. Other sections of this proposal remain proposals unless
 separately implemented.

@@ -12,7 +12,7 @@ import Control.Monad.AvarMonadAsk as AA
 import Control.Monad.Error.Class (throwError, try)
 import Control.Monad.Reader (runReaderT)
 import Control.Monad.Trans.Class (lift)
-import Data.Array (any, elem, find, head, length, mapMaybe, null)
+import Data.Array (any, elem, find, head, length, mapMaybe, null, sort, (..))
 import Data.List.NonEmpty as NonEmptyList
 import Data.Either (Either(..), isLeft)
 import Data.Foldable (for_)
@@ -59,7 +59,7 @@ import Perspectives.Persistence.API (addDocument_, deleteDatabase, documentsInRa
 import Perspectives.Persistence.CausalStore (CausalInstallationDoc(..), CausalRoleDoc(..), causalDatabaseName, ensureCausalEpoch, getCausalRole, recordCausalDelta, reserveCausalStamp)
 import Perspectives.Persistence.DeltaStore (getDeltasForResource, pruneDeltasThrough, storeDeltaFromSignedDelta)
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
-import Perspectives.Persistence.PendingTransactionStore (pendingTransactionDatabaseName)
+import Perspectives.Persistence.PendingTransactionStore (PendingTransactionRecord(..), blockedStatus, failedStatus, getAllPendingTransactions, maxFailedAttempts, pendingTransactionDatabaseName, recordFailedTransaction)
 import Perspectives.Persistence.QuarantineStore (QuarantinedTransaction(..), getQuarantinedTransactions, quarantineDatabaseName)
 import Perspectives.Persistence.ResourceVersionStore (getResourceVersion, setResourceVersion)
 import Perspectives.Persistent (forceSaveContext, forceSaveRole, getPerspectContext, getPerspectRol, saveEntiteit, tryGetPerspectContext, tryGetPerspectRol)
@@ -84,7 +84,9 @@ import Perspectives.Sync.Causal (CausalStamp, Clock, currentCausalEpoch, readCau
 import Perspectives.Sync.ConstructionBaseline (sameResource, selectRoleBaseline)
 import Perspectives.Query.Interpreter.Dependencies (Dependency(..))
 import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
-import Perspectives.Sync.HandleTransaction (Delta(..), executeDeltas, executeTransaction, executeUniverseRoleDelta)
+import Perspectives.Sync.HandleTransaction (Delta(..), TransactionOutcome(..), executeDeltas, executeTransaction, executeUniverseRoleDelta)
+import Perspectives.Sync.PropertyHistory (conflictPrecedence)
+import Perspectives.Sync.PendingTransactions (DrainMode(..), drainPendingTransactions, settleIncomingTransaction)
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
 import Perspectives.Sync.Transaction (Transaction(..), createTransaction)
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..), currentTransactionForPeer)
@@ -316,6 +318,107 @@ theSuite = suite "Causal role deletion and coordinated cutover" do
         equal 1 roleVersion
         equal 1 propertyVersion
 
+  test "a blocked transaction is retried and removed once its gap has been filled" $
+    withSigningFixture true \key -> do
+      prepare key
+      third <- propertyChange "remote-old" 3 $ stamp "remote-old" 2 [ dot "remote-old" 1 ]
+      receive [ third ]
+      blocked <- lift getAllPendingTransactions
+      blockedVersion <- lift $ getResourceVersion History.propertyKey
+      liftAff do
+        equal 1 (length blocked)
+        equal 1 blockedVersion
+      second <- propertyChange "remote-old" 2 $ stamp "remote-old" 1 []
+      receive [ second ]
+      lift $ drainPendingTransactions AfterIncoming
+      remaining <- lift getAllPendingTransactions
+      version <- lift $ getResourceVersion History.propertyKey
+      liftAff do
+        equal 0 (length remaining)
+        equal 3 version
+
+  test "a chain of blocked transactions drains in a single call" $
+    withSigningFixture true \key -> do
+      prepare key
+      fourth <- propertyChange "remote-old" 4 $ stamp "remote-old" 3 [ dot "remote-old" 2 ]
+      third <- propertyChange "remote-old" 3 $ stamp "remote-old" 2 [ dot "remote-old" 1 ]
+      receive [ fourth ]
+      receive [ third ]
+      blocked <- lift getAllPendingTransactions
+      liftAff $ equal 2 (length blocked)
+      second <- propertyChange "remote-old" 2 $ stamp "remote-old" 1 []
+      receive [ second ]
+      lift $ drainPendingTransactions AfterIncoming
+      remaining <- lift getAllPendingTransactions
+      version <- lift $ getResourceVersion History.propertyKey
+      liftAff do
+        equal 0 (length remaining)
+        equal 4 version
+
+  test "a redelivered blocked transaction keeps a single pending record" $
+    withSigningFixture true \key -> do
+      prepare key
+      third <- propertyChange "remote-old" 3 $ stamp "remote-old" 2 [ dot "remote-old" 1 ]
+      incoming <- packet [ third ]
+      executeTransaction incoming
+      executeTransaction incoming
+      pending <- lift $ pendingTransactionDatabaseName >>= \db -> documentsInRange db "" "\xFFFF"
+      liftAff $ equal 1 (length pending.rows)
+
+  test "failed transactions are kept, stop being retried, and are retried at startup" $
+    withSigningFixture true \key -> do
+      prepare key
+      second <- propertyChange "remote-old" 2 $ stamp "remote-old" 1 []
+      incoming <- packet [ second ]
+      for_ (1 .. maxFailedAttempts) \_ -> lift $ recordFailedTransaction incoming "simulated failure"
+      failed <- lift getAllPendingTransactions
+      liftAff case failed of
+        [ PendingTransactionRecord r ] -> do
+          equal maxFailedAttempts r.attempts
+          equal failedStatus r.status
+          equal (Just "simulated failure") r.lastError
+        _ -> assert "Expected exactly one pending record" false
+      lift $ drainPendingTransactions AfterIncoming
+      notRetried <- lift $ getResourceVersion History.propertyKey
+      liftAff $ equal 1 notRetried
+      lift $ drainPendingTransactions AtStartup
+      remaining <- lift getAllPendingTransactions
+      version <- lift $ getResourceVersion History.propertyKey
+      liftAff do
+        equal 0 (length remaining)
+        equal 2 version
+
+  test "a failed transaction that turns out to be blocked keeps a single pending record" $
+    withSigningFixture true \key -> do
+      prepare key
+      third <- propertyChange "remote-old" 3 $ stamp "remote-old" 2 [ dot "remote-old" 1 ]
+      incoming <- packet [ third ]
+      lift $ recordFailedTransaction incoming "simulated failure"
+      lift $ drainPendingTransactions AfterIncoming
+      records <- lift getAllPendingTransactions
+      liftAff case records of
+        [ PendingTransactionRecord r ] -> do
+          equal blockedStatus r.status
+          equal 1 r.attempts
+          assert "The retry must record the gap" (not $ null r.missingDeltas)
+        _ -> assert "Expected exactly one pending record" false
+
+  test "an execution failure is stored as a pending record instead of being lost" $
+    withSigningFixture true \key -> do
+      prepare key
+      second <- propertyChange "remote-old" 2 $ stamp "remote-old" 1 []
+      incoming <- packet [ second ]
+      done <- lift $ settleIncomingTransaction incoming (Left $ error "simulated crash")
+      stored <- lift getAllPendingTransactions
+      liftAff do
+        assert "A failed transaction must not be reported as handled" (not done)
+        equal 1 (length stored)
+      executed <- lift $ settleIncomingTransaction incoming (Right Executed)
+      remaining <- lift getAllPendingTransactions
+      liftAff do
+        assert "An executed transaction is handled" executed
+        equal 0 (length remaining)
+
   test "membership alone cannot establish a high-version construction baseline" $
     withSigningFixture true \key -> do
       prepare key
@@ -522,6 +625,71 @@ theSuite = suite "Causal role deletion and coordinated cutover" do
         assert "A concurrent edit must retain the role" present
         equal [ Value "changed" ] value
 
+  -- I-4/I-5: "remote-old" wins a conflict at version 2 over "local"; "local" then builds
+  -- version 3 (a relative AddProperty) on its own losing write. Every delivery order
+  -- must converge on the fold of the winners: remote's v2 followed by local's v3.
+  for_
+    [ { name: "winner first", order: [ "remote2", "local2", "local3" ] }
+    , { name: "late winner after a relative follow-up", order: [ "local2", "local3", "remote2" ] }
+    , { name: "late winner between", order: [ "local2", "remote2", "local3" ] }
+    ]
+    \scenario ->
+      test ("property conflicts converge regardless of delivery order (" <> scenario.name <> ")") $
+        withSigningFixture true \key -> do
+          prepare key
+          remote2 <- propertyOperation "remote-old" 2 "SetProperty" [ "x" ] $ stamp "remote-old" 1 []
+          local2 <- propertyOperation "local" 2 "SetProperty" [ "y" ] $ stamp "local" 1 []
+          local3 <- propertyOperation "local" 3 "AddProperty" [ "z" ] $ stamp "local" 2 [ dot "local" 1 ]
+          let
+            pick = case _ of
+              "remote2" -> remote2
+              "local2" -> local2
+              _ -> local3
+          for_ scenario.order \name -> receive [ pick name ]
+          value <- lift (Binding.visibleId ##= getProperty Binding.visibleProperty)
+          version <- lift $ getResourceVersion History.propertyKey
+          records <- lift $ getDeltasForResource History.propertyKey
+          liftAff do
+            equal [ Value "x", Value "z" ] (sort value)
+            equal 3 version
+            assert "The losing write must not stay applied"
+              $ isJust
+              $ find (\(DeltaStoreRecord r) -> (unwrap r.signedDelta).encryptedDelta == (unwrap local2).encryptedDelta && not r.applied) records
+            assert "The winning write must be applied"
+              $ isJust
+              $ find (\(DeltaStoreRecord r) -> (unwrap r.signedDelta).encryptedDelta == (unwrap remote2).encryptedDelta && r.applied) records
+
+  test "a late conflict loser below the local version stays outdated" $
+    withSigningFixture true \key -> do
+      prepare key
+      remote2 <- propertyOperation "remote-old" 2 "SetProperty" [ "x" ] $ stamp "remote-old" 1 []
+      remote3 <- propertyOperation "remote-old" 3 "AddProperty" [ "w" ] $ stamp "remote-old" 2 [ dot "remote-old" 1 ]
+      local2 <- propertyOperation "local" 2 "SetProperty" [ "y" ] $ stamp "local" 1 []
+      receive [ remote2 ]
+      receive [ remote3 ]
+      receive [ local2 ]
+      value <- lift (Binding.visibleId ##= getProperty Binding.visibleProperty)
+      records <- lift $ getDeltasForResource History.propertyKey
+      liftAff do
+        equal [ Value "w", Value "x" ] (sort value)
+        assert "A late loser is kept as outdated evidence"
+          $ isJust
+          $ find (\(DeltaStoreRecord r) -> (unwrap r.signedDelta).encryptedDelta == (unwrap local2).encryptedDelta && not r.applied && r.disposition == Just "Outdated") records
+
+  -- I-13: two different deltas of one author at one version (counter loss) are ordered by
+  -- their signed content, so the outcome does not depend on arrival order.
+  for_ [ true, false ] \firstX ->
+    test ("same-author conflicts at one version are resolved independently of arrival order (" <> (if firstX then "x first" else "y first") <> ")") $
+      withSigningFixture true \key -> do
+        prepare key
+        x <- propertyOperation "remote-old" 2 "SetProperty" [ "x" ] $ stamp "remote-old" 1 []
+        y <- propertyOperation "remote-old" 2 "SetProperty" [ "y" ] $ stamp "remote-old" 2 []
+        receive [ if firstX then x else y ]
+        receive [ if firstX then y else x ]
+        value <- lift (Binding.visibleId ##= getProperty Binding.visibleProperty)
+        let expected = if conflictPrecedence x y == GT then [ Value "x" ] else [ Value "y" ]
+        liftAff $ equal expected value
+
   test "a concurrent write arriving after deletion restores the role and its property" $
     withSigningFixture true \key -> do
       prepare key
@@ -705,15 +873,18 @@ signPayload author payload = do
   pure $ SignedDelta signed { author = PerspectivesUser author }
 
 propertyChange :: String -> Int -> CausalStamp -> MonadPerspectivesTransaction SignedDelta
-propertyChange author version causal = signPayload author
+propertyChange author version causal = propertyOperation author version "SetProperty" [ "changed" ] causal
+
+propertyOperation :: String -> Int -> String -> Array String -> CausalStamp -> MonadPerspectivesTransaction SignedDelta
+propertyOperation author version deltaType values causal = signPayload author
   { deltaFormatVersion: 4
   , resourceKey: History.propertyKey
   , resourceVersion: version
-  , deltaType: "SetProperty"
+  , deltaType
   , id: "visible"
   , roleType: unwrap Binding.visibleType
   , property: unwrap Binding.visibleProperty
-  , values: [ Value "changed" ]
+  , values: map Value values
   , subject: unwrap Binding.otherUserType
   , subjectKind: "ENR"
   , causal

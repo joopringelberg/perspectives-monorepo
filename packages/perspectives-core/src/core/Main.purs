@@ -37,6 +37,7 @@ import Data.Newtype (unwrap)
 import Data.Nullable (Nullable, toMaybe, toNullable)
 import Data.Tuple (Tuple(..))
 import Effect (Effect)
+import Control.Monad.Rec.Class (forever)
 import Effect.Aff (Aff, Error, Fiber, Milliseconds(..), catchError, delay, error, forkAff, joinFiber, killFiber, launchAff_, runAff, throwError, try)
 import Effect.Aff.AVar (AVar, empty, new, put, take, read)
 import Effect.Aff.Class (liftAff)
@@ -102,6 +103,7 @@ import Perspectives.Sync.DateTime (SerializableDateTime(..))
 import Perspectives.Sync.Transaction (UninterpretedTransactionForPeer(..))
 import Perspectives.TransactionQueue (TransactionPriority(..))
 import Perspectives.SystemClocks (forkedSystemClocks)
+import Perspectives.Sync.PendingTransactions (DrainMode(..), drainPendingTransactions)
 import Prelude (Unit, bind, discard, pure, show, unit, void, ($), (+), (-), (<), (<$>), (<<<), (<>), (>), (>=>), (>>=))
 import Simple.JSON (read, write) as JSON
 import Unsafe.Coerce (unsafeCoerce)
@@ -246,6 +248,15 @@ runPDR_ usr rawPouchdbUser options callback = do
         catchError (joinFiber postFiber)
           \e -> do
             logPerspectivesError $ Custom $ "Stopped handling incoming post because of: " <> show e
+
+      -- Periodically reconsider blocked transactions, so that history requests (§10.6 of
+      -- docsources/delta-ordering.md) are sent even when no new post arrives.
+      void $ forkAff $ forever do
+        delay (Milliseconds 600000.0)
+        drained <- try $ runPerspectivesWithState (drainPendingTransactions AfterIncoming) state
+        case drained of
+          Left e -> logPerspectivesError $ Custom $ "Periodic drain of pending transactions failed: " <> show e
+          Right _ -> pure unit
 
       -- Fork aff to run the system clocks. Should not be started before we have added the private key to state!
       void $ forkAff $ forkedSystemClocks state

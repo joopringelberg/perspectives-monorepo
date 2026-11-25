@@ -42,7 +42,7 @@ import Foreign.Object (Object, empty, singleton)
 import Foreign.Object (lookup, insert, delete) as OBJ
 import LRUCache (Cache, clear, defaultCreateOptions, defaultGetOptions, delete, get, newCache, set)
 import Perspectives.AMQP.Stomp (StompClient, createStompClient)
-import Perspectives.CoreTypes (AssumptionRegister, BrokerService, ContextInstances, DeltaCache, DomeinCache, IndexedResource, IntegrityFix, JustInTimeModelLoad, LogConfig, LogLevel(..), LogTopic, MonadPerspectives, PerspectivesState, QueryInstances, RepeatingTransaction, ResourceDeltasCache, ResourceVersionCache, RolInstances, RoleInstanceDeltasCache, RuntimeOptions, TranslationTable, TypeFix, Warning, invalidateRoleNormalisationCache, newPendingSettledStack, removeInternally)
+import Perspectives.CoreTypes (AssumptionRegister, BrokerService, ContextInstances, DeltaCache, DomeinCache, IndexedResource, IntegrityFix, JustInTimeModelLoad, LogConfig, LogLevel(..), LogTopic, MonadPerspectives, PerspectivesState, QueryInstances, RepeatingTransaction, ResourceDeltasCache, ResourceVersionCache, RolInstances, RoleInstanceDeltasCache, RuntimeOptions, TranslationTable, TypeFix, Warning, invalidateRoleNormalisationCache, newPendingDrainGuard, newPendingSettledStack, removeInternally)
 import Perspectives.DomeinFile (DomeinFile)
 import Perspectives.Instances.Environment (Environment, _pushFrame, addVariable, lookup) as ENV
 import Perspectives.Logging.DefaultLevels (defaultLogLevels)
@@ -118,6 +118,7 @@ newPerspectivesState uinfo transFlag transactionWithTiming modelToLoad runtimeOp
   , logConfig: defaultLogLevels
   , logColor: Nothing
   , pendingSettledTransactions: newPendingSettledStack unit
+  , pendingTransactionDrain: newPendingDrainGuard unit
   }
 
 defaultRuntimeOptions :: RuntimeOptions

@@ -27,7 +27,7 @@ import Control.Monad.Error.Class (catchError, throwError, try)
 import Control.Monad.Except (lift, runExcept, runExceptT)
 import Control.Monad.State (StateT, gets, modify, runStateT) as ST
 import Crypto.Subtle.Key.Types (CryptoKey)
-import Data.Array (any, catMaybes, concat, filter, filterA, foldl, fromFoldable, last, null, nub, sortBy)
+import Data.Array (any, catMaybes, concat, filter, filterA, foldl, fromFoldable, last, null, nub, sort, sortBy)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.FoldableWithIndex (forWithIndex_)
@@ -62,7 +62,7 @@ import Perspectives.Instances.Builders (lookupOrCreateContextInstance, lookupOrC
 import Perspectives.Instances.ObjectGetters (bottom_, getProperty, roleType)
 import Perspectives.Instances.Values (parsePerspectivesFile)
 import Perspectives.Logging (traceSync, warnSync)
-import Perspectives.ModelDependencies (rootContext)
+import Perspectives.ModelDependencies (perspectivesUsersPublicKey, perspectivesUsersTransportPublicKey, rootContext)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (getAttachment)
 import Perspectives.Persistence.DeltaStore (deltaStoreDocIdWithDeltaId, extractDeltaInfo, findDeltaByDeltaId, getDeltasForResource, getDeltasForRoleInstance, safeKey, storeDelta, storeDeltaFromSignedDelta, updateDeltaApplied)
@@ -88,15 +88,16 @@ import Perspectives.SaveUserData (removeBinding, removeReceivedContextIfUnbound,
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.StrippedDelta (addPublicResourceScheme, addResourceSchemes, addSchemeToResourceIdentifier)
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
-import Perspectives.Sync.PropertyHistory (checkpoint, isCheckpoint, isPropertyOperation, propertyHistory, validateCheckpoint)
+import Perspectives.Sync.PropertyHistory (checkpoint, conflictPrecedence, isCheckpoint, isPropertyOperation, propertyHistory, validateCheckpoint)
 import Perspectives.Sync.Transaction (PublicKeyInfo, Transaction(..))
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..), deduplicatePublicKeys, withoutPredefinedContextScaffolding)
 import Perspectives.Sync.VersionedDelta (DeltaEnvelope(..), parseIncomingDelta)
 import Perspectives.Types.ObjectGetters (contextAspectsClosure, hasAspect, isPublic, roleAspectsClosure, publicUserRole)
 import Perspectives.TypesForDeltas (ContextDelta(..), ContextDeltaType(..), DeltaRecord, RoleBindingDelta(..), RoleBindingDeltaType(..), RolePropertyDelta(..), RolePropertyDeltaType(..), UniverseContextDelta(..), UniverseContextDeltaType(..), UniverseRoleDelta(..), UniverseRoleDeltaType(..))
-import Perspectives.UnschemedIdentifiers (UnschemedResourceIdentifier, unschemePerspectivesUser)
+import Perspectives.UnschemedIdentifiers (UnschemedResourceIdentifier, unschemePerspectivesUser, unschemeRoleInstance)
+import Perspectives.Persistence.PeerDeliveryStore (forgetPeerDeliveryKnowledge)
 import Perspectives.Warning (PerspectivesWarning(..))
-import Prelude (class Eq, class Monad, class Ord, Unit, bind, compare, discard, flip, map, max, negate, not, pure, show, unit, void, when, ($), (*>), (+), (/=), (<), (<$>), (<<<), (<>), (==), (>), (>=), (>>=), (&&), (||), (>=>))
+import Prelude (class Eq, class Monad, class Ord, class Show, Unit, bind, compare, discard, flip, map, max, negate, not, pure, show, unit, void, when, ($), (*>), (+), (/=), (<), (<$>), (<<<), (<>), (==), (>), (>=), (>>=), (&&), (||), (>=>))
 import Simple.JSON (readJSON')
 
 -- TODO. Each of the executing functions must catch errors that arise from unknown types.
@@ -137,9 +138,24 @@ executeRoleBindingDelta (RoleBindingDelta { filled, filler, deltaType, subject }
       RemoveBinding -> void $ removeBinding filled
       ReplaceBinding -> void $ replaceBinding filled (unsafePartial $ fromJust filler) (Just signedDelta)
 
--- TODO. Wat met SetPropertyValue?
+-- | When a peer's signing or transport key changes, the peer has (most likely) reinstalled:
+-- | it has lost the deltas we have shipped to it before. Forget what we know about its
+-- | delivery state, so that knowledge-based forwarding ships complete histories again (I-7).
+-- | A changed installation nonce does not trigger this: one user may legitimately run several
+-- | installations. A restore from an older backup is repaired by history requests (§10.6).
 executeRolePropertyDelta :: RolePropertyDelta -> SignedDelta -> MonadPerspectivesTransaction Unit
-executeRolePropertyDelta d@(RolePropertyDelta { id, roleType, deltaType, values, property, subject }) signedDelta = do
+executeRolePropertyDelta d@(RolePropertyDelta { id, property }) signedDelta =
+  if unwrap property == perspectivesUsersPublicKey || unwrap property == perspectivesUsersTransportPublicKey then do
+    before <- lift (id ##= getProperty property)
+    executeRolePropertyDelta_ d signedDelta
+    after <- lift (id ##= getProperty property)
+    when (not (null before) && sort before /= sort after)
+      (lift $ forgetPeerDeliveryKnowledge (unschemeRoleInstance id))
+  else executeRolePropertyDelta_ d signedDelta
+
+-- TODO. Wat met SetPropertyValue?
+executeRolePropertyDelta_ :: RolePropertyDelta -> SignedDelta -> MonadPerspectivesTransaction Unit
+executeRolePropertyDelta_ d@(RolePropertyDelta { id, roleType, deltaType, values, property, subject }) signedDelta = do
   let
     authorize = roleHasPerspectiveOnPropertyWithVerb (unwrap signedDelta).author subject id property
     reject e = do
@@ -462,14 +478,32 @@ roleDeletionPermission (UniverseRoleDelta { roleType, roleInstance, authorizedRo
 -- | so that keys of authors not yet in the entity store can still be used for
 -- | re-verification during delta execution.
 executeTransaction :: TransactionForPeer -> MonadPerspectivesTransaction Unit
-executeTransaction t = do
+executeTransaction = void <<< executeTransactionWithOutcome
+
+-- | The result of handling an incoming transaction.
+-- | * Executed: all deltas were handled (applied, recognised as duplicates, outdated or conflicting).
+-- | * Blocked: version gaps were found; the transaction has been stored in the PendingTransactionStore.
+-- | * Quarantined: the transaction is outside the active causal epoch and has been quarantined.
+-- | * Rejected: the transaction could not be verified; nothing has been changed.
+-- | Exceptions during execution are not an outcome: they propagate (see Perspectives.Sync.PendingTransactions).
+data TransactionOutcome = Executed | Blocked (Array MissingDelta) | Quarantined | Rejected String
+
+instance Show TransactionOutcome where
+  show Executed = "Executed"
+  show (Blocked gaps) = "Blocked " <> show gaps
+  show Quarantined = "Quarantined"
+  show (Rejected reason) = "Rejected " <> reason
+
+executeTransactionWithOutcome :: TransactionForPeer -> MonadPerspectivesTransaction TransactionOutcome
+executeTransactionWithOutcome t = do
   void $ lift ensureCausalEpoch
   if (unwrap t).causalEpoch /= Just currentCausalEpoch then do
     id <- lift $ quarantineTransaction "Transaction is outside the active causal epoch" t
     lift $ warnSync $ "Quarantined transaction " <> id <> ": missing or unsupported causal epoch; manual reconciliation required"
+    pure Quarantined
   else executeCurrentTransaction t
 
-executeCurrentTransaction :: TransactionForPeer -> MonadPerspectivesTransaction Unit
+executeCurrentTransaction :: TransactionForPeer -> MonadPerspectivesTransaction TransactionOutcome
 executeCurrentTransaction t = do
   transactionNumber <- gets \(Transaction tr) -> tr.transactionNumber
   -- Prevent addDelta/insertDelta from storing deltas in the DeltaStore.
@@ -484,8 +518,10 @@ executeCurrentTransaction t = do
         verifiedKeys <- verifyTransaction incoming
         pure $ Tuple verifiedKeys incoming
     ) >>= case _ of
-    Left e -> lift $ renderPerspectivesError >=> warnSync $ (IncomingTransactionFailed (show e))
-    Right (Tuple verifiedKeys incoming) -> timed "incoming.execute" (show transactionNumber) (executeTransaction' verifiedKeys incoming)
+    Left e -> do
+      lift $ renderPerspectivesError >=> warnSync $ (IncomingTransactionFailed (show e))
+      pure $ Rejected (show e)
+    Right (Tuple verifiedKeys incoming) -> timed "incoming.execute" (show transactionNumber) (executeTransaction' verifiedKeys t incoming)
 
 verifyTransaction :: TransactionForPeer -> MonadPerspectivesTransaction (Map.Map UnschemedResourceIdentifier CryptoKey)
 verifyTransaction (TransactionForPeer { deltas, publicKeys }) = do
@@ -623,8 +659,10 @@ validatedConstructionBaselines history = do
       throwError $ error message
     Right _ -> pure unit
 
-executeTransaction' :: Map.Map UnschemedResourceIdentifier CryptoKey -> TransactionForPeer -> MonadPerspectivesTransaction Unit
-executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) = do
+-- | `original` is the transaction as received; it is what a pending record stores, so that a
+-- | blocked and a failed attempt of the same transaction share one pending record.
+executeTransaction' :: Map.Map UnschemedResourceIdentifier CryptoKey -> TransactionForPeer -> TransactionForPeer -> MonadPerspectivesTransaction TransactionOutcome
+executeTransaction' verifiedKeys original t@(TransactionForPeer { deltas, publicKeys }) = do
 
   -- Add all public key information (possibly leading to more TheWorld$PerspectivesUsers instances).
   -- Key deltas are executed directly (not through executeDeltaWithVersionTracking),
@@ -682,11 +720,13 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
       -- No gaps: execute all deltas with version tracking.
       void $ for (sortBy compareForReplay verifiedDeltas) \{ signedDelta, stringified, resourceKey, resourceVersion, author } ->
         executeDeltaWithVersionTracking baselines signedDelta stringified resourceKey resourceVersion author
+      pure Executed
     _ -> do
       -- Gaps detected: block the entire transaction.
       lift $ renderPerspectivesWarning >=> traceSync $ TransactionBlockedByVersionGaps
       lift $ traceSync $ "Missing peer delta versions: " <> show gaps
-      lift $ storePendingTransaction t gaps
+      lift $ storePendingTransaction original gaps
+      pure $ Blocked gaps
   where
 
   compareForReplay left right =
@@ -773,6 +813,32 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
         local <- lift $ getResourceVersion resourceKey
         lift $ setResourceVersion resourceKey (max local b.version)
         persistIncomingDelta true "ConstructionBaseline"
+      -- A property delta below the local version may be the winner of a conflict at its
+      -- own version that arrived late (I-4), or fill a version this installation never
+      -- received. When it would win there, the property is re-derived from its full
+      -- version-ordered history, so every installation ends with the same fold of winners.
+      reconsiderLateProperty localVersion = do
+        existing <- lift $ getDeltasForResource resourceKey
+        let
+          floor = foldl
+            ( \v (DeltaStoreRecord r) ->
+                if isCheckpoint (unwrap r.signedDelta).encryptedDelta then max v r.resourceVersion else v
+            )
+            0
+            existing
+          sameVersionDeltas = filter (\(DeltaStoreRecord r) -> r.resourceVersion == resourceVersion) existing
+        if resourceVersion >= floor && not (existingDeltaWins (SignedDelta (unwrap s) { author = author }) sameVersionDeltas) then do
+          lift $ renderPerspectivesWarning >=> traceSync $ (LateWinnerRederivingProperty resourceKey deltaType resourceVersion localVersion)
+          for_ sameVersionDeltas \(DeltaStoreRecord old) ->
+            when (not $ isCheckpoint (unwrap old.signedDelta).encryptedDelta)
+              $ lift
+              $ updateDeltaApplied old._id false
+          persistIncomingDelta true "LateWinner"
+          history <- lift $ getDeltasForResource resourceKey
+          restorePropertyFromHistory history
+        else do
+          lift $ renderPerspectivesWarning >=> traceSync $ (SkippingOutdatedDelta resourceKey deltaType resourceVersion localVersion)
+          persistIncomingDelta false "Outdated"
     case baseline, baselineRecord, contextBaselineRecord, mDuplicate of
       Just b, true, _, _ -> applyBaseline b
       _, _, true, _ -> do
@@ -793,10 +859,12 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
             executeDelta s (Just stringified)
             lift $ setResourceVersion resourceKey resourceVersion
             persistIncomingDelta true "Checkpoint"
-        else if resourceVersion < localVersion then do
-          -- Outdated delta: version is behind local version. Store but don't execute.
-          lift $ renderPerspectivesWarning >=> traceSync $ (SkippingOutdatedDelta resourceKey deltaType resourceVersion localVersion)
-          persistIncomingDelta false "Outdated"
+        else if resourceVersion < localVersion then
+          if isPropertyOperation deltaType then reconsiderLateProperty localVersion
+          else do
+            -- Outdated delta: version is behind local version. Store but don't execute.
+            lift $ renderPerspectivesWarning >=> traceSync $ (SkippingOutdatedDelta resourceKey deltaType resourceVersion localVersion)
+            persistIncomingDelta false "Outdated"
         else if resourceVersion == localVersion then do
           -- Check for existing deltas at this version to distinguish a fresh creation from a genuine conflict.
           existingDeltas <- lift $ getDeltasForResource resourceKey
@@ -813,7 +881,7 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
             -- Resolve deterministically by lexicographic comparison of author IDs:
             -- the author with the highest ID wins on all installations.
             -- Check whether any already-stored delta at this version has an author >= the incoming author.
-            let incomingAuthorWins = not (hasAuthorGreaterOrEqual author sameVersionDeltas)
+            let incomingAuthorWins = not (existingDeltaWins (SignedDelta (unwrap s) { author = author }) sameVersionDeltas)
             if incomingAuthorWins then do
               -- Incoming author wins: execute the delta (overwriting the current value).
               lift $ renderPerspectivesWarning >=> traceSync $ (VersionConflictIncomingWins resourceKey deltaType resourceVersion (show author))
@@ -967,24 +1035,20 @@ executeTransaction' verifiedKeys t@(TransactionForPeer { deltas, publicKeys }) =
       executeDelta sd (Just (unwrap sd).encryptedDelta)
     restorePropertyHistories subResourceDeltas
 
-  -- | Returns true if any DeltaStoreRecord in the array has an author >= the given author.
-  hasAuthorGreaterOrEqual :: PerspectivesUser -> Array DeltaStoreRecord -> Boolean
-  hasAuthorGreaterOrEqual _ [] = false
-  hasAuthorGreaterOrEqual incomingAuthor records =
-    case
-      filter
-        ( \(DeltaStoreRecord r) ->
-            let
-              winner = case checkpoint (unwrap r.signedDelta).encryptedDelta of
-                Just marker -> (unwrap marker.winner).author
-                Nothing -> r.author
-            in
-              unschemePerspectivesUser winner >= unschemePerspectivesUser incomingAuthor
-        )
-        records
-      of
-      [] -> false
-      _ -> true
+  -- | Returns true if any DeltaStoreRecord in the array takes precedence over (or equals)
+  -- | the incoming delta according to `conflictPrecedence` (author first, signed content second).
+  -- | A checkpoint competes with the original winner it certifies.
+  existingDeltaWins :: SignedDelta -> Array DeltaStoreRecord -> Boolean
+  existingDeltaWins incoming records = any
+    ( \(DeltaStoreRecord r) ->
+        let
+          winner = case checkpoint (unwrap r.signedDelta).encryptedDelta of
+            Just marker -> marker.winner
+            Nothing -> SignedDelta (unwrap r.signedDelta) { author = r.author }
+        in
+          conflictPrecedence winner incoming /= LT
+    )
+    records
 
   -- | Check whether a resource key is a sub-resource key (i.e. it has a second "#").
   -- | Resource IDs have the form "scheme:#identifier" (one "#" from the scheme separator).

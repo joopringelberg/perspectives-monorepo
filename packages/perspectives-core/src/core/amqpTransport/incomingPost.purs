@@ -26,7 +26,7 @@ module Perspectives.AMQP.IncomingPost
   ) where
 
 import Control.Coroutine (Consumer, Producer, await, runProcess, ($$))
-import Control.Monad.Error.Class (throwError)
+import Control.Monad.Error.Class (throwError, try)
 import Control.Monad.Rec.Class (forever)
 import Control.Monad.Trans.Class (lift)
 import Data.Array (length, nub, sort)
@@ -61,7 +61,10 @@ import Perspectives.Representation.InstanceIdentifiers (RoleInstance(..), Value(
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), RoleType(..))
 import Perspectives.ResourceIdentifiers (takeGuid)
 import Perspectives.RunMonadPerspectivesTransaction (detectPublicStateChanges, runMonadPerspectivesTransaction')
-import Perspectives.Sync.HandleTransaction (executeTransaction)
+import Perspectives.Sync.HandleTransaction (executeTransactionWithOutcome)
+import Perspectives.Sync.HistoryRequest (HistoryRequestMessage(..), answerHistoryRequest)
+import Perspectives.Sync.SignedDelta (SignedDelta)
+import Perspectives.Sync.PendingTransactions (DrainMode(..), drainPendingTransactions, settleIncomingTransaction)
 import Perspectives.Sync.Causal (currentCausalEpoch)
 import Perspectives.Sync.OutgoingTransaction (OutgoingTransaction(..))
 import Perspectives.Sync.TransactionForPeer (EncryptedTransactionForPeer(..), TransactionForPeer)
@@ -91,6 +94,8 @@ incomingPost = do
     , passcode
     , vhost
     }
+  -- Retry transactions that were stored as pending in an earlier session.
+  drainPendingTransactions AtStartup
   debugBroker "Starting transaction consumer"
   void $ runProcess $ transactionProducer $$ transactionConsumer
 
@@ -118,24 +123,41 @@ incomingPost = do
             padding <- transactionLevel
             debugBroker $ padding <> "Executing incoming post transaction from author " <> unwrap (unwrap body).author <> " and timestamp " <> show (unwrap body).timeStamp
             profileSession <- liftEffect captureSession
-            transaction <- profile profileSession "decrypt" $ timed "incoming.decrypt" messageId (decryptTransaction profileSession body)
-            let currentEpoch = (unwrap transaction).causalEpoch == Just currentCausalEpoch
-            -- Keep early acknowledgement for current traffic; legacy traffic must be stored first.
-            when currentEpoch $ timed "consumer.ack" messageId (acknowledge ack)
-            liftEffect $ traceTiming "incoming.admission.requested" messageId
-            withTransactionPriority BackgroundTransaction do
-              liftEffect $ traceTiming "incoming.admission.granted" messageId
-              profile profileSession "incomingCascade"
-                $ timed "incoming.transaction" messageId
-                $
-                  runMonadPerspectivesTransaction'
-                    false
-                    (ENR $ EnumeratedRoleType sysUser)
-                    (profile profileSession "executeTransaction" (executeTransaction transaction))
-              profile profileSession "publicStates" $ timed "incoming.public-states" messageId detectPublicStateChanges
-            when (currentEpoch == false) $ timed "consumer.ack" messageId (acknowledge ack)
-            remainingCount <- markHandled markHandled_
-            showPendingIncomingTransactions remainingCount
+            decrypted <- profile profileSession "decrypt" $ timed "incoming.decrypt" messageId (decryptTransaction profileSession body)
+            case decrypted of
+              -- A history request (§10.6) is answered outside any transaction; it is never stored as pending.
+              Left historyRequest -> do
+                timed "consumer.ack" messageId (acknowledge ack)
+                answered <- try $ answerHistoryRequest historyRequest
+                case answered of
+                  Left e -> warnBroker $ "Could not answer a history request: " <> show e
+                  Right _ -> pure unit
+                remainingCount <- markHandled markHandled_
+                showPendingIncomingTransactions remainingCount
+              Right transaction -> do
+                let currentEpoch = (unwrap transaction).causalEpoch == Just currentCausalEpoch
+                -- Keep early acknowledgement for current traffic; legacy traffic must be stored first.
+                when currentEpoch $ timed "consumer.ack" messageId (acknowledge ack)
+                liftEffect $ traceTiming "incoming.admission.requested" messageId
+                -- An exception must not be lost (the message may already have been acknowledged),
+                -- nor stop this consumer: settleIncomingTransaction stores the transaction for a retry.
+                outcome <- try $ withTransactionPriority BackgroundTransaction do
+                  liftEffect $ traceTiming "incoming.admission.granted" messageId
+                  o <- profile profileSession "incomingCascade"
+                    $ timed "incoming.transaction" messageId
+                    $
+                      runMonadPerspectivesTransaction'
+                        false
+                        (ENR $ EnumeratedRoleType sysUser)
+                        (profile profileSession "executeTransaction" (executeTransactionWithOutcome transaction))
+                  profile profileSession "publicStates" $ timed "incoming.public-states" messageId detectPublicStateChanges
+                  pure o
+                void $ settleIncomingTransaction transaction outcome
+                when (currentEpoch == false) $ timed "consumer.ack" messageId (acknowledge ack)
+                remainingCount <- markHandled markHandled_
+                showPendingIncomingTransactions remainingCount
+          -- This transaction may have filled gaps that block stored transactions.
+          lift $ timed "incoming.drain-pending" messageId (drainPendingTransactions AfterIncoming)
 
   setConnectionState :: Boolean -> MonadPerspectives Unit
   setConnectionState c = do
@@ -164,7 +186,7 @@ incomingPost = do
         void $ for transactions \(OutgoingTransaction { _id, receiver, transaction }) -> liftEffect $ sendToTopic stompClient receiver _id (writeJSON transaction)
       _ -> pure unit
 
-  decryptTransaction :: ProfileSession -> EncryptedTransactionForPeer -> MonadPerspectives TransactionForPeer
+  decryptTransaction :: ProfileSession -> EncryptedTransactionForPeer -> MonadPerspectives (Either SignedDelta TransactionForPeer)
   decryptTransaction profileSession (EncryptedTransactionForPeer { encryptedDeltas, author, perspectivesSystem, timeStamp, publicKeys }) = do
     profiling <- liftEffect $ sessionEnabled profileSession
     when profiling $ liftEffect $ countEncrypted profileSession encryptedDeltas.ciphertext (length encryptedDeltas.wrappedKeys)
@@ -174,10 +196,12 @@ incomingPost = do
       Just privateKey, Just wrappedKey -> do
         payload <- liftAff $ decryptForRecipient encryptedDeltas.ciphertext encryptedDeltas.iv wrappedKey.wrappedKey privateKey
         case readJSON payload of
-          Right (transaction :: TransactionForPeer) -> do
-            when profiling $ liftEffect $ countDecrypted profileSession payload (length (unwrap transaction).deltas) (size $ keys (unwrap transaction).publicKeys)
-            pure transaction
-          Left e -> throwError (error $ "Could not decode decrypted transaction payload: " <> show e)
+          Right (HistoryRequestMessage { historyRequest }) -> pure $ Left historyRequest
+          Left _ -> case readJSON payload of
+            Right (transaction :: TransactionForPeer) -> do
+              when profiling $ liftEffect $ countDecrypted profileSession payload (length (unwrap transaction).deltas) (size $ keys (unwrap transaction).publicKeys)
+              pure $ Right transaction
+            Left e -> throwError (error $ "Could not decode decrypted transaction payload: " <> show e)
       _, _ -> throwError (error $ "No wrapped transport key found for recipient " <> show currentUser)
 
 -- | Construct the BrokerService from the database, if possible, and set it in PerspectivesState.
