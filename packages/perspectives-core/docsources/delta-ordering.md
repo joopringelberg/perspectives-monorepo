@@ -506,6 +506,18 @@ the originating installation (change and restore the value if necessary), or
 repeat the scenario with fresh instances. Do not remove history or bypass
 signature/conflict checks to force old deltas to replay.
 
+The witness depends on *evidence* the receiver must already hold: the author's
+chain of filled roles up to the subject role (for example `PerspectivesUsers <-
+Persons <- Employees <- Ambassadeur`) and the object's binding chain down to the
+storage (`Deelnemer -> Persons -> NonPerspectivesUsers`). A property change only
+ships the second chain (`serialiseDependencies`); the first is assumed to have
+arrived with the subject role. If it did not (for example because it was
+serialised by a runtime that failed to compute construction baselines in
+`TheWorld`/`TheSocialEnvironment`), every retry fails in the same way and the
+transaction stays pending until `maxFailedAttempts` (I-17). When the instance
+check fails, it logs (`AUTH`) the author identities found, the roles the author
+transitively fills and their contexts, so the missing link can be identified.
+
 ---
 
 ## 7. Gap detection and blocking
@@ -1157,6 +1169,7 @@ can cause wrong intermediate state or lost work under plausible conditions;
 | I-13 | L | **Fixed** (§6.1, `conflictPrecedence`): signed content is the secondary tiebreak, shared by arrival-time resolution and history reconstruction. `hasAuthorGreaterOrEqual` used `>=`, so the same author at the same version counts as a winner over itself. Duplicates are normally caught by `deltaId`; of two *different* deltas of one author at one version (only possible after counter loss, e.g. restore from backup) the later arrival always loses, so the outcome depends on arrival order. | `executeDeltaWithVersionTracking` | Compare `deltaId` as a secondary tiebreak. |
 | I-14 | L | Concurrent version-0 constructors by different authors for the same deterministic identifier: the first is executed as "fresh", the second resolved by author tiebreak; context constructors carry no causal stamp. Constructors are idempotent so state converges, but the recorded winner may differ between peers. | §5.3 | Accept; document that constructor winners are not significant. |
 | I-15 | L | **Partly mitigated**: what a restored peer lost is repaired by history requests (§10.6). Counter reuse remains. Restoring a peer from backup reuses its counters for new writes (resource versions and causal counters), creating same-author same-version deltas at its peers. The doc warns against two live copies, but not against restore-then-continue. | §9.3 | Rotate the installation nonce on restore and announce it, which triggers a knowledge reset (I-7). |
+| I-17 | M | Inherited-property authorisation (§6.4) needs the author's filled-role chain up to the subject role at the receiver. Property shipping does not include that chain, and no repair path requests it: when it is missing, the transaction fails `UnauthorizedForProperty` on every retry. | `hasInstancePropertyPermission`, `addDeltasForPropertyChange` | Ship the author's subject-role chain (bindings plus construction histories) with property deltas whose permission is instance-based, or answer such rejections with a history request for the subject role's bindings (§10.6). |
 | I-16 | L | The previous version of this document claimed every mutation increments the version, linked a non-existent `docs/transaction-execution.md`, omitted the `deltaId`/`disposition`/`contextKey` fields, and presented §6.4/§6.5 as existing behaviour. | this file | Corrected in this revision. |
 
 ### Priorities

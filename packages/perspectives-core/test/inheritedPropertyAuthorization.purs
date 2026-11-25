@@ -90,6 +90,23 @@ theSuite = suite "Instance-aware inherited property authorization" do
         assert "The declared union must not imply either individual alternative" $ not typeOnly
         assert "The concrete binding chain must authorize the inherited write" $ not $ isLeft result
 
+  test "accepts an author who fills the subject through several intermediate roles" $
+    Binding.withFixture Binding.localPeer [] [] do
+      lift do
+        installInheritance
+        -- subject <- employee <- membership <- author (cf. Ambassadeur <- Employees <- Persons <- PerspectivesUsers)
+        for_ [ Tuple employee Binding.otherUserType, Tuple membership Binding.bridgeType ] \(Tuple rid rt) ->
+          void $ cacheEntity rid $ PerspectRol defaultRolRecord
+            { id = rid, pspType = rt, context = Binding.contextId }
+        filledPointsTo Binding.userId employee
+        fillerPointsTo employee Binding.userId
+        filledPointsTo employee membership
+        fillerPointsTo membership employee
+        filledPointsTo membership Binding.localPeer
+        fillerPointsTo Binding.localPeer membership
+      result <- permission Verification.localAuthor Binding.visibleId SetPropertyValue
+      liftAff $ assert "A multi-hop author chain must authorize the inherited write" $ not $ isLeft result
+
   test "preserves existing direct property permission" $
     Binding.withFixture Binding.localPeer [] [] do
       result <- permission Verification.localAuthor Binding.visibleId Consult
@@ -261,6 +278,12 @@ person = RoleInstance "def:#inherited-person"
 
 unrelated :: RoleInstance
 unrelated = RoleInstance "def:#unrelated-person"
+
+employee :: RoleInstance
+employee = RoleInstance "def:#employee"
+
+membership :: RoleInstance
+membership = RoleInstance "def:#membership"
 
 installInheritance :: MonadPerspectives Unit
 installInheritance = do

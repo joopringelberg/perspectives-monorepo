@@ -90,7 +90,7 @@ hasInstancePropertyPermission author subject storage property verb = do
   contexts <- nub <<< join <$> traverse context_ authorRoles
   subjectContexts <- contextOfRoleType subject
   readableSubject <- toReadable subject
-  withQueryAuthor queryAuthor $ isJust <$> findPerspective readableSubject
+  permitted <- withQueryAuthor queryAuthor $ isJust <$> findPerspective readableSubject
     ( \perspective@(Perspective p) -> do
         properties <- propertiesInPerspective perspective
         writableProperties <- filterA (\prop -> toReadable prop >>= \readable -> supportsPropertyForVerb perspective readable verb) properties
@@ -121,6 +121,21 @@ hasInstancePropertyPermission author subject storage property verb = do
           )
           contexts
     )
+  -- Report which authorization evidence is missing, so that a pending transaction that
+  -- never recovers can be diagnosed (see delta-ordering.md, inherited-property authorisation).
+  when (not permitted) $ warnAuth $ "Instance property authorization failed for author " <> unwrap author
+    <> " writing "
+    <> unwrap property
+    <> " on "
+    <> unwrap storage
+    <> ". Author identity found: "
+    <> show (unwrap <$> roots)
+    <> "; roles (transitively) filled by the author: "
+    <> show (unwrap <$> authorRoles)
+    <> "; their contexts: "
+    <> show (unwrap <$> contexts)
+    <> "."
+  pure permitted
   where
   anyM :: forall a. (a -> MonadPerspectives Boolean) -> Array a -> MonadPerspectives Boolean
   anyM predicate = foldM (\found value -> if found then pure true else predicate value) false
