@@ -29,6 +29,7 @@ import Data.Array (filter)
 import Data.Either (Either(..), isLeft)
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
+import Data.String (Pattern(..), contains)
 import Data.Tuple (Tuple(..))
 import Data.Foldable (for_)
 import Effect (Effect)
@@ -38,6 +39,7 @@ import Partial.Unsafe (unsafePartial)
 import Perspectives.Checking.Authorization (roleHasPerspectiveOnPropertyWithVerb)
 import Perspectives.ContextAndRole (defaultRolRecord)
 import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction, (##=))
+import Perspectives.Error.Pretty (renderPerspectivesError)
 import Perspectives.Data.EncodableMap as EM
 import Perspectives.InstanceRepresentation (PerspectContext(..), PerspectRol(..))
 import Perspectives.Instances.ObjectGetters (getProperty)
@@ -64,11 +66,11 @@ import Perspectives.Representation.InstanceIdentifiers (PerspectivesUser(..), Ro
 import Perspectives.Representation.Perspective (Perspective(..), PropertyVerbs(..), StateSpec(..))
 import Perspectives.Representation.Range (Range(..))
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
-import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..), PropertyType(..), RoleType(..), StateIdentifier(..))
+import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), StateIdentifier(..))
 import Perspectives.Representation.Verbs (PropertyVerb(..))
 import Perspectives.RoleAssignment (filledPointsTo, fillerPointsTo)
 import Perspectives.Sync.HandleTransaction (executeTransaction)
-import Perspectives.Types.ObjectGetters (hasPerspectiveOnPropertyWithVerb)
+import Perspectives.Types.ObjectGetters (hasPerspectiveOnPropertyWithVerb, hasPerspectiveOnPropertyWithVerbByImplication)
 import Test.BindingReplacement as Binding
 import Test.VerificationBundles as Verification
 import Test.Unit (TestSuite, suite, test)
@@ -85,10 +87,42 @@ theSuite = suite "Instance-aware inherited property authorization" do
       lift installInheritance
       typeOnly <- lift $ unsafePartial $
         hasPerspectiveOnPropertyWithVerb (ENR Binding.userType) Binding.visibleType Binding.visibleProperty SetPropertyValue
+      implied <- lift $ unsafePartial $
+        hasPerspectiveOnPropertyWithVerbByImplication (ENR Binding.userType) Binding.visibleProperty SetPropertyValue
       result <- permission Verification.localAuthor Binding.visibleId SetPropertyValue
       liftAff do
         assert "The declared union must not imply either individual alternative" $ not typeOnly
+        assert "One alternative carrying the property is insufficient for implication" $ not implied
         assert "The concrete binding chain must authorize the inherited write" $ not $ isLeft result
+
+  test "authorizes a property declared on a shared aspect without changing compiler checks" $
+    Binding.withFixture Binding.localPeer [] [] do
+      lift do
+        installInheritance
+        let
+          addingRole = EnumeratedRoleType $ unwrap Binding.visibleType <> "Addressable"
+          aspect = RoleInContext { context: Binding.contextType, role: addingRole }
+        EnumeratedRole original <- getEnumeratedRole Binding.visibleType
+        cacheInDomeinFile addingRole $ EnumeratedRole original
+          { id = addingRole, readableName = addingRole }
+        for_ [ Binding.visibleType, Binding.externalType ] \roleType -> do
+          EnumeratedRole role <- getEnumeratedRole roleType
+          cacheInDomeinFile roleType $ EnumeratedRole role
+            { roleAspects = [ aspect ], properties = [] }
+        EnumeratedProperty property <- getEnumeratedProperty Binding.visibleProperty
+        cacheInDomeinFile Binding.visibleProperty $ EnumeratedProperty property { role = addingRole }
+      compilerPermission <- lift $ unsafePartial $
+        hasPerspectiveOnPropertyWithVerb (ENR Binding.userType) Binding.visibleType Binding.visibleProperty SetPropertyValue
+      implied <- lift $ unsafePartial $
+        hasPerspectiveOnPropertyWithVerbByImplication (ENR Binding.userType) Binding.visibleProperty SetPropertyValue
+      absentVerb <- lift $ unsafePartial $
+        hasPerspectiveOnPropertyWithVerbByImplication (ENR Binding.userType) Binding.visibleProperty RemovePropertyValue
+      result <- permission Verification.localAuthor Binding.visibleId SetPropertyValue
+      liftAff do
+        assert "The compiler must still require the particular target role type" $ not compilerPermission
+        assert "Every filler alternative implies the shared declaring aspect" implied
+        assert "A shared aspect must not grant an absent property verb" $ not absentVerb
+        assert "Incoming authorization must accept the shared-aspect property" $ not $ isLeft result
 
   test "accepts an author who fills the subject through several intermediate roles" $
     Binding.withFixture Binding.localPeer [] [] do
@@ -254,6 +288,18 @@ theSuite = suite "Instance-aware inherited property authorization" do
       CausalRoleDoc causalAfter <- lift $ getCausalRole (unwrap Binding.visibleId)
       liftAff do
         assert "Unauthorized property execution must fail, rather than warn and succeed" $ isLeft rejected
+        case rejected of
+          Left err -> do
+            assert "The incoming error must report the type-level failure"
+              $ contains (Pattern "Type-level property authorization failed:")
+              $ show err
+            assert "The incoming error must also report the instance witness failure"
+              $ contains (Pattern "Instance property authorization failed for author")
+              $ show err
+            assert "The incoming error must include the author-chain evidence"
+              $ contains (Pattern "roles (transitively) filled by the author:")
+              $ show err
+          Right _ -> assert "Expected the incoming transaction to fail" false
         equal (map (\(DeltaStoreRecord r) -> r._id) before) (map (\(DeltaStoreRecord r) -> r._id) after)
         equal 0 version
         equal [ Value "visible-value" ] values
@@ -265,6 +311,24 @@ theSuite = suite "Instance-aware inherited property authorization" do
       liftAff do
         equal [ Value "updated" ] retried
         equal 1 retriedVersion
+
+  test "reports both authorization failures and absent author evidence together" $
+    Binding.withFixture Binding.localPeer [] [] do
+      lift installInheritance
+      result <- permission (PerspectivesUser "unknown-author") Binding.visibleId SetPropertyValue
+      case result of
+        Right _ -> liftAff $ assert "An unknown author must not be authorized" false
+        Left err -> do
+          message <- lift $ renderPerspectivesError err
+          liftAff do
+            assert "The type-level failure must retain the original property error" $
+              contains (Pattern "Type-level property authorization failed: (UnauthorizedForProperty)") message
+            assert "The instance failure must identify the signed author" $
+              contains (Pattern "Instance property authorization failed for author unknown-author") message
+            assert "Missing author identity evidence must be explicit" $
+              contains (Pattern "Author identity found: []") message
+            assert "Missing author-role evidence must be explicit" $
+              contains (Pattern "roles (transitively) filled by the author: []") message
 
 permission :: PerspectivesUser -> RoleInstance -> PropertyVerb -> MonadPerspectivesTransaction (Either PerspectivesError Boolean)
 permission author storage verb = lift $

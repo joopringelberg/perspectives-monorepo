@@ -60,7 +60,7 @@ import Perspectives.Representation.CNF (CNF, DPROD(..), DSUM(..), distribute, fl
 import Perspectives.Representation.Class.Context (contextADT, contextRole, roleInContext, userRole) as ContextClass
 import Perspectives.Representation.Class.Context (contextAspects)
 import Perspectives.Representation.Class.Context (externalRole) as CTCLASS
-import Perspectives.Representation.Class.PersistentType (getCalculatedRole, getContext, getEnumeratedRole, getPerspectType, getView, tryGetState)
+import Perspectives.Representation.Class.PersistentType (getCalculatedRole, getContext, getEnumeratedProperty, getEnumeratedRole, getPerspectType, getView, tryGetState)
 import Perspectives.Representation.Class.Role (actionsOfRoleType, adtOfRole, allProperties, allRoleProperties, allRoles, allViews, bindingOfADT, calculation, expandUnexpandedLeaves, getRole, getRoleADT, perspectives, perspectivesOfRoleType, roleADT, roleADTOfRoleType, roleKindOfRoleType, toConjunctiveNormalForm_)
 import Perspectives.Representation.Context (Context)
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
@@ -789,6 +789,21 @@ hasPerspectiveOnPropertyWithVerb subjectType roleType property verb = do
         b <- perspective `isPerspectiveOnRoleType` (ENR readableObject)
         c <- perspective `isPerspectiveOnRoleFilledWithRoleType` (ENR readableObject)
         pure (a && (b || c))
+    )
+
+-- | Incoming writes may be stored on either of several filler types. Require the
+-- | perspective object to imply the property's declaring role, not a storage type.
+hasPerspectiveOnPropertyWithVerbByImplication :: Partial => RoleType -> EnumeratedPropertyType -> PropertyVerb -> MonadPerspectives Boolean
+hasPerspectiveOnPropertyWithVerbByImplication subjectType property verb = do
+  readableSubject <- toReadable subjectType
+  readableProperty <- toReadable property
+  addingRole <- _.role <<< unwrap <$> getEnumeratedProperty readableProperty
+  addingRoleADT <- getRoleADT (ENR addingRole)
+  isJust <$> findPerspective readableSubject
+    ( \perspective -> do
+        permitted <- supportsPropertyForVerb perspective (ENP readableProperty) verb
+        if not permitted then pure false
+        else equalsOrSpecialisesRoleInContext (objectOfPerspective perspective) addingRoleADT
     )
 
 -- | Disregarding state, returns true iff the perspective lets the user apply the

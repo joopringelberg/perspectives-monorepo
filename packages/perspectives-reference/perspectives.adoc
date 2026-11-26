@@ -11,7 +11,9 @@ When a peer newly fills a user role, the runtime synchronises the contexts, role
 
 A perspective's property permissions also apply to properties inherited through the selected object's actual filler chain. For example, a perspective on a participant may permit editing a name stored on the non-Perspectives user filling that participant through an intermediate person role. This remains possible when the intermediate role allows either Perspectives users or non-Perspectives users: the concrete binding determines where the property is stored.
 
-When the declared types alone cannot establish permission for a received property change, the runtime checks the original signed author's concrete subject role, the perspective's selected object instances, and the exact property-bearing instance reached by the write. A compatible type or an unrelated instance is not sufficient. Perspective filters and property replacements still apply. Historical changes are checked against permissions declared in any state, rather than requiring the editing state to remain active when the change arrives.
+For a received property change, type-level permission is established when a perspective grants the property and requested verb and its object type implies the role declaring that property. This includes alternative filler types that all inherit the declaring role as an aspect. This type-level check does not establish the connection to the particular storage instance. Static statement compilation additionally retains its target-role check.
+
+When the declared types alone cannot establish permission for a received property change, the runtime checks the original signed author's concrete subject role, the perspective's selected object instances, and the exact property-bearing instance reached by the write. In this fallback, a compatible type or an unrelated instance is not sufficient; perspective filters and property replacements are checked. Historical changes are checked against permissions declared in any state, rather than requiring the editing state to remain active when the change arrives.
 
 [[perspectives-aspects]]
 === Perspectives inherited from aspects

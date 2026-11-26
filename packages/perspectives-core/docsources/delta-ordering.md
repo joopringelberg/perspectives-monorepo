@@ -467,9 +467,17 @@ authorised deletion (§5.1 step 4):
 
 ### 6.4 Inherited-property authorisation and rejected updates
 
-Ordinary property operations first retain the existing type-level permission
-check. If it cannot prove permission, `hasInstancePropertyPermission` looks for
-a concrete witness:
+Ordinary incoming property operations first use
+`hasPerspectiveOnPropertyWithVerbByImplication`: a perspective must grant the
+property and verb, and its object ADT must imply the role declaring that
+property, using the existing CNF type comparison. Alternative filler types can
+therefore establish permission through a shared aspect without implying one
+particular storage role type. This check does not establish instance provenance;
+a successful type-level check bypasses the instance witness.
+Static statement compilation retains `hasPerspectiveOnPropertyWithVerb`,
+including its check against the statement's target role type.
+If implication cannot prove permission, `hasInstancePropertyPermission` looks
+for a concrete witness:
 
 1. Follow the signed author's inverse binding links, confirming every link
    against the filled role's actual binding. Visit each role at most once.
@@ -517,6 +525,9 @@ serialised by a runtime that failed to compute construction baselines in
 transaction stays pending until `maxFailedAttempts` (I-17). When the instance
 check fails, it logs (`AUTH`) the author identities found, the roles the author
 transitively fills and their contexts, so the missing link can be identified.
+The incoming transaction error includes both the type-level permission failure
+and the instance-witness failure, including that same author-chain evidence.
+Failure to establish a witness does not by itself prove which link is missing.
 
 ---
 
