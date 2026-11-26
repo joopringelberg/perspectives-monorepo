@@ -43,6 +43,8 @@ been corrected.
 | Peer delivery knowledge (suppress re-forwarding) | Implemented, with a contiguous watermark for checkpoints and a reset on key change (§3.4, §8.3) |
 | Per-role causal clocks, causal epoch, quarantine | Implemented |
 | Receiver-driven repair (requesting missing history) | Implemented (§10.6) |
+| Signed property provenance and authority bundle (Stage 1) | Implemented (§6.4); provenance is optional on the wire, targeted evidence requests are not yet implemented |
+| Delta format 5 with explicit `deltaFamily`; `universeEpoch` | Implemented (§9.4, §9.3) |
 
 ---
 
@@ -140,15 +142,16 @@ All deltas — locally created and received — are kept in the PouchDB database
 **Document ID** (`deltaStoreDocIdWithDeltaId`):
 
 ```
-<safeResourceKey>_v<resourceVersion>_<authorGuid>|<shortDeltaId>
+<safeResourceKey>_v<paddedResourceVersion>_<authorGuid>|<shortDeltaId>
 ```
 
 - `safeResourceKey` — the key converted by `safeKey`: the URI scheme prefix
   (`def:`, `loc:`, `rem:`, `model://…#`) is stripped and property-type URIs are
   shortened to `<firstSegment>$<lastSegment>`. `safeKey` is idempotent, so raw
   and already-safe keys normalise to the same identity.
-- `_v<resourceVersion>` — decimal version (not numerically sortable as a
-  string; readers sort numerically).
+- `_v<paddedResourceVersion>` — the version, zero-padded to 10 digits, so
+  that document IDs of one key sort in numeric version order (readers still
+  sort numerically on the `resourceVersion` field).
 - `authorGuid` — the GUID part of the author's `PerspectivesUser`.
 - `shortDeltaId` — the first 16 characters of the content hash
   `computeDeltaId author payload`.
@@ -563,14 +566,58 @@ originating installation); quarantined transactions are not replayed
 automatically. Non-property delta types still log authorisation failures and
 continue (I-12).
 
-The type check trusts the self-declared `subject` type; whether the author
-actually fills a `subject` instance is only established by the instance witness
-(when the type check fails). Signing the subject instance, the object instance
-and the evaluation context in which the subject query starts — together with an
-authority bundle of the sender's filled-role chain — is designed as Stage 1 in
-`design/historical-property-authorization-research.md`. Targeted evidence
-requests for a missing author chain depend on those signed instances and are
-part of Stage 1 as well.
+**Signed provenance and authority bundle (Stage 1).** A `RolePropertyDelta`
+carries an optional, signed `provenance`:
+
+```
+{ subjectInstance, subjectInstanceType,
+  evaluationContext, evaluationContextType,
+  objectInstance, objectInstanceType }
+```
+
+It names the witness the *sender* used: the concrete subject role instance the
+author fills, the context in which the perspective's object query was
+evaluated, and the object instance whose filler chain reaches the storage
+instance. The sender computes it with `findPropertyProvenance`
+(`Perspectives.Checking.PropertyProvenance`) in `shipPropertyDelta`, using the
+same witness search the receiver uses (`findWitness`). When no witness is found
+(for example a property set by `sys:Me` or on an own role), the delta is sent
+without provenance and an `AUTH` warning is logged.
+
+With every shipped property delta the sender also adds an **authority bundle**
+(`addPropertyAuthorityBundle`) to the transaction for the same peers: for each
+role in the binding chains of the subject instance and of the object instance
+(the latter down to the storage), its construction baseline
+(`getRoleConstructionHistory`) and its `#binding` history, plus the construction
+history of the evaluation context. Records are deduplicated and the usual
+`PeerDelivery` knowledge suppresses resending. Missing history on the sender is
+tolerated (the bundle is best effort).
+
+The receiver (`authorizePropertyDelta`) then decides:
+
+1. **Provenance present** — `checkPropertyProvenance` verifies the claimed
+   witness: author identity known, subject/object/context instances present,
+   the author's filled-role chain reaches the subject instance, and, starting
+   only from the evaluation context, the subject role selects that subject
+   instance, it has a perspective granting the needed verb whose object query
+   yields the claimed object instance, and that object's filler chain reaches
+   the storage instance for the property. If that fails, the general instance search
+   (`hasInstancePropertyPermission`) is tried. If both fail, the operation is
+   not applied and the transaction stays pending (missing evidence never
+   permits).
+2. **Provenance refuted** — `refutedPropertyProvenance`: the claimed evaluation
+   context type cannot hold the signed `subject` role type (neither equal nor
+   an aspect of it). This is model-deterministic, so
+   `provenUnauthorizedPropertyDeltas` quarantines the transaction. An error
+   during this check (e.g. an unavailable model) does not quarantine.
+3. **Provenance absent** — the type-level check runs, falling back to the
+   instance search, with an `AUTH` warning. The type check trusts the
+   self-declared `subject` type; this remains a documented gap until provenance
+   is mandatory.
+
+Not yet implemented: targeted evidence requests for a missing author chain
+(the history-request mechanism of §10.6 could carry them), mandatory
+provenance, and an API to let the GUI name the evaluation context explicitly.
 
 ---
 
@@ -845,6 +892,13 @@ assumes that peers' mutually visible state has converged before cutover.
 
 ### 9.3 Quarantine
 
+All newly assembled transactions include `universeEpoch` (the Perspectives
+Universe, `currentUniverseEpoch`) and `causalEpoch`. A transaction whose
+`universeEpoch` is missing or different is **rejected** (outcome `Rejected`,
+logged as `SYNC`) before verification: it comes from an installation that was
+not restarted at a Universe cut-over, and is neither executed, kept pending nor
+quarantined.
+
 All newly assembled transactions include `causalEpoch`. Transactions with a
 missing or unsupported epoch go to `{systemIdentifier}_quarantinedtransactions`.
 `getQuarantinedTransactions` enumerates the decoded transactions and reasons;
@@ -860,13 +914,23 @@ the same installation. Storage migration copies these databases as well.
 
 ### 9.4 Supported delta representations
 
-Payloads without `resourceKey`/`resourceVersion`, and old role deltas with
-plural `roleInstances`, are rejected (issue #196). Supported:
+Since the Universe cut-over only two representations are accepted
+(`Perspectives.Sync.VersionedDelta`); any other `deltaFormatVersion`, an
+unmarked payload, or a format-5 payload without `deltaFamily` is rejected:
 
-- Format 1: ordered, unmarked payloads with singular `roleInstance`.
-- Format 2: explicit format markers and revisioned type references.
-- Format 3: signed property checkpoints (§8.1).
-- Format 4: revisioned type references plus signed per-role causal metadata.
+- **Format 5** (`currentDeltaFormatVersion`): explicit `deltaFamily`
+  (`RolePropertyDelta`, `RoleBindingDelta`, `ContextDelta`,
+  `UniverseRoleDelta`, `UniverseContextDelta`) that selects the decoder,
+  revisioned type references (`subject` with `subjectKind`, likewise
+  `authorizedRole`/`authorizedRoleKind`), `resourceKey`/`resourceVersion`, and
+  signed per-role causal metadata. Every format-5 delta that mutates a role
+  must carry a causal stamp (`validateCausalDelta`). Property deltas may carry
+  `provenance` (§6.4) with revisioned types.
+- **Format 3**: signed property checkpoints (§8.1), which wrap a format-5
+  winner.
+
+Formats 1, 2 and 4 are retired; no migration is provided because the cut-over
+starts a new Perspectives Universe.
 
 ---
 
@@ -1234,7 +1298,7 @@ can cause wrong intermediate state or lost work under plausible conditions;
 | I-13 | L | **Fixed** (§6.1, `conflictPrecedence`): signed content is the secondary tiebreak, shared by arrival-time resolution and history reconstruction. `hasAuthorGreaterOrEqual` used `>=`, so the same author at the same version counts as a winner over itself. Duplicates are normally caught by `deltaId`; of two *different* deltas of one author at one version (only possible after counter loss, e.g. restore from backup) the later arrival always loses, so the outcome depends on arrival order. | `executeDeltaWithVersionTracking` | Compare `deltaId` as a secondary tiebreak. |
 | I-14 | L | Concurrent version-0 constructors by different authors for the same deterministic identifier: the first is executed as "fresh", the second resolved by author tiebreak; context constructors carry no causal stamp. Constructors are idempotent so state converges, but the recorded winner may differ between peers. | §5.3 | Accept; document that constructor winners are not significant. |
 | I-15 | L | **Partly mitigated**: what a restored peer lost is repaired by history requests (§10.6). Counter reuse remains. Restoring a peer from backup reuses its counters for new writes (resource versions and causal counters), creating same-author same-version deltas at its peers. The doc warns against two live copies, but not against restore-then-continue. | §9.3 | Rotate the installation nonce on restore and announce it, which triggers a knowledge reset (I-7). |
-| I-17 | M | Inherited-property authorisation (§6.4) needs the author's filled-role chain up to the subject role at the receiver. Property shipping does not include that chain, and no repair path requests it: when it is missing, the transaction fails `UnauthorizedForProperty` on every retry. | `hasInstancePropertyPermission`, `addDeltasForPropertyChange` | **Partly mitigated** (Stage 0, §6.4): unsigned deltas are rejected, and deltas whose subject provably has no property-writing perspective are quarantined instead of retried. Remaining: Stage 1 — sign subject, object and evaluation-context instances and ship an authority bundle with the author's subject-role chain; request missing evidence with a targeted history request (§10.6). |
+| I-17 | M | Inherited-property authorisation (§6.4) needs the author's filled-role chain up to the subject role at the receiver. | `authorizePropertyDelta`, `shipPropertyDelta` | **Largely mitigated** (Stages 0 and 1, §6.4): unsigned deltas are rejected; proven-unauthorised and refuted-provenance deltas are quarantined; property deltas carry signed provenance and an authority bundle with the subject and object chains. Remaining: provenance is optional (absent provenance falls back to the type-level check that trusts the self-declared subject), and missing evidence is not yet requested with a targeted history request (§10.6). |
 | I-16 | L | The previous version of this document claimed every mutation increments the version, linked a non-existent `docs/transaction-execution.md`, omitted the `deltaId`/`disposition`/`contextKey` fields, and presented §6.4/§6.5 as existing behaviour. | this file | Corrected in this revision. |
 
 ### Priorities

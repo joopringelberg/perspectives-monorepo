@@ -497,6 +497,26 @@ These are design consequences only:
 | Delta ordering in IDs | zero-padded version segment |
 | Old/new universe separation | explicit `universeEpoch` |
 
+## Implementation status
+
+Implemented together with Stage 1 of the property-provenance work (see
+`docsources/delta-ordering.md` §6.4, §9.3, §9.4):
+
+- **Hard cut-over:** only delta format 5 (and format-3 property checkpoints)
+  is accepted; formats 1, 2 and 4 are rejected.
+- **Explicit `deltaFamily`** in every format-5 payload; the decoder is chosen
+  by the family instead of by trial parsing.
+- **`universeEpoch`** on `TransactionForPeer` (`currentUniverseEpoch`); a
+  missing or foreign epoch is rejected.
+- **Zero-padded version segment** in DeltaStore document IDs. The universe
+  epoch is not part of the ID: one database belongs to one universe.
+- **Multi-recipient fan-out** (one ciphertext, wrapped content keys per
+  recipient; RSA-OAEP transport keys) was implemented earlier.
+
+Deferred: the header/payload split with `payloadHash`, `transactionId` and
+position, `baseResourceKey`, the resource-head store, undo status/`before`
+fields, and mandatory property provenance.
+
 ## Verification during implementation
 
 When this design is implemented, verify at least:

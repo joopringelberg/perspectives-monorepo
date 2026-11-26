@@ -198,7 +198,14 @@ Do not change runtime code as part of this investigation.
   for `fullhistory` properties and for binding/membership/constructor history)
   is documented in `docsources/delta-ordering.md` §8.1.
 
-**Stage 1 (decided, not implemented).**
+**Stage 1 (implemented, except targeted evidence requests).** See
+`docsources/delta-ordering.md` §6.4 for the as-built behaviour: an optional
+signed `provenance` on `RolePropertyDelta`
+(`Perspectives.Checking.PropertyProvenance`), an authority bundle with the
+subject and object binding chains and the evaluation context's construction
+history (`addPropertyAuthorityBundle` in `Perspectives.Assignment.Update`), a
+receiver check that falls back to the instance search, and quarantine when the
+claimed evaluation context type cannot hold the subject. The decisions were:
 
 - The signed property delta carries the subject instance, the object instance
   and the **evaluation context instance** from which the subject query starts.
