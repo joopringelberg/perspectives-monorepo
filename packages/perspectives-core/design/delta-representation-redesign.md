@@ -506,15 +506,26 @@ Implemented together with Stage 1 of the property-provenance work (see
   is accepted; formats 1, 2 and 4 are rejected.
 - **Explicit `deltaFamily`** in every format-5 payload; the decoder is chosen
   by the family instead of by trial parsing.
-- **`universeEpoch`** on `TransactionForPeer` (`currentUniverseEpoch`); a
-  missing or foreign epoch is rejected.
+- **`universeEpoch`** on `TransactionForPeer` and signed into every delta
+  (`currentUniverseEpoch`); a missing or foreign epoch is rejected, at
+  transaction and at delta level.
+- **`minReaderVersion`** signed into every delta, with the receiver rule:
+  newer formats are read when `minReaderVersion` permits (unknown fields
+  ignored); otherwise, or for an unknown `deltaFamily`, the transaction is
+  kept pending until the installation is upgraded.
+- **`transactionId` and `transactionPosition`** signed into every delta
+  (not yet interpreted; reserved for transaction-atomic undo/rollback).
+- **Signing scope:** the signature covers the whole delta text, as before.
+  The header is derived locally by parsing; the "header + `payloadHash`"
+  variant (§Cryptography 2) is dropped, as changing the signed bytes would
+  require another Universe restart.
 - **Zero-padded version segment** in DeltaStore document IDs. The universe
   epoch is not part of the ID: one database belongs to one universe.
 - **Multi-recipient fan-out** (one ciphertext, wrapped content keys per
   recipient; RSA-OAEP transport keys) was implemented earlier.
 
-Deferred: the header/payload split with `payloadHash`, `transactionId` and
-position, `baseResourceKey`, the resource-head store, undo status/`before`
+Deferred: a locally derived, stored header (no wire change needed),
+`baseResourceKey`, the resource-head store, undo status/`before`
 fields, and mandatory property provenance.
 
 ## Verification during implementation

@@ -899,6 +899,11 @@ logged as `SYNC`) before verification: it comes from an installation that was
 not restarted at a Universe cut-over, and is neither executed, kept pending nor
 quarantined.
 
+The universe is also **signed into every delta** (`universeEpoch` in the
+payload, see §9.4). `verifyDelta_` rejects a delta whose signed epoch is
+missing or different, so a validly signed delta from an earlier universe cannot
+be replayed inside a new transaction envelope.
+
 All newly assembled transactions include `causalEpoch`. Transactions with a
 missing or unsupported epoch go to `{systemIdentifier}_quarantinedtransactions`.
 `getQuarantinedTransactions` enumerates the decoded transactions and reasons;
@@ -915,8 +920,10 @@ the same installation. Storage migration copies these databases as well.
 ### 9.4 Supported delta representations
 
 Since the Universe cut-over only two representations are accepted
-(`Perspectives.Sync.VersionedDelta`); any other `deltaFormatVersion`, an
-unmarked payload, or a format-5 payload without `deltaFamily` is rejected:
+(`Perspectives.Sync.VersionedDelta`); a `deltaFormatVersion` below 5 (other
+than a format-3 checkpoint), an unmarked payload, or a format-5 payload without
+`deltaFamily` is rejected. Newer formats are handled by the receiver rule
+below.
 
 - **Format 5** (`currentDeltaFormatVersion`): explicit `deltaFamily`
   (`RolePropertyDelta`, `RoleBindingDelta`, `ContextDelta`,
@@ -931,6 +938,42 @@ unmarked payload, or a format-5 payload without `deltaFamily` is rejected:
 
 Formats 1, 2 and 4 are retired; no migration is provided because the cut-over
 starts a new Perspectives Universe.
+
+**Signed transaction-level fields.** Every delta written by `signVersionedDelta`
+carries, inside the signed text:
+
+| Field | Meaning |
+|---|---|
+| `universeEpoch` | `currentUniverseEpoch`; checked per delta (§9.3). |
+| `minReaderVersion` | `currentMinReaderVersion`: the lowest reader version that interprets the delta correctly. |
+| `transactionId` | A cuid shared by all deltas signed in one local transaction (created on the first signed delta). |
+| `transactionPosition` | 0-based position of the delta among the deltas signed in that transaction. |
+
+`transactionId` and `transactionPosition` are not interpreted yet; they are
+signed now so that transaction-atomic undo/rollback can later be built without
+another Universe restart. Embedded transactions get their own id. Checkpoints
+copy these fields from their winner.
+
+The signature keeps covering the whole delta text (`encryptedDelta`, stored
+verbatim). A header (resource key, version, author, epoch, transaction slot)
+is derived locally by parsing that text; there is no separate signed
+`header + payloadHash`.
+
+**Receiver rule.** A reader of version `deltaReaderVersion` (5):
+
+1. reads a delta of any format ≥ 5 whose `minReaderVersion` (default: its
+   `deltaFormatVersion`) is ≤ `deltaReaderVersion`, ignoring fields it does not
+   know (Simple.JSON ignores unknown fields; the signature still covers them);
+2. keeps a transaction **pending** (not rejected) when any of its deltas, key
+   deltas or checkpoint winners requires a newer reader or names an unknown
+   `deltaFamily` (`requiresNewerReader`, checked in
+   `executeTransactionWithOutcome` before verification). The thrown error makes
+   `settleIncomingTransaction` record it as pending; it is retried after the
+   installation has been upgraded and restarted.
+
+Consequently a writer raises `deltaFormatVersion` for every change, and raises
+`minReaderVersion` only when older readers would misinterpret the delta by
+ignoring the new fields.
 
 ---
 
