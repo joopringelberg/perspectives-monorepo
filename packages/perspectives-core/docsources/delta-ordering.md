@@ -45,6 +45,7 @@ been corrected.
 | Receiver-driven repair (requesting missing history) | Implemented (§10.6) |
 | Signed property provenance and authority bundle (Stage 1) | Implemented (§6.4); provenance is optional on the wire, targeted evidence requests are not yet implemented |
 | Delta format 5 with explicit `deltaFamily`; `universeEpoch` | Implemented (§9.4, §9.3) |
+| Version order within one resource key; strict replay; monotonic counters | Implemented (§4.2 step 8, §5.4; I-6, I-11, I-12) |
 
 ---
 
@@ -114,8 +115,10 @@ How the sender stamps deltas:
 | `PropertyCheckpoint` (format 3) | the version of the boundary it certifies (no increment) |
 
 A delta thus carries the version the key has *after* it is applied. On receipt,
-an applied delta sets the local counter to the delta's `resourceVersion`
-(never lower — see issue I-11).
+an applied delta sets the local counter to the delta's `resourceVersion`.
+`setResourceVersion` is monotonic: it never lowers a counter, so an applied
+version cannot be reopened (I-11). Only data upgrades and tests lower a counter,
+with the explicit `resetResourceVersion`.
 
 Consequences that matter later:
 
@@ -331,7 +334,15 @@ stored.
    steps 8–9 do not happen.
 8. **Replay order** — deltas are sorted by `compareForReplay`
    (`deltaTypeSortPriority`; property-like deltas by key and version, checkpoint
-   first).
+   first). Then `orderWithinResourceKeys` (`deltas.purs`) refills the positions
+   held by the deltas of each resource key with those deltas in version order
+   (checkpoint first). The type priority thus orders deltas of *different*
+   keys, while within one key the author's version order always wins (I-6):
+   `SetFirstBinding v1, RemoveBinding v2, SetFirstBinding v3` on one binding key
+   replays as v1, v2, v3. The sender's `sortTransactionDeltas` applies the same
+   rule. Limitation: of two version-0 constructors for one key in a single
+   transaction (a role reconstructed within it), both sort before the removal
+   in between; reconstruction normally spans transactions.
 9. **Version tracking** — `executeDeltaWithVersionTracking` per delta (§5).
 
 ---
@@ -406,12 +417,24 @@ re-applied on top of the winner.
 
 ### 5.4 Execution errors
 
-`executeDelta` catches errors of non-property deltas and only logs a warning;
-the delta is still stored as applied and the counter advanced (issue I-12).
-Property errors (including failed instance-level authorisation, §6.4) and
-checkpoint errors propagate: nothing of that delta is recorded, and the
-exception aborts the incoming transaction. Earlier deltas of that transaction
-are not rolled back.
+On the version-tracked path (`applyDelta`), every execution error propagates,
+including an authorisation failure of a non-property delta (context
+membership, binding, role and context construction, role removal) (I-12).
+Nothing of the failing delta is recorded and its counter does not advance; the
+exception aborts the incoming transaction, which is kept as pending and retried
+(§10.5). Earlier deltas of that transaction are not rolled back: they are
+stored with their `deltaId` and skipped as duplicates on the retry.
+
+Three paths stay tolerant (authorisation failures and non-property errors are
+only logged), through the `handleError` variants of the `execute*Delta`
+functions:
+- public-key deltas in `executeTransaction'`, executed unconditionally so that
+  first contact with a new peer cannot block;
+- `restoreRoleFromDeltaStore`, which re-executes stored role-level deltas
+  regardless of their applied flag;
+- `executeDeltas` (publishing for a public role, from the local user's own
+  transaction) and `restoreResource.purs`, which must not fail the local
+  transaction for a peer's delta.
 
 ---
 
@@ -563,8 +586,8 @@ A quarantine is decided by the receiver's model version: a sender on a newer
 model that grants a new perspective is quarantined by an older receiver. Such
 cases need manual reconciliation (update the model and resend from the
 originating installation); quarantined transactions are not replayed
-automatically. Non-property delta types still log authorisation failures and
-continue (I-12).
+automatically. Authorisation failures of non-property delta types make the
+transaction fail and stay pending (§5.4, I-12); they are not quarantined.
 
 **Signed provenance and authority bundle (Stage 1).** A `RolePropertyDelta`
 carries an optional, signed `provenance`:
@@ -1331,13 +1354,13 @@ can cause wrong intermediate state or lost work under plausible conditions;
 | I-3 | M | **Fixed** (§3.3). Pending doc ID was `pending_<author>_<timeStamp>` and stored without `_rev`: redelivery of a blocked transaction (or any future re-store) conflicts and throws after the AMQP ack. | `storePendingTransaction` | Deterministic ID with content hash, upsert (§10.2) |
 | I-4 | H | **Fixed** (§5.1, `reconsiderLateProperty`, disposition `LateWinner`). A late property delta that wins at its version (or fills an unknown version above the checkpoint) re-derives the property from history. Below the checkpoint it remains `Outdated`; non-property deltas remain `Outdated` (absolute operations). **`Outdated` is not the same as stale.** A delta with `resourceVersion < localVersion` may be the *winner* of a conflict at its version that arrived late. Example: A and B write v4 concurrently, A > B; B then writes v5 = `AddProperty z`. At B, A's v4 arrives at local v5: `Outdated`, discarded. At A, B's v4 loses and B's v5 is applied on A's v4. For relative operations A ends with {x, z}, B with {y, z}. The same happens when a third peer's gap is "closed" by the losing v4, or by a local write on an awaited key. Absolute operations (set, bindings, role lifecycle) converge in their final state. | `executeDeltaWithVersionTracking`, outdated branch | For property operations: persist, and if the incoming delta would win at its version (or no record exists there and it is above the checkpoint), re-derive the property with `restorePropertyFromHistory`, exactly as the conflict-winner branch already does. |
 | I-5 | M | **Mitigated** (§6.1 invariant): with I-4 and I-13 fixed, every installation computes the same version-ordered fold of winners, so properties converge. Remaining: a v(n+1) built on a losing v(n) is rebased on the winner rather than merged by intent; this is the documented semantics. Resolving conflicts from causal stamps remains an option, not a correctness requirement. Version counters carry no causality. A v(n+1) built on a losing v(n) is applied as normal; per-role causal stamps exist but are not used for same-key conflicts. Combined with I-4 this is the root of property divergence. | §6.1, §7 | Short term: I-4's re-derivation. Long term: resolve property conflicts from the causal stamps (I-4 then becomes a special case). |
-| I-6 | M | Replay order only sorts by version within priority 5 (properties, moves). For one key, `SetFirstBinding` (4) runs before `RemoveBinding`/`ReplaceBinding` (6) regardless of version, and role `Move` (5) before `Remove` (6). A transaction `SetFirstBinding v1, RemoveBinding v2, SetFirstBinding v3` replays as v1, v3, v2: v2 becomes `Outdated` and its side effects (e.g. inverse binding cleanup) are skipped. | `compareForReplay`, `sortTransactionDeltas` | Keep the type priority across keys, but within one resource key order strictly by version (constructors at version 0 sort first naturally). |
+| I-6 | M | **Fixed** (§4.2 step 8, `orderWithinResourceKeys`). Replay order only sorts by version within priority 5 (properties, moves). For one key, `SetFirstBinding` (4) runs before `RemoveBinding`/`ReplaceBinding` (6) regardless of version, and role `Move` (5) before `Remove` (6). A transaction `SetFirstBinding v1, RemoveBinding v2, SetFirstBinding v3` replays as v1, v3, v2: v2 becomes `Outdated` and its side effects (e.g. inverse binding cleanup) are skipped. | `compareForReplay`, `sortTransactionDeltas` | Keep the type priority across keys, but within one resource key order strictly by version (constructors at version 0 sort first naturally). |
 | I-7 | H | **Fixed** (§3.4, §10.6): knowledge is lowered per key on a history request, and forgotten for a peer when its signing or transport key changes (`executeRolePropertyDelta`). The installation nonce is deliberately not a trigger: one user may run several installations; a restore from backup keeps keys and is repaired by history requests. Peer delivery knowledge means "queued", never reset. A peer that lost or rejected a delta (restore from backup, reinstall, quarantine, rejected authorisation, exception after early ack) never receives it or a covering checkpoint again on knowledge-based paths → permanent gap. | `peerDeliveryStore.purs`, `addStoredDeltas` | Reset on history request (§10.6); also reset all knowledge for a peer when its installation nonce or key changes. |
 | I-8 | M | **Mitigated** (§10.6): history answers carry the retained binding history from the missing version. Binding, context and role-membership keys have no checkpoint. A single missed binding delta can only be repaired by resending exactly that delta. Baselines lift only the role key; property and binding gaps in the same transaction still block it. | §8.4 | Answering history requests with full binding history (§10.6) suffices; a binding checkpoint is optional. |
 | I-9 | M | **Fixed** for stored-history paths (§8.3): a checkpoint is withheld only from peers whose contiguous watermark reaches it. `addStoredDeltas` always receives the full retained history, so no other part of a range is skipped. Live `addDelta` paths still ship v(n+k) without v(n..); the resulting gap is repaired by a history request (§10.6). Non-initial shipping paths (state-dependent or filtered perspectives, perspective assumptions in `collectAffectedContexts.purs`) can send version n+k to a peer that never received n..n+k-1, relying on knowledge (I-7). | `collectAffectedContexts.purs`, `serialiseAsDeltas.purs` | Same as I-7; optionally ship a checkpoint whenever knowledge's `maxVersion` is below the first shipped version - 1. |
 | I-10 | H | **Fixed** for execution failures (§10.5); the early acknowledgement remains, so a failure to *write* the pending record, or to decrypt, still loses the message. Current-epoch AMQP messages are acknowledged before execution. If `storePendingTransaction` fails (I-3) or execution throws (§5.4, §6.4), the transaction is gone; only the sender's knowledge remains, which says "delivered". | `amqpTransport/incomingPost.purs` | Store failed executions as pending (§10.5); alternatively acknowledge only after execution or pending storage. |
-| I-11 | L | `setResourceVersion` is unconditional; most callers guard with `max`, some rely on the branch condition. A future caller can lower a counter and reopen applied versions. | `resourceVersionStore.purs` | Make `setResourceVersion` monotonic (`max`) and add an explicit `resetResourceVersion` if ever needed. |
-| I-12 | M | Still open; now that failed transactions are retried (§10.5), the suggested fix is possible, but it changes which transactions fail and must be evaluated per delta type. Non-property execution errors are swallowed: the delta is stored as `Applied` and the counter advanced although nothing happened. The peer silently diverges and later deltas build on a state that does not exist. | `executeDelta` | Treat like property errors: propagate, and rely on §10.5 for retry. |
+| I-11 | L | **Fixed** (§2.2): `setResourceVersion` is monotonic; `resetResourceVersion` is used only by the data upgrade and tests. `setResourceVersion` was unconditional; most callers guard with `max`, some rely on the branch condition. A future caller can lower a counter and reopen applied versions. | `resourceVersionStore.purs` | Make `setResourceVersion` monotonic (`max`) and add an explicit `resetResourceVersion` if ever needed. |
+| I-12 | M | **Fixed** on the version-tracked path (§5.4): non-property errors and authorisation failures propagate, so the transaction stays pending and is retried (after 5 attempts it is `Failed`). Key deltas, restoration and public-role publishing stay tolerant. Unauthorised non-property deltas are not quarantined; a permanently unauthorised one ends as a failed pending record. Non-property execution errors are swallowed: the delta is stored as `Applied` and the counter advanced although nothing happened. The peer silently diverges and later deltas build on a state that does not exist. | `executeDelta` | Treat like property errors: propagate, and rely on §10.5 for retry. |
 | I-13 | L | **Fixed** (§6.1, `conflictPrecedence`): signed content is the secondary tiebreak, shared by arrival-time resolution and history reconstruction. `hasAuthorGreaterOrEqual` used `>=`, so the same author at the same version counts as a winner over itself. Duplicates are normally caught by `deltaId`; of two *different* deltas of one author at one version (only possible after counter loss, e.g. restore from backup) the later arrival always loses, so the outcome depends on arrival order. | `executeDeltaWithVersionTracking` | Compare `deltaId` as a secondary tiebreak. |
 | I-14 | L | Concurrent version-0 constructors by different authors for the same deterministic identifier: the first is executed as "fresh", the second resolved by author tiebreak; context constructors carry no causal stamp. Constructors are idempotent so state converges, but the recorded winner may differ between peers. | §5.3 | Accept; document that constructor winners are not significant. |
 | I-15 | L | **Partly mitigated**: what a restored peer lost is repaired by history requests (§10.6). Counter reuse remains. Restoring a peer from backup reuses its counters for new writes (resource versions and causal counters), creating same-author same-version deltas at its peers. The doc warns against two live copies, but not against restore-then-continue. | §9.3 | Rotate the installation nonce on restore and announce it, which triggers a knowledge reset (I-7). |
@@ -1351,7 +1374,7 @@ can cause wrong intermediate state or lost work under plausible conditions;
    concurrency~~ — done.
 3. ~~I-7, I-9 (history requests): repair after data loss~~ — done; the
    two-PDR test remains.
-4. I-6, I-12: correctness of replay within a transaction.
+4. ~~I-6, I-11, I-12: correctness of replay within a transaction~~ — done.
 5. The rest.
 
 ---
