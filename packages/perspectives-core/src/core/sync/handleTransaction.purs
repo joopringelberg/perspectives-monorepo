@@ -33,7 +33,7 @@ import Data.Foldable (for_)
 import Data.FoldableWithIndex (forWithIndex_)
 import Data.Generic.Rep (class Generic)
 import Data.Map as Map
-import Data.Maybe (Maybe(..), fromJust, isJust, isNothing)
+import Data.Maybe (Maybe(..), fromJust, isJust, isNothing, maybe)
 import Data.MediaType (MediaType(..))
 import Data.Newtype (over, unwrap)
 import Data.Ordering (Ordering(..))
@@ -48,7 +48,8 @@ import Partial.Unsafe (unsafePartial)
 import Perspectives.ApiTypes (PropertySerialization(..), RolSerialization(..))
 import Perspectives.Assignment.Update (addProperty, addRoleInstanceToContext, deleteProperty, moveRoleInstanceToAnotherContext, removeProperty, setProperty)
 import Perspectives.Authenticate (deserializeJWK, tryGetPublicKey, verifyDelta, verifyDelta')
-import Perspectives.Checking.Authorization (roleHasPerspectiveOnExternalRoleWithVerbs, roleHasPerspectiveOnPropertyWithVerb, roleHasPerspectiveOnRoleWithVerb, subjectCannotWriteAnyPropertyWith)
+import Perspectives.Checking.Authorization (authorizePropertyDelta, roleHasPerspectiveOnExternalRoleWithVerbs, roleHasPerspectiveOnRoleWithVerb, subjectCannotWriteAnyPropertyWith)
+import Perspectives.Checking.PropertyProvenance (refutedPropertyProvenance)
 import Perspectives.ContextAndRole (defaultContextRecord, defaultRolRecord, getNextRolIndex)
 import Perspectives.CoreTypes (MonadPerspectivesTransaction, removeInternally, (###=), (###>>), (##=), (##>), (##>>))
 import Perspectives.Data.EncodableMap as ENCMAP
@@ -90,7 +91,7 @@ import Perspectives.StrippedDelta (addPublicResourceScheme, addResourceSchemes, 
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
 import Perspectives.Sync.PropertyHistory (checkpoint, conflictPrecedence, isCheckpoint, isPropertyOperation, propertyHistory, validateCheckpoint)
 import Perspectives.Sync.Transaction (PublicKeyInfo, Transaction(..))
-import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..), deduplicatePublicKeys, withoutPredefinedContextScaffolding)
+import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..), currentUniverseEpoch, deduplicatePublicKeys, withoutPredefinedContextScaffolding)
 import Perspectives.Sync.VersionedDelta (DeltaEnvelope(..), parseIncomingDelta)
 import Perspectives.Types.ObjectGetters (contextAspectsClosure, hasAspect, isPublic, roleAspectsClosure, publicUserRole)
 import Perspectives.TypesForDeltas (ContextDelta(..), ContextDeltaType(..), DeltaRecord, RoleBindingDelta(..), RoleBindingDeltaType(..), RolePropertyDelta(..), RolePropertyDeltaType(..), UniverseContextDelta(..), UniverseContextDeltaType(..), UniverseRoleDelta(..), UniverseRoleDeltaType(..))
@@ -155,9 +156,10 @@ executeRolePropertyDelta d@(RolePropertyDelta { id, property }) signedDelta =
 
 -- TODO. Wat met SetPropertyValue?
 executeRolePropertyDelta_ :: RolePropertyDelta -> SignedDelta -> MonadPerspectivesTransaction Unit
-executeRolePropertyDelta_ d@(RolePropertyDelta { id, roleType, deltaType, values, property, subject }) signedDelta = do
+executeRolePropertyDelta_ d@(RolePropertyDelta { id, roleType, deltaType, values, property, subject, provenance }) signedDelta = do
   let
-    authorize = roleHasPerspectiveOnPropertyWithVerb (unwrap signedDelta).author subject id property
+    -- With provenance, the signed instance-level witness is checked; without it, the legacy type-level check applies.
+    authorize = authorizePropertyDelta (unwrap signedDelta).author subject id property provenance
     reject e = do
       message <- lift $ renderPerspectivesError e
       throwError $ error message
@@ -497,7 +499,11 @@ instance Show TransactionOutcome where
 executeTransactionWithOutcome :: TransactionForPeer -> MonadPerspectivesTransaction TransactionOutcome
 executeTransactionWithOutcome t = do
   void $ lift ensureCausalEpoch
-  if (unwrap t).causalEpoch /= Just currentCausalEpoch then do
+  if (unwrap t).universeEpoch /= Just currentUniverseEpoch then do
+    let reason = "Transaction from author " <> unwrap (unwrap t).author <> " is outside the current Perspectives Universe (" <> show (unwrap t).universeEpoch <> ")"
+    lift $ warnSync reason
+    pure $ Rejected reason
+  else if (unwrap t).causalEpoch /= Just currentCausalEpoch then do
     id <- lift $ quarantineTransaction "Transaction is outside the active causal epoch" t
     lift $ warnSync $ "Quarantined transaction " <> id <> ": missing or unsupported causal epoch; manual reconciliation required"
     pure Quarantined
@@ -541,20 +547,29 @@ provenUnauthorizedPropertyDeltas :: TransactionForPeer -> MonadPerspectivesTrans
 provenUnauthorizedPropertyDeltas (TransactionForPeer { deltas }) = lift $ catMaybes <$> for deltas \(SignedDelta { author, encryptedDelta }) ->
   if isCheckpoint encryptedDelta then pure Nothing
   else case parseIncomingDelta encryptedDelta of
-    Right (RolePropertyEnvelope (RolePropertyDelta { id, property, deltaType, subject })) -> case propertyDeltaVerbs deltaType of
+    Right (RolePropertyEnvelope (RolePropertyDelta { id, property, deltaType, subject, provenance })) -> case propertyDeltaVerbs deltaType of
       [] -> pure Nothing
-      verbs -> try (subjectCannotWriteAnyPropertyWith subject verbs) >>= case _ of
+      verbs -> try (maybe (pure false) (refutedPropertyProvenance subject) provenance) >>= case _ of
         Right true -> pure $ Just $ "author " <> unwrap author <> " as " <> show subject
-          <> " has no perspective to "
-          <> show verbs
-          <> " any property ("
+          <> " claims an evaluation context whose type cannot hold that subject ("
           <> show deltaType
           <> " of "
           <> unwrap property
           <> " on "
           <> unwrap id
           <> ")"
-        _ -> pure Nothing
+        _ -> try (subjectCannotWriteAnyPropertyWith subject verbs) >>= case _ of
+          Right true -> pure $ Just $ "author " <> unwrap author <> " as " <> show subject
+            <> " has no perspective to "
+            <> show verbs
+            <> " any property ("
+            <> show deltaType
+            <> " of "
+            <> unwrap property
+            <> " on "
+            <> unwrap id
+            <> ")"
+          _ -> pure Nothing
     _ -> pure Nothing
 
 -- | The verbs any of which authorizes a property delta type (compare executeRolePropertyDelta_).

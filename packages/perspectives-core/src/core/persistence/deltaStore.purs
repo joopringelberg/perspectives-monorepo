@@ -49,12 +49,12 @@ import Prelude
 import Control.Monad.AvarMonadAsk (gets)
 import Control.Monad.Error.Class (throwError)
 import Control.Monad.Except (runExcept)
-import Data.Array (catMaybes, elem, filter, head, last, length, sortBy) as Arr
+import Data.Array (catMaybes, elem, filter, head, last, length, replicate, sortBy) as Arr
 import Data.Either (Either(..))
 import Data.Foldable (for_, traverse_)
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Newtype (unwrap)
-import Data.String (Pattern(..), drop, indexOf, lastIndexOf, length, split, take) as Str
+import Data.String (Pattern(..), drop, indexOf, joinWith, lastIndexOf, length, split, take) as Str
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
 import Effect.Exception (error)
@@ -142,12 +142,22 @@ shortenPropertyType propType =
 -----------------------------------------------------------
 
 -- | Construct the deterministic document ID for a delta in the store.
--- | Format: <safeResourceKey>_v<resourceVersion>_<author>
+-- | Format: <safeResourceKey>_v<resourceVersion, zero-padded to 10 digits>_<author>
 -- | This is unique: in a conflict, two deltas share resourceVersion but have different authors.
 -- | The resourceKey is converted to a URL-safe form via 'safeKey'.
+-- | Zero padding makes the lexicographic document order equal the numeric version order
+-- | (delta-representation-redesign.md), so range reads return the history in version order.
 deltaStoreDocId :: String -> Int -> PerspectivesUser -> String
 deltaStoreDocId resourceKey resourceVersion author =
-  safeKey resourceKey <> "_v" <> show resourceVersion <> "_" <> takeGuid (unwrap author)
+  safeKey resourceKey <> "_v" <> paddedVersion resourceVersion <> "_" <> takeGuid (unwrap author)
+
+paddedVersion :: Int -> String
+paddedVersion version =
+  let
+    digits = show version
+  in
+    if version < 0 then digits
+    else Str.joinWith "" (Arr.replicate (10 - Str.length digits) "0") <> digits
 
 deltaStoreDocIdWithDeltaId :: String -> Int -> PerspectivesUser -> String -> String
 deltaStoreDocIdWithDeltaId resourceKey resourceVersion author deltaId =

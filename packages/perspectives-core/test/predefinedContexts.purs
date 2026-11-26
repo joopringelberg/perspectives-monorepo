@@ -48,6 +48,7 @@ import Perspectives.Sync.Transaction (Transaction(..), TransactionDestination(..
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..), currentTransactionForPeer, withoutPredefinedContextScaffolding)
 import Perspectives.Sync.VersionedDelta (isPredefinedContextScaffolding)
 import Perspectives.UnschemedIdentifiers (unschemePerspectivesUser)
+import Perspectives.Sync.Causal (currentCausalEpoch)
 import Simple.JSON (class WriteForeign, writeJSON)
 import Test.BindingReplacement as Binding
 import Test.VerificationBundles as Verification
@@ -79,26 +80,28 @@ theSuite = suite "Predefined context scaffolding" do
       let deltas = scaffolding (PerspectivesUser "historical") id
       equal deltas (unwrap $ withoutPredefinedContextScaffolding $ peerTransaction deltas).deltas
 
-  test "recognizes ordered unmarked scaffolding for both predefined contexts" do
+  test "recognizes format-5 scaffolding for both predefined contexts" do
     for_ [ "TheWorld", "TheSocialEnvironment" ] \id -> do
       let
-        subject = ENR Binding.userType
+        subject = unwrap Binding.userType
+        subjectKind = "ENR"
+        deltaFormatVersion = 5
         contextType = Binding.contextType
         roleType = externalRoleType contextType
         roleInstance = RoleInstance $ id <> "$External"
         payloads =
-          [ writeJSON { subject, resourceKey: id, resourceVersion: 0, id: ContextInstance id, contextType, deltaType: "ConstructEmptyContext" }
-          , writeJSON { subject, resourceKey: unwrap roleInstance, resourceVersion: 0, id: ContextInstance id, contextType, roleType, roleInstance, deltaType: "ConstructExternalRole" }
-          , writeJSON { subject, resourceKey: unwrap roleInstance, resourceVersion: 0, contextInstance: ContextInstance id, contextType, roleType, roleInstance, deltaType: "AddExternalRole" }
+          [ writeJSON { deltaFormatVersion, deltaFamily: "UniverseContextDelta", subject, subjectKind, resourceKey: id, resourceVersion: 0, id: ContextInstance id, contextType, deltaType: "ConstructEmptyContext" }
+          , writeJSON { deltaFormatVersion, deltaFamily: "UniverseRoleDelta", subject, subjectKind, resourceKey: unwrap roleInstance, resourceVersion: 0, id: ContextInstance id, contextType, roleType, roleInstance, deltaType: "ConstructExternalRole" }
+          , writeJSON { deltaFormatVersion, deltaFamily: "ContextDelta", subject, subjectKind, resourceKey: unwrap roleInstance, resourceVersion: 0, contextInstance: ContextInstance id, contextType, roleType, roleInstance, deltaType: "AddExternalRole" }
           ]
       for_ payloads \payload ->
-        assert "Ordered unmarked scaffolding must be omitted too" $ isPredefinedContextScaffolding payload
+        assert "Scaffolding must be omitted" $ isPredefinedContextScaffolding payload
 
   test "preserves memberships, bindings, and external properties of predefined contexts" do
     let
       deltas =
         [ Binding.signed
-            { deltaFormatVersion: 2
+            { deltaFormatVersion: 5
             , subject: "model://test.example#User@1.0"
             , subjectKind: "ENR"
             , resourceKey: "def:#member"
@@ -108,9 +111,10 @@ theSuite = suite "Predefined context scaffolding" do
             , roleInstance: RoleInstance "member"
             , roleType: "model://test.example#World$Member@1.0"
             , deltaType: "ConstructEmptyRole"
+            , deltaFamily: "UniverseRoleDelta"
             }
         , Binding.signed
-            { deltaFormatVersion: 2
+            { deltaFormatVersion: 5
             , subject: "model://test.example#User@1.0"
             , subjectKind: "ENR"
             , resourceKey: "def:#member"
@@ -120,10 +124,11 @@ theSuite = suite "Predefined context scaffolding" do
             , roleInstance: RoleInstance "member"
             , roleType: "model://test.example#World$Member@1.0"
             , deltaType: "AddRoleInstancesToContext"
+            , deltaFamily: "ContextDelta"
             }
         , Binding.replacementDelta Binding.oldRemotePeer
         , Binding.signed
-            { deltaFormatVersion: 2
+            { deltaFormatVersion: 5
             , subject: "model://test.example#User@1.0"
             , subjectKind: "ENR"
             , resourceKey: "def:#TheSocialEnvironment$External#model://test.example#External$MyIdentity"
@@ -133,6 +138,7 @@ theSuite = suite "Predefined context scaffolding" do
             , property: "model://test.example#External$MyIdentity@1.0"
             , values: [ Value "identity-file" ]
             , deltaType: "SetProperty"
+            , deltaFamily: "RolePropertyDelta"
             }
         ]
     equal deltas (unwrap $ withoutPredefinedContextScaffolding $ peerTransaction deltas).deltas
@@ -220,11 +226,19 @@ theSuite = suite "Predefined context scaffolding" do
           { resourceKey: unwrap Binding.visibleId <> "#" <> unwrap Binding.visibleProperty
           , resourceVersion: 2
           , deltaType: "SetProperty"
+          , deltaFamily: "RolePropertyDelta"
+          , deltaFormatVersion: 5
+          , subjectKind: "ENR"
           , id: RoleInstance "visible"
           , roleType: Binding.visibleType
           , property: Binding.visibleProperty
           , values: [ Value "updated" ]
-          , subject: ENR Binding.userType
+          , subject: unwrap Binding.userType
+          , causal:
+              { epoch: currentCausalEpoch
+              , dot: { actor: writeJSON [ "local", "scaffolding-test-installation" ], counter: 1 }
+              , context: ([] :: Array { actor :: String, counter :: Int })
+              }
           }
       propertyDelta <- over SignedDelta (\d -> d { author = PerspectivesUser "local" }) <$> signDelta (unwrap unsignedProperty).encryptedDelta
       lift do
@@ -275,7 +289,7 @@ scaffolding author id =
     roleType = "model://test.example#World$External@1.0"
   in
     [ sign
-        { deltaFormatVersion: 2
+        { deltaFormatVersion: 5
         , subject
         , subjectKind: "CR"
         , resourceKey: id
@@ -283,9 +297,10 @@ scaffolding author id =
         , id: ContextInstance id
         , contextType
         , deltaType: "ConstructEmptyContext"
+        , deltaFamily: "UniverseContextDelta"
         }
     , sign
-        { deltaFormatVersion: 2
+        { deltaFormatVersion: 5
         , subject
         , subjectKind: "CR"
         , resourceKey: id <> "$External"
@@ -295,9 +310,10 @@ scaffolding author id =
         , roleType
         , roleInstance: RoleInstance $ id <> "$External"
         , deltaType: "ConstructExternalRole"
+        , deltaFamily: "UniverseRoleDelta"
         }
     , sign
-        { deltaFormatVersion: 2
+        { deltaFormatVersion: 5
         , subject
         , subjectKind: "CR"
         , resourceKey: id <> "$External"
@@ -307,6 +323,7 @@ scaffolding author id =
         , roleType
         , roleInstance: RoleInstance $ id <> "$External"
         , deltaType: "AddExternalRole"
+        , deltaFamily: "ContextDelta"
         }
     ]
 

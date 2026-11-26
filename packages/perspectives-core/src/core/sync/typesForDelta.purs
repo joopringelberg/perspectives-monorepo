@@ -292,8 +292,24 @@ newtype RolePropertyDelta = RolePropertyDelta
       , property :: EnumeratedPropertyType
       , values :: Array Value
       , deltaType :: RolePropertyDeltaType
+      , provenance :: Maybe PropertyProvenance
       )
   )
+
+-- | The instance-level authority for a property delta (Stage 1, delta-ordering.md §6.5).
+-- | The author fills `subjectInstance` (an instance of the delta's subject role type);
+-- | evaluating the subject role from `evaluationContext` yields `subjectInstance`;
+-- | evaluating the perspective's object query from `evaluationContext` yields `objectInstance`;
+-- | resolving the delta's property from `objectInstance` reaches the delta's role instance (`id`).
+-- | The types are signed claims, used to restore storage schemes and refuted when they contradict the instances.
+type PropertyProvenance =
+  { subjectInstance :: RoleInstance
+  , subjectInstanceType :: EnumeratedRoleType
+  , evaluationContext :: ContextInstance
+  , evaluationContextType :: ContextType
+  , objectInstance :: RoleInstance
+  , objectInstanceType :: EnumeratedRoleType
+  }
 
 derive instance genericPropertyDelta :: Generic RolePropertyDelta _
 derive instance newtypeRolePropertyDelta :: Newtype RolePropertyDelta _

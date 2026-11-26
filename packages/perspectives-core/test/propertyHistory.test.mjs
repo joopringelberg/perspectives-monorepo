@@ -15,7 +15,7 @@ function delta(version, operation = "SetProperty", values = [String(version)], a
     author,
     signature: new Just("original-signature"),
     encryptedDelta: JSON.stringify({
-      deltaFormatVersion: 2, resourceKey: key, resourceVersion: version,
+      deltaFormatVersion: 5, deltaFamily: "RolePropertyDelta", resourceKey: key, resourceVersion: version,
       deltaType: operation, id: "role", roleType: "model://test.example#History$Role@0.0",
       property: "model://test.example#History$Value@0.0",
       subject: "model://test.example#History$Writer@0.0", subjectKind: "ENR", values

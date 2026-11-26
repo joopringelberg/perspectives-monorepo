@@ -84,7 +84,7 @@ import Perspectives.Sync.Causal (CausalStamp, Clock, currentCausalEpoch, readCau
 import Perspectives.Sync.ConstructionBaseline (sameResource, selectRoleBaseline)
 import Perspectives.Query.Interpreter.Dependencies (Dependency(..))
 import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
-import Perspectives.Sync.HandleTransaction (Delta(..), TransactionOutcome(..), executeDeltas, executeTransaction, executeUniverseRoleDelta)
+import Perspectives.Sync.HandleTransaction (Delta(..), TransactionOutcome(..), executeDeltas, executeTransaction, executeTransactionWithOutcome, executeUniverseRoleDelta)
 import Perspectives.Sync.PropertyHistory (conflictPrecedence)
 import Perspectives.Sync.PendingTransactions (DrainMode(..), drainPendingTransactions, settleIncomingTransaction)
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
@@ -114,10 +114,11 @@ theSuite = suite "Causal role deletion and coordinated cutover" do
       let
         external = RoleInstance $ unwrap Binding.contextId <> "$External"
       context <- signPayload "local"
-        { deltaFormatVersion: 4
+        { deltaFormatVersion: 5
         , resourceKey: takeGuid $ unwrap Binding.contextId
         , resourceVersion: 0
         , deltaType: "ConstructEmptyContext"
+        , deltaFamily: "UniverseContextDelta"
         , id: takeGuid $ unwrap Binding.contextId
         , contextType: unwrap Binding.contextType
         , subject: unwrap Binding.userType
@@ -126,10 +127,11 @@ theSuite = suite "Causal role deletion and coordinated cutover" do
       oldExternalCreation <- constructionFor external true "local" (stamp "local" 1 [])
       oldExternalMembership <- membershipFor external true "local" 1 (stamp "local" 2 [ dot "local" 1 ])
       oldExternalRemoval <- signPayload "local"
-        { deltaFormatVersion: 4
+        { deltaFormatVersion: 5
         , resourceKey: takeGuid $ unwrap external
         , resourceVersion: 2
         , deltaType: "RemoveExternalRoleInstance"
+        , deltaFamily: "UniverseRoleDelta"
         , id: takeGuid $ unwrap Binding.contextId
         , contextType: unwrap Binding.contextType
         , roleType: unwrap Binding.externalType
@@ -763,6 +765,7 @@ theSuite = suite "Causal role deletion and coordinated cutover" do
         , property: Binding.visibleProperty
         , values: [ Value "changed" ]
         , subject: ENR Binding.userType
+        , provenance: Nothing
         }
       binding <- signVersionedDelta $ RoleBindingDelta
         { resourceKey: unwrap Binding.visibleId <> "#binding"
@@ -807,7 +810,7 @@ theSuite = suite "Causal role deletion and coordinated cutover" do
       selfCovered <- propertyChange "local" 2 $ stamp "local" 1 [ dot "local" 1 ]
       let
         missing = Binding.signed
-          { deltaFormatVersion: 4
+          { deltaFormatVersion: 5
           , id: "visible"
           , property: unwrap Binding.visibleProperty
           }
@@ -838,6 +841,24 @@ theSuite = suite "Causal role deletion and coordinated cutover" do
         for_ quarantined \(QuarantinedTransaction doc) -> do
           assert "Quarantine must be persistent" $ isJust doc._rev
           equal [ modification ] (unwrap doc.transaction).deltas
+
+  test "transactions from another or no Perspectives Universe are rejected without side effects or quarantine" $
+    withSigningFixture true \key -> do
+      prepare key
+      modification <- propertyChange "local" 2 $ stamp "local" 1 []
+      incoming <- packet [ modification ]
+      outcomes <- for [ Nothing, Just "another-universe" ] \epoch ->
+        executeTransactionWithOutcome $ TransactionForPeer (unwrap incoming) { universeEpoch = epoch }
+      quarantined <- lift getQuarantinedTransactions
+      version <- lift $ getResourceVersion History.propertyKey
+      value <- lift (Binding.visibleId ##= getProperty Binding.visibleProperty)
+      liftAff do
+        for_ outcomes \outcome -> assert "A foreign universe must be rejected" $ case outcome of
+          Rejected reason -> contains (Pattern "outside the current Perspectives Universe") reason
+          _ -> false
+        equal 0 (length quarantined)
+        equal 1 version
+        equal [ Value "visible-value" ] value
 
   test "a conflicting persisted epoch is an explicit failure, not a successful receive" $
     Binding.withFixture Binding.localPeer [] [] do
@@ -877,10 +898,11 @@ propertyChange author version causal = propertyOperation author version "SetProp
 
 propertyOperation :: String -> Int -> String -> Array String -> CausalStamp -> MonadPerspectivesTransaction SignedDelta
 propertyOperation author version deltaType values causal = signPayload author
-  { deltaFormatVersion: 4
+  { deltaFormatVersion: 5
   , resourceKey: History.propertyKey
   , resourceVersion: version
   , deltaType
+  , deltaFamily: "RolePropertyDelta"
   , id: "visible"
   , roleType: unwrap Binding.visibleType
   , property: unwrap Binding.visibleProperty
@@ -892,10 +914,11 @@ propertyOperation author version deltaType values causal = signPayload author
 
 roleDeletion :: CausalStamp -> MonadPerspectivesTransaction SignedDelta
 roleDeletion causal = signPayload "local"
-  { deltaFormatVersion: 4
+  { deltaFormatVersion: 5
   , resourceKey: unwrap Binding.visibleId
   , resourceVersion: 2
   , deltaType: "RemoveRoleInstance"
+  , deltaFamily: "UniverseRoleDelta"
   , id: takeGuid $ unwrap Binding.contextId
   , contextType: unwrap Binding.contextType
   , roleType: unwrap Binding.visibleType
@@ -907,10 +930,11 @@ roleDeletion causal = signPayload "local"
 
 constructionFor :: RoleInstance -> Boolean -> String -> CausalStamp -> MonadPerspectivesTransaction SignedDelta
 constructionFor role external author causal = signPayload author
-  { deltaFormatVersion: 4
+  { deltaFormatVersion: 5
   , resourceKey: takeGuid $ unwrap role
   , resourceVersion: 0
   , deltaType: if external then "ConstructExternalRole" else "ConstructEmptyRole"
+  , deltaFamily: "UniverseRoleDelta"
   , id: takeGuid $ if external then deconstructBuitenRol $ unwrap role else unwrap Binding.contextId
   , contextType: unwrap Binding.contextType
   , roleType: unwrap $ if external then Binding.externalType else Binding.visibleType
@@ -924,10 +948,11 @@ constructionFor role external author causal = signPayload author
 
 membershipFor :: RoleInstance -> Boolean -> String -> Int -> CausalStamp -> MonadPerspectivesTransaction SignedDelta
 membershipFor role external author version causal = signPayload author
-  { deltaFormatVersion: 4
+  { deltaFormatVersion: 5
   , resourceKey: takeGuid $ unwrap role
   , resourceVersion: version
   , deltaType: if external then "AddExternalRole" else "AddRoleInstancesToContext"
+  , deltaFamily: "ContextDelta"
   , contextInstance: takeGuid $ if external then deconstructBuitenRol $ unwrap role else unwrap Binding.contextId
   , contextType: unwrap Binding.contextType
   , roleType: unwrap $ if external then Binding.externalType else Binding.visibleType
@@ -983,21 +1008,27 @@ prepare key = do
     { resourceKey: unwrap Binding.visibleId
     , resourceVersion: 0
     , deltaType: "ConstructEmptyRole"
+    , deltaFamily: "UniverseRoleDelta"
+    , deltaFormatVersion: 5
+    , subjectKind: "ENR"
     , id: ContextInstance $ takeGuid $ unwrap Binding.contextId
     , contextType: Binding.contextType
     , roleType: Binding.visibleType
     , roleInstance: RoleInstance "visible"
-    , subject: ENR Binding.userType
+    , subject: unwrap Binding.userType
     }
   initial <- signPayload "local"
     { resourceKey: History.propertyKey
     , resourceVersion: 1
     , deltaType: "SetProperty"
+    , deltaFamily: "RolePropertyDelta"
+    , deltaFormatVersion: 5
+    , subjectKind: "ENR"
     , id: RoleInstance "visible"
     , roleType: Binding.visibleType
     , property: Binding.visibleProperty
     , values: [ Value "visible-value" ]
-    , subject: ENR Binding.userType
+    , subject: unwrap Binding.userType
     }
   for_ [ { key: unwrap Binding.visibleId, signed: creation }, { key: History.propertyKey, signed: initial } ] \baseline -> do
     lift $ storeDeltaFromSignedDelta baseline.signed

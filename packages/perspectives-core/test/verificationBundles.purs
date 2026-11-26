@@ -41,6 +41,7 @@ import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), Per
 import Perspectives.Representation.Perspective (Perspective(..), PropertyVerbs(..), StateSpec(..))
 import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..), PropertyType(..), RoleType(..), StateIdentifier(..))
 import Perspectives.Representation.Verbs (PropertyVerb(..))
+import Perspectives.Sync.Causal (currentCausalEpoch)
 import Perspectives.Sync.DateTime (SerializableDateTime(..))
 import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
 import Perspectives.Sync.HandleTransaction (executeTransaction, verifyTransaction)
@@ -253,11 +254,19 @@ signAs author =
           { resourceKey: unwrap Binding.visibleId <> "#" <> unwrap Binding.visibleProperty
           , resourceVersion: 1
           , deltaType: "SetProperty"
+          , deltaFamily: "RolePropertyDelta"
+          , deltaFormatVersion: 5
+          , subjectKind: "ENR"
           , id: RoleInstance "visible"
           , roleType: Binding.visibleType
           , property: Binding.visibleProperty
           , values: [ Value "updated" ]
-          , subject: ENR Binding.userType
+          , subject: unwrap Binding.userType
+          , causal:
+              { epoch: currentCausalEpoch
+              , dot: { actor: writeJSON [ unwrap (unschemePerspectivesUser author), "verification-test-installation" ], counter: 1 }
+              , context: ([] :: Array { actor :: String, counter :: Int })
+              }
           }
       )
 

@@ -36,7 +36,8 @@ import Effect (Effect)
 import Effect.Aff.Class (liftAff)
 import Foreign.Object as Object
 import Partial.Unsafe (unsafePartial)
-import Perspectives.Checking.Authorization (roleHasPerspectiveOnPropertyWithVerb)
+import Perspectives.Checking.Authorization (authorizePropertyDelta, roleHasPerspectiveOnPropertyWithVerb)
+import Perspectives.Checking.PropertyProvenance (checkPropertyProvenance, findPropertyProvenance, refutedPropertyProvenance)
 import Perspectives.ContextAndRole (defaultRolRecord)
 import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction, (##=))
 import Perspectives.Error.Pretty (renderPerspectivesError)
@@ -57,9 +58,10 @@ import Perspectives.Query.QueryTypes (Domain(..), QueryFunctionDescription(..), 
 import Perspectives.Query.UnsafeCompiler (compileFunction, withQueryAuthor)
 import Perspectives.Representation.ADT (ADT(..))
 import Perspectives.Representation.Class.Cacheable (cacheEntity)
-import Perspectives.Representation.Class.PersistentType (cacheInDomeinFile, getCalculatedRole, getEnumeratedProperty, getEnumeratedRole)
+import Perspectives.Representation.Class.PersistentType (cacheInDomeinFile, getCalculatedRole, getContext, getEnumeratedProperty, getEnumeratedRole)
 import Perspectives.Representation.Class.Role (perspectivesOfRoleType)
 import Perspectives.Representation.CalculatedRole (CalculatedRole(..))
+import Perspectives.Representation.Context (Context(..))
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.EnumeratedProperty (EnumeratedProperty(..))
 import Perspectives.Representation.ExplicitSet (ExplicitSet(..))
@@ -67,7 +69,7 @@ import Perspectives.Representation.InstanceIdentifiers (PerspectivesUser(..), Ro
 import Perspectives.Representation.Perspective (Perspective(..), PropertyVerbs(..), StateSpec(..))
 import Perspectives.Representation.Range (Range(..))
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
-import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), StateIdentifier(..))
+import Perspectives.Representation.TypeIdentifiers (ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), StateIdentifier(..))
 import Perspectives.Representation.Verbs (PropertyVerb(..))
 import Perspectives.RoleAssignment (filledPointsTo, fillerPointsTo)
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
@@ -376,6 +378,54 @@ theSuite = suite "Instance-aware inherited property authorization" do
               contains (Pattern "Author identity found: []") message
             assert "Missing author-role evidence must be explicit" $
               contains (Pattern "roles (transitively) filled by the author: []") message
+
+  test "a sender's property provenance is accepted by the receiver" $
+    Binding.withFixture Binding.localPeer [] [] do
+      lift installInheritance
+      mprov <- lift $ findPropertyProvenance Verification.localAuthor (ENR Binding.userType) Binding.visibleId Binding.visibleProperty [ SetPropertyValue ]
+      case mprov of
+        Nothing -> liftAff $ assert "The sender must find a witness for an authorized inherited write" false
+        Just prov -> do
+          checked <- lift $ checkPropertyProvenance Verification.localAuthor (ENR Binding.userType) Binding.visibleId Binding.visibleProperty SetPropertyValue prov
+          authorized <- lift $ authorizePropertyDelta Verification.localAuthor (ENR Binding.userType) Binding.visibleId Binding.visibleProperty (Just prov) SetPropertyValue
+          refuted <- lift $ refutedPropertyProvenance (ENR Binding.userType) prov
+          liftAff do
+            equal Binding.contextId prov.evaluationContext
+            -- The perspective's object is Hidden, which reaches the storage instance through its filler chain.
+            equal Binding.hiddenId prov.objectInstance
+            assert "The witness must be confirmed" $ checked == Right unit
+            assert "A confirmed witness authorizes the delta" $ not $ isLeft authorized
+            assert "A genuine evaluation context is not refuted" $ not refuted
+
+  test "an unconfirmed provenance falls back to the instance search; missing evidence stays an error" $
+    Binding.withFixture Binding.localPeer [] [] do
+      lift installInheritance
+      mprov <- lift $ findPropertyProvenance Verification.localAuthor (ENR Binding.userType) Binding.visibleId Binding.visibleProperty [ SetPropertyValue ]
+      case mprov of
+        Nothing -> liftAff $ assert "The sender must find a witness for an authorized inherited write" false
+        Just prov -> do
+          let stale = prov { subjectInstance = RoleInstance "def:#not-yet-received" }
+          checked <- lift $ checkPropertyProvenance Verification.localAuthor (ENR Binding.userType) Binding.visibleId Binding.visibleProperty SetPropertyValue stale
+          fallback <- lift $ authorizePropertyDelta Verification.localAuthor (ENR Binding.userType) Binding.visibleId Binding.visibleProperty (Just stale) SetPropertyValue
+          stranger <- lift $ authorizePropertyDelta (PerspectivesUser "remote-old") (ENR Binding.userType) Binding.visibleId Binding.visibleProperty (Just prov) SetPropertyValue
+          liftAff do
+            assert "An unknown subject instance cannot confirm the witness" $ isLeft checked
+            assert "The receiver's own instance search may still authorize the delta" $ not $ isLeft fallback
+            assert "Without evidence for the signer the delta is not authorized (it stays pending)" $ isLeft stranger
+
+  test "a provenance whose evaluation context type cannot hold the subject is refuted" $
+    Binding.withFixture Binding.localPeer [] [] do
+      lift installInheritance
+      mprov <- lift $ findPropertyProvenance Verification.localAuthor (ENR Binding.userType) Binding.visibleId Binding.visibleProperty [ SetPropertyValue ]
+      case mprov of
+        Nothing -> liftAff $ assert "The sender must find a witness for an authorized inherited write" false
+        Just prov -> do
+          let unrelatedContext = ContextType $ Binding.model <> "$Unrelated"
+          refuted <- lift do
+            Context original <- getContext Binding.contextType
+            cacheInDomeinFile unrelatedContext $ Context original { id = unrelatedContext, readableName = unrelatedContext, contextAspects = [] }
+            refutedPropertyProvenance (ENR Binding.userType) prov { evaluationContextType = unrelatedContext }
+          liftAff $ assert "A foreign evaluation context type is a model-deterministic refutation" refuted
 
 permission :: PerspectivesUser -> RoleInstance -> PropertyVerb -> MonadPerspectivesTransaction (Either PerspectivesError Boolean)
 permission author storage verb = lift $

@@ -41,11 +41,11 @@ import Control.Monad.AvarMonadAsk (get, gets, modify)
 import Control.Monad.Error.Class (catchError, throwError, try)
 import Control.Monad.State (StateT, evalStateT, put, get) as ST
 import Control.Monad.Trans.Class (lift)
-import Data.Array (concat, difference, elemIndex, filter, filterA, foldMap, nub, null, snoc)
+import Data.Array (concat, difference, elem, elemIndex, filter, filterA, foldMap, nub, nubByEq, null, snoc)
 import Data.Array (head) as ARR
-import Data.Either (Either(..))
+import Data.Either (Either(..), either)
 import Data.Foldable (for_)
-import Data.Maybe (Maybe(..), fromMaybe, isJust, maybe)
+import Data.Maybe (Maybe(..), fromMaybe, isJust, isNothing, maybe)
 import Data.MediaType (MediaType(..))
 import Data.Monoid.Disj (Disj(..))
 import Data.Newtype (ala, over, unwrap)
@@ -54,13 +54,15 @@ import Data.Tuple (Tuple(..), fst)
 import Effect.Class (liftEffect)
 import Effect.Exception (error)
 import Foreign (Foreign)
-import Foreign.Object (empty, lookup)
+import Foreign.Object (lookup)
 import Partial.Unsafe (unsafePartial)
 import Persistence.Attachment (class Attachment)
+import Perspectives.Assignment.PropertyBearingRole (RoleProp(..), getPropertyBearingRoleInstance)
+import Perspectives.Checking.PropertyProvenance (findPropertyProvenance, verbsForPropertyDeltaType)
 import Perspectives.CollectAffectedContexts (aisInPropertyDelta, usersWithPerspectiveOnRoleInstance)
 import Perspectives.ContextAndRole (addRol_property, changeContext_me, changeContext_preferredUserRoleType, context_pspType, context_rolInContext, deleteRol_property, modifyContext_rolInContext, popContext_state, popRol_state, pushContext_state, pushRol_state, removeRol_property, rol_context, rol_pspType, setRol_property)
 import Perspectives.CoreTypes (class Persistent, InformedAssumption(..), LogLevel(..), LogTopic(..), MonadPerspectives, MonadPerspectivesTransaction, Updater, (###=), (##=), (##>), (##>>))
-import Perspectives.Deltas (addCorrelationIdentifiersToTransactie, addDelta)
+import Perspectives.Deltas (addCorrelationIdentifiersToTransactie, addDelta, addStoredDeltas)
 import Perspectives.DependencyTracking.Array.Trans (runArrayT)
 import Perspectives.DependencyTracking.Dependency (findContextStateRequests, findMeRequests, findPropertyRequests, findRoleRequests, findRoleStateRequests)
 import Perspectives.Error.Boundaries (handlePerspectContextError, handlePerspectRolError)
@@ -69,30 +71,30 @@ import Perspectives.Identifiers (startsWithSegments, typeUri2LocalName_, typeUri
 import Perspectives.InstanceRepresentation (PerspectContext, PerspectRol(..))
 import Perspectives.Instances.ObjectGetters (binding_, contextType, getProperty, roleType, roleType_)
 import Perspectives.Instances.Values (parsePerspectivesFile, writePerspectivesFile)
-import Perspectives.Logging (debugResource, logWhen, traceDelta, warnResource)
+import Perspectives.Logging (debugResource, logWhen, traceDelta, warnAuth, warnResource)
 import Perspectives.Persistence.API (toFile)
-import Perspectives.Persistence.DeltaStore (getDeltasForResourceByDeltaType)
+import Perspectives.PerspectivesState (getPerspectivesUser)
+import Perspectives.Persistence.DeltaStore (getDeltasForResource, getDeltasForResourceByDeltaType)
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
 import Perspectives.Persistence.PropertyHistoryStore (storeLocalDeltaWithHistory)
 import Perspectives.Persistence.ResourceVersionStore (incrementResourceVersion)
 import Perspectives.Persistent (addAttachment, getPerspectContext, getPerspectRol, saveEntiteit_)
 import Perspectives.Persistent (saveEntiteit) as Instances
 import Perspectives.Query.UnsafeCompiler (getPropertyFromTelescope)
-import Perspectives.Representation.ADT (ADT(..))
 import Perspectives.Representation.Class.Cacheable (EnumeratedPropertyType, EnumeratedRoleType(..), cacheEntity)
-import Perspectives.Representation.Class.Role (allLocallyRepresentedProperties)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance, Value(..))
-import Perspectives.Representation.TypeIdentifiers (PropertyType(..), RoleType, StateIdentifier(..))
+import Perspectives.Representation.TypeIdentifiers (RoleType, StateIdentifier(..))
 import Perspectives.ResourceIdentifiers (databaseLocation, resourceIdentifier2DocLocator)
 import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.StrippedDelta (stripResourceSchemes)
 import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
 import Perspectives.Sync.ConstructionBaseline (selectRoleConstruction)
+import Perspectives.Sync.ConstructionHistory (getContextConstructionHistory, getRoleConstructionHistory)
 import Perspectives.Sync.SignedDelta (SignedDelta)
 import Perspectives.Sync.VersionedDelta (signVersionedDelta)
 import Perspectives.Sync.Transaction (Transaction(..))
-import Perspectives.Types.ObjectGetters (getRoleAspectSpecialisations, hasPerspectiveOnRole, isUnlinked_, propertyAliases)
-import Perspectives.TypesForDeltas (ContextDelta(..), ContextDeltaType(..), RolePropertyDelta(..), RolePropertyDeltaType(..))
+import Perspectives.Types.ObjectGetters (getRoleAspectSpecialisations, hasPerspectiveOnRole, isUnlinked_)
+import Perspectives.TypesForDeltas (ContextDelta(..), ContextDeltaType(..), PropertyProvenance, RolePropertyDelta(..), RolePropertyDeltaType(..))
 import Perspectives.Warning (PerspectivesWarning(..))
 import Simple.JSON (class WriteForeign)
 
@@ -292,7 +294,7 @@ addProperty rids propertyName valuesAndDeltas = case ARR.head rids of
           \(propertyBearingInstanceRole :: PerspectRol) -> do
             -- TODO: Only when the property is not Local!
             deltas <- for valuesAndDeltas \(Tuple value msignedDelta) -> do
-              delta <- case msignedDelta of
+              case msignedDelta of
                 Nothing -> do
                   -- Create a delta for each value. The delta is in terms of the 
                   -- replacement property (if any), because that describes the structural change.
@@ -307,10 +309,10 @@ addProperty rids propertyName valuesAndDeltas = case ARR.head rids of
                     , subject
                     , resourceKey: rkey
                     , resourceVersion: rversion
+                    , provenance: Nothing
                     }
-                  signVersionedDelta (stripResourceSchemes delta)
-                Just signedDelta -> pure signedDelta
-              pure (Tuple (unwrap value) delta)
+                  pure $ Left delta
+                Just signedDelta -> pure $ Right signedDelta
             -- Save the property values in the role instance. Do this now because it will affect computing the users.
             -- Apply all changes to the role and then save it:
             --  - change the property values in one go
@@ -327,43 +329,14 @@ addProperty rids propertyName valuesAndDeltas = case ARR.head rids of
               propertyName
               replacementProperty
               (rol_pspType propertyBearingInstanceRole)
-            void $ for deltas \(Tuple _ delta) ->
-              -- TODO: For a Private property, remove users that are not another installation of the own user.
-              -- NOTICE: probably self-synchronisation (keeping installations of the same user up to date) currently doesn't work.
-              addDelta (DeltaInTransaction { users, delta: delta })
+            -- TODO: For a Private property, remove users that are not another installation of the own user.
+            -- NOTICE: probably self-synchronisation (keeping installations of the same user up to date) currently doesn't work.
+            for_ deltas (shipPropertyDelta users)
             -- Look for requests for the original property AND the replacement property (if any).
             (lift $ findPropertyRequests propertyBearingInstance propertyName) >>= addCorrelationIdentifiersToTransactie
             (lift $ findPropertyRequests propertyBearingInstance replacementProperty) >>= addCorrelationIdentifiersToTransactie
             readablePropertyName <- lift $ toReadable propertyName
             lift $ debugResource ("addProperty: add to property " <> unwrap readablePropertyName <> " values " <> show values)
-
--- | Get the property bearing role individual in the chain.
--- | If the property is defined on role instance's type (either directly or by Aspect), return it; otherwise
--- | recursively apply this function to its binding.
--- | Takes (aspect) property replacements into consideration.
-getPropertyBearingRoleInstance :: EnumeratedPropertyType -> RoleInstance -> MonadPerspectives (Maybe RoleProp)
-getPropertyBearingRoleInstance prop roleId = do
-  tp <- roleId ##>> roleType
-  -- NOTE. UP TILL version v0.20.0 we have a very specific problem with the external roles of the specialisations
-  -- of model:System$Model. These roles are fetched before the models themselves are fetched; indeed, we don't mean to 
-  -- get the models until the end user explicitly asks for it.
-  -- This situation will go away in the next version.
-  aliases <- catchError (propertyAliases tp)
-    \e -> pure empty
-  case lookup (unwrap prop) aliases of
-    Just destination -> pure $ Just $ RoleProp roleId destination
-    Nothing -> do
-      allProps <- allLocallyRepresentedProperties (ST tp)
-      if isJust $ elemIndex (ENP prop) allProps then pure $ Just $ RoleProp roleId prop
-      else binding_ roleId >>= maybe (pure Nothing) (getPropertyBearingRoleInstance prop)
-
-data RoleProp = RoleProp RoleInstance EnumeratedPropertyType
-
-roleProp_roleinstance :: RoleProp -> RoleInstance
-roleProp_roleinstance (RoleProp ri _) = ri
-
-roleProp_property :: RoleProp -> EnumeratedPropertyType
-roleProp_property (RoleProp _ pt) = pt
 
 -- | Remove the values from the property's values for the role instance.
 -- | When none of the values are in the list of values of the property for the role instance, this is a no-op.
@@ -387,26 +360,25 @@ removeProperty rids propertyName mdelta values = case ARR.head rids of
               -- Compute the peers first, because otherwise the query interpreter won't find the property values and thus won't find the peers.
               users <- aisInPropertyDelta rid' rid propertyName replacementProperty (rol_pspType pe)
               -- Create a delta for all values at once.
-              signedDelta <- case mdelta of
-                Just d -> pure d
+              delta <- case mdelta of
+                Just d -> pure $ Right d
                 Nothing -> do
                   let rkey = unwrap rid <> "#" <> unwrap replacementProperty
                   rversion <- lift $ incrementResourceVersion rkey
-                  signVersionedDelta
-                    ( stripResourceSchemes
-                        ( RolePropertyDelta
-                            { id: rid
-                            , roleType: rol_pspType pe
-                            , property: replacementProperty
-                            , deltaType: RemoveProperty
-                            , values: values
-                            , subject
-                            , resourceKey: rkey
-                            , resourceVersion: rversion
-                            }
-                        )
+                  pure $ Left
+                    ( RolePropertyDelta
+                        { id: rid
+                        , roleType: rol_pspType pe
+                        , property: replacementProperty
+                        , deltaType: RemoveProperty
+                        , values: values
+                        , subject
+                        , resourceKey: rkey
+                        , resourceVersion: rversion
+                        , provenance: Nothing
+                        }
                     )
-              addDelta (DeltaInTransaction { users, delta: signedDelta })
+              shipPropertyDelta users delta
               (lift $ findPropertyRequests rid propertyName) >>= addCorrelationIdentifiersToTransactie
               (lift $ findPropertyRequests rid replacementProperty) >>= addCorrelationIdentifiersToTransactie
               -- Apply changes to the role and save it.
@@ -439,26 +411,25 @@ deleteProperty rids propertyName mdelta = case ARR.head rids of
               -- Create a delta for all values.
               -- We must add the current values, otherwise a Transaction can only have a single 
               -- DeleteProperty delta.
-              signedDelta <- case mdelta of
-                Just d -> pure d
+              delta <- case mdelta of
+                Just d -> pure $ Right d
                 Nothing -> do
                   let rkey = unwrap rid <> "#" <> unwrap replacementProperty
                   rversion <- lift $ incrementResourceVersion rkey
-                  signVersionedDelta
-                    ( stripResourceSchemes
-                        ( RolePropertyDelta
-                            { id: rid
-                            , roleType: pspType
-                            , property: replacementProperty
-                            , deltaType: DeleteProperty
-                            , values: maybe [] identity (lookup (unwrap replacementProperty) properties)
-                            , subject
-                            , resourceKey: rkey
-                            , resourceVersion: rversion
-                            }
-                        )
+                  pure $ Left
+                    ( RolePropertyDelta
+                        { id: rid
+                        , roleType: pspType
+                        , property: replacementProperty
+                        , deltaType: DeleteProperty
+                        , values: maybe [] identity (lookup (unwrap replacementProperty) properties)
+                        , subject
+                        , resourceKey: rkey
+                        , resourceVersion: rversion
+                        , provenance: Nothing
+                        }
                     )
-              addDelta (DeltaInTransaction { users, delta: signedDelta })
+              shipPropertyDelta users delta
               (lift $ findPropertyRequests rid propertyName) >>= addCorrelationIdentifiersToTransactie
               (lift $ findPropertyRequests rid replacementProperty) >>= addCorrelationIdentifiersToTransactie
               -- Apply changes to the role and save it.
@@ -513,30 +484,29 @@ setProperty rids propertyName mdelta values = do
                 -- Create a delta for all values.
                 -- We must add the current values, otherwise a Transaction can only have a single 
                 -- DeleteProperty delta.
-                signedDelta <- case mdelta of
-                  Just d -> pure d
+                delta <- case mdelta of
+                  Just d -> pure $ Right d
                   Nothing -> do
                     let rkey = unwrap rid <> "#" <> unwrap replacementProperty
                     rversion <- lift $ incrementResourceVersion rkey
-                    signVersionedDelta
-                      ( stripResourceSchemes
-                          ( RolePropertyDelta
-                              { id: rid
-                              , roleType: pspType
-                              , property: replacementProperty
-                              , deltaType: SetProperty
-                              , values
-                              , subject
-                              , resourceKey: rkey
-                              , resourceVersion: rversion
-                              }
-                          )
+                    pure $ Left
+                      ( RolePropertyDelta
+                          { id: rid
+                          , roleType: pspType
+                          , property: replacementProperty
+                          , deltaType: SetProperty
+                          , values
+                          , subject
+                          , resourceKey: rkey
+                          , resourceVersion: rversion
+                          , provenance: Nothing
+                          }
                       )
                 -- Save the property values in the role instance. Do this now because it will affect computing the users.
                 lift $ void $ cacheAndSave rid (setRol_property pe replacementProperty values)
                 users <- aisInPropertyDelta rid' rid propertyName replacementProperty pspType
                 lift $ traceDelta $ "setProperty: recipients for " <> show replacementProperty <> " on " <> show rid <> " = " <> show users
-                addDelta (DeltaInTransaction { users, delta: signedDelta })
+                shipPropertyDelta users delta
                 (lift $ findPropertyRequests rid propertyName) >>= addCorrelationIdentifiersToTransactie
                 (lift $ findPropertyRequests rid replacementProperty) >>= addCorrelationIdentifiersToTransactie
                 readablePropertyName <- lift $ toReadable propertyName
@@ -601,14 +571,65 @@ saveFile r property arrayBuf mimeType fileName = do
           , subject
           , resourceKey: rkey
           , resourceVersion: rversion
+          , provenance: Nothing
           }
-        signedDelta <- signVersionedDelta (stripResourceSchemes delta)
         setProperty [ rid ] replacementProperty Nothing [ Value usedVal ]
         -- Compute the users for this role. As a side effect, contexts are added to the transaction.
         users <- aisInPropertyDelta r rid property replacementProperty (rol_pspType roleInstance)
-        addDelta (DeltaInTransaction { users, delta: signedDelta })
+        shipPropertyDelta users (Left delta)
         pure usedVal
       else throwError (error ("Could not save file in the database"))
+
+-----------------------------------------------------------
+-- SHIPPING PROPERTY DELTAS WITH PROVENANCE
+-----------------------------------------------------------
+-- | Add a property delta to the transaction. A delta received from a peer (Right) is forwarded as is.
+-- | A locally created delta (Left) is signed first; if it will be shipped to peers, it carries the
+-- | instance-level provenance of the write and is accompanied by the evidence the receiver needs to
+-- | check that provenance (delta-ordering.md §6.5, Stage 1).
+shipPropertyDelta :: Array RoleInstance -> Either RolePropertyDelta SignedDelta -> MonadPerspectivesTransaction Unit
+shipPropertyDelta users (Right signedDelta) = addDelta (DeltaInTransaction { users, delta: signedDelta })
+shipPropertyDelta users (Left (RolePropertyDelta r)) = do
+  provenance <-
+    if null users then pure Nothing
+    else lift do
+      author <- getPerspectivesUser
+      mprovenance <- catchError
+        (findPropertyProvenance author r.subject r.id r.property (verbsForPropertyDeltaType r.deltaType))
+        \e -> do
+          warnAuth $ "Could not compute property provenance: " <> show e
+          pure Nothing
+      when (isNothing mprovenance) $ warnAuth $ "No property provenance found for " <> show r.deltaType <> " of " <> unwrap r.property <> " on " <> unwrap r.id <> " by subject " <> show r.subject <> "; receivers fall back to the type-level check."
+      pure mprovenance
+  signedDelta <- signVersionedDelta (stripResourceSchemes (RolePropertyDelta r { provenance = provenance }))
+  addDelta (DeltaInTransaction { users, delta: signedDelta })
+  for_ provenance (addPropertyAuthorityBundle users r.id)
+
+-- | The authority bundle: the construction and filler history of the subject instance's filler chain
+-- | (up to the author), of the object instance's filler chain up to the property-bearing instance, and of
+-- | the evaluation context. Peer delivery knowledge suppresses what a peer has already been sent.
+addPropertyAuthorityBundle :: Array RoleInstance -> RoleInstance -> PropertyProvenance -> MonadPerspectivesTransaction Unit
+addPropertyAuthorityBundle users storage provenance = do
+  records <- lift do
+    subjectChain <- fillerChain (const false) provenance.subjectInstance
+    objectChain <- fillerChain (_ == storage) provenance.objectInstance
+    roleRecords <- for (nub $ subjectChain <> objectChain) \role -> do
+      construction <- either (const []) identity <$> try (getRoleConstructionHistory role)
+      filling <- getDeltasForResource (unwrap role <> "#binding")
+      pure $ construction <> filling
+    contextRecords <- either (const []) identity <$> try (getContextConstructionHistory provenance.evaluationContext)
+    pure $ nubByEq (\(DeltaStoreRecord a) (DeltaStoreRecord b) -> a._id == b._id) (concat roleRecords <> contextRecords)
+  unless (null records) (addStoredDeltas users records)
+  where
+  fillerChain :: (RoleInstance -> Boolean) -> RoleInstance -> MonadPerspectives (Array RoleInstance)
+  fillerChain stop = go []
+    where
+    go visited role =
+      if elem role visited then pure visited
+      else if stop role then pure (snoc visited role)
+      else binding_ role >>= case _ of
+        Nothing -> pure (snoc visited role)
+        Just filler -> go (snoc visited role) filler
 
 -----------------------------------------------------------
 -- CACHEANDSAVE

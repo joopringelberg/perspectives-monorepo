@@ -86,7 +86,8 @@ validateCausalDelta signed@(SignedDelta { encryptedDelta, author }) = do
     Right (r :: { deltaFormatVersion :: Maybe Int, historyCheckpoint :: Maybe { causalContext :: Maybe Clock } }) -> Right r
   case stamp of
     Nothing ->
-      if marker.deltaFormatVersion == Just 4 && isJust role then Left "A causal role mutation requires a causal stamp"
+      -- Every delta of the current format (5, see VersionedDelta.currentDeltaFormatVersion) that mutates a role is causally stamped.
+      if marker.deltaFormatVersion == Just 5 && isJust role then Left "A causal role mutation requires a causal stamp"
       else pure unit
     Just causal -> do
       validateClock causal.context

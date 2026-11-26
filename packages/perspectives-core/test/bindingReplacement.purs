@@ -231,11 +231,14 @@ theSuite = suite "User-role filler replacement" do
               { resourceKey: unwrap peer <> "#" <> perspectivesUsersPublicKey
               , resourceVersion: 1
               , deltaType: "SetProperty"
+              , deltaFamily: "RolePropertyDelta"
+              , deltaFormatVersion: 5
+              , subjectKind: "ENR"
               , id: peer
               , roleType: EnumeratedRoleType perspectivesUsers
               , property: EnumeratedPropertyType perspectivesUsersPublicKey
               , values: [ Value "test-public-key" ]
-              , subject: ENR userType
+              , subject: unwrap userType
               }
           lift $ for_ [ newRemotePeer, oldRemotePeer ] (storeDeltaFromSignedDelta <<< keyDelta)
           serialiseRoleInstancesAndProperties contextId users object
@@ -550,50 +553,66 @@ addFilledContext name subjectType filler locallyFilled = do
       { resourceKey: unwrap cid
       , resourceVersion: 1
       , deltaType: "ConstructEmptyContext"
+      , deltaFamily: "UniverseContextDelta"
+      , deltaFormatVersion: 5
+      , subjectKind: "ENR"
       , id: cid
       , contextType
-      , subject: ENR userType
+      , subject: unwrap userType
       }
     constructRole role roleType = signed
       { resourceKey: unwrap role
       , resourceVersion: 0
       , deltaType: if roleType == externalType then "ConstructExternalRole" else "ConstructEmptyRole"
+      , deltaFamily: "UniverseRoleDelta"
+      , deltaFormatVersion: 5
+      , subjectKind: "ENR"
       , roleInstance: role
       , id: cid
       , contextType
       , roleType
-      , authorizedRole: if roleType == externalType then Just $ ENR userType else Nothing
-      , subject: ENR userType
+      , authorizedRole: if roleType == externalType then Just $ unwrap userType else Nothing
+      , authorizedRoleKind: if roleType == externalType then Just "ENR" else Nothing
+      , subject: unwrap userType
       }
     linkRole role roleType = signed
       { resourceKey: unwrap role
       , resourceVersion: 1
       , deltaType: "AddRoleInstancesToContext"
+      , deltaFamily: "ContextDelta"
+      , deltaFormatVersion: 5
+      , subjectKind: "ENR"
       , contextInstance: cid
       , contextType
       , roleInstance: role
       , roleType
-      , subject: ENR userType
+      , subject: unwrap userType
       }
     linkExternal = signed
       { resourceKey: unwrap external
       , resourceVersion: 1
       , deltaType: "AddExternalRole"
+      , deltaFamily: "ContextDelta"
+      , deltaFormatVersion: 5
+      , subjectKind: "ENR"
       , contextInstance: cid
       , contextType
       , roleInstance: external
       , roleType: externalType
-      , subject: ENR userType
+      , subject: unwrap userType
       }
     propertyDelta = signed
       { resourceKey: unwrap visible <> "#" <> unwrap visibleProperty
       , resourceVersion: 1
       , deltaType: "SetProperty"
+      , deltaFamily: "RolePropertyDelta"
+      , deltaFormatVersion: 5
+      , subjectKind: "ENR"
       , id: visible
       , roleType: visibleType
       , property: visibleProperty
       , values: [ Value name ]
-      , subject: ENR userType
+      , subject: unwrap userType
       }
   lift do
     void $ cacheEntity cid $ PerspectContext defaultContextRecord
@@ -624,13 +643,16 @@ addFilledContext name subjectType filler locallyFilled = do
       { resourceKey: unwrap rid <> "#binding"
       , resourceVersion: 1
       , deltaType: "SetFirstBinding"
+      , deltaFamily: "RoleBindingDelta"
+      , deltaFormatVersion: 5
+      , subjectKind: "ENR"
       , filled: rid
       , filledType: subjectType
       , filler: Just filler
       , fillerType: Just fillerType
       , oldFiller: Nothing :: Maybe RoleInstance
       , oldFillerType: Nothing :: Maybe EnumeratedRoleType
-      , subject: ENR userType
+      , subject: unwrap userType
       }
     constructionDeltas =
       [ constructContext
@@ -834,9 +856,12 @@ contextDelta = signed
   { resourceKey: unwrap contextId
   , resourceVersion: 1
   , deltaType: "ConstructEmptyContext"
+  , deltaFamily: "UniverseContextDelta"
+  , deltaFormatVersion: 5
+  , subjectKind: "ENR"
   , id: contextId
   , contextType
-  , subject: ENR userType
+  , subject: unwrap userType
   }
 
 externalLinkDelta :: SignedDelta
@@ -844,11 +869,14 @@ externalLinkDelta = signed
   { resourceKey: unwrap externalId
   , resourceVersion: 1
   , deltaType: "AddExternalRole"
+  , deltaFamily: "ContextDelta"
+  , deltaFormatVersion: 5
+  , subjectKind: "ENR"
   , contextInstance: contextId
   , contextType
   , roleInstance: externalId
   , roleType: externalType
-  , subject: ENR userType
+  , subject: unwrap userType
   }
 
 roleDelta :: RoleInstance -> SignedDelta
@@ -856,6 +884,9 @@ roleDelta rid = signed
   { resourceKey: unwrap rid
   , resourceVersion: 0
   , deltaType: if rid == externalId then "ConstructExternalRole" else "ConstructEmptyRole"
+  , deltaFamily: "UniverseRoleDelta"
+  , deltaFormatVersion: 5
+  , subjectKind: "ENR"
   , roleInstance: rid
   , id: contextId
   , contextType
@@ -866,8 +897,9 @@ roleDelta rid = signed
       else if elem rid [ localPeer, oldRemotePeer, newRemotePeer ] then EnumeratedRoleType perspectivesUsers
       else if rid == otherLocalId then otherUserType
       else userType
-  , subject: ENR userType
-  , authorizedRole: if rid == externalId then Just $ ENR userType else Nothing
+  , subject: unwrap userType
+  , authorizedRole: if rid == externalId then Just $ unwrap userType else Nothing
+  , authorizedRoleKind: if rid == externalId then Just "ENR" else Nothing
   }
 
 membershipDelta :: RoleInstance -> SignedDelta
@@ -875,6 +907,9 @@ membershipDelta rid = signed
   { resourceKey: unwrap rid
   , resourceVersion: 1
   , deltaType: "AddRoleInstancesToContext"
+  , deltaFamily: "ContextDelta"
+  , deltaFormatVersion: 5
+  , subjectKind: "ENR"
   , contextInstance: contextId
   , contextType
   , roleInstance: rid
@@ -884,7 +919,7 @@ membershipDelta rid = signed
       else if elem rid [ localPeer, oldRemotePeer, newRemotePeer ] then EnumeratedRoleType perspectivesUsers
       else if rid == otherLocalId then otherUserType
       else userType
-  , subject: ENR userType
+  , subject: unwrap userType
   }
 
 replacementDelta :: RoleInstance -> SignedDelta
@@ -892,13 +927,16 @@ replacementDelta oldFiller = signed
   { resourceKey: unwrap userId <> "#binding"
   , resourceVersion: 2
   , deltaType: "ReplaceBinding"
+  , deltaFamily: "RoleBindingDelta"
+  , deltaFormatVersion: 5
+  , subjectKind: "ENR"
   , filled: userId
   , filledType: userType
   , filler: Just newRemotePeer
   , fillerType: Just $ EnumeratedRoleType perspectivesUsers
   , oldFiller: Just oldFiller
   , oldFillerType: Just $ EnumeratedRoleType perspectivesUsers
-  , subject: ENR userType
+  , subject: unwrap userType
   }
 
 firstBindingDelta :: SignedDelta
@@ -906,13 +944,16 @@ firstBindingDelta = signed
   { resourceKey: unwrap userId <> "#binding"
   , resourceVersion: 1
   , deltaType: "SetFirstBinding"
+  , deltaFamily: "RoleBindingDelta"
+  , deltaFormatVersion: 5
+  , subjectKind: "ENR"
   , filled: userId
   , filledType: userType
   , filler: Just newRemotePeer
   , fillerType: Just $ EnumeratedRoleType perspectivesUsers
   , oldFiller: Nothing :: Maybe RoleInstance
   , oldFillerType: Nothing :: Maybe EnumeratedRoleType
-  , subject: ENR userType
+  , subject: unwrap userType
   }
 
 visiblePropertyDelta :: SignedDelta
@@ -920,11 +961,14 @@ visiblePropertyDelta = signed
   { resourceKey: unwrap visibleId <> "#" <> unwrap visibleProperty
   , resourceVersion: 1
   , deltaType: "SetProperty"
+  , deltaFamily: "RolePropertyDelta"
+  , deltaFormatVersion: 5
+  , subjectKind: "ENR"
   , id: visibleId
   , roleType: visibleType
   , property: visibleProperty
   , values: [ Value "visible-value" ]
-  , subject: ENR userType
+  , subject: unwrap userType
   }
 
 model :: String

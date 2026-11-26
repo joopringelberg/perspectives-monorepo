@@ -26,6 +26,7 @@ module Perspectives.Sync.VersionedDelta
   , isPredefinedContext
   , isPredefinedContextScaffolding
   , parseIncomingDelta
+  , currentDeltaFormatVersion
   , parseDeltaFormatVersion
   , signVersionedDelta
   ) where
@@ -38,7 +39,7 @@ import Data.Either (Either(..))
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Newtype (unwrap)
 import Data.String as Str
-import Data.Traversable (traverse)
+import Data.Traversable (for, traverse)
 import Perspectives.Authenticate (signDelta)
 import Perspectives.CoreTypes (MonadPerspectivesTransaction)
 import Perspectives.Persistence.CausalStore (reserveCausalStamp)
@@ -59,8 +60,10 @@ import Simple.JSON (class ReadForeign, readJSON', writeJSON)
 defaultTypeVersion :: String
 defaultTypeVersion = "0.0"
 
+-- | Format 5 (Perspectives Universe cut-over): every delta carries an explicit `deltaFamily`, property deltas
+-- | carry signed `provenance`. Only format 5 deltas and format-3 property checkpoints are accepted.
 currentDeltaFormatVersion :: Int
-currentDeltaFormatVersion = 4
+currentDeltaFormatVersion = 5
 
 data DeltaEnvelope
   = ContextEnvelope ContextDelta
@@ -81,6 +84,7 @@ parseDeltaFormatVersion stringifiedDelta = case runExcept $ readJSON' stringifie
 
 type WireBase f =
   { deltaFormatVersion :: Int
+  , deltaFamily :: String
   , subject :: String
   , subjectKind :: String
   , resourceKey :: String
@@ -147,20 +151,45 @@ newtype WireRolePropertyDelta = WireRolePropertyDelta
       , property :: String
       , values :: Array Value
       , deltaType :: RolePropertyDeltaType
+      , provenance :: Maybe WirePropertyProvenance
       )
   )
 
 derive newtype instance ReadForeign WireRolePropertyDelta
 
+type WirePropertyProvenance =
+  { subjectInstance :: RoleInstance
+  , subjectInstanceType :: String
+  , evaluationContext :: ContextInstance
+  , evaluationContextType :: String
+  , objectInstance :: RoleInstance
+  , objectInstanceType :: String
+  }
+
+-- | The values of the explicit `deltaFamily` discriminator on the wire.
+rolePropertyFamily :: String
+rolePropertyFamily = "RolePropertyDelta"
+
+roleBindingFamily :: String
+roleBindingFamily = "RoleBindingDelta"
+
+contextFamily :: String
+contextFamily = "ContextDelta"
+
+universeRoleFamily :: String
+universeRoleFamily = "UniverseRoleDelta"
+
+universeContextFamily :: String
+universeContextFamily = "UniverseContextDelta"
+
 parseIncomingDelta :: String -> Either String DeltaEnvelope
 parseIncomingDelta stringifiedDelta =
-  if parseDeltaFormatVersion stringifiedDelta == 3 && isCheckpoint stringifiedDelta then
-    parseVersion2 stringifiedDelta
-  else if parseDeltaFormatVersion stringifiedDelta == 2 || parseDeltaFormatVersion stringifiedDelta == currentDeltaFormatVersion then
-    parseVersion2 stringifiedDelta
-  else if parseDeltaFormatVersion stringifiedDelta == 1 then
-    parseOrderedUnmarked stringifiedDelta
-  else Left "Unsupported delta format version"
+  let
+    format = parseDeltaFormatVersion stringifiedDelta
+  in
+    if format == currentDeltaFormatVersion || (format == 3 && isCheckpoint stringifiedDelta) then
+      parseCurrentFormat stringifiedDelta
+    else Left $ "Unsupported delta format version " <> show format
 
 -- | TheWorld and TheSocialEnvironment are constructed locally by every installation, with the same
 -- | identifier. Their construction history is never shipped. Published copies are not predefined.
@@ -187,23 +216,31 @@ isPredefinedContextScaffolding stringifiedDelta = case parseIncomingDelta string
   isExternal id roleId =
     isPredefined id && stripNonPublicIdentifiers roleId == stripNonPublicIdentifiers id <> "$External"
 
-parseVersion2 :: String -> Either String DeltaEnvelope
-parseVersion2 stringifiedDelta =
-  case runExcept $ readJSON' stringifiedDelta of
-    Right (WireRolePropertyDelta r) ->
-      Right $ RolePropertyEnvelope $ RolePropertyDelta
-        { subject: mkRoleType r.subjectKind r.subject
-        , resourceKey: r.resourceKey
-        , resourceVersion: r.resourceVersion
-        , id: r.id
-        , roleType: EnumeratedRoleType $ stripRevisionedTypeReference r.roleType
-        , property: EnumeratedPropertyType $ stripRevisionedTypeReference r.property
-        , values: r.values
-        , deltaType: r.deltaType
-        }
-    Left _ -> case runExcept $ readJSON' stringifiedDelta of
-      Right (WireRoleBindingDelta r) ->
-        Right $ RoleBindingEnvelope $ RoleBindingDelta
+parseCurrentFormat :: String -> Either String DeltaEnvelope
+parseCurrentFormat stringifiedDelta = case runExcept $ readJSON' stringifiedDelta of
+  Left err -> Left $ "Missing delta family: " <> show err
+  Right ({ deltaFamily } :: { deltaFamily :: String })
+    | deltaFamily == rolePropertyFamily -> readWire stringifiedDelta \(WireRolePropertyDelta r) ->
+        RolePropertyEnvelope $ RolePropertyDelta
+          { subject: mkRoleType r.subjectKind r.subject
+          , resourceKey: r.resourceKey
+          , resourceVersion: r.resourceVersion
+          , id: r.id
+          , roleType: EnumeratedRoleType $ stripRevisionedTypeReference r.roleType
+          , property: EnumeratedPropertyType $ stripRevisionedTypeReference r.property
+          , values: r.values
+          , deltaType: r.deltaType
+          , provenance: r.provenance <#> \p ->
+              { subjectInstance: p.subjectInstance
+              , subjectInstanceType: EnumeratedRoleType $ stripRevisionedTypeReference p.subjectInstanceType
+              , evaluationContext: p.evaluationContext
+              , evaluationContextType: ContextType $ stripRevisionedTypeReference p.evaluationContextType
+              , objectInstance: p.objectInstance
+              , objectInstanceType: EnumeratedRoleType $ stripRevisionedTypeReference p.objectInstanceType
+              }
+          }
+    | deltaFamily == roleBindingFamily -> readWire stringifiedDelta \(WireRoleBindingDelta r) ->
+        RoleBindingEnvelope $ RoleBindingDelta
           { subject: mkRoleType r.subjectKind r.subject
           , resourceKey: r.resourceKey
           , resourceVersion: r.resourceVersion
@@ -215,61 +252,49 @@ parseVersion2 stringifiedDelta =
           , oldFillerType: map (EnumeratedRoleType <<< stripRevisionedTypeReference) r.oldFillerType
           , deltaType: r.deltaType
           }
-      Left _ -> case runExcept $ readJSON' stringifiedDelta of
-        Right (WireContextDelta r) ->
-          Right $ ContextEnvelope $ ContextDelta
-            { subject: mkRoleType r.subjectKind r.subject
-            , resourceKey: r.resourceKey
-            , resourceVersion: r.resourceVersion
-            , contextInstance: r.contextInstance
-            , contextType: ContextType $ stripRevisionedTypeReference r.contextType
-            , roleType: EnumeratedRoleType $ stripRevisionedTypeReference r.roleType
-            , roleInstance: r.roleInstance
-            , destinationContext: r.destinationContext
-            , destinationContextType: map (ContextType <<< stripRevisionedTypeReference) r.destinationContextType
-            , deltaType: r.deltaType
-            }
-        Left _ -> case runExcept $ readJSON' stringifiedDelta of
-          Right (WireUniverseRoleDelta r) ->
-            Right $ UniverseRoleEnvelope $ UniverseRoleDelta
-              { subject: mkRoleType r.subjectKind r.subject
-              , resourceKey: r.resourceKey
-              , resourceVersion: r.resourceVersion
-              , id: r.id
-              , contextType: ContextType $ stripRevisionedTypeReference r.contextType
-              , roleType: EnumeratedRoleType $ stripRevisionedTypeReference r.roleType
-              , authorizedRole: case r.authorizedRole, r.authorizedRoleKind of
-                  Nothing, _ -> Nothing
-                  Just roleRef, Just roleKind -> Just $ mkRoleType roleKind roleRef
-                  Just roleRef, Nothing -> Just $ ENR $ EnumeratedRoleType $ stripRevisionedTypeReference roleRef
-              , roleInstance: r.roleInstance
-              , deltaType: r.deltaType
-              }
-          Left _ -> case runExcept $ readJSON' stringifiedDelta of
-            Right (WireUniverseContextDelta r) ->
-              Right $ UniverseContextEnvelope $ UniverseContextDelta
-                { subject: mkRoleType r.subjectKind r.subject
-                , resourceKey: r.resourceKey
-                , resourceVersion: r.resourceVersion
-                , id: r.id
-                , contextType: ContextType $ stripRevisionedTypeReference r.contextType
-                , deltaType: r.deltaType
-                }
-            Left err -> Left $ show err
-
-parseOrderedUnmarked :: String -> Either String DeltaEnvelope
-parseOrderedUnmarked stringifiedDelta =
-  case runExcept $ readJSON' stringifiedDelta of
-    Right delta -> Right $ RolePropertyEnvelope delta
-    Left _ -> case runExcept $ readJSON' stringifiedDelta of
-      Right delta -> Right $ RoleBindingEnvelope delta
-      Left _ -> case runExcept $ readJSON' stringifiedDelta of
-        Right delta -> Right $ ContextEnvelope delta
-        Left _ -> case runExcept $ readJSON' stringifiedDelta of
-          Right delta -> Right $ UniverseRoleEnvelope delta
-          Left _ -> case runExcept $ readJSON' stringifiedDelta of
-            Right delta -> Right $ UniverseContextEnvelope delta
-            Left err -> Left $ show err
+    | deltaFamily == contextFamily -> readWire stringifiedDelta \(WireContextDelta r) ->
+        ContextEnvelope $ ContextDelta
+          { subject: mkRoleType r.subjectKind r.subject
+          , resourceKey: r.resourceKey
+          , resourceVersion: r.resourceVersion
+          , contextInstance: r.contextInstance
+          , contextType: ContextType $ stripRevisionedTypeReference r.contextType
+          , roleType: EnumeratedRoleType $ stripRevisionedTypeReference r.roleType
+          , roleInstance: r.roleInstance
+          , destinationContext: r.destinationContext
+          , destinationContextType: map (ContextType <<< stripRevisionedTypeReference) r.destinationContextType
+          , deltaType: r.deltaType
+          }
+    | deltaFamily == universeRoleFamily -> readWire stringifiedDelta \(WireUniverseRoleDelta r) ->
+        UniverseRoleEnvelope $ UniverseRoleDelta
+          { subject: mkRoleType r.subjectKind r.subject
+          , resourceKey: r.resourceKey
+          , resourceVersion: r.resourceVersion
+          , id: r.id
+          , contextType: ContextType $ stripRevisionedTypeReference r.contextType
+          , roleType: EnumeratedRoleType $ stripRevisionedTypeReference r.roleType
+          , authorizedRole: case r.authorizedRole, r.authorizedRoleKind of
+              Nothing, _ -> Nothing
+              Just roleRef, Just roleKind -> Just $ mkRoleType roleKind roleRef
+              Just roleRef, Nothing -> Just $ ENR $ EnumeratedRoleType $ stripRevisionedTypeReference roleRef
+          , roleInstance: r.roleInstance
+          , deltaType: r.deltaType
+          }
+    | deltaFamily == universeContextFamily -> readWire stringifiedDelta \(WireUniverseContextDelta r) ->
+        UniverseContextEnvelope $ UniverseContextDelta
+          { subject: mkRoleType r.subjectKind r.subject
+          , resourceKey: r.resourceKey
+          , resourceVersion: r.resourceVersion
+          , id: r.id
+          , contextType: ContextType $ stripRevisionedTypeReference r.contextType
+          , deltaType: r.deltaType
+          }
+    | otherwise -> Left $ "Unknown delta family " <> deltaFamily
+  where
+  readWire :: forall w. ReadForeign w => String -> (w -> DeltaEnvelope) -> Either String DeltaEnvelope
+  readWire json f = case runExcept $ readJSON' json of
+    Right w -> Right $ f w
+    Left err -> Left $ show err
 
 instance signVersionedUniverseContextDelta :: SignVersionedDelta UniverseContextDelta where
   signVersionedDelta (UniverseContextDelta delta) = do
@@ -277,6 +302,7 @@ instance signVersionedUniverseContextDelta :: SignVersionedDelta UniverseContext
     contextType <- versionedContextType delta.contextType
     signDelta $ writeJSON
       { deltaFormatVersion: currentDeltaFormatVersion
+      , deltaFamily: universeContextFamily
       , subject: subject.reference
       , subjectKind: subject.kind
       , resourceKey: delta.resourceKey
@@ -295,6 +321,7 @@ instance signVersionedUniverseRoleDelta :: SignVersionedDelta UniverseRoleDelta 
     authorizedRole <- traverse versionedRoleParts delta.authorizedRole
     signDelta $ writeJSON
       { deltaFormatVersion: currentDeltaFormatVersion
+      , deltaFamily: universeRoleFamily
       , causal
       , subject: subject.reference
       , subjectKind: subject.kind
@@ -318,6 +345,7 @@ instance signVersionedContextDelta :: SignVersionedDelta ContextDelta where
     destinationContextType <- traverse versionedContextType delta.destinationContextType
     signDelta $ writeJSON
       { deltaFormatVersion: currentDeltaFormatVersion
+      , deltaFamily: contextFamily
       , causal
       , subject: subject.reference
       , subjectKind: subject.kind
@@ -341,6 +369,7 @@ instance signVersionedRoleBindingDelta :: SignVersionedDelta RoleBindingDelta wh
     oldFillerType <- traverse versionedEnumeratedRoleType delta.oldFillerType
     signDelta $ writeJSON
       { deltaFormatVersion: currentDeltaFormatVersion
+      , deltaFamily: roleBindingFamily
       , causal
       , subject: subject.reference
       , subjectKind: subject.kind
@@ -361,8 +390,21 @@ instance signVersionedRolePropertyDelta :: SignVersionedDelta RolePropertyDelta 
     subject <- versionedRoleParts delta.subject
     roleType <- versionedEnumeratedRoleType delta.roleType
     property <- versionedEnumeratedPropertyType delta.property
+    provenance <- for delta.provenance \p -> do
+      subjectInstanceType <- versionedEnumeratedRoleType p.subjectInstanceType
+      evaluationContextType <- versionedContextType p.evaluationContextType
+      objectInstanceType <- versionedEnumeratedRoleType p.objectInstanceType
+      pure
+        { subjectInstance: p.subjectInstance
+        , subjectInstanceType
+        , evaluationContext: p.evaluationContext
+        , evaluationContextType
+        , objectInstance: p.objectInstance
+        , objectInstanceType
+        }
     signDelta $ writeJSON
       { deltaFormatVersion: currentDeltaFormatVersion
+      , deltaFamily: rolePropertyFamily
       , causal
       , subject: subject.reference
       , subjectKind: subject.kind
@@ -373,6 +415,7 @@ instance signVersionedRolePropertyDelta :: SignVersionedDelta RolePropertyDelta 
       , property
       , values: delta.values
       , deltaType: delta.deltaType
+      , provenance
       }
 
 versionedContextType :: ContextType -> MonadPerspectivesTransaction String

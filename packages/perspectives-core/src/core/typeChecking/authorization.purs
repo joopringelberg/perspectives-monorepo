@@ -25,35 +25,29 @@ module Perspectives.Checking.Authorization where
 import Prelude
 
 import Control.Monad.State (StateT, get)
-import Data.Array (elem, filterA, foldMap, nub, uncons)
+import Data.Array (foldMap)
 import Data.Either (Either(..))
-import Data.Foldable (any, foldM)
+import Data.Foldable (any)
 import Data.Maybe (Maybe(..), isJust, isNothing)
 import Data.Monoid.Disj (Disj(..))
 import Data.Newtype (ala, unwrap)
-import Data.Traversable (traverse)
 import Partial.Unsafe (unsafePartial)
-import Perspectives.Assignment.Update (RoleProp(..), getPropertyBearingRoleInstance)
-import Perspectives.CoreTypes (MonadPerspectives, (##=), (##>>), (###=))
+import Perspectives.Checking.PropertyProvenance (checkPropertyProvenance, findWitness, witnessSearchDiagnostics)
+import Perspectives.CoreTypes (MonadPerspectives, (###=), (##>>))
 import Perspectives.Error.Pretty (humanizePerspectivesError, renderPerspectivesError)
-import Perspectives.Instances.ObjectGetters (binding_, context_, contextType_, deltaAuthor2ResourceIdentifier, getAllFilledRoles_, roleType)
+import Perspectives.Instances.ObjectGetters (roleType)
 import Perspectives.Logging (warnAuth)
 import Perspectives.Parsing.Arc.Position (ArcPosition)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
-import Perspectives.PerspectivesState (addBinding, withFrame)
-import Perspectives.Persistent (entityExists)
-import Perspectives.Query.UnsafeCompiler (compileFunction, getRoleInstances, withQueryAuthor)
-import Perspectives.Representation.ADT (ADT(..))
-import Perspectives.Representation.Class.Role (adtOfRole, contextOfRoleType, getRole)
-import Perspectives.Representation.InstanceIdentifiers (PerspectivesUser(..), RoleInstance(..), perspectivesUser2RoleInstance, roleInstance2PerspectivesUser)
+import Perspectives.Representation.Class.Role (adtOfRole, getRole)
+import Perspectives.Representation.InstanceIdentifiers (PerspectivesUser, RoleInstance)
 import Perspectives.Representation.ExplicitSet (ExplicitSet(..), isElementOf)
 import Perspectives.Representation.Perspective (Perspective(..), PropertyVerbs(..), perspectiveSupportsOneOfRoleVerbs)
 import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType, EnumeratedRoleType, PropertyType(..), RoleType(..))
 import Perspectives.Representation.Verbs (PropertyVerb, RoleVerb)
 import Perspectives.Sidecar.ToReadable (toReadable)
-import Perspectives.Sidecar.ToStable (toStable)
-import Perspectives.Types.ObjectGetters (equalsOrGeneralisesContextADT, findPerspective, hasPerspectiveOnPropertyWithVerbByImplication, hasPerspectiveOnRoleWithVerbs, isPerspectiveOnADT, propertiesInPerspective, supportsPropertyForVerb)
-import Perspectives.UnschemedIdentifiers (unschemePerspectivesUser)
+import Perspectives.TypesForDeltas (PropertyProvenance)
+import Perspectives.Types.ObjectGetters (findPerspective, hasPerspectiveOnPropertyWithVerbByImplication, hasPerspectiveOnRoleWithVerbs, isPerspectiveOnADT)
 
 type Found a = StateT Boolean MonadPerspectives a
 
@@ -101,99 +95,36 @@ subjectCannotWriteAnyPropertyWith subject verbs = do
 -- | the exact property storage reached by the same resolver used for writes.
 hasInstancePropertyPermission :: PerspectivesUser -> RoleType -> RoleInstance -> EnumeratedPropertyType -> PropertyVerb -> MonadPerspectives (Either String Unit)
 hasInstancePropertyPermission author subject storage property verb = do
-  let
-    identities = nub $ perspectivesUser2RoleInstance <<< deltaAuthor2ResourceIdentifier <$>
-      [ PerspectivesUser $ unwrap $ unschemePerspectivesUser author, author ]
-  roots <- filterA entityExists identities
-  let
-    queryAuthor = case uncons roots of
-      Nothing -> author
-      Just { head } -> roleInstance2PerspectivesUser head
-  -- All role instances transitively filled by the author are considered for property authorization.
-  authorRoles <- filledRolesClosure [] roots
-  -- The context instance of each author role is considered for property authorization.
-  contexts <- nub <<< join <$> traverse context_ authorRoles
-  -- The type of the context of the type of the subject.
-  subjectContexts <- contextOfRoleType subject
-  readableSubject <- toReadable subject
-  permitted <- withQueryAuthor queryAuthor $ isJust <$> findPerspective readableSubject
-    ( \perspective@(Perspective p) -> do
-        properties <- propertiesInPerspective perspective
-        writableProperties <- filterA (\prop -> toReadable prop >>= \readable -> supportsPropertyForVerb perspective readable verb) properties
-        if writableProperties == [] then pure false
-        else anyM
-          ( \ctx -> do
-              -- ctx is one of the context instances of the author roles.
-              contextType <- contextType_ ctx
-              -- Is this context compatible with the subject's context type?
-              compatible <- equalsOrGeneralisesContextADT subjectContexts (ST contextType)
-              if not compatible then pure false
-              else do
-                -- Get all role instances of the subject within this context.
-                actors <- ctx ##= getRoleInstances subject
-                anyM
-                  ( \actor ->
-                      if not $ elem actor authorRoles then pure false
-                      -- If the actor is one of the author roles, we proceed with further checks.
-                      else withFrame do
-                        addBinding "currentactor" [ unwrap actor ]
-                        addBinding "currentcontext" [ unwrap ctx ]
-                        getter <- compileFunction p.object
-                        -- Retrieve all perspective objects within this context.
-                        objects <- unwrap ctx ##= getter
-                        anyM
-                          ( \object ->
-                              -- A provision for selfonly perspectives.
-                              if p.selfOnly && object /= unwrap actor then pure false
-                              -- true if the object's filler chain contains the storage instance for the given property.
-                              else anyM (resolvesToStorage $ RoleInstance object) writableProperties
-                          )
-                          objects
-                  )
-                  actors
-          )
-          contexts
-    )
-  if permitted then pure $ Right unit
-  else do
-    let
-      message = "Instance property authorization failed for author " <> unwrap author
-        <> " writing "
-        <> unwrap property
-        <> " on "
-        <> unwrap storage
-        <> ": no author-linked subject role and permitted perspective object could be witnessed resolving to this exact property-bearing instance and property. Author identity found: "
-        <> show (unwrap <$> roots)
-        <> "; roles (transitively) filled by the author: "
-        <> show (unwrap <$> authorRoles)
-        <> "; their contexts: "
-        <> show (unwrap <$> contexts)
-        <> "."
-    warnAuth message
-    pure $ Left message
-  where
-  anyM :: forall a. (a -> MonadPerspectives Boolean) -> Array a -> MonadPerspectives Boolean
-  anyM predicate = foldM (\found value -> if found then pure true else predicate value) false
+  findWitness author subject storage property verb >>= case _ of
+    Just _ -> pure $ Right unit
+    Nothing -> do
+      diagnostics <- witnessSearchDiagnostics author
+      let
+        message = "Instance property authorization failed for author " <> unwrap author
+          <> " writing "
+          <> unwrap property
+          <> " on "
+          <> unwrap storage
+          <> ": no author-linked subject role and permitted perspective object could be witnessed resolving to this exact property-bearing instance and property. "
+          <> diagnostics
+      warnAuth message
+      pure $ Left message
 
-  -- Returns true iff the objects filler chain contains the storage instance for the given property.
-  resolvesToStorage :: RoleInstance -> PropertyType -> MonadPerspectives Boolean
-  resolvesToStorage object (ENP prop) = do
-    stableProperty <- toStable prop
-    resolved <- getPropertyBearingRoleInstance stableProperty object
-    pure $ case resolved of
-      Just (RoleProp target targetProperty) -> target == storage && targetProperty == property
-      Nothing -> false
-  resolvesToStorage _ (CP _) = pure false
-
-  filledRolesClosure :: Array RoleInstance -> Array RoleInstance -> MonadPerspectives (Array RoleInstance)
-  filledRolesClosure visited remaining = case uncons remaining of
-    Nothing -> pure visited
-    Just { head: role, tail } ->
-      if elem role visited then filledRolesClosure visited tail
-      else do
-        candidates <- getAllFilledRoles_ role
-        filled <- filterA (\candidate -> (_ == Just role) <$> binding_ candidate) candidates
-        filledRolesClosure (visited <> [ role ]) (tail <> filled)
+-- | Authorize an incoming property delta (Stage 1, delta-ordering.md §6.5).
+-- | With signed provenance, the signed witness is checked directly; if it cannot be established, a witness is
+-- | searched in the author's filled-role closure. The self-declared subject type alone no longer suffices.
+-- | Without provenance (the sender found no witness), the legacy check applies: type-level permission of the
+-- | self-declared subject, then the instance witness search. This is logged, as it is a gap to close.
+authorizePropertyDelta :: PerspectivesUser -> RoleType -> RoleInstance -> EnumeratedPropertyType -> Maybe PropertyProvenance -> PropertyVerb -> MonadPerspectives (Either PerspectivesError Boolean)
+authorizePropertyDelta author subject storage property mprovenance verb = case mprovenance of
+  Nothing -> do
+    warnAuth $ "Property delta without provenance by " <> unwrap author <> " on " <> unwrap storage <> " for " <> unwrap property <> "; using the type-level check."
+    roleHasPerspectiveOnPropertyWithVerb author subject storage property verb
+  Just provenance -> checkPropertyProvenance author subject storage property verb provenance >>= case _ of
+    Right _ -> pure $ Right true
+    Left provenanceFailure -> hasInstancePropertyPermission author subject storage property verb >>= case _ of
+      Right _ -> pure $ Right true
+      Left instanceFailure -> pure $ Left $ Custom $ "Signed property provenance could not be established: " <> provenanceFailure <> ". " <> instanceFailure
 
 -- | True if the user role represented by the subject argument has a perspective
 -- | on the RoleType that includes an Action with the given Verb,

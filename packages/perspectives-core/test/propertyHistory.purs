@@ -187,11 +187,19 @@ theSuite = suite "Checkpointed property history" do
           { resourceKey: "other-visible#" <> unwrap Binding.visibleProperty
           , resourceVersion: 5
           , deltaType: "SetProperty"
+          , deltaFamily: "RolePropertyDelta"
+          , deltaFormatVersion: 5
+          , subjectKind: "ENR"
           , id: RoleInstance "other-visible"
           , roleType: Binding.visibleType
           , property: Binding.visibleProperty
           , values: [ Value "not-yet-applicable" ]
-          , subject: ENR Binding.otherUserType
+          , subject: unwrap Binding.otherUserType
+          , causal:
+              { epoch: currentCausalEpoch
+              , dot: { actor: writeJSON [ "local", "gap-test-installation" ], counter: 1 }
+              , context: ([] :: Array { actor :: String, counter :: Int })
+              }
           }
       SignedDelta signedMissing <- signDelta (unwrap unsigned).encryptedDelta
       let missing = SignedDelta signedMissing { author = (unwrap unsigned).author }
@@ -244,9 +252,10 @@ propertyKey = unwrap Binding.visibleId <> "#" <> unwrap Binding.visibleProperty
 change :: Int -> String -> Array Value -> SignedDelta
 change version operation values = Binding.signed
   { resourceKey: propertyKey
-  , deltaFormatVersion: 4
+  , deltaFormatVersion: 5
   , resourceVersion: version
   , deltaType: operation
+  , deltaFamily: "RolePropertyDelta"
   , id: RoleInstance "visible"
   , roleType: Binding.visibleType
   , property: Binding.visibleProperty

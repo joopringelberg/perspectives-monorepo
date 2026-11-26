@@ -55,8 +55,15 @@ import Simple.JSON (class ReadForeign, class WriteForeign)
 -----------------------------------------------------------
 -- TRANSACTIE
 -----------------------------------------------------------
+-- | The Perspectives Universe this installation takes part in. Transactions from another universe
+-- | (e.g. an installation that was not restarted at a cut-over) are rejected unseen
+-- | (delta-representation-redesign.md, `universeEpoch`).
+currentUniverseEpoch :: String
+currentUniverseEpoch = "perspectives-universe-2"
+
 newtype TransactionForPeer = TransactionForPeer
-  { causalEpoch :: Maybe String
+  { universeEpoch :: Maybe String
+  , causalEpoch :: Maybe String
   , author :: PerspectivesUser
   , perspectivesSystem :: ContextInstance
   , timeStamp :: SerializableDateTime
@@ -73,7 +80,8 @@ currentTransactionForPeer
      }
   -> TransactionForPeer
 currentTransactionForPeer r = TransactionForPeer
-  { causalEpoch: Just currentCausalEpoch
+  { universeEpoch: Just currentUniverseEpoch
+  , causalEpoch: Just currentCausalEpoch
   , author: r.author
   , perspectivesSystem: r.perspectivesSystem
   , timeStamp: r.timeStamp

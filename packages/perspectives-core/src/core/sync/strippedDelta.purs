@@ -26,7 +26,7 @@ import Control.Monad.AvarMonadAsk (gets)
 import Data.Map (Map, lookup)
 import Data.Maybe (Maybe(..), maybe)
 import Data.Newtype (over, unwrap)
-import Data.Traversable (traverse)
+import Data.Traversable (for, traverse)
 import Decacheable (decache)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.ContextAndRole (change_context_publicUrl)
@@ -44,7 +44,7 @@ import Perspectives.ResourceIdentifiers.Parser (ResourceIdentifier)
 import Perspectives.Types.ObjectGetters (requiresPublicFiller)
 
 import Perspectives.TypesForDeltas (ContextDelta(..), RoleBindingDelta(..), RolePropertyDelta(..), UniverseContextDelta(..), UniverseRoleDelta(..))
-import Prelude (Unit, bind, discard, pure, void, ($), (&&), (<$>), (<<<), (>>=))
+import Prelude (Unit, bind, discard, pure, void, ($), (&&), (<$>), (<#>), (<<<), (>>=))
 
 -----------------------------------------------------------
 -- STRIPPING RESOURCE IDENTIFIERS IN A DELTA
@@ -168,17 +168,29 @@ instance StrippedDelta RoleBindingDelta where
 instance StrippedDelta RolePropertyDelta where
   stripResourceSchemes (RolePropertyDelta r) = RolePropertyDelta r
     { id = over RoleInstance stripNonPublicIdentifiers r.id
+    , provenance = r.provenance <#> \p -> p
+        { subjectInstance = over RoleInstance stripNonPublicIdentifiers p.subjectInstance
+        , evaluationContext = over ContextInstance stripNonPublicIdentifiers p.evaluationContext
+        , objectInstance = over RoleInstance stripNonPublicIdentifiers p.objectInstance
+        }
     }
   addResourceSchemes storageSchemes (RolePropertyDelta r) = do
     id <- RoleInstance <$> addSchemeToResourceIdentifier storageSchemes (RType r.roleType) (unwrap r.id)
+    provenance <- for r.provenance \p -> do
+      subjectInstance <- RoleInstance <$> addSchemeToResourceIdentifier storageSchemes (RType p.subjectInstanceType) (unwrap p.subjectInstance)
+      evaluationContext <- ContextInstance <$> addSchemeToResourceIdentifier storageSchemes (CType p.evaluationContextType) (unwrap p.evaluationContext)
+      objectInstance <- RoleInstance <$> addSchemeToResourceIdentifier storageSchemes (RType p.objectInstanceType) (unwrap p.objectInstance)
+      pure p { subjectInstance = subjectInstance, evaluationContext = evaluationContext, objectInstance = objectInstance }
     pure $ RolePropertyDelta r
       { id = id
+      , provenance = provenance
       }
   addPublicResourceScheme url (RolePropertyDelta r) = do
     ctxt <- addOwnStorageScheme (RType r.roleType) (unwrap r.id) >>= context' <<< RoleInstance
     url' <- getUrlForPublishing url ctxt
+    -- Provenance refers to the author's private instances; the public store does not authorize by it.
     rec <- pure r
-      { id = over RoleInstance (createPublicIdentifier url') r.id }
+      { id = over RoleInstance (createPublicIdentifier url') r.id, provenance = Nothing }
     void $ decache rec.id
     pure $ RolePropertyDelta rec
 

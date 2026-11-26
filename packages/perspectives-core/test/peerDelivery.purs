@@ -424,6 +424,8 @@ propertyChange resourceVersion deltaType value author = SignedDelta
       { resourceKey: propertyKey
       , resourceVersion
       , deltaType
+      , deltaFamily: "RolePropertyDelta"
+      , deltaFormatVersion: 5
       , id: Binding.visibleId
       , property: Binding.visibleProperty
       , values: [ Value value ]
@@ -438,6 +440,7 @@ checkpointChange winner = SignedDelta
       { resourceKey: propertyKey
       , resourceVersion: 2
       , deltaType: "SetProperty"
+      , deltaFamily: "RolePropertyDelta"
       , deltaFormatVersion: 3
       , id: Binding.visibleId
       , property: Binding.visibleProperty

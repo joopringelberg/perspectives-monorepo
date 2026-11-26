@@ -3,7 +3,7 @@ module Test.VersionedDeltas where
 import Prelude
 
 import Control.Monad.Except (runExcept)
-import Data.Array (any)
+import Data.Array (any, sort)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.Identity (Identity(..))
@@ -52,7 +52,7 @@ theSuite = suite "Versioned delta phase 0/1" do
     Assert.assert "missing format marker should be treated as format 1" (parseDeltaFormatVersion "{\"a\":1}" == 1)
     Assert.assert "explicit version field should be treated as format 2" (parseDeltaFormatVersion "{\"deltaFormatVersion\":2}" == 2)
 
-  suite "pre-ordering formats are retired" do
+  suite "formats before 5 are retired" do
     let
       subject = ENR (EnumeratedRoleType "model://example.org#Sales$User")
       contextType = "model://example.org#Sales"
@@ -60,10 +60,12 @@ theSuite = suite "Versioned delta phase 0/1" do
       property = "model://example.org#Sales$Order$Status"
       fixtures =
         [ { name: "context creation"
+          , family: "UniverseContextDelta"
           , key: "context"
           , payload: writeJSON { subject, id: "context", contextType, deltaType: "ConstructEmptyContext" }
           }
         , { name: "role creation"
+          , family: "UniverseRoleDelta"
           , key: "role"
           , payload: writeJSON
               { subject
@@ -76,6 +78,7 @@ theSuite = suite "Versioned delta phase 0/1" do
               }
           }
         , { name: "context membership"
+          , family: "ContextDelta"
           , key: "role"
           , payload: writeJSON
               { subject
@@ -89,6 +92,7 @@ theSuite = suite "Versioned delta phase 0/1" do
               }
           }
         , { name: "binding"
+          , family: "RoleBindingDelta"
           , key: "role#binding"
           , payload: writeJSON
               { subject
@@ -102,13 +106,14 @@ theSuite = suite "Versioned delta phase 0/1" do
               }
           }
         , { name: "property"
+          , family: "RolePropertyDelta"
           , key: "role#" <> property
           , payload: writeJSON
               { subject, id: "role", roleType, property, values: [ "approved" ], deltaType: "SetProperty" }
           }
         ]
-    for_ fixtures \{ name, key, payload } ->
-      test ("rejects pre-ordering " <> name <> " but preserves ordered unmarked payloads") do
+    for_ fixtures \{ name, key, family, payload } ->
+      test ("rejects pre-ordering, unmarked and format-4 " <> name <> " but reads format 5") do
         case parseIncomingDelta payload of
           Left _ -> pure unit
           Right _ -> Assert.assert "Pre-ordering payloads must not be converted to version zero" false
@@ -120,16 +125,25 @@ theSuite = suite "Versioned delta phase 0/1" do
                 if Object.member "roleInstances" fields then
                   Object.insert "roleInstance" (write "role") $ Object.delete "roleInstances" fields
                 else fields
-              ordered = Object.insert "resourceKey" (write key)
+              ordered = Object.insert "subject" (write "model://example.org#Sales$User")
+                $ Object.insert "subjectKind" (write "ENR")
+                $ Object.insert "resourceKey" (write key)
                 $ Object.insert "resourceVersion" (write 1) singular
-            case parseIncomingDelta (writeJSON ordered) of
+              format4 = Object.insert "deltaFormatVersion" (write 4) ordered
+              format5 = Object.insert "deltaFamily" (write family) $ Object.insert "deltaFormatVersion" (write 5) ordered
+              withoutFamily = Object.insert "deltaFormatVersion" (write 5) ordered
+            for_ [ ordered, format4, withoutFamily ] \retired -> case parseIncomingDelta (writeJSON retired) of
+              Left _ -> pure unit
+              Right _ -> Assert.assert "Unmarked, format-4 and family-less payloads must be rejected" false
+            case parseIncomingDelta (writeJSON format5) of
               Right _ -> pure unit
-              Left message -> Assert.assert ("Ordered payload must remain readable: " <> message) false
+              Left message -> Assert.assert ("Format-5 payload must be readable: " <> message) false
 
-  test "v2 role-property deltas strip revision suffixes on parse" do
+  test "format-5 role-property deltas strip revision suffixes on parse" do
     let
       payload = writeJSON
-        { deltaFormatVersion: 2
+        { deltaFormatVersion: 5
+        , deltaFamily: "RolePropertyDelta"
         , subject: "model://example.org#Sales$User@3.2"
         , subjectKind: "ENR"
         , resourceKey: "def:#role#model://example.org#Sales$Order$Status"
@@ -145,11 +159,48 @@ theSuite = suite "Versioned delta phase 0/1" do
         Assert.assert "subject should parse as an enumerated role" (delta.subject == ENR (EnumeratedRoleType "model://example.org#Sales$User"))
         Assert.assert "role type should drop the version suffix" (delta.roleType == EnumeratedRoleType "model://example.org#Sales$Order")
         Assert.assert "property type should drop the version suffix" (delta.property == EnumeratedPropertyType "model://example.org#Sales$Order$Status")
-      _ -> Assert.assert "format-2 role-property payload should parse" false
+      _ -> Assert.assert "format-5 role-property payload should parse" false
+
+  test "format-5 role-property deltas carry provenance with unversioned types" do
+    let
+      payload = writeJSON
+        { deltaFormatVersion: 5
+        , deltaFamily: "RolePropertyDelta"
+        , subject: "model://example.org#Sales$User@3.2"
+        , subjectKind: "ENR"
+        , resourceKey: "def:#role#model://example.org#Sales$Order$Status"
+        , resourceVersion: 4
+        , id: RoleInstance "def:#role"
+        , roleType: "model://example.org#Sales$Order@3.2"
+        , property: "model://example.org#Sales$Order$Status@3.2"
+        , values: [ Value "approved" ]
+        , deltaType: SetProperty
+        , provenance:
+            { subjectInstance: RoleInstance "def:#user"
+            , subjectInstanceType: "model://example.org#Sales$User@3.2"
+            , evaluationContext: "def:#sale"
+            , evaluationContextType: "model://example.org#Sales@3.2"
+            , objectInstance: RoleInstance "def:#role"
+            , objectInstanceType: "model://example.org#Sales$Order@3.2"
+            }
+        }
+    case parseIncomingDelta payload of
+      Right (RolePropertyEnvelope (RolePropertyDelta { provenance: Just prov })) -> do
+        Assert.equal (RoleInstance "def:#user") prov.subjectInstance
+        Assert.equal (EnumeratedRoleType "model://example.org#Sales$User") prov.subjectInstanceType
+        Assert.equal "model://example.org#Sales" (unwrap prov.evaluationContextType)
+        Assert.equal (EnumeratedRoleType "model://example.org#Sales$Order") prov.objectInstanceType
+      _ -> Assert.assert "format-5 provenance should parse" false
 
   test "delta store ids retain a short delta suffix" do
     let docId = deltaStoreDocIdWithDeltaId "def:#role" 4 (PerspectivesUser "def:#author") "0123456789abcdef9876543210"
-    Assert.assert "doc ids should end in the short delta id suffix" (docId == "role_v4_author|0123456789abcdef")
+    Assert.assert "doc ids should end in the short delta id suffix" (docId == "role_v0000000004_author|0123456789abcdef")
+
+  test "delta store ids sort in numeric version order" do
+    let
+      author = PerspectivesUser "def:#author"
+      ids = map (\v -> deltaStoreDocIdWithDeltaId "def:#role" v author "0123456789abcdef") [ 2, 9, 10, 100 ]
+    Assert.equal ids (sort ids)
 
   suite "resource key normalisation" do
     for_ [ "", "def:#", "loc:cw_roles#", "rem:https://example.org/cw_roles/#", "pub:https://example.org/cw_roles/#", "pub:cw_roles#" ] \prefix ->
