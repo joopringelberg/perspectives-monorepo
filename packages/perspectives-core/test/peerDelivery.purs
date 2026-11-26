@@ -22,6 +22,7 @@ import Data.Set as Set
 import Effect (Effect)
 import Effect.Aff.Class (liftAff)
 import Foreign.Object as Object
+import Perspectives.Sync.VersionedDelta (currentUniverseEpoch)
 import Perspectives.Assignment.SerialiseAsDeltas (serialiseRoleInstancesAndProperties, serialiseRoleInstancesAndPropertiesForInitialVisibility)
 import Perspectives.CoreTypes (MonadPerspectivesTransaction)
 import Perspectives.Data.EncodableMap as EM
@@ -426,6 +427,7 @@ propertyChange resourceVersion deltaType value author = SignedDelta
       , deltaType
       , deltaFamily: "RolePropertyDelta"
       , deltaFormatVersion: 5
+      , universeEpoch: currentUniverseEpoch
       , id: Binding.visibleId
       , property: Binding.visibleProperty
       , values: [ Value value ]
@@ -442,6 +444,7 @@ checkpointChange winner = SignedDelta
       , deltaType: "SetProperty"
       , deltaFamily: "RolePropertyDelta"
       , deltaFormatVersion: 3
+      , universeEpoch: currentUniverseEpoch
       , id: Binding.visibleId
       , property: Binding.visibleProperty
       , values: [ Value "winner" ]

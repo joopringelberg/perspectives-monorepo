@@ -23,6 +23,7 @@ import Effect.Class (liftEffect)
 import Effect.Ref as Ref
 import Effect.Exception (error)
 import Foreign.Object as Object
+import Perspectives.Sync.VersionedDelta (currentUniverseEpoch)
 import Perspectives.Authenticate (signDelta)
 import Perspectives.CoreTypes (MonadPerspectivesTransaction, (##=))
 import Perspectives.Data.EncodableMap as EM
@@ -189,6 +190,7 @@ theSuite = suite "Checkpointed property history" do
           , deltaType: "SetProperty"
           , deltaFamily: "RolePropertyDelta"
           , deltaFormatVersion: 5
+          , universeEpoch: currentUniverseEpoch
           , subjectKind: "ENR"
           , id: RoleInstance "other-visible"
           , roleType: Binding.visibleType
@@ -253,6 +255,7 @@ change :: Int -> String -> Array Value -> SignedDelta
 change version operation values = Binding.signed
   { resourceKey: propertyKey
   , deltaFormatVersion: 5
+  , universeEpoch: currentUniverseEpoch
   , resourceVersion: version
   , deltaType: operation
   , deltaFamily: "RolePropertyDelta"

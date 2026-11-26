@@ -46,7 +46,7 @@ import Perspectives.Sync.HandleTransaction (executeTransaction)
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
 import Perspectives.Sync.Transaction (Transaction(..), TransactionDestination(..))
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..), currentTransactionForPeer, withoutPredefinedContextScaffolding)
-import Perspectives.Sync.VersionedDelta (isPredefinedContextScaffolding)
+import Perspectives.Sync.VersionedDelta (currentUniverseEpoch, isPredefinedContextScaffolding)
 import Perspectives.UnschemedIdentifiers (unschemePerspectivesUser)
 import Perspectives.Sync.Causal (currentCausalEpoch)
 import Simple.JSON (class WriteForeign, writeJSON)
@@ -90,9 +90,9 @@ theSuite = suite "Predefined context scaffolding" do
         roleType = externalRoleType contextType
         roleInstance = RoleInstance $ id <> "$External"
         payloads =
-          [ writeJSON { deltaFormatVersion, deltaFamily: "UniverseContextDelta", subject, subjectKind, resourceKey: id, resourceVersion: 0, id: ContextInstance id, contextType, deltaType: "ConstructEmptyContext" }
-          , writeJSON { deltaFormatVersion, deltaFamily: "UniverseRoleDelta", subject, subjectKind, resourceKey: unwrap roleInstance, resourceVersion: 0, id: ContextInstance id, contextType, roleType, roleInstance, deltaType: "ConstructExternalRole" }
-          , writeJSON { deltaFormatVersion, deltaFamily: "ContextDelta", subject, subjectKind, resourceKey: unwrap roleInstance, resourceVersion: 0, contextInstance: ContextInstance id, contextType, roleType, roleInstance, deltaType: "AddExternalRole" }
+          [ writeJSON { deltaFormatVersion, universeEpoch: currentUniverseEpoch, deltaFamily: "UniverseContextDelta", subject, subjectKind, resourceKey: id, resourceVersion: 0, id: ContextInstance id, contextType, deltaType: "ConstructEmptyContext" }
+          , writeJSON { deltaFormatVersion, universeEpoch: currentUniverseEpoch, deltaFamily: "UniverseRoleDelta", subject, subjectKind, resourceKey: unwrap roleInstance, resourceVersion: 0, id: ContextInstance id, contextType, roleType, roleInstance, deltaType: "ConstructExternalRole" }
+          , writeJSON { deltaFormatVersion, universeEpoch: currentUniverseEpoch, deltaFamily: "ContextDelta", subject, subjectKind, resourceKey: unwrap roleInstance, resourceVersion: 0, contextInstance: ContextInstance id, contextType, roleType, roleInstance, deltaType: "AddExternalRole" }
           ]
       for_ payloads \payload ->
         assert "Scaffolding must be omitted" $ isPredefinedContextScaffolding payload
@@ -102,6 +102,7 @@ theSuite = suite "Predefined context scaffolding" do
       deltas =
         [ Binding.signed
             { deltaFormatVersion: 5
+            , universeEpoch: currentUniverseEpoch
             , subject: "model://test.example#User@1.0"
             , subjectKind: "ENR"
             , resourceKey: "def:#member"
@@ -115,6 +116,7 @@ theSuite = suite "Predefined context scaffolding" do
             }
         , Binding.signed
             { deltaFormatVersion: 5
+            , universeEpoch: currentUniverseEpoch
             , subject: "model://test.example#User@1.0"
             , subjectKind: "ENR"
             , resourceKey: "def:#member"
@@ -129,6 +131,7 @@ theSuite = suite "Predefined context scaffolding" do
         , Binding.replacementDelta Binding.oldRemotePeer
         , Binding.signed
             { deltaFormatVersion: 5
+            , universeEpoch: currentUniverseEpoch
             , subject: "model://test.example#User@1.0"
             , subjectKind: "ENR"
             , resourceKey: "def:#TheSocialEnvironment$External#model://test.example#External$MyIdentity"
@@ -228,6 +231,7 @@ theSuite = suite "Predefined context scaffolding" do
           , deltaType: "SetProperty"
           , deltaFamily: "RolePropertyDelta"
           , deltaFormatVersion: 5
+          , universeEpoch: currentUniverseEpoch
           , subjectKind: "ENR"
           , id: RoleInstance "visible"
           , roleType: Binding.visibleType
@@ -290,6 +294,7 @@ scaffolding author id =
   in
     [ sign
         { deltaFormatVersion: 5
+        , universeEpoch: currentUniverseEpoch
         , subject
         , subjectKind: "CR"
         , resourceKey: id
@@ -301,6 +306,7 @@ scaffolding author id =
         }
     , sign
         { deltaFormatVersion: 5
+        , universeEpoch: currentUniverseEpoch
         , subject
         , subjectKind: "CR"
         , resourceKey: id <> "$External"
@@ -314,6 +320,7 @@ scaffolding author id =
         }
     , sign
         { deltaFormatVersion: 5
+        , universeEpoch: currentUniverseEpoch
         , subject
         , subjectKind: "CR"
         , resourceKey: id <> "$External"

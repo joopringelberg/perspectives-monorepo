@@ -108,6 +108,10 @@ newtype Transaction = Transaction
       -- True while the exit actions of a locally removed context or role are executed.
       -- Removals scheduled in the meantime are local, too.
       , removingLocally :: Boolean
+      -- The identifier signed into every delta of this transaction (`transactionId`), created when the first delta is signed.
+      , deltaTransactionId :: Maybe String
+      -- The number of deltas signed so far in this transaction; the next delta gets this `transactionPosition`.
+      , deltaPosition :: Int
       )
   )
 
@@ -188,6 +192,8 @@ instance ReadForeign Transaction where
       , isSharing: false
       , localRemovals: Set.empty
       , removingLocally: false
+      , deltaTransactionId: Nothing
+      , deltaPosition: 0
       }
 
 derive newtype instance ReadForeign Transaction'
@@ -233,6 +239,8 @@ createTransaction authoringRole sharing =
       , isSharing: sharing
       , localRemovals: Set.empty
       , removingLocally: false
+      , deltaTransactionId: Nothing
+      , deltaPosition: 0
       }
 
 appendTransactionDelta :: DeltaInTransaction -> Transaction -> Transaction

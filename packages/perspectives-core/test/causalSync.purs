@@ -90,7 +90,7 @@ import Perspectives.Sync.PendingTransactions (DrainMode(..), drainPendingTransac
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
 import Perspectives.Sync.Transaction (Transaction(..), createTransaction)
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..), currentTransactionForPeer)
-import Perspectives.Sync.VersionedDelta (DeltaEnvelope(..), parseIncomingDelta, signVersionedDelta)
+import Perspectives.Sync.VersionedDelta (currentUniverseEpoch, DeltaEnvelope(..), parseIncomingDelta, signVersionedDelta)
 import Perspectives.TypesForDeltas (ContextDelta(..), RoleBindingDelta(..), RoleBindingDeltaType(..), RolePropertyDelta(..), RolePropertyDeltaType(..), UniverseContextDelta(..), UniverseRoleDelta(..), UniverseRoleDeltaType(..))
 import Simple.JSON (class WriteForeign, writeJSON)
 import Test.BindingReplacement as Binding
@@ -115,6 +115,7 @@ theSuite = suite "Causal role deletion and coordinated cutover" do
         external = RoleInstance $ unwrap Binding.contextId <> "$External"
       context <- signPayload "local"
         { deltaFormatVersion: 5
+        , universeEpoch: currentUniverseEpoch
         , resourceKey: takeGuid $ unwrap Binding.contextId
         , resourceVersion: 0
         , deltaType: "ConstructEmptyContext"
@@ -128,6 +129,7 @@ theSuite = suite "Causal role deletion and coordinated cutover" do
       oldExternalMembership <- membershipFor external true "local" 1 (stamp "local" 2 [ dot "local" 1 ])
       oldExternalRemoval <- signPayload "local"
         { deltaFormatVersion: 5
+        , universeEpoch: currentUniverseEpoch
         , resourceKey: takeGuid $ unwrap external
         , resourceVersion: 2
         , deltaType: "RemoveExternalRoleInstance"
@@ -811,6 +813,7 @@ theSuite = suite "Causal role deletion and coordinated cutover" do
       let
         missing = Binding.signed
           { deltaFormatVersion: 5
+          , universeEpoch: currentUniverseEpoch
           , id: "visible"
           , property: unwrap Binding.visibleProperty
           }
@@ -899,6 +902,7 @@ propertyChange author version causal = propertyOperation author version "SetProp
 propertyOperation :: String -> Int -> String -> Array String -> CausalStamp -> MonadPerspectivesTransaction SignedDelta
 propertyOperation author version deltaType values causal = signPayload author
   { deltaFormatVersion: 5
+  , universeEpoch: currentUniverseEpoch
   , resourceKey: History.propertyKey
   , resourceVersion: version
   , deltaType
@@ -915,6 +919,7 @@ propertyOperation author version deltaType values causal = signPayload author
 roleDeletion :: CausalStamp -> MonadPerspectivesTransaction SignedDelta
 roleDeletion causal = signPayload "local"
   { deltaFormatVersion: 5
+  , universeEpoch: currentUniverseEpoch
   , resourceKey: unwrap Binding.visibleId
   , resourceVersion: 2
   , deltaType: "RemoveRoleInstance"
@@ -931,6 +936,7 @@ roleDeletion causal = signPayload "local"
 constructionFor :: RoleInstance -> Boolean -> String -> CausalStamp -> MonadPerspectivesTransaction SignedDelta
 constructionFor role external author causal = signPayload author
   { deltaFormatVersion: 5
+  , universeEpoch: currentUniverseEpoch
   , resourceKey: takeGuid $ unwrap role
   , resourceVersion: 0
   , deltaType: if external then "ConstructExternalRole" else "ConstructEmptyRole"
@@ -949,6 +955,7 @@ constructionFor role external author causal = signPayload author
 membershipFor :: RoleInstance -> Boolean -> String -> Int -> CausalStamp -> MonadPerspectivesTransaction SignedDelta
 membershipFor role external author version causal = signPayload author
   { deltaFormatVersion: 5
+  , universeEpoch: currentUniverseEpoch
   , resourceKey: takeGuid $ unwrap role
   , resourceVersion: version
   , deltaType: if external then "AddExternalRole" else "AddRoleInstancesToContext"
@@ -1010,6 +1017,7 @@ prepare key = do
     , deltaType: "ConstructEmptyRole"
     , deltaFamily: "UniverseRoleDelta"
     , deltaFormatVersion: 5
+    , universeEpoch: currentUniverseEpoch
     , subjectKind: "ENR"
     , id: ContextInstance $ takeGuid $ unwrap Binding.contextId
     , contextType: Binding.contextType
@@ -1023,6 +1031,7 @@ prepare key = do
     , deltaType: "SetProperty"
     , deltaFamily: "RolePropertyDelta"
     , deltaFormatVersion: 5
+    , universeEpoch: currentUniverseEpoch
     , subjectKind: "ENR"
     , id: RoleInstance "visible"
     , roleType: Binding.visibleType

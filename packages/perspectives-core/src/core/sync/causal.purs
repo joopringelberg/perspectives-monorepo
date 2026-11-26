@@ -11,7 +11,7 @@ import Data.Array as Array
 import Data.Either (Either(..))
 import Data.Foldable (all, foldl)
 import Data.Map as Map
-import Data.Maybe (Maybe(..), fromMaybe, isJust)
+import Data.Maybe (Maybe(..), fromMaybe, isJust, maybe)
 import Data.Newtype (unwrap)
 import Data.Tuple (Tuple(..))
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
@@ -86,8 +86,8 @@ validateCausalDelta signed@(SignedDelta { encryptedDelta, author }) = do
     Right (r :: { deltaFormatVersion :: Maybe Int, historyCheckpoint :: Maybe { causalContext :: Maybe Clock } }) -> Right r
   case stamp of
     Nothing ->
-      -- Every delta of the current format (5, see VersionedDelta.currentDeltaFormatVersion) that mutates a role is causally stamped.
-      if marker.deltaFormatVersion == Just 5 && isJust role then Left "A causal role mutation requires a causal stamp"
+      -- Every delta of format 5 or newer (see VersionedDelta.currentDeltaFormatVersion) that mutates a role is causally stamped.
+      if maybe false (_ >= 5) marker.deltaFormatVersion && isJust role then Left "A causal role mutation requires a causal stamp"
       else pure unit
     Just causal -> do
       validateClock causal.context

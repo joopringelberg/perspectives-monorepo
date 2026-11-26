@@ -27,15 +27,23 @@ module Perspectives.Sync.VersionedDelta
   , isPredefinedContextScaffolding
   , parseIncomingDelta
   , currentDeltaFormatVersion
+  , currentMinReaderVersion
+  , currentUniverseEpoch
+  , deltaReaderVersion
+  , deltaUniverseEpoch
+  , deltaTransactionSlot
   , parseDeltaFormatVersion
+  , requiresNewerReader
   , signVersionedDelta
   ) where
 
 import Prelude
 
+import Control.Monad.AvarMonadAsk (gets, modify) as AA
 import Control.Monad.Except (runExcept)
 import Control.Monad.Trans.Class (lift)
 import Data.Either (Either(..))
+import Data.Array (elem)
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Newtype (unwrap)
 import Data.String as Str
@@ -51,9 +59,10 @@ import Perspectives.Representation.EnumeratedProperty (EnumeratedProperty(..))
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.TypeIdentifiers (CalculatedRoleType(..), ContextType(..), EnumeratedPropertyType(..), EnumeratedRoleType(..), RoleType(..))
 import Perspectives.Representation.Class.PersistentType (getCalculatedRole, getContext, getEnumeratedProperty, getEnumeratedRole)
-import Perspectives.ResourceIdentifiers (stripNonPublicIdentifiers)
+import Perspectives.ResourceIdentifiers (createCuid, stripNonPublicIdentifiers)
 import Perspectives.Sync.SignedDelta (SignedDelta)
 import Perspectives.Sync.PropertyHistory (isCheckpoint)
+import Perspectives.Sync.Transaction (Transaction(..))
 import Perspectives.TypesForDeltas (ContextDelta(..), ContextDeltaType(..), RoleBindingDelta(..), RoleBindingDeltaType, RolePropertyDelta(..), RolePropertyDeltaType, UniverseContextDelta(..), UniverseContextDeltaType, UniverseRoleDelta(..), UniverseRoleDeltaType(..))
 import Simple.JSON (class ReadForeign, readJSON', writeJSON)
 
@@ -64,6 +73,22 @@ defaultTypeVersion = "0.0"
 -- | carry signed `provenance`. Only format 5 deltas and format-3 property checkpoints are accepted.
 currentDeltaFormatVersion :: Int
 currentDeltaFormatVersion = 5
+
+-- | The highest `minReaderVersion` this installation can read. A delta of a higher `deltaFormatVersion` is read
+-- | (ignoring the fields this reader does not know) as long as its `minReaderVersion` does not exceed this number.
+deltaReaderVersion :: Int
+deltaReaderVersion = 5
+
+-- | The `minReaderVersion` signed into the deltas this installation writes: the lowest reader version that
+-- | interprets them correctly. Raise it only when a format change cannot safely be ignored by older readers.
+currentMinReaderVersion :: Int
+currentMinReaderVersion = 5
+
+-- | The Perspectives Universe this installation takes part in. It is signed into every delta and set on every
+-- | TransactionForPeer. Transactions and deltas from another universe (e.g. an installation that was not restarted
+-- | at a cut-over) are rejected unseen (delta-representation-redesign.md, `universeEpoch`).
+currentUniverseEpoch :: String
+currentUniverseEpoch = "perspectives-universe-2"
 
 data DeltaEnvelope
   = ContextEnvelope ContextDelta
@@ -76,6 +101,50 @@ class SignVersionedDelta a where
   signVersionedDelta :: a -> MonadPerspectivesTransaction SignedDelta
 
 type DeltaFormatMarker = { deltaFormatVersion :: Maybe Int }
+
+type ReaderMarker = { deltaFormatVersion :: Maybe Int, minReaderVersion :: Maybe Int, deltaFamily :: Maybe String }
+
+-- | The `universeEpoch` signed into a delta, if any.
+deltaUniverseEpoch :: String -> Maybe String
+deltaUniverseEpoch stringifiedDelta = case runExcept $ readJSON' stringifiedDelta of
+  Right ({ universeEpoch } :: { universeEpoch :: Maybe String }) -> universeEpoch
+  _ -> Nothing
+
+-- | The reader version a delta requires: its `minReaderVersion`, or its format version when absent.
+requiredReaderVersion :: String -> Int
+requiredReaderVersion stringifiedDelta = case runExcept $ readJSON' stringifiedDelta of
+  Right ({ deltaFormatVersion, minReaderVersion } :: ReaderMarker) -> fromMaybe (fromMaybe 1 deltaFormatVersion) minReaderVersion
+  _ -> 1
+
+-- | Just a reason when this installation is too old to read the delta: it requires a newer reader, or it is of
+-- | a delta family this reader does not know. Such a delta is not invalid; a transaction holding it is kept
+-- | pending until the installation is upgraded (the receiver rule, delta-ordering.md).
+requiresNewerReader :: String -> Maybe String
+requiresNewerReader stringifiedDelta = case runExcept $ readJSON' stringifiedDelta of
+  Right ({ deltaFormatVersion, minReaderVersion, deltaFamily } :: ReaderMarker) ->
+    let
+      format = fromMaybe 1 deltaFormatVersion
+      required = fromMaybe format minReaderVersion
+    in
+      if required > deltaReaderVersion then Just $ "delta requires reader version " <> show required <> " (this reader: " <> show deltaReaderVersion <> ")"
+      else case deltaFamily of
+        Just family | (format >= currentDeltaFormatVersion || isCheckpoint stringifiedDelta) && not (elem family knownFamilies) ->
+          Just $ "unknown delta family " <> family
+        _ -> Nothing
+  _ -> Nothing
+  where
+  knownFamilies = [ rolePropertyFamily, roleBindingFamily, contextFamily, universeRoleFamily, universeContextFamily ]
+
+-- | The transaction-level identity signed into the next delta: a `transactionId` shared by all deltas signed
+-- | in the current transaction and the `transactionPosition` of this delta in that transaction.
+deltaTransactionSlot :: MonadPerspectivesTransaction { transactionId :: String, transactionPosition :: Int }
+deltaTransactionSlot = do
+  { mid, position } <- AA.gets \(Transaction r) -> { mid: r.deltaTransactionId, position: r.deltaPosition }
+  transactionId <- case mid of
+    Just id -> pure id
+    Nothing -> lift createCuid
+  AA.modify \(Transaction r) -> Transaction r { deltaTransactionId = Just transactionId, deltaPosition = position + 1 }
+  pure { transactionId, transactionPosition: position }
 
 parseDeltaFormatVersion :: String -> Int
 parseDeltaFormatVersion stringifiedDelta = case runExcept $ readJSON' stringifiedDelta of
@@ -187,9 +256,12 @@ parseIncomingDelta stringifiedDelta =
   let
     format = parseDeltaFormatVersion stringifiedDelta
   in
-    if format == currentDeltaFormatVersion || (format == 3 && isCheckpoint stringifiedDelta) then
-      parseCurrentFormat stringifiedDelta
-    else Left $ "Unsupported delta format version " <> show format
+    if format == 3 && isCheckpoint stringifiedDelta then parseCurrentFormat stringifiedDelta
+    else if format < currentDeltaFormatVersion then Left $ "Unsupported delta format version " <> show format
+    -- The receiver rule: a newer format is read as long as it does not require a newer reader.
+    else if requiredReaderVersion stringifiedDelta > deltaReaderVersion then
+      Left $ "Delta format version " <> show format <> " requires reader version " <> show (requiredReaderVersion stringifiedDelta)
+    else parseCurrentFormat stringifiedDelta
 
 -- | TheWorld and TheSocialEnvironment are constructed locally by every installation, with the same
 -- | identifier. Their construction history is never shipped. Published copies are not predefined.
@@ -300,8 +372,13 @@ instance signVersionedUniverseContextDelta :: SignVersionedDelta UniverseContext
   signVersionedDelta (UniverseContextDelta delta) = do
     subject <- versionedRoleParts delta.subject
     contextType <- versionedContextType delta.contextType
+    slot <- deltaTransactionSlot
     signDelta $ writeJSON
       { deltaFormatVersion: currentDeltaFormatVersion
+      , minReaderVersion: currentMinReaderVersion
+      , universeEpoch: currentUniverseEpoch
+      , transactionId: slot.transactionId
+      , transactionPosition: slot.transactionPosition
       , deltaFamily: universeContextFamily
       , subject: subject.reference
       , subjectKind: subject.kind
@@ -319,8 +396,13 @@ instance signVersionedUniverseRoleDelta :: SignVersionedDelta UniverseRoleDelta 
     contextType <- versionedContextType delta.contextType
     roleType <- versionedEnumeratedRoleType delta.roleType
     authorizedRole <- traverse versionedRoleParts delta.authorizedRole
+    slot <- deltaTransactionSlot
     signDelta $ writeJSON
       { deltaFormatVersion: currentDeltaFormatVersion
+      , minReaderVersion: currentMinReaderVersion
+      , universeEpoch: currentUniverseEpoch
+      , transactionId: slot.transactionId
+      , transactionPosition: slot.transactionPosition
       , deltaFamily: universeRoleFamily
       , causal
       , subject: subject.reference
@@ -343,8 +425,13 @@ instance signVersionedContextDelta :: SignVersionedDelta ContextDelta where
     contextType <- versionedContextType delta.contextType
     roleType <- versionedEnumeratedRoleType delta.roleType
     destinationContextType <- traverse versionedContextType delta.destinationContextType
+    slot <- deltaTransactionSlot
     signDelta $ writeJSON
       { deltaFormatVersion: currentDeltaFormatVersion
+      , minReaderVersion: currentMinReaderVersion
+      , universeEpoch: currentUniverseEpoch
+      , transactionId: slot.transactionId
+      , transactionPosition: slot.transactionPosition
       , deltaFamily: contextFamily
       , causal
       , subject: subject.reference
@@ -367,8 +454,13 @@ instance signVersionedRoleBindingDelta :: SignVersionedDelta RoleBindingDelta wh
     filledType <- versionedEnumeratedRoleType delta.filledType
     fillerType <- traverse versionedEnumeratedRoleType delta.fillerType
     oldFillerType <- traverse versionedEnumeratedRoleType delta.oldFillerType
+    slot <- deltaTransactionSlot
     signDelta $ writeJSON
       { deltaFormatVersion: currentDeltaFormatVersion
+      , minReaderVersion: currentMinReaderVersion
+      , universeEpoch: currentUniverseEpoch
+      , transactionId: slot.transactionId
+      , transactionPosition: slot.transactionPosition
       , deltaFamily: roleBindingFamily
       , causal
       , subject: subject.reference
@@ -402,8 +494,13 @@ instance signVersionedRolePropertyDelta :: SignVersionedDelta RolePropertyDelta 
         , objectInstance: p.objectInstance
         , objectInstanceType
         }
+    slot <- deltaTransactionSlot
     signDelta $ writeJSON
       { deltaFormatVersion: currentDeltaFormatVersion
+      , minReaderVersion: currentMinReaderVersion
+      , universeEpoch: currentUniverseEpoch
+      , transactionId: slot.transactionId
+      , transactionPosition: slot.transactionPosition
       , deltaFamily: rolePropertyFamily
       , causal
       , subject: subject.reference

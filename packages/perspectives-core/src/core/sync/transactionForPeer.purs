@@ -48,19 +48,13 @@ import Perspectives.Sync.DateTime (SerializableDateTime)
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
 import Perspectives.Sync.PropertyHistory (checkpoint)
 import Perspectives.Sync.Transaction (PublicKeyInfo)
-import Perspectives.Sync.VersionedDelta (isPredefinedContextScaffolding)
+import Perspectives.Sync.VersionedDelta (currentUniverseEpoch, isPredefinedContextScaffolding)
 import Prelude (class Ord, class Show, class Eq, bind, compare, map, not, pure, show, ($), (<$>), (<>), (&&), (<<<), (==), (>>=), eq)
 import Simple.JSON (class ReadForeign, class WriteForeign)
 
 -----------------------------------------------------------
 -- TRANSACTIE
 -----------------------------------------------------------
--- | The Perspectives Universe this installation takes part in. Transactions from another universe
--- | (e.g. an installation that was not restarted at a cut-over) are rejected unseen
--- | (delta-representation-redesign.md, `universeEpoch`).
-currentUniverseEpoch :: String
-currentUniverseEpoch = "perspectives-universe-2"
-
 newtype TransactionForPeer = TransactionForPeer
   { universeEpoch :: Maybe String
   , causalEpoch :: Maybe String

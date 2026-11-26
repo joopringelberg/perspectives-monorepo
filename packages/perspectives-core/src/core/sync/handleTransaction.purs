@@ -27,7 +27,7 @@ import Control.Monad.Error.Class (catchError, throwError, try)
 import Control.Monad.Except (lift, runExcept, runExceptT)
 import Control.Monad.State (StateT, gets, modify, runStateT) as ST
 import Crypto.Subtle.Key.Types (CryptoKey)
-import Data.Array (any, catMaybes, concat, filter, filterA, foldl, fromFoldable, last, null, nub, sort, sortBy)
+import Data.Array (any, catMaybes, concat, filter, filterA, findMap, foldl, fromFoldable, last, null, nub, sort, sortBy)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.FoldableWithIndex (forWithIndex_)
@@ -91,8 +91,8 @@ import Perspectives.StrippedDelta (addPublicResourceScheme, addResourceSchemes, 
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
 import Perspectives.Sync.PropertyHistory (checkpoint, conflictPrecedence, isCheckpoint, isPropertyOperation, propertyHistory, validateCheckpoint)
 import Perspectives.Sync.Transaction (PublicKeyInfo, Transaction(..))
-import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..), currentUniverseEpoch, deduplicatePublicKeys, withoutPredefinedContextScaffolding)
-import Perspectives.Sync.VersionedDelta (DeltaEnvelope(..), parseIncomingDelta)
+import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..), deduplicatePublicKeys, withoutPredefinedContextScaffolding)
+import Perspectives.Sync.VersionedDelta (DeltaEnvelope(..), currentUniverseEpoch, deltaUniverseEpoch, parseIncomingDelta, requiresNewerReader)
 import Perspectives.Types.ObjectGetters (contextAspectsClosure, hasAspect, isPublic, roleAspectsClosure, publicUserRole)
 import Perspectives.TypesForDeltas (ContextDelta(..), ContextDeltaType(..), DeltaRecord, RoleBindingDelta(..), RoleBindingDeltaType(..), RolePropertyDelta(..), RolePropertyDeltaType(..), UniverseContextDelta(..), UniverseContextDeltaType(..), UniverseRoleDelta(..), UniverseRoleDeltaType(..))
 import Perspectives.UnschemedIdentifiers (UnschemedResourceIdentifier, unschemePerspectivesUser, unschemeRoleInstance)
@@ -503,11 +503,32 @@ executeTransactionWithOutcome t = do
     let reason = "Transaction from author " <> unwrap (unwrap t).author <> " is outside the current Perspectives Universe (" <> show (unwrap t).universeEpoch <> ")"
     lift $ warnSync reason
     pure $ Rejected reason
-  else if (unwrap t).causalEpoch /= Just currentCausalEpoch then do
+  else case tooNewForThisReader t of
+    -- The receiver rule: a delta this installation is too old to read is not invalid. Throwing keeps the
+    -- transaction pending (Perspectives.Sync.PendingTransactions); it is retried after an upgrade.
+    Just reason -> do
+      lift $ warnSync $ "Transaction from author " <> unwrap (unwrap t).author <> " kept pending: " <> reason
+      throwError $ error $ "Transaction requires a newer PDR: " <> reason
+    Nothing -> executeInUniverse t
+
+executeInUniverse :: TransactionForPeer -> MonadPerspectivesTransaction TransactionOutcome
+executeInUniverse t =
+  if (unwrap t).causalEpoch /= Just currentCausalEpoch then do
     id <- lift $ quarantineTransaction "Transaction is outside the active causal epoch" t
     lift $ warnSync $ "Quarantined transaction " <> id <> ": missing or unsupported causal epoch; manual reconciliation required"
     pure Quarantined
   else executeCurrentTransaction t
+
+-- | Just a reason when any delta in the transaction (including key deltas and checkpoint winners) requires
+-- | a newer reader than this installation.
+tooNewForThisReader :: TransactionForPeer -> Maybe String
+tooNewForThisReader (TransactionForPeer { deltas, publicKeys }) =
+  findMap tooNew (deltas <> concat (map _.deltas (fromFoldable $ Map.values $ unwrap publicKeys)))
+  where
+  tooNew :: SignedDelta -> Maybe String
+  tooNew (SignedDelta { encryptedDelta }) = case requiresNewerReader encryptedDelta of
+    Just reason -> Just reason
+    Nothing -> checkpoint encryptedDelta >>= \marker -> tooNew marker.winner
 
 executeCurrentTransaction :: TransactionForPeer -> MonadPerspectivesTransaction TransactionOutcome
 executeCurrentTransaction t = do
@@ -646,6 +667,9 @@ verifyTransaction (TransactionForPeer { deltas, publicKeys }) = do
           case parseIncomingDelta (unwrap d).encryptedDelta of
             Left message -> throwError $ error $ "Invalid incoming delta: " <> message
             Right _ -> pure unit
+          -- The universe is signed into every delta, so a delta cannot be replayed into another universe.
+          when (deltaUniverseEpoch (unwrap d).encryptedDelta /= Just currentUniverseEpoch)
+            (throwError (error $ "Delta allegedly by author " <> show author <> " is outside the current Perspectives Universe"))
           case validateCausalDelta d of
             Left message -> throwError $ error message
             Right _ -> pure unit

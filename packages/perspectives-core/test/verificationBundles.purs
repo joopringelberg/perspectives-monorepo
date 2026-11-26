@@ -17,6 +17,8 @@ import Data.Foldable (for_)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), isJust)
 import Data.Newtype (over, unwrap)
+import Data.String (Pattern(..), Replacement(..), contains)
+import Data.String as String
 import Data.Tuple (Tuple(..))
 import Effect (Effect)
 import Effect.Aff (Aff)
@@ -44,15 +46,15 @@ import Perspectives.Representation.Verbs (PropertyVerb(..))
 import Perspectives.Sync.Causal (currentCausalEpoch)
 import Perspectives.Sync.DateTime (SerializableDateTime(..))
 import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
-import Perspectives.Sync.HandleTransaction (executeTransaction, verifyTransaction)
+import Perspectives.Sync.HandleTransaction (TransactionOutcome(..), executeTransaction, executeTransactionWithOutcome, verifyTransaction)
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
 import Perspectives.StrippedDelta (stripResourceSchemes)
-import Perspectives.Sync.VersionedDelta (signVersionedDelta)
+import Perspectives.Sync.VersionedDelta (currentMinReaderVersion, currentUniverseEpoch, signVersionedDelta)
 import Perspectives.TypesForDeltas (ContextDelta(..), ContextDeltaType(..), UniverseRoleDelta(..), UniverseRoleDeltaType(..))
 import Perspectives.Sync.Transaction (PublicKeyInfo, Transaction(..))
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..), currentTransactionForPeer, deduplicatePublicKeys, removeUnusedPublicKeys)
 import Perspectives.UnschemedIdentifiers (unschemePerspectivesUser)
-import Simple.JSON (unsafeStringify, writeJSON)
+import Simple.JSON (readJSON, unsafeStringify, writeJSON)
 import Test.BindingReplacement as Binding
 import Test.Unit (TestSuite, suite, test)
 import Test.Unit.Assert (assert, equal)
@@ -224,6 +226,92 @@ theSuite = suite "Verification bundle identities" do
       PerspectRol role <- lift $ getPerspectRol Binding.visibleId
       liftAff $ equal (Just [ Value "updated" ]) $ Object.lookup (unwrap Binding.visibleProperty) role.properties
 
+  test "every signed delta carries the universe, the minimal reader version and its transaction slot" $
+    withSigningFixture true \_ -> do
+      let
+        membership = ContextDelta
+          { contextInstance: Binding.contextId
+          , contextType: Binding.contextType
+          , roleType: EnumeratedRoleType DEP.perspectivesUsers
+          , roleInstance: Binding.localPeer
+          , destinationContext: Nothing
+          , destinationContextType: Nothing
+          , deltaType: AddRoleInstancesToContext
+          , subject: ENR Binding.userType
+          , resourceKey: unwrap Binding.localPeer
+          , resourceVersion: 1
+          }
+      first <- signVersionedDelta $ stripResourceSchemes membership
+      second <- signVersionedDelta $ stripResourceSchemes membership
+      liftAff case readJSON (unwrap first).encryptedDelta, readJSON (unwrap second).encryptedDelta of
+        Right (a :: SlotFields), Right (b :: SlotFields) -> do
+          equal currentUniverseEpoch a.universeEpoch
+          equal currentMinReaderVersion a.minReaderVersion
+          equal a.transactionId b.transactionId
+          equal 0 a.transactionPosition
+          equal 1 b.transactionPosition
+        _, _ -> assert "Signed deltas must carry the transaction-level fields" false
+
+  test "rejects a delta signed into another universe, or without a universe" $
+    for_ [ replace "\"universeEpoch\":\"" "\"universeEpoch\":\"other-", replace ("\"universeEpoch\":\"" <> currentUniverseEpoch <> "\"") "\"other\":0" ] \rewrite ->
+      withSigningFixture true \key -> do
+        grantVisibleProperty
+        signed <- signAsWith rewrite localAuthor
+        outcome <- executeTransactionWithOutcome $ transaction [ signed ] $
+          EM.singleton publicAuthor { key, transportKey: "unused", deltas: [] }
+        PerspectRol role <- lift $ getPerspectRol Binding.visibleId
+        liftAff do
+          assert "A delta outside the current universe must be rejected" case outcome of
+            Rejected reason -> contains (Pattern "outside the current Perspectives Universe") reason
+            _ -> false
+          equal (Just [ Value "visible-value" ]) $ Object.lookup (unwrap Binding.visibleProperty) role.properties
+
+  test "keeps a transaction pending when a delta requires a newer reader or has an unknown family" $
+    for_
+      [ replace "\"deltaFormatVersion\":5" "\"deltaFormatVersion\":6,\"minReaderVersion\":6"
+      , replace "\"deltaFormatVersion\":5" "\"deltaFormatVersion\":6"
+      , replace "\"deltaFamily\":\"RolePropertyDelta\"" "\"deltaFamily\":\"FutureDelta\""
+      ]
+      \rewrite -> withSigningFixture true \key -> do
+        grantVisibleProperty
+        signed <- signAsWith rewrite localAuthor
+        result <- try $ executeTransactionWithOutcome $ transaction [ signed ] $
+          EM.singleton publicAuthor { key, transportKey: "unused", deltas: [] }
+        PerspectRol role <- lift $ getPerspectRol Binding.visibleId
+        liftAff do
+          assert "A delta for a newer reader must throw, so that the transaction stays pending" $ isLeft result
+          equal (Just [ Value "visible-value" ]) $ Object.lookup (unwrap Binding.visibleProperty) role.properties
+
+  test "applies a newer format that older readers may read, ignoring its unknown fields" $
+    withSigningFixture true \key -> do
+      grantVisibleProperty
+      signed <- signAsWith (replace "\"deltaFormatVersion\":5" "\"deltaFormatVersion\":6,\"minReaderVersion\":5,\"futureField\":{\"x\":1}") localAuthor
+      outcome <- executeTransactionWithOutcome $ transaction [ signed ] $
+        EM.singleton publicAuthor { key, transportKey: "unused", deltas: [] }
+      PerspectRol role <- lift $ getPerspectRol Binding.visibleId
+      liftAff do
+        assert ("A readable newer format must execute, got " <> show outcome) case outcome of
+          Executed -> true
+          _ -> false
+        equal (Just [ Value "updated" ]) $ Object.lookup (unwrap Binding.visibleProperty) role.properties
+
+type SlotFields = { universeEpoch :: String, minReaderVersion :: Int, transactionId :: String, transactionPosition :: Int }
+
+replace :: String -> String -> String -> String
+replace pattern replacement = String.replace (Pattern pattern) (Replacement replacement)
+
+grantVisibleProperty :: MonadPerspectivesTransaction Unit
+grantVisibleProperty = do
+  EnumeratedRole subject <- lift $ getEnumeratedRole Binding.userType
+  let
+    grant (Perspective p) = Perspective p
+      { propertyVerbs = EM.singleton (ContextState $ StateIdentifier $ unwrap Binding.contextType)
+          [ PropertyVerbs (PSet [ ENP Binding.visibleProperty ]) (PSet [ Consult, SetPropertyValue ]) ]
+      }
+  lift do
+    cacheInDomeinFile Binding.userType $ EnumeratedRole subject { perspectives = map grant subject.perspectives }
+    setResourceVersion (unwrap Binding.visibleId <> "#" <> unwrap Binding.visibleProperty) 0
+
 localAuthor :: PerspectivesUser
 localAuthor = PerspectivesUser "local"
 
@@ -247,15 +335,20 @@ transaction deltas publicKeys = currentTransactionForPeer
   }
 
 signAs :: PerspectivesUser -> MonadPerspectivesTransaction SignedDelta
-signAs author =
+signAs = signAsWith identity
+
+-- | Sign the standard property delta after rewriting its JSON text (to construct wire-format variants).
+signAsWith :: (String -> String) -> PerspectivesUser -> MonadPerspectivesTransaction SignedDelta
+signAsWith rewrite author =
   over SignedDelta (\d -> d { author = author }) <$>
     signDelta
-      ( writeJSON
+      ( rewrite $ writeJSON
           { resourceKey: unwrap Binding.visibleId <> "#" <> unwrap Binding.visibleProperty
           , resourceVersion: 1
           , deltaType: "SetProperty"
           , deltaFamily: "RolePropertyDelta"
           , deltaFormatVersion: 5
+          , universeEpoch: currentUniverseEpoch
           , subjectKind: "ENR"
           , id: RoleInstance "visible"
           , roleType: Binding.visibleType

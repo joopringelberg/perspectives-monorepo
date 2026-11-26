@@ -29,6 +29,7 @@ import Effect.Class (liftEffect)
 import Effect.Exception as Exception
 import Effect.Ref as Ref
 import Foreign.Object as Object
+import Perspectives.Sync.VersionedDelta (currentUniverseEpoch)
 import Perspectives.ApiTypes (ApiEffect, ResponseWithWarnings(..))
 import Perspectives.Assignment.SerialiseAsDeltas (serialiseRoleInstancesAndProperties)
 import Perspectives.Assignment.Update (setPreferredUserRoleType)
@@ -233,6 +234,7 @@ theSuite = suite "User-role filler replacement" do
               , deltaType: "SetProperty"
               , deltaFamily: "RolePropertyDelta"
               , deltaFormatVersion: 5
+              , universeEpoch: currentUniverseEpoch
               , subjectKind: "ENR"
               , id: peer
               , roleType: EnumeratedRoleType perspectivesUsers
@@ -555,6 +557,7 @@ addFilledContext name subjectType filler locallyFilled = do
       , deltaType: "ConstructEmptyContext"
       , deltaFamily: "UniverseContextDelta"
       , deltaFormatVersion: 5
+      , universeEpoch: currentUniverseEpoch
       , subjectKind: "ENR"
       , id: cid
       , contextType
@@ -566,6 +569,7 @@ addFilledContext name subjectType filler locallyFilled = do
       , deltaType: if roleType == externalType then "ConstructExternalRole" else "ConstructEmptyRole"
       , deltaFamily: "UniverseRoleDelta"
       , deltaFormatVersion: 5
+      , universeEpoch: currentUniverseEpoch
       , subjectKind: "ENR"
       , roleInstance: role
       , id: cid
@@ -581,6 +585,7 @@ addFilledContext name subjectType filler locallyFilled = do
       , deltaType: "AddRoleInstancesToContext"
       , deltaFamily: "ContextDelta"
       , deltaFormatVersion: 5
+      , universeEpoch: currentUniverseEpoch
       , subjectKind: "ENR"
       , contextInstance: cid
       , contextType
@@ -594,6 +599,7 @@ addFilledContext name subjectType filler locallyFilled = do
       , deltaType: "AddExternalRole"
       , deltaFamily: "ContextDelta"
       , deltaFormatVersion: 5
+      , universeEpoch: currentUniverseEpoch
       , subjectKind: "ENR"
       , contextInstance: cid
       , contextType
@@ -607,6 +613,7 @@ addFilledContext name subjectType filler locallyFilled = do
       , deltaType: "SetProperty"
       , deltaFamily: "RolePropertyDelta"
       , deltaFormatVersion: 5
+      , universeEpoch: currentUniverseEpoch
       , subjectKind: "ENR"
       , id: visible
       , roleType: visibleType
@@ -645,6 +652,7 @@ addFilledContext name subjectType filler locallyFilled = do
       , deltaType: "SetFirstBinding"
       , deltaFamily: "RoleBindingDelta"
       , deltaFormatVersion: 5
+      , universeEpoch: currentUniverseEpoch
       , subjectKind: "ENR"
       , filled: rid
       , filledType: subjectType
@@ -858,6 +866,7 @@ contextDelta = signed
   , deltaType: "ConstructEmptyContext"
   , deltaFamily: "UniverseContextDelta"
   , deltaFormatVersion: 5
+  , universeEpoch: currentUniverseEpoch
   , subjectKind: "ENR"
   , id: contextId
   , contextType
@@ -871,6 +880,7 @@ externalLinkDelta = signed
   , deltaType: "AddExternalRole"
   , deltaFamily: "ContextDelta"
   , deltaFormatVersion: 5
+  , universeEpoch: currentUniverseEpoch
   , subjectKind: "ENR"
   , contextInstance: contextId
   , contextType
@@ -886,6 +896,7 @@ roleDelta rid = signed
   , deltaType: if rid == externalId then "ConstructExternalRole" else "ConstructEmptyRole"
   , deltaFamily: "UniverseRoleDelta"
   , deltaFormatVersion: 5
+  , universeEpoch: currentUniverseEpoch
   , subjectKind: "ENR"
   , roleInstance: rid
   , id: contextId
@@ -909,6 +920,7 @@ membershipDelta rid = signed
   , deltaType: "AddRoleInstancesToContext"
   , deltaFamily: "ContextDelta"
   , deltaFormatVersion: 5
+  , universeEpoch: currentUniverseEpoch
   , subjectKind: "ENR"
   , contextInstance: contextId
   , contextType
@@ -929,6 +941,7 @@ replacementDelta oldFiller = signed
   , deltaType: "ReplaceBinding"
   , deltaFamily: "RoleBindingDelta"
   , deltaFormatVersion: 5
+  , universeEpoch: currentUniverseEpoch
   , subjectKind: "ENR"
   , filled: userId
   , filledType: userType
@@ -946,6 +959,7 @@ firstBindingDelta = signed
   , deltaType: "SetFirstBinding"
   , deltaFamily: "RoleBindingDelta"
   , deltaFormatVersion: 5
+  , universeEpoch: currentUniverseEpoch
   , subjectKind: "ENR"
   , filled: userId
   , filledType: userType
@@ -963,6 +977,7 @@ visiblePropertyDelta = signed
   , deltaType: "SetProperty"
   , deltaFamily: "RolePropertyDelta"
   , deltaFormatVersion: 5
+  , universeEpoch: currentUniverseEpoch
   , subjectKind: "ENR"
   , id: visibleId
   , roleType: visibleType
