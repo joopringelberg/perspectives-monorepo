@@ -32,7 +32,7 @@ import Perspectives.Data.EncodableMap as EM
 import Perspectives.Deltas (addPublicKeysToTransaction)
 import Perspectives.InstanceRepresentation (PerspectRol(..))
 import Perspectives.ModelDependencies as DEP
-import Perspectives.Persistence.ResourceVersionStore (setResourceVersion)
+import Perspectives.Persistence.ResourceVersionStore (resetResourceVersion)
 import Perspectives.Persistence.DeltaStore (storeDeltaFromSignedDelta)
 import Perspectives.Persistent (getPerspectRol)
 import Perspectives.Representation.Class.Cacheable (cacheEntity)
@@ -219,7 +219,7 @@ theSuite = suite "Verification bundle identities" do
           }
       lift do
         cacheInDomeinFile Binding.userType $ EnumeratedRole subject { perspectives = map grant subject.perspectives }
-        setResourceVersion (unwrap Binding.visibleId <> "#" <> unwrap Binding.visibleProperty) 0
+        resetResourceVersion (unwrap Binding.visibleId <> "#" <> unwrap Binding.visibleProperty) 0
       signed <- signAs localAuthor
       executeTransaction $ transaction [ signed ] $
         EM.singleton publicAuthor { key, transportKey: "unused", deltas: [] }
@@ -310,7 +310,7 @@ grantVisibleProperty = do
       }
   lift do
     cacheInDomeinFile Binding.userType $ EnumeratedRole subject { perspectives = map grant subject.perspectives }
-    setResourceVersion (unwrap Binding.visibleId <> "#" <> unwrap Binding.visibleProperty) 0
+    resetResourceVersion (unwrap Binding.visibleId <> "#" <> unwrap Binding.visibleProperty) 0
 
 localAuthor :: PerspectivesUser
 localAuthor = PerspectivesUser "local"

@@ -26,7 +26,7 @@ import Perspectives.Sync.VersionedDelta (currentUniverseEpoch)
 import Perspectives.Assignment.SerialiseAsDeltas (serialiseRoleInstancesAndProperties, serialiseRoleInstancesAndPropertiesForInitialVisibility)
 import Perspectives.CoreTypes (MonadPerspectivesTransaction)
 import Perspectives.Data.EncodableMap as EM
-import Perspectives.Deltas (addPublicKeysToTransaction, addStoredDeltas, savePeerTransactionInOutgoingPost, sortTransactionDeltas)
+import Perspectives.Deltas (addPublicKeysToTransaction, addStoredDeltas, orderWithinResourceKeys, savePeerTransactionInOutgoingPost, sortTransactionDeltas)
 import Perspectives.InstanceRepresentation (PerspectRol(..))
 import Perspectives.Persistence.API (tryGetDocument_)
 import Perspectives.Persistence.DeltaStore (getDeltasForResource, pruneDeltasThrough, safeKey, storeDeltaFromSignedDelta)
@@ -279,7 +279,7 @@ theSuite = suite "Durable incremental peer delivery" do
       baseline = checkpointChange winner
       change version operation = propertyChange version operation "v" (PerspectivesUser "local")
       creation = Binding.roleDelta Binding.visibleId
-      deletion = change 0 "RemoveRoleInstance"
+      deletion = keyedChange (unwrap Binding.visibleId) 1 "RemoveRoleInstance"
       expected =
         [ creation
         , baseline
@@ -292,6 +292,35 @@ theSuite = suite "Durable incremental peer delivery" do
       unsorted = [ deletion, change 10 "SetProperty", change 5 "DeleteProperty", change 4 "AddProperty", baseline, creation, change 3 "RemoveProperty" ]
       sorted = sortTransactionDeltas $ map (\delta -> DeltaInTransaction { users: [], delta }) unsorted
     equal expected $ map (\(DeltaInTransaction d) -> d.delta) sorted
+
+  test "within one resource key, deltas replay in version order regardless of type priority (I-6)" do
+    let
+      bindingKey = unwrap Binding.visibleId <> "#binding"
+      bind1 = keyedChange bindingKey 1 "SetFirstBinding"
+      unbind2 = keyedChange bindingKey 2 "RemoveBinding"
+      bind3 = keyedChange bindingKey 3 "SetFirstBinding"
+      creation = Binding.roleDelta Binding.visibleId
+      property = propertyChange 1 "SetProperty" "v" (PerspectivesUser "local")
+      -- Between keys, the type priority still decides: the constructor first, the property
+      -- (priority 5) after the bindings that occupy the earlier (priority 4) positions.
+      unsorted = [ unbind2, property, bind3, creation, bind1 ]
+      sorted = sortTransactionDeltas $ map (\delta -> DeltaInTransaction { users: [], delta }) unsorted
+
+      item :: String -> String -> Int -> { label :: String, slot :: Maybe { key :: String, checkpoint :: Boolean, version :: Int } }
+      item label key version = { label, slot: Just { key, checkpoint: false, version } }
+    equal [ creation, bind1, unbind2, property, bind3 ] $ map (\(DeltaInTransaction d) -> d.delta) sorted
+    -- The pure regrouping keeps foreign keys and keyless items in place.
+    equal [ "a0", "x", "b1", "a1", "-", "b2", "a2" ]
+      $ map _.label
+      $ orderWithinResourceKeys _.slot
+          [ item "a2" "a" 2
+          , item "x" "x" 0
+          , item "b2" "b" 2
+          , item "a0" "a" 0
+          , { label: "-", slot: Nothing }
+          , item "b1" "b" 1
+          , item "a1" "a" 1
+          ]
 
   test "the contiguous watermark only advances through versions the peer has" do
     let
@@ -431,6 +460,21 @@ propertyChange resourceVersion deltaType value author = SignedDelta
       , id: Binding.visibleId
       , property: Binding.visibleProperty
       , values: [ Value value ]
+      }
+  }
+
+keyedChange :: String -> Int -> String -> SignedDelta
+keyedChange resourceKey resourceVersion deltaType = SignedDelta
+  { author: PerspectivesUser "local"
+  , signature: Just $ "signature-" <> deltaType <> show resourceVersion
+  , encryptedDelta: writeJSON
+      { resourceKey
+      , resourceVersion
+      , deltaType
+      , deltaFamily: "RoleBindingDelta"
+      , deltaFormatVersion: 5
+      , universeEpoch: currentUniverseEpoch
+      , id: Binding.visibleId
       }
   }
 

@@ -25,7 +25,7 @@ module Perspectives.Deltas where
 import Control.Monad.AvarMonadAsk (modify, gets) as AA
 import Control.Monad.Error.Class (throwError)
 import Control.Monad.State.Trans (StateT, execStateT, get, lift, modify, put)
-import Data.Array (catMaybes, concat, elemIndex, filter, filterA, foldl, head, nub, null, snoc, sortBy, union)
+import Data.Array (catMaybes, concat, elemIndex, filter, filterA, foldl, fromFoldable, head, mapWithIndex, nub, null, snoc, sortBy, union, updateAtIndices, zip)
 import Data.DateTime.Instant (toDateTime)
 import Data.Foldable (any)
 import Data.Map (Map, empty, filter, filterKeys, insert, insertWith, lookup, mapMaybeWithKey, toUnfoldable, values) as Map
@@ -59,7 +59,7 @@ import Perspectives.ModelDependencies (perspectivesUsersCancelled, perspectivesU
 import Perspectives.Names (getMySystem)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Persistence.API (Url, addDocument, addDocument_, tryGetDocument_)
-import Perspectives.Persistence.DeltaStore (extractDeltaInfo, getDeltasForResource)
+import Perspectives.Persistence.DeltaStore (extractDeltaInfo, getDeltasForResource, safeKey)
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
 import Perspectives.Persistence.PeerDeliveryStore (peerDeliveryKnowledge, recordQueuedPeerDeltas, storedDeltaDeliveryId)
 import Perspectives.Persistence.PropertyHistoryStore (storeLocalDeltaWithHistory)
@@ -82,7 +82,7 @@ import Perspectives.Sync.Transaction (PublicKeyInfo, Transaction(..), Transactio
 import Perspectives.Sync.TransactionForPeer (EncryptedTransactionForPeer(..), TransactionForPeer(..), addToTransactionForPeer, currentTransactionForPeer, deduplicatePublicKeys, removeUnusedPublicKeys, transactieID, withoutPredefinedContextScaffolding)
 import Perspectives.Types.ObjectGetters (isPublicProxy)
 import Perspectives.UnschemedIdentifiers (UnschemedResourceIdentifier, unschemePerspectivesUser)
-import Prelude (Unit, bind, compare, discard, eq, flip, map, not, pure, show, unit, void, when, ($), (&&), (*>), (<$>), (<<<), (<>), (==), (>=), (>=>), (>>=), (>>>), (||))
+import Prelude (Unit, bind, compare, (/=), discard, eq, flip, map, not, pure, show, unit, void, when, ($), (&&), (*>), (<$>), (<<<), (<>), (==), (>=), (>=>), (>>=), (>>>), (||))
 import Simple.JSON (writeJSON)
 
 -- | Splits the transaction in versions specific for each peer and public role, but does not send them.
@@ -516,8 +516,10 @@ deltaTypeSortPriority dt
 -- | are grouped by resource key and replayed numerically, not lexicographically
 -- | and not grouped by operation (which would incorrectly move removals).
 -- | Deltas whose type cannot be determined are placed at the end.
+-- | Finally, within each resource key the deltas are put in version order (see orderWithinResourceKeys).
 sortTransactionDeltas :: Array DeltaInTransaction -> Array DeltaInTransaction
-sortTransactionDeltas = sortBy compareDeltaInTransaction
+sortTransactionDeltas = orderWithinResourceKeys (\(DeltaInTransaction { delta: SignedDelta { encryptedDelta } }) -> resourceSlot encryptedDelta)
+  <<< sortBy compareDeltaInTransaction
   where
   compareDeltaInTransaction :: DeltaInTransaction -> DeltaInTransaction -> Ordering
   compareDeltaInTransaction
@@ -538,3 +540,45 @@ sortTransactionDeltas = sortBy compareDeltaInTransaction
           if priority1 == 5 && priority2 == 5 then
             compare key1 key2 <> compare version1 version2
           else compare 0 0
+
+-- | Within one resource key, the version is the author's own order of the mutations; the type
+-- | priority must not reorder them (delta-ordering.md I-6). E.g. `SetFirstBinding v1`,
+-- | `RemoveBinding v2`, `SetFirstBinding v3` on one binding key must replay as v1, v2, v3,
+-- | although `RemoveBinding` has a later type priority.
+-- | Given an array sorted by type priority, the positions occupied by the deltas of one key are
+-- | refilled with those deltas in version order (a property checkpoint first). The type priority
+-- | thus still orders deltas of different keys; deltas without a key keep their position.
+-- | The sort is stable, so deltas of one key with equal versions keep their relative order.
+orderWithinResourceKeys :: forall a. (a -> Maybe ResourceSlot) -> Array a -> Array a
+orderWithinResourceKeys slotOf sorted = updateAtIndices placements sorted
+  where
+  groups :: Map.Map String (Array { index :: Int, item :: a, slot :: ResourceSlot })
+  groups = foldl
+    ( \acc entry -> case entry.slot of
+        Just slot -> Map.insertWith (<>) slot.key [ { index: entry.index, item: entry.item, slot } ] acc
+        Nothing -> acc
+    )
+    Map.empty
+    (mapWithIndex (\index item -> { index, item, slot: slotOf item }) sorted)
+
+  placements :: Array (Tuple Int a)
+  placements = concat $ map
+    (\group -> zip (map _.index group) (map _.item (sortBy (\l r -> compareSlots l.slot r.slot) group)))
+    (fromFoldable $ Map.values groups)
+
+  compareSlots :: ResourceSlot -> ResourceSlot -> Ordering
+  compareSlots l r = compare (not l.checkpoint) (not r.checkpoint) <> compare l.version r.version
+
+-- | The ordering identity of a delta: its (safe) resource key, whether it is a property checkpoint,
+-- | and its resource version.
+type ResourceSlot = { key :: String, checkpoint :: Boolean, version :: Int }
+
+-- | The ResourceSlot of a stringified delta; Nothing if it has no resource key.
+resourceSlot :: String -> Maybe ResourceSlot
+resourceSlot stringified = case extractDeltaInfo stringified of
+  Just info | info.resourceKey /= "" -> Just
+    { key: safeKey info.resourceKey
+    , checkpoint: isJust (checkpoint stringified)
+    , version: info.resourceVersion
+    }
+  _ -> Nothing

@@ -28,7 +28,7 @@ import Perspectives.ModelDependencies as DEP
 import Perspectives.Parsing.Arc.Position (ArcPosition(..))
 import Perspectives.Persistence.DeltaStore (getDeltasForResource, storeDeltaFromSignedDelta)
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
-import Perspectives.Persistence.ResourceVersionStore (setResourceVersion)
+import Perspectives.Persistence.ResourceVersionStore (resetResourceVersion)
 import Perspectives.Persistent (entityExists, getDomeinFile, getPerspectRol, tryGetPerspectRol)
 import Perspectives.Representation.Class.PersistentType (cacheInDomeinFile, getEnumeratedRole)
 import Perspectives.Representation.Class.Cacheable (cacheEntity)
@@ -248,7 +248,7 @@ theSuite = suite "Predefined context scaffolding" do
       lift do
         cacheInDomeinFile Binding.userType $ EnumeratedRole subject { perspectives = map grant subject.perspectives }
         for_ local storeDeltaFromSignedDelta
-        setResourceVersion (unwrap Binding.visibleId <> "#" <> unwrap Binding.visibleProperty) 1
+        resetResourceVersion (unwrap Binding.visibleId <> "#" <> unwrap Binding.visibleProperty) 1
       let
         input = over TransactionForPeer
           (\t -> t { publicKeys = EM.insert (PerspectivesUser "def:#local") { key, transportKey: "unused", deltas: [] } t.publicKeys })

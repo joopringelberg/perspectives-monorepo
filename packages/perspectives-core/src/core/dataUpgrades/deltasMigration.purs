@@ -61,7 +61,7 @@ import Perspectives.InstanceRepresentation (PerspectContext, PerspectRol)
 import Perspectives.Persistence.API (documentsInDatabase, includeDocs)
 import Perspectives.Persistence.DeltaStore (deltaStoreDocId, safeKey, storeDelta)
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
-import Perspectives.Persistence.ResourceVersionStore (setResourceVersion)
+import Perspectives.Persistence.ResourceVersionStore (resetResourceVersion)
 import Perspectives.Persistent (entitiesDatabaseName, saveEntiteit_)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance)
 import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType)
@@ -193,7 +193,7 @@ migrateContextDeltas { id: contextId, universeContextDelta } = do
     , disposition: Just "Applied"
     , contextKey: Nothing
     }
-  setResourceVersion resourceKey 0
+  resetResourceVersion resourceKey 0
 
 -----------------------------------------------------------
 -- ROLE MIGRATION
@@ -242,8 +242,8 @@ migrateRolDeltas { id: roleId, universeRoleDelta, contextDelta, bindingDelta, pr
       }
 
   -- Set the resource version for the role (highest assigned = 1 if contextDelta was stored, else 0)
-  if not (isSentinel contextDelta) then setResourceVersion resourceKey 1
-  else setResourceVersion resourceKey 0
+  if not (isSentinel contextDelta) then resetResourceVersion resourceKey 1
+  else resetResourceVersion resourceKey 0
 
   -- 3. BindingDelta (if present and not sentinel)
   case bindingDelta of
@@ -265,7 +265,7 @@ migrateRolDeltas { id: roleId, universeRoleDelta, contextDelta, bindingDelta, pr
         , disposition: Just "Applied"
         , contextKey: Nothing
         }
-      setResourceVersion bindingResourceKey 0
+      resetResourceVersion bindingResourceKey 0
 
   -- 4. PropertyDeltas
   -- Old format: Object (Object SignedDelta) where first key is property type,
@@ -300,7 +300,7 @@ migratePropertyDeltas propResourceKey deltas = do
         , contextKey: Nothing
         }
   let maxVersion = if length deltas > 0 then length deltas - 1 else 0
-  setResourceVersion propResourceKey maxVersion
+  resetResourceVersion propResourceKey maxVersion
   pure maxVersion
 
 -----------------------------------------------------------

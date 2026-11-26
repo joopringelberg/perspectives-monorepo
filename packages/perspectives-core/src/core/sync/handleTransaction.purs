@@ -53,7 +53,7 @@ import Perspectives.Checking.PropertyProvenance (refutedPropertyProvenance)
 import Perspectives.ContextAndRole (defaultContextRecord, defaultRolRecord, getNextRolIndex)
 import Perspectives.CoreTypes (MonadPerspectivesTransaction, removeInternally, (###=), (###>>), (##=), (##>), (##>>))
 import Perspectives.Data.EncodableMap as ENCMAP
-import Perspectives.Deltas (addCorrelationIdentifiersToTransactie, addCreatedContextToTransaction, addCreatedRoleToTransaction, deltaTypeSortPriority)
+import Perspectives.Deltas (addCorrelationIdentifiersToTransactie, addCreatedContextToTransaction, addCreatedRoleToTransaction, deltaTypeSortPriority, orderWithinResourceKeys)
 import Perspectives.DependencyTracking.Dependency (findRoleRequests)
 import Perspectives.DomeinCache (retrieveDomeinFile)
 import Perspectives.Error.Pretty (renderPerspectivesError, renderPerspectivesWarning)
@@ -110,30 +110,38 @@ import Simple.JSON (readJSON')
 -- or update to the newer model version (have the end user consent).
 
 executeContextDelta :: ContextDelta -> SignedDelta -> MonadPerspectivesTransaction Unit
-executeContextDelta (ContextDelta { deltaType, contextInstance, contextType, roleType, roleInstance, destinationContext, subject }) signedDelta = do
+executeContextDelta = executeContextDeltaWith handleError
+
+-- | The handler decides what happens when the author turns out to be unauthorised:
+-- | `handleError` only warns; `rejectUnauthorized` throws (I-12).
+executeContextDeltaWith :: (PerspectivesError -> MonadPerspectivesTransaction Unit) -> ContextDelta -> SignedDelta -> MonadPerspectivesTransaction Unit
+executeContextDeltaWith onUnauthorized (ContextDelta { deltaType, contextInstance, contextType, roleType, roleInstance, destinationContext, subject }) signedDelta = do
   lift $ renderPerspectivesWarning >=> traceSync $ (ExecutingContextDelta (show deltaType) (show contextInstance) (show roleInstance))
   case deltaType of
     -- The subject must be allowed to change the role: they must have a perspective on it that includes:
     --  * the verb CreateAndFill, in case a context role is created;
     --  * the verb Create, in case another role is created.
     AddRoleInstancesToContext -> (lift $ roleHasPerspectiveOnRoleWithVerb subject roleType [ Verbs.Create, Verbs.CreateAndFill ] Nothing Nothing) >>= case _ of
-      Left e -> handleError e
+      Left e -> onUnauthorized e
       -- Takes care of PERSISTENCE of both context and role.
       Right _ -> addRoleInstanceToContext contextInstance roleType (Tuple roleInstance (Just signedDelta))
     -- NOTE: the perspective should always include the Delete verb.
     MoveRoleInstancesToAnotherContext -> (lift $ roleHasPerspectiveOnRoleWithVerb subject roleType [ Verbs.Create, Verbs.CreateAndFill ] Nothing Nothing) >>= case _ of
-      Left e -> handleError e
+      Left e -> onUnauthorized e
       Right _ -> moveRoleInstanceToAnotherContext contextInstance (unsafePartial $ fromJust destinationContext) roleType (Just signedDelta) roleInstance
     -- The contextDelta is stored in the DeltaStore via executeDeltaWithVersionTracking.
     -- No need to store it on the role record.
     AddExternalRole -> pure unit
 
 executeRoleBindingDelta :: RoleBindingDelta -> SignedDelta -> MonadPerspectivesTransaction Unit
-executeRoleBindingDelta (RoleBindingDelta { filled, filler, deltaType, subject }) signedDelta = do
+executeRoleBindingDelta = executeRoleBindingDeltaWith handleError
+
+executeRoleBindingDeltaWith :: (PerspectivesError -> MonadPerspectivesTransaction Unit) -> RoleBindingDelta -> SignedDelta -> MonadPerspectivesTransaction Unit
+executeRoleBindingDeltaWith onUnauthorized (RoleBindingDelta { filled, filler, deltaType, subject }) signedDelta = do
   lift $ renderPerspectivesWarning >=> traceSync $ (ExecutingRoleBindingDelta (show deltaType) (show filled) (show filler))
   roleType' <- lift (filled ##>> roleType)
   (lift $ roleHasPerspectiveOnRoleWithVerb subject roleType' [ Verbs.Fill, Verbs.CreateAndFill ] Nothing Nothing) >>= case _ of
-    Left e -> handleError e
+    Left e -> onUnauthorized e
     Right _ -> case deltaType of
       SetFirstBinding -> void $ setFirstBinding filled (unsafePartial $ fromJust filler) (Just signedDelta)
       RemoveBinding -> void $ removeBinding filled
@@ -244,6 +252,13 @@ executeRolePropertyDelta_ d@(RolePropertyDelta { id, roleType, deltaType, values
 handleError :: PerspectivesError -> MonadPerspectivesTransaction Unit
 handleError e = lift $ renderPerspectivesError >=> warnSync $ e
 
+-- | Turn an authorisation failure into an exception, so that an incoming peer transaction stays
+-- | pending and is retried instead of being recorded as applied (I-12).
+rejectUnauthorized :: PerspectivesError -> MonadPerspectivesTransaction Unit
+rejectUnauthorized e = do
+  message <- lift $ renderPerspectivesError e
+  throwError $ error message
+
 -----------------------------------------------------------
 -- DELTA ORDERING TYPES AND HELPERS
 -----------------------------------------------------------
@@ -303,7 +318,11 @@ checkForGapsWith lookupVersion deltaInfos = do
 -- | The ConstructExternalRole always precedes the UniverseContextDelta for the context it is the external
 -- | role for. Hence we only have to check whether the external role exists.
 executeUniverseContextDelta :: UniverseContextDelta -> SignedDelta -> MonadPerspectivesTransaction Unit
-executeUniverseContextDelta (UniverseContextDelta { id, contextType, deltaType, subject }) signedDelta = do
+executeUniverseContextDelta = executeUniverseContextDeltaWith handleError
+
+-- | A missing external role is handled as an authorisation failure, as before.
+executeUniverseContextDeltaWith :: (PerspectivesError -> MonadPerspectivesTransaction Unit) -> UniverseContextDelta -> SignedDelta -> MonadPerspectivesTransaction Unit
+executeUniverseContextDeltaWith onUnauthorized (UniverseContextDelta { id, contextType, deltaType, subject }) signedDelta = do
   lift $ renderPerspectivesWarning >=> traceSync $ (ExecutingUniverseContextDelta deltaType id contextType)
   allTypes <- lift (contextType ###= contextAspectsClosure)
   externalRoleExists <- lift $ entityExists (RoleInstance $ buitenRol $ unwrap id)
@@ -344,11 +363,14 @@ executeUniverseContextDelta (UniverseContextDelta { id, contextType, deltaType, 
           else pure unit
           pure id
       )
-  else lift $ renderPerspectivesError >=> warnSync $ UnauthorizedForContext "auteur" subject contextType
+  else onUnauthorized $ UnauthorizedForContext "auteur" subject contextType
 
 -- | Retrieves from the repository the model that holds the RoleType, if necessary.
 executeUniverseRoleDelta :: UniverseRoleDelta -> SignedDelta -> MonadPerspectivesTransaction Unit
-executeUniverseRoleDelta delta@(UniverseRoleDelta { id, roleType, roleInstance, authorizedRole, deltaType, subject }) s = do
+executeUniverseRoleDelta = executeUniverseRoleDeltaWith handleError
+
+executeUniverseRoleDeltaWith :: (PerspectivesError -> MonadPerspectivesTransaction Unit) -> UniverseRoleDelta -> SignedDelta -> MonadPerspectivesTransaction Unit
+executeUniverseRoleDeltaWith onUnauthorized delta@(UniverseRoleDelta { id, roleType, roleInstance, authorizedRole, deltaType, subject }) s = do
   lift $ renderPerspectivesWarning >=> traceSync $ (ExecutingUniverseRoleDelta deltaType id roleInstance roleType subject)
   void $ lift $ retrieveDomeinFile (ModelUri $ unsafePartial typeUri2ModelUri_ $ unwrap roleType)
   case deltaType of
@@ -360,7 +382,7 @@ executeUniverseRoleDelta delta@(UniverseRoleDelta { id, roleType, roleInstance, 
         -- Check if the author has a perspective on the role to be created that includes
         -- the verb Create.
         (lift $ roleHasPerspectiveOnRoleWithVerb subject roleType [ Verbs.Create, Verbs.CreateAndFill ] Nothing Nothing) >>= case _ of
-          Left e -> handleError e
+          Left e -> onUnauthorized e
           Right _ -> constructAnotherRole_
     ConstructExternalRole -> do
       -- Notice that merely constructing a role has no consequences for the responsibilities
@@ -371,7 +393,7 @@ executeUniverseRoleDelta delta@(UniverseRoleDelta { id, roleType, roleInstance, 
       lift (roleType ###>> hasAspect (EnumeratedRoleType rootContext)) >>=
         if _ then void $ lookupOrCreateRoleInstance roleType Nothing constructExternalRole
         else (lift $ roleHasPerspectiveOnExternalRoleWithVerbs subject authorizedRole [ Verbs.CreateAndFill ] Nothing Nothing) >>= case _ of
-          Left e -> handleError e
+          Left e -> onUnauthorized e
           Right _ -> void $ lookupOrCreateRoleInstance roleType Nothing constructExternalRole
     RemoveRoleInstance -> do
       -- We justify the Delete verb with the reasoning that the user is allowed to delete all role instances, he certainly is allowed to delete one.
@@ -392,7 +414,7 @@ executeUniverseRoleDelta delta@(UniverseRoleDelta { id, roleType, roleInstance, 
   withRemovalPermission action = do
     result <- roleDeletionPermission delta s
     case result of
-      Left e -> handleError e
+      Left e -> onUnauthorized e
       Right _ -> action
 
   userCreatesThemselves :: Boolean
@@ -806,7 +828,7 @@ executeTransaction' verifiedKeys original t@(TransactionForPeer { deltas, public
   case gaps of
     [] -> do
       -- No gaps: execute all deltas with version tracking.
-      void $ for (sortBy compareForReplay verifiedDeltas) \{ signedDelta, stringified, resourceKey, resourceVersion, author } ->
+      void $ for (orderWithinResourceKeys replaySlot $ sortBy compareForReplay verifiedDeltas) \{ signedDelta, stringified, resourceKey, resourceVersion, author } ->
         executeDeltaWithVersionTracking baselines signedDelta stringified resourceKey resourceVersion author
       pure Executed
     _ -> do
@@ -830,6 +852,11 @@ executeTransaction' verifiedKeys original t@(TransactionForPeer { deltas, public
         else EQ
     in
       compare (priority left) (priority right) <> propertyOrder
+
+  -- Within one resource key, replay strictly in version order (I-6).
+  replaySlot d =
+    if d.resourceKey == "" then Nothing
+    else Just { key: safeKey d.resourceKey, checkpoint: isCheckpoint d.stringified, version: d.resourceVersion }
 
   executeDeltaWithVersionTracking :: Map.Map String ConstructionBaseline -> SignedDelta -> String -> String -> Int -> PerspectivesUser -> MonadPerspectivesTransaction Unit
   executeDeltaWithVersionTracking baselines s stringified resourceKey resourceVersion author = do
@@ -882,7 +909,7 @@ executeTransaction' verifiedKeys original t@(TransactionForPeer { deltas, public
           persistIncomingDelta false (if obsolete then "SupersededByConstruction" else "ModifyWinsSuppressedDelete")
           pure false
         else do
-          executeDelta s (Just stringified)
+          applyDelta s (Just stringified)
           persistIncomingDelta true "Applied"
           pure true
       baseline = Map.lookup (safeKey resourceKey) baselines
@@ -897,7 +924,7 @@ executeTransaction' verifiedKeys original t@(TransactionForPeer { deltas, public
         Nothing -> false
       applyBaseline b = do
         lift $ recordCausalDelta s
-        executeDelta s (Just stringified)
+        applyDelta s (Just stringified)
         local <- lift $ getResourceVersion resourceKey
         lift $ setResourceVersion resourceKey (max local b.version)
         persistIncomingDelta true "ConstructionBaseline"
@@ -930,7 +957,7 @@ executeTransaction' verifiedKeys original t@(TransactionForPeer { deltas, public
     case baseline, baselineRecord, contextBaselineRecord, mDuplicate of
       Just b, true, _, _ -> applyBaseline b
       _, _, true, _ -> do
-        executeDelta s (Just stringified)
+        applyDelta s (Just stringified)
         persistIncomingDelta true "ConstructionBaseline"
       _, _, _, Just _ -> pure unit
       _, _, _, Nothing | resourceKey /= "" -> do
@@ -944,7 +971,7 @@ executeTransaction' verifiedKeys original t@(TransactionForPeer { deltas, public
         else if isCheckpoint stringified then do
           -- Never overwrite a peer's equally new or newer state with a baseline.
           when (resourceVersion > localVersion) do
-            executeDelta s (Just stringified)
+            applyDelta s (Just stringified)
             lift $ setResourceVersion resourceKey resourceVersion
             persistIncomingDelta true "Checkpoint"
         else if resourceVersion < localVersion then
@@ -962,7 +989,7 @@ executeTransaction' verifiedKeys original t@(TransactionForPeer { deltas, public
             -- getResourceVersion returns 0 both for untracked resources and for resources
             -- at version 0, so when there are no existing deltas this is the first mutation,
             -- not a write-write conflict. Execute directly.
-            executeDelta s (Just stringified)
+            applyDelta s (Just stringified)
             persistIncomingDelta true "Applied"
           else do
             -- Genuine version conflict: two deltas claim the same version from different authors.
@@ -976,7 +1003,7 @@ executeTransaction' verifiedKeys original t@(TransactionForPeer { deltas, public
               applied <-
                 if isDeletionDeltaType deltaType then applyDeletion
                 else do
-                  executeDelta s (Just stringified)
+                  applyDelta s (Just stringified)
                   persistIncomingDelta true "Applied"
                   pure true
               when applied do
@@ -1024,17 +1051,17 @@ executeTransaction' verifiedKeys original t@(TransactionForPeer { deltas, public
                   restoreRoleFromDeltaStore roleInstanceId
                 else pure unit
                 -- Execute the modification (role should now exist if restored).
-                executeDelta s (Just stringified)
+                applyDelta s (Just stringified)
                 lift $ setResourceVersion resourceKey resourceVersion
                 persistIncomingDelta true "Applied"
               Just _ -> do
                 -- Role exists: execute normally.
-                executeDelta s (Just stringified)
+                applyDelta s (Just stringified)
                 lift $ setResourceVersion resourceKey resourceVersion
                 persistIncomingDelta true "Applied"
           else do
             -- Role-level delta that is not a deletion (e.g. ConstructEmptyRole, AddRoleInstancesToContext).
-            executeDelta s (Just stringified)
+            applyDelta s (Just stringified)
             lift $ setResourceVersion resourceKey resourceVersion
             persistIncomingDelta true "Applied"
       _, _, _, Nothing -> pure unit
@@ -1174,20 +1201,32 @@ executeTransaction' verifiedKeys original t@(TransactionForPeer { deltas, public
       Nothing -> key -- Only one "#": this IS a role instance key, not a sub-resource key.
       Just p2 -> Str.take (p1 + 1 + p2) key
 
+  -- | Applies a delta on the version-tracked path. Every failure, including an authorisation
+  -- | failure of a non-property delta, propagates: the transaction stays pending and is retried,
+  -- | and the delta is neither recorded as applied nor advances the resource version (I-12).
+  applyDelta :: SignedDelta -> Maybe String -> MonadPerspectivesTransaction Unit
+  applyDelta = executeDeltaWith true
+
+  -- | Tolerant execution, for public-key deltas (executed unconditionally) and for re-executing
+  -- | stored role-level deltas during restoration: failures of non-property deltas are only logged.
   executeDelta :: SignedDelta -> Maybe String -> MonadPerspectivesTransaction Unit
+  executeDelta = executeDeltaWith false
+
+  executeDeltaWith :: Boolean -> SignedDelta -> Maybe String -> MonadPerspectivesTransaction Unit
   -- For now, we fail silently on deltas that cannot be authenticated.
-  executeDelta s Nothing = pure unit
-  executeDelta s (Just stringifiedDelta) = do
+  executeDeltaWith _ s Nothing = pure unit
+  executeDeltaWith strict s (Just stringifiedDelta) = do
     storageSchemes <- lift $ gets _.typeToStorage
     let
+      onUnauthorized = if strict then rejectUnauthorized else handleError
       execute = case parseIncomingDelta stringifiedDelta of
         Right (RolePropertyEnvelope d1) -> lift (addResourceSchemes storageSchemes d1) >>= flip executeRolePropertyDelta s
-        Right (RoleBindingEnvelope d2) -> lift (addResourceSchemes storageSchemes d2) >>= flip executeRoleBindingDelta s
-        Right (ContextEnvelope d3) -> lift (addResourceSchemes storageSchemes d3) >>= flip executeContextDelta s
-        Right (UniverseRoleEnvelope d4) -> lift (addResourceSchemes storageSchemes d4) >>= flip executeUniverseRoleDelta s
-        Right (UniverseContextEnvelope d5) -> lift (addResourceSchemes storageSchemes d5) >>= flip executeUniverseContextDelta s
+        Right (RoleBindingEnvelope d2) -> lift (addResourceSchemes storageSchemes d2) >>= flip (executeRoleBindingDeltaWith onUnauthorized) s
+        Right (ContextEnvelope d3) -> lift (addResourceSchemes storageSchemes d3) >>= flip (executeContextDeltaWith onUnauthorized) s
+        Right (UniverseRoleEnvelope d4) -> lift (addResourceSchemes storageSchemes d4) >>= flip (executeUniverseRoleDeltaWith onUnauthorized) s
+        Right (UniverseContextEnvelope d5) -> lift (addResourceSchemes storageSchemes d5) >>= flip (executeUniverseContextDeltaWith onUnauthorized) s
         Left _ -> throwError (error "Cannot execute an unparseable incoming delta")
-    if isCheckpoint stringifiedDelta then execute
+    if strict || isCheckpoint stringifiedDelta then execute
     else catchError execute \e -> do
       lift $ renderPerspectivesError >=> warnSync $ (DeltaExecutionError (show e))
       case parseIncomingDelta stringifiedDelta of

@@ -61,7 +61,7 @@ import Perspectives.Persistence.DeltaStore (getDeltasForResource, pruneDeltasThr
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
 import Perspectives.Persistence.PendingTransactionStore (PendingTransactionRecord(..), blockedStatus, failedStatus, getAllPendingTransactions, maxFailedAttempts, pendingTransactionDatabaseName, recordFailedTransaction)
 import Perspectives.Persistence.QuarantineStore (QuarantinedTransaction(..), getQuarantinedTransactions, quarantineDatabaseName)
-import Perspectives.Persistence.ResourceVersionStore (getResourceVersion, setResourceVersion)
+import Perspectives.Persistence.ResourceVersionStore (getResourceVersion, resetResourceVersion, setResourceVersion)
 import Perspectives.Persistent (forceSaveContext, forceSaveRole, getPerspectContext, getPerspectRol, saveEntiteit, tryGetPerspectContext, tryGetPerspectRol)
 import Perspectives.Representation.Class.Cacheable (cacheEntity)
 import Perspectives.Representation.ADT (ADT(..))
@@ -741,6 +741,41 @@ theSuite = suite "Causal role deletion and coordinated cutover" do
         equal [] state.deletions
         assert "Rejected deletion must leave the role intact" present
 
+  test "an unauthorised role construction fails the transaction and leaves no trace (I-12)" $
+    withSigningFixture true \key -> do
+      prepare key
+      EnumeratedRole metadata <- lift $ getEnumeratedRole Binding.userType
+      let revoke (Perspective p) = Perspective p { roleVerbs = EM.empty }
+      lift $ cacheInDomeinFile Binding.userType $ EnumeratedRole metadata { perspectives = map revoke metadata.perspectives }
+      let
+        intruder = RoleInstance "def:#unauthorised-role"
+        intruderKey = takeGuid $ unwrap intruder
+      construction <- constructionFor intruder false "local" (stamp "local" 1 [])
+      result <- try $ receive [ construction ]
+      version <- lift $ getResourceVersion intruderKey
+      stored <- lift $ getDeltasForResource intruderKey
+      present <- isJust <$> lift (tryGetPerspectRol intruder)
+      liftAff do
+        assert "An unauthorised construction must fail, so the transaction stays pending" $ isLeft result
+        equal 0 version
+        assert "An unauthorised construction must not be recorded as applied" $ null stored
+        assert "An unauthorised construction must not create the role" $ not present
+
+  test "the resource version store never lowers a version without an explicit reset (I-11)" $
+    Binding.withFixture Binding.localPeer [] [] do
+      let key = "def:#monotonic-version"
+      lift $ setResourceVersion key 5
+      lift $ setResourceVersion key 3
+      afterLowering <- lift $ getResourceVersion key
+      lift $ setResourceVersion key 7
+      afterRaising <- lift $ getResourceVersion key
+      lift $ resetResourceVersion key 2
+      afterReset <- lift $ getResourceVersion key
+      liftAff do
+        equal 5 afterLowering
+        equal 7 afterRaising
+        equal 2 afterReset
+
   test "reserves persistent installation-specific counters across role storage aliases" $
     Binding.withFixture Binding.localPeer [] [] do
       installation <- lift ensureCausalEpoch
@@ -1044,7 +1079,7 @@ prepare key = do
     records <- lift $ getDeltasForResource baseline.key
     for_ (find (\(DeltaStoreRecord r) -> r.signedDelta == baseline.signed) records) \(DeltaStoreRecord r) ->
       lift $ pruneDeltasThrough baseline.key 1 r._id
-    lift $ setResourceVersion baseline.key 1
+    lift $ resetResourceVersion baseline.key 1
   lift $ storeDeltaFromSignedDelta $ Binding.membershipDelta Binding.visibleId
   lift $ void $ saveEntiteit Binding.contextId
   lift $ void $ saveEntiteit Binding.visibleId

@@ -28,6 +28,7 @@ module Perspectives.Persistence.ResourceVersionStore
   , getResourceVersion
   , incrementResourceVersion
   , setResourceVersion
+  , resetResourceVersion
   , initResourceVersion
   , resourceVersionDatabaseName
   ) where
@@ -129,11 +130,20 @@ initResourceVersion key = do
       cacheInsertVersion sk 0
     Just _ -> pure unit
 
--- | Set the version for a resource-key to a specific value.
+-- | Raise the version for a resource-key to a specific value. The counter is monotonic:
+-- | a lower value is ignored, so applied versions can never be reopened (delta-ordering.md I-11).
 -- | Creates the document if it does not exist; updates it otherwise.
 -- | Also updates the in-memory cache after a successful database write.
 setResourceVersion :: ResourceKey -> Int -> MonadPerspectives Unit
-setResourceVersion key version = do
+setResourceVersion = writeResourceVersion false
+
+-- | Set the version for a resource-key to a specific value, also when that is lower than the
+-- | current version. Only for explicit resets (data upgrades, tests); never on the delta paths.
+resetResourceVersion :: ResourceKey -> Int -> MonadPerspectives Unit
+resetResourceVersion = writeResourceVersion true
+
+writeResourceVersion :: Boolean -> ResourceKey -> Int -> MonadPerspectives Unit
+writeResourceVersion allowLower key version = do
   dbName <- resourceVersionDatabaseName
   let sk = safeKey key
   (mDoc :: Maybe ResourceVersionDoc) <- tryGetDocument_ dbName sk
@@ -141,9 +151,12 @@ setResourceVersion key version = do
     Nothing -> do
       _ <- addDocument_ dbName (ResourceVersionDoc { _id: sk, _rev: Nothing, resourceVersion: version }) sk
       cacheInsertVersion sk version
-    Just (ResourceVersionDoc { _rev }) -> do
-      _ <- addDocument_ dbName (ResourceVersionDoc { _id: sk, _rev, resourceVersion: version }) sk
-      cacheInsertVersion sk version
+    Just (ResourceVersionDoc { _rev, resourceVersion })
+      | version == resourceVersion -> cacheInsertVersion sk version
+      | version < resourceVersion && not allowLower -> cacheInsertVersion sk resourceVersion
+      | otherwise -> do
+          _ <- addDocument_ dbName (ResourceVersionDoc { _id: sk, _rev, resourceVersion: version }) sk
+          cacheInsertVersion sk version
 
 -- | Increment the version for a resource-key by 1 and return the new version.
 -- | If the key does not exist yet, it is created with version 1.
