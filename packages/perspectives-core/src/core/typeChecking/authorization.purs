@@ -27,8 +27,8 @@ import Prelude
 import Control.Monad.State (StateT, get)
 import Data.Array (elem, filterA, foldMap, nub, uncons)
 import Data.Either (Either(..))
-import Data.Foldable (foldM)
-import Data.Maybe (Maybe(..), isJust)
+import Data.Foldable (any, foldM)
+import Data.Maybe (Maybe(..), isJust, isNothing)
 import Data.Monoid.Disj (Disj(..))
 import Data.Newtype (ala, unwrap)
 import Data.Traversable (traverse)
@@ -46,7 +46,8 @@ import Perspectives.Query.UnsafeCompiler (compileFunction, getRoleInstances, wit
 import Perspectives.Representation.ADT (ADT(..))
 import Perspectives.Representation.Class.Role (adtOfRole, contextOfRoleType, getRole)
 import Perspectives.Representation.InstanceIdentifiers (PerspectivesUser(..), RoleInstance(..), perspectivesUser2RoleInstance, roleInstance2PerspectivesUser)
-import Perspectives.Representation.Perspective (Perspective(..), perspectiveSupportsOneOfRoleVerbs)
+import Perspectives.Representation.ExplicitSet (ExplicitSet(..), isElementOf)
+import Perspectives.Representation.Perspective (Perspective(..), PropertyVerbs(..), perspectiveSupportsOneOfRoleVerbs)
 import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType, EnumeratedRoleType, PropertyType(..), RoleType(..))
 import Perspectives.Representation.Verbs (PropertyVerb, RoleVerb)
 import Perspectives.Sidecar.ToReadable (toReadable)
@@ -76,6 +77,24 @@ roleHasPerspectiveOnPropertyWithVerb author subject roleInstance property verb' 
       pure $ Left $ Custom $ "Type-level property authorization failed: " <> typeFailure
         <> " "
         <> instanceFailure
+
+-- | True iff no perspective of the subject role type (or its aspects) lets it apply any of the
+-- | given verbs to any property at all. Then neither the type-level grant nor an instance witness
+-- | (hasInstancePropertyPermission) can ever authorize a property delta of this subject with one
+-- | of these verbs: the lack of authority follows from the model alone and does not depend on
+-- | instance evidence that may still be missing. See delta-ordering.md §6.4 (Stage 0).
+-- | This is deliberately conservative: it does not try to prove that a granted property cannot
+-- | resolve to the delta's property, as that depends on aliases and filler chains.
+subjectCannotWriteAnyPropertyWith :: RoleType -> Array PropertyVerb -> MonadPerspectives Boolean
+subjectCannotWriteAnyPropertyWith subject verbs = do
+  readableSubject <- toReadable subject
+  isNothing <$> findPerspective readableSubject
+    ( \(Perspective { propertyVerbs }) -> pure $ any
+        ( any \(PropertyVerbs properties pverbs) ->
+            properties /= Empty && properties /= PSet [] && any (flip isElementOf pverbs) verbs
+        )
+        (unwrap propertyVerbs)
+    )
 
 -- | A disjunctive filler restriction cannot prove where a property is stored.
 -- | Instead, witness the signed author's subject role, its selected object and

@@ -28,10 +28,10 @@ import Control.Monad.Trans.Class (lift)
 import Data.Array (filter)
 import Data.Either (Either(..), isLeft)
 import Data.Maybe (Maybe(..))
-import Data.Newtype (unwrap)
+import Data.Newtype (over, unwrap)
 import Data.String (Pattern(..), contains)
 import Data.Tuple (Tuple(..))
-import Data.Foldable (for_)
+import Data.Foldable (any, for_)
 import Effect (Effect)
 import Effect.Aff.Class (liftAff)
 import Foreign.Object as Object
@@ -47,6 +47,7 @@ import Perspectives.ModelDependencies as DEP
 import Perspectives.Persistence.CausalStore (CausalRoleDoc(..), getCausalRole)
 import Perspectives.Persistence.DeltaStore (getDeltasForResource)
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
+import Perspectives.Persistence.QuarantineStore (QuarantinedTransaction(..), getQuarantinedTransactions)
 import Perspectives.Persistence.ResourceVersionStore (getResourceVersion)
 import Perspectives.Persistent (getPerspectContext, getPerspectRol)
 import Perspectives.PerspectivesState (getPerspectivesUser)
@@ -69,7 +70,8 @@ import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
 import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..), EnumeratedRoleType(..), PropertyType(..), RoleType(..), StateIdentifier(..))
 import Perspectives.Representation.Verbs (PropertyVerb(..))
 import Perspectives.RoleAssignment (filledPointsTo, fillerPointsTo)
-import Perspectives.Sync.HandleTransaction (executeTransaction)
+import Perspectives.Sync.SignedDelta (SignedDelta(..))
+import Perspectives.Sync.HandleTransaction (TransactionOutcome(..), executeTransaction, executeTransactionWithOutcome)
 import Perspectives.Types.ObjectGetters (hasPerspectiveOnPropertyWithVerb, hasPerspectiveOnPropertyWithVerbByImplication)
 import Test.BindingReplacement as Binding
 import Test.VerificationBundles as Verification
@@ -270,11 +272,56 @@ theSuite = suite "Instance-aware inherited property authorization" do
         equal [ unwrap authorPerson ] relative
         equal [ unwrap receiverPerson ] local
 
-  test "rejected signed updates do not advance history, versions or causality, and can be retried" $
+  test "a subject that cannot write any property is quarantined, not retried" $
     Verification.withSigningFixture true \key -> do
       lift do
         installInheritance
         changePerspective \(Perspective p) -> Perspective p { propertyVerbs = EM.empty }
+      signed <- Verification.signAs Verification.localAuthor
+      let
+        incoming = Verification.transaction [ signed ] $
+          EM.singleton Verification.publicAuthor { key, transportKey: "unused", deltas: [] }
+      before <- lift $ getDeltasForResource propertyKey
+      outcome <- executeTransactionWithOutcome incoming
+      after <- lift $ getDeltasForResource propertyKey
+      version <- lift $ getResourceVersion propertyKey
+      values <- lift (Binding.visibleId ##= getProperty Binding.visibleProperty)
+      quarantined <- lift getQuarantinedTransactions
+      liftAff do
+        assert "A model-deterministic lack of authority must quarantine the transaction" $ case outcome of
+          Quarantined -> true
+          _ -> false
+        assert "The quarantine record must attribute the signed author" $
+          any (\(QuarantinedTransaction q) -> contains (Pattern ("author " <> unwrap Verification.localAuthor)) q.reason) quarantined
+        equal (map (\(DeltaStoreRecord r) -> r._id) before) (map (\(DeltaStoreRecord r) -> r._id) after)
+        equal 0 version
+        equal [ Value "visible-value" ] values
+
+  test "unsigned peer deltas are rejected" $
+    Verification.withSigningFixture true \key -> do
+      lift installInheritance
+      signed <- Verification.signAs Verification.localAuthor
+      let
+        unsigned = over SignedDelta (_ { signature = Nothing }) signed
+        incoming = Verification.transaction [ unsigned ] $
+          EM.singleton Verification.publicAuthor { key, transportKey: "unused", deltas: [] }
+      outcome <- executeTransactionWithOutcome incoming
+      values <- lift (Binding.visibleId ##= getProperty Binding.visibleProperty)
+      liftAff do
+        assert "An unsigned peer delta must be rejected" $ case outcome of
+          Rejected reason -> contains (Pattern "Unsigned peer delta") reason
+          _ -> false
+        equal [ Value "visible-value" ] values
+
+  test "rejected signed updates do not advance history, versions or causality, and can be retried" $
+    Verification.withSigningFixture true \key -> do
+      lift do
+        installInheritance
+        -- The subject can write some property, so the failure may be due to missing evidence.
+        changePerspective \(Perspective p) -> Perspective p
+          { propertyVerbs = EM.singleton (ContextState $ StateIdentifier $ unwrap Binding.contextType <> "$Inactive")
+              [ PropertyVerbs (PSet [ ENP unrelatedProperty ]) (PSet [ SetPropertyValue ]) ]
+          }
       signed <- Verification.signAs Verification.localAuthor
       let
         incoming = Verification.transaction [ signed ] $
@@ -374,6 +421,9 @@ installInheritance = do
         False
     , roleTypes = [ ENR Binding.hiddenType ]
     }
+
+unrelatedProperty :: EnumeratedPropertyType
+unrelatedProperty = EnumeratedPropertyType $ unwrap Binding.visibleType <> "$Unrelated"
 
 grantProperty :: Perspective -> Perspective
 grantProperty (Perspective p) = Perspective p

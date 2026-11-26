@@ -37,7 +37,7 @@ import Data.Maybe (Maybe(..), fromJust, isJust, isNothing)
 import Data.MediaType (MediaType(..))
 import Data.Newtype (over, unwrap)
 import Data.Ordering (Ordering(..))
-import Data.String (Pattern(..), drop, indexOf, length, take) as Str
+import Data.String (Pattern(..), drop, indexOf, joinWith, length, take) as Str
 import Data.Traversable (for)
 import Data.Tuple (Tuple(..))
 import Effect.Aff.Class (liftAff)
@@ -48,7 +48,7 @@ import Partial.Unsafe (unsafePartial)
 import Perspectives.ApiTypes (PropertySerialization(..), RolSerialization(..))
 import Perspectives.Assignment.Update (addProperty, addRoleInstanceToContext, deleteProperty, moveRoleInstanceToAnotherContext, removeProperty, setProperty)
 import Perspectives.Authenticate (deserializeJWK, tryGetPublicKey, verifyDelta, verifyDelta')
-import Perspectives.Checking.Authorization (roleHasPerspectiveOnExternalRoleWithVerbs, roleHasPerspectiveOnPropertyWithVerb, roleHasPerspectiveOnRoleWithVerb)
+import Perspectives.Checking.Authorization (roleHasPerspectiveOnExternalRoleWithVerbs, roleHasPerspectiveOnPropertyWithVerb, roleHasPerspectiveOnRoleWithVerb, subjectCannotWriteAnyPropertyWith)
 import Perspectives.ContextAndRole (defaultContextRecord, defaultRolRecord, getNextRolIndex)
 import Perspectives.CoreTypes (MonadPerspectivesTransaction, removeInternally, (###=), (###>>), (##=), (##>), (##>>))
 import Perspectives.Data.EncodableMap as ENCMAP
@@ -521,7 +521,52 @@ executeCurrentTransaction t = do
     Left e -> do
       lift $ renderPerspectivesError >=> warnSync $ (IncomingTransactionFailed (show e))
       pure $ Rejected (show e)
-    Right (Tuple verifiedKeys incoming) -> timed "incoming.execute" (show transactionNumber) (executeTransaction' verifiedKeys t incoming)
+    Right (Tuple verifiedKeys incoming) -> provenUnauthorizedPropertyDeltas incoming >>= case _ of
+      [] -> timed "incoming.execute" (show transactionNumber) (executeTransaction' verifiedKeys t incoming)
+      reasons -> do
+        -- Proven unauthorized: never retried, but kept with the signed (attributable) deltas for audit.
+        let reason = "Unauthorized property delta(s): " <> Str.joinWith "; " reasons
+        id <- lift $ quarantineTransaction reason t
+        lift $ warnSync $ "Quarantined transaction " <> id <> ": " <> reason
+        pure Quarantined
+
+-- | Stage 0 of instance-level property authorization (delta-ordering.md §6.4).
+-- | A signed property delta whose subject role type has no perspective that lets it apply the
+-- | delta's verb(s) to any property is unauthorized on the model alone: no instance evidence that
+-- | may arrive later can change that. Returns a description of each such delta.
+-- | Every other authorization failure may be caused by missing evidence; executeRolePropertyDelta_
+-- | then throws, so the transaction is kept as pending and retried. Missing evidence never permits.
+-- | When the subject type is unknown (e.g. a model is missing), nothing is proven.
+provenUnauthorizedPropertyDeltas :: TransactionForPeer -> MonadPerspectivesTransaction (Array String)
+provenUnauthorizedPropertyDeltas (TransactionForPeer { deltas }) = lift $ catMaybes <$> for deltas \(SignedDelta { author, encryptedDelta }) ->
+  if isCheckpoint encryptedDelta then pure Nothing
+  else case parseIncomingDelta encryptedDelta of
+    Right (RolePropertyEnvelope (RolePropertyDelta { id, property, deltaType, subject })) -> case propertyDeltaVerbs deltaType of
+      [] -> pure Nothing
+      verbs -> try (subjectCannotWriteAnyPropertyWith subject verbs) >>= case _ of
+        Right true -> pure $ Just $ "author " <> unwrap author <> " as " <> show subject
+          <> " has no perspective to "
+          <> show verbs
+          <> " any property ("
+          <> show deltaType
+          <> " of "
+          <> unwrap property
+          <> " on "
+          <> unwrap id
+          <> ")"
+        _ -> pure Nothing
+    _ -> pure Nothing
+
+-- | The verbs any of which authorizes a property delta type (compare executeRolePropertyDelta_).
+propertyDeltaVerbs :: RolePropertyDeltaType -> Array Verbs.PropertyVerb
+propertyDeltaVerbs = case _ of
+  -- Historically, properties were set by removing and then adding them.
+  AddProperty -> [ Verbs.AddPropertyValue, Verbs.SetPropertyValue ]
+  RemoveProperty -> [ Verbs.RemovePropertyValue ]
+  DeleteProperty -> [ Verbs.DeleteProperty ]
+  SetProperty -> [ Verbs.SetPropertyValue ]
+  -- Not authorized per delta: only executed for public roles.
+  UploadFile -> []
 
 verifyTransaction :: TransactionForPeer -> MonadPerspectivesTransaction (Map.Map UnschemedResourceIdentifier CryptoKey)
 verifyTransaction (TransactionForPeer { deltas, publicKeys }) = do
@@ -574,6 +619,10 @@ verifyTransaction (TransactionForPeer { deltas, publicKeys }) = do
 
   verifyDelta_ :: SignedDelta -> ST.StateT (Map.Map UnschemedResourceIdentifier CryptoKey) MonadPerspectivesTransaction Unit
   verifyDelta_ d@(SignedDelta { author }) = do
+    -- Every installation signs its deltas (signDeltaMP only omits the signature without a private key).
+    -- An unsigned peer delta cannot be attributed to its author, so it is never accepted (Stage 0).
+    when (isNothing (unwrap d).signature)
+      (throwError (error $ "Unsigned peer delta allegedly by author: " <> show author))
     cryptoKey <- ST.gets (Map.lookup $ unschemePerspectivesUser author)
     (lift $ lift $ verifyDelta' d cryptoKey) >>=
       case _ of

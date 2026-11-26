@@ -181,3 +181,32 @@ Recommend the smallest coherent design, with alternatives, limitations and a
 few concrete scenarios demonstrating authorized historical replay, false
 rejection prevention, unauthorized-write rejection and concurrent revocation.
 Do not change runtime code as part of this investigation.
+
+## Decisions and implementation status
+
+**Stage 0 (implemented).** No change to the delta format.
+
+- `verifyTransaction` rejects unsigned peer deltas (including key-establishing
+  deltas): authorship must be attributable before anything is executed.
+- `provenUnauthorizedPropertyDeltas` quarantines a transaction when a property
+  delta's signed subject type has no perspective granting any property with the
+  required verb in the receiver's model. The quarantine reason names the signed
+  author. Every other authorization failure is treated as missing evidence: the
+  operation is not applied and the transaction is retried as a pending record.
+  Missing evidence never permits.
+- The non-repudiation window (checkpoint plus ten retained versions, unbounded
+  for `fullhistory` properties and for binding/membership/constructor history)
+  is documented in `docsources/delta-ordering.md` §8.1.
+
+**Stage 1 (decided, not implemented).**
+
+- The signed property delta carries the subject instance, the object instance
+  and the **evaluation context instance** from which the subject query starts.
+  The context cannot be derived from the subject instance: a calculated subject
+  can be the result of a query that starts in a context other than the
+  subject's own context.
+- The authority bundle may disclose the sender's intermediate filled roles
+  between the signer and the subject instance. This privacy cost is accepted:
+  these roles are largely exposed as soon as the receiver knows the sender.
+- Targeted history requests for missing evidence use the signed instances to
+  name the resources to request.

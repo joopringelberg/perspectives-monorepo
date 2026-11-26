@@ -50,6 +50,8 @@ import Perspectives.Sync.VersionedDelta (isPredefinedContextScaffolding)
 import Perspectives.UnschemedIdentifiers (unschemePerspectivesUser)
 import Simple.JSON (class WriteForeign, writeJSON)
 import Test.BindingReplacement as Binding
+import Test.VerificationBundles as Verification
+import Perspectives.Authenticate (signDelta)
 import Test.Unit (TestSuite, suite, test)
 import Test.Unit.Assert (assert, equal)
 import Test.Unit.Main (runTest)
@@ -204,7 +206,8 @@ theSuite = suite "Predefined context scaffolding" do
         equal (Just $ EM.singleton secondAuthor info) (_.publicKeys <<< unwrap <$> Map.lookup firstDestination customized)
 
   test "incoming scaffolding neither accumulates nor imports incidental identities" $
-    Binding.withFixture Binding.oldRemotePeer [] [] do
+    -- Peer deltas must be signed: sign the property delta with the known key of local.
+    Verification.withSigningFixture true \key -> do
       EnumeratedRole subject <- lift $ getEnumeratedRole Binding.userType
       let
         grant (Perspective p) = Perspective p
@@ -213,7 +216,7 @@ theSuite = suite "Predefined context scaffolding" do
           }
         local = scaffolding (PerspectivesUser "def:#local") "TheWorld"
         incoming = scaffolding (PerspectivesUser "historical") "TheWorld"
-        propertyDelta = over SignedDelta (\d -> d { author = PerspectivesUser "local" }) $ Binding.signed
+        unsignedProperty = Binding.signed
           { resourceKey: unwrap Binding.visibleId <> "#" <> unwrap Binding.visibleProperty
           , resourceVersion: 2
           , deltaType: "SetProperty"
@@ -223,15 +226,14 @@ theSuite = suite "Predefined context scaffolding" do
           , values: [ Value "updated" ]
           , subject: ENR Binding.userType
           }
+      propertyDelta <- over SignedDelta (\d -> d { author = PerspectivesUser "local" }) <$> signDelta (unwrap unsignedProperty).encryptedDelta
       lift do
         cacheInDomeinFile Binding.userType $ EnumeratedRole subject { perspectives = map grant subject.perspectives }
-        PerspectRol author <- getPerspectRol Binding.localPeer
-        void $ cacheEntity Binding.localPeer $ PerspectRol author { properties = Object.delete DEP.perspectivesUsersPublicKey author.properties }
         for_ local storeDeltaFromSignedDelta
         setResourceVersion (unwrap Binding.visibleId <> "#" <> unwrap Binding.visibleProperty) 1
       let
         input = over TransactionForPeer
-          (\t -> t { publicKeys = EM.delete (PerspectivesUser "def:#local") t.publicKeys })
+          (\t -> t { publicKeys = EM.insert (PerspectivesUser "def:#local") { key, transportKey: "unused", deltas: [] } t.publicKeys })
           (peerTransaction $ incoming <> [ propertyDelta ])
       executeTransaction input
       PerspectRol role <- lift $ getPerspectRol Binding.visibleId

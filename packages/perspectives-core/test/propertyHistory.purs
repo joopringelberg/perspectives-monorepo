@@ -181,7 +181,21 @@ theSuite = suite "Checkpointed property history" do
         signed <- signedChange version
         lift $ storeLocalDeltaWithHistory signed
       records <- lift $ getDeltasForResource propertyKey
-      liftEffect $ Ref.write (Just { key, author, records }) captured
+      -- Peer deltas must be signed; sign the gap-causing delta with the sender's key.
+      let
+        unsigned = Binding.signed
+          { resourceKey: "other-visible#" <> unwrap Binding.visibleProperty
+          , resourceVersion: 5
+          , deltaType: "SetProperty"
+          , id: RoleInstance "other-visible"
+          , roleType: Binding.visibleType
+          , property: Binding.visibleProperty
+          , values: [ Value "not-yet-applicable" ]
+          , subject: ENR Binding.otherUserType
+          }
+      SignedDelta signedMissing <- signDelta (unwrap unsigned).encryptedDelta
+      let missing = SignedDelta signedMissing { author = (unwrap unsigned).author }
+      liftEffect $ Ref.write (Just { key, author, records, missing }) captured
     saved <- liftEffect $ Ref.read captured
     case saved of
       Nothing -> assert "Sender history was not captured" false
@@ -202,17 +216,7 @@ theSuite = suite "Checkpointed property history" do
             , publicKeys: keys
             , deltas: map (\(DeltaStoreRecord r) -> r.signedDelta) snapshot.records
             }
-          missing = Binding.signed
-            { resourceKey: "other-visible#" <> unwrap Binding.visibleProperty
-            , resourceVersion: 5
-            , deltaType: "SetProperty"
-            , id: RoleInstance "other-visible"
-            , roleType: Binding.visibleType
-            , property: Binding.visibleProperty
-            , values: [ Value "not-yet-applicable" ]
-            , subject: ENR Binding.otherUserType
-            }
-          blocked = TransactionForPeer (unwrap incoming) { deltas = (unwrap incoming).deltas <> [ missing ] }
+          blocked = TransactionForPeer (unwrap incoming) { deltas = (unwrap incoming).deltas <> [ snapshot.missing ] }
         executeTransaction blocked
         blockedVersion <- lift $ getResourceVersion propertyKey
         pending <- lift $ pendingTransactionDocId blocked >>= getPendingTransactionsForResource
