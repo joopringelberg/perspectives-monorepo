@@ -607,14 +607,20 @@ same witness search the receiver uses (`findWitness`). When no witness is found
 (for example a property set by `sys:Me` or on an own role), the delta is sent
 without provenance and an `AUTH` warning is logged.
 
-With every shipped property delta the sender also adds an **authority bundle**
-(`addPropertyAuthorityBundle`) to the transaction for the same peers: for each
+With every shipped property delta the shared outgoing-delta path also adds an
+**authority bundle** (`addPropertyAuthorityBundle` in `Perspectives.Deltas`) to
+the transaction for the same peers. This applies to newly created writes,
+stored-property exports (including invitations), forwarding and history
+responses, and to the signed winner retained in a property checkpoint. The
+original property delta and signature remain unchanged. For each
 role in the binding chains of the subject instance and of the object instance
 (the latter down to the storage), its construction baseline
 (`getRoleConstructionHistory`) and its `#binding` history, plus the construction
 history of the evaluation context. Records are deduplicated and the usual
-`PeerDelivery` knowledge suppresses resending. Missing history on the sender is
-tolerated (the bundle is best effort).
+`PeerDelivery` knowledge suppresses resending. Only construction and binding
+evidence is included, not other properties of the author's private context.
+Missing required construction history on the sender fails the export explicitly
+rather than silently emitting an incomplete authority bundle.
 
 The receiver (`authorizePropertyDelta`) then decides:
 

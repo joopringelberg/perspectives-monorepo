@@ -25,8 +25,9 @@ module Perspectives.Deltas where
 import Control.Monad.AvarMonadAsk (modify, gets) as AA
 import Control.Monad.Error.Class (throwError)
 import Control.Monad.State.Trans (StateT, execStateT, get, lift, modify, put)
-import Data.Array (catMaybes, concat, elemIndex, filter, filterA, foldl, fromFoldable, head, mapWithIndex, nub, null, snoc, sortBy, union, updateAtIndices, zip)
+import Data.Array (catMaybes, concat, elem, elemIndex, filter, filterA, foldl, fromFoldable, head, mapWithIndex, nub, nubByEq, null, snoc, sortBy, union, updateAtIndices, zip)
 import Data.DateTime.Instant (toDateTime)
+import Data.Either (Either(..))
 import Data.Foldable (any)
 import Data.Map (Map, empty, filter, filterKeys, insert, insertWith, lookup, mapMaybeWithKey, toUnfoldable, values) as Map
 import Data.Maybe (Maybe(..), fromJust, isJust, maybe)
@@ -40,6 +41,7 @@ import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
 import Effect.Exception (error)
 import Effect.Now (now)
+import Foreign (Foreign)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.AMQP.Stomp (sendToTopic)
 import Perspectives.ApiTypes (CorrelationIdentifier)
@@ -52,7 +54,7 @@ import Perspectives.EntiteitAndRDFAliases (ID)
 import Perspectives.ErrorLogging (logPerspectivesError)
 import Perspectives.Identifiers (buitenRol)
 import Perspectives.Instances.Me (notIsMe)
-import Perspectives.Instances.ObjectGetters (deltaAuthor2ResourceIdentifier, getProperty, perspectivesUsersRole_, roleType_)
+import Perspectives.Instances.ObjectGetters (binding_, deltaAuthor2ResourceIdentifier, getProperty, perspectivesUsersRole_, roleType_)
 import Perspectives.Logging (debugBroker, infoDelta, traceDelta)
 import Perspectives.ModelDependencies (connectedToAMQPBroker, userChannel) as DEP
 import Perspectives.ModelDependencies (perspectivesUsersCancelled, perspectivesUsersPublicKey, perspectivesUsersTransportPublicKey)
@@ -72,18 +74,21 @@ import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), Per
 import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..), RoleType(..))
 import Perspectives.ResourceIdentifiers (isInPublicScheme, takeGuid)
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
+import Perspectives.StrippedDelta (addResourceSchemes)
 import Perspectives.Sync.DateTime (SerializableDateTime(..))
-import Perspectives.Sync.ConstructionHistory (getRoleBaselineHistory)
+import Perspectives.Sync.ConstructionHistory (getContextConstructionHistory, getRoleBaselineHistory, getRoleConstructionHistory)
 import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
 import Perspectives.Sync.OutgoingTransaction (OutgoingTransaction(..))
 import Perspectives.Sync.PropertyHistory (checkpoint)
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
 import Perspectives.Sync.Transaction (PublicKeyInfo, Transaction(..), TransactionDestination(..), appendTransactionDelta)
 import Perspectives.Sync.TransactionForPeer (EncryptedTransactionForPeer(..), TransactionForPeer(..), addToTransactionForPeer, currentTransactionForPeer, deduplicatePublicKeys, removeUnusedPublicKeys, transactieID, withoutPredefinedContextScaffolding)
+import Perspectives.Sync.VersionedDelta (DeltaEnvelope(..), parseIncomingDelta)
 import Perspectives.Types.ObjectGetters (isPublicProxy)
+import Perspectives.TypesForDeltas (PropertyProvenance, RolePropertyDelta(..))
 import Perspectives.UnschemedIdentifiers (UnschemedResourceIdentifier, unschemePerspectivesUser)
-import Prelude (Unit, bind, compare, (/=), discard, eq, flip, map, not, pure, show, unit, void, when, ($), (&&), (*>), (<$>), (<<<), (<>), (==), (>=), (>=>), (>>=), (>>>), (||))
-import Simple.JSON (writeJSON)
+import Prelude (Unit, bind, compare, (/=), const, discard, eq, flip, map, not, pure, show, unit, void, when, ($), (&&), (*>), (<$>), (<<<), (<>), (==), (>=), (>=>), (>>=), (>>>), (||))
+import Simple.JSON (readJSON, writeJSON)
 
 -- | Splits the transaction in versions specific for each peer and public role, but does not send them.
 -- | Send the peer versions with `sendPeerTransactions`; select the public role versions with `publicRoleTransactions`.
@@ -407,6 +412,49 @@ addDeltaWithStorage shouldStore (DeltaInTransaction deltarecord@{ users, delta }
               t { userRoleBottoms = foldl (\userBottoms' (Tuple role user) -> Map.insert role user userBottoms') userRoleBottoms newUserBottoms }
           ) <<< appendTransactionDelta newDelta
       )
+    addPropertyAuthorityForDelta users' delta
+
+-- | Stored exports and forwarded writes need the same evidence as newly signed writes.
+-- | Checkpoints retain the original winner's signed provenance.
+addPropertyAuthorityForDelta :: Array RoleInstance -> SignedDelta -> MonadPerspectivesTransaction Unit
+addPropertyAuthorityForDelta users (SignedDelta { encryptedDelta }) =
+  case checkpoint encryptedDelta of
+    Just { winner } -> addPropertyAuthorityForDelta users winner
+    Nothing -> case readJSON encryptedDelta of
+      Left errors -> throwError $ error $ "Cannot read outgoing property provenance: " <> show errors
+      Right ({ provenance: Nothing } :: { provenance :: Maybe Foreign }) -> pure unit
+      Right _ -> case parseIncomingDelta encryptedDelta of
+        Left message -> throwError $ error $ "Cannot collect outgoing property authority: " <> message
+        Right (RolePropertyEnvelope propertyDelta) -> do
+          storageSchemes <- lift $ AA.gets _.typeToStorage
+          RolePropertyDelta { id, provenance } <- lift $ addResourceSchemes storageSchemes propertyDelta
+          for_ provenance (addPropertyAuthorityBundle users id)
+        Right _ -> pure unit
+
+-- | Only construction and binding evidence is disclosed, never the properties of
+-- | the author's private context. Missing evidence must not silently produce an incomplete export.
+addPropertyAuthorityBundle :: Array RoleInstance -> RoleInstance -> PropertyProvenance -> MonadPerspectivesTransaction Unit
+addPropertyAuthorityBundle users storage provenance = do
+  records <- lift do
+    subjectChain <- fillerChain (const false) provenance.subjectInstance
+    objectChain <- fillerChain (_ == storage) provenance.objectInstance
+    roleRecords <- for (nub $ subjectChain <> objectChain) \role -> do
+      construction <- getRoleConstructionHistory role
+      filling <- getDeltasForResource (unwrap role <> "#binding")
+      pure $ construction <> filling
+    contextRecords <- getContextConstructionHistory provenance.evaluationContext
+    pure $ nubByEq (\(DeltaStoreRecord a) (DeltaStoreRecord b) -> a._id == b._id) (concat roleRecords <> contextRecords)
+  addStoredDeltas users records
+  where
+  fillerChain :: (RoleInstance -> Boolean) -> RoleInstance -> MonadPerspectives (Array RoleInstance)
+  fillerChain stop = go []
+    where
+    go visited role =
+      if elem role visited then pure visited
+      else if stop role then pure (snoc visited role)
+      else binding_ role >>= case _ of
+        Nothing -> pure (snoc visited role)
+        Just filler -> go (snoc visited role) filler
 
 -- | Instrumental for QUERY UPDATES.
 addCorrelationIdentifiersToTransactie :: Array CorrelationIdentifier -> MonadPerspectivesTransaction Unit

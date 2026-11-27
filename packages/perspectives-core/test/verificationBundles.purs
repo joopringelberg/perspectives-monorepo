@@ -27,13 +27,14 @@ import Effect.Class (liftEffect)
 import Effect.Exception as Exception
 import Foreign.Object as Object
 import Perspectives.Authenticate (signDelta)
+import Perspectives.Assignment.Update (shipPropertyDelta)
 import Perspectives.CoreTypes (MonadPerspectivesTransaction)
 import Perspectives.Data.EncodableMap as EM
-import Perspectives.Deltas (addPublicKeysToTransaction)
+import Perspectives.Deltas (addPublicKeysToTransaction, addStoredDeltas, addStoredDeltaForInitialVisibility)
 import Perspectives.InstanceRepresentation (PerspectRol(..))
 import Perspectives.ModelDependencies as DEP
 import Perspectives.Persistence.ResourceVersionStore (resetResourceVersion)
-import Perspectives.Persistence.DeltaStore (storeDeltaFromSignedDelta)
+import Perspectives.Persistence.DeltaStore (getDeltasForResource, storeDeltaFromSignedDelta)
 import Perspectives.Persistent (getPerspectRol)
 import Perspectives.Representation.Class.Cacheable (cacheEntity)
 import Perspectives.Representation.Class.PersistentType (cacheInDomeinFile, getEnumeratedRole)
@@ -50,11 +51,11 @@ import Perspectives.Sync.HandleTransaction (TransactionOutcome(..), executeTrans
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
 import Perspectives.StrippedDelta (stripResourceSchemes)
 import Perspectives.Sync.VersionedDelta (currentMinReaderVersion, currentUniverseEpoch, signVersionedDelta)
-import Perspectives.TypesForDeltas (ContextDelta(..), ContextDeltaType(..), UniverseRoleDelta(..), UniverseRoleDeltaType(..))
+import Perspectives.TypesForDeltas (ContextDelta(..), ContextDeltaType(..), RoleBindingDelta(..), RoleBindingDeltaType(..), RolePropertyDelta(..), RolePropertyDeltaType(..), UniverseRoleDelta(..), UniverseRoleDeltaType(..))
 import Perspectives.Sync.Transaction (PublicKeyInfo, Transaction(..))
 import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..), currentTransactionForPeer, deduplicatePublicKeys, removeUnusedPublicKeys)
 import Perspectives.UnschemedIdentifiers (unschemePerspectivesUser)
-import Simple.JSON (readJSON, unsafeStringify, writeJSON)
+import Simple.JSON (readJSON, unsafeStringify, write, writeJSON)
 import Test.BindingReplacement as Binding
 import Test.Unit (TestSuite, suite, test)
 import Test.Unit.Assert (assert, equal)
@@ -66,6 +67,74 @@ main = runTest theSuite
 
 theSuite :: TestSuite
 theSuite = suite "Verification bundle identities" do
+  for_ [ "stored export", "initial visibility", "forwarding", "checkpoint" ] \mode ->
+    test ("includes signed property authority for " <> mode) $
+      withSigningFixture true \_ -> do
+        lift do
+          PerspectRol actor <- getPerspectRol Binding.userId
+          void $ cacheEntity Binding.userId $ PerspectRol actor { binding = Just Binding.localPeer }
+        filling <- signVersionedDelta $ stripResourceSchemes $ RoleBindingDelta
+          { filled: Binding.userId
+          , filledType: Binding.userType
+          , filler: Just Binding.localPeer
+          , fillerType: Just $ EnumeratedRoleType DEP.perspectivesUsers
+          , oldFiller: Nothing
+          , oldFillerType: Nothing
+          , deltaType: SetFirstBinding
+          , subject: ENR Binding.userType
+          , resourceKey: unwrap Binding.userId <> "#binding"
+          , resourceVersion: 1
+          }
+        signed <- signPropertyWithProvenance Binding.userId
+        outgoing <-
+          if mode /= "checkpoint" then pure signed
+          else do
+            payload <- case readJSON (unwrap signed).encryptedDelta of
+              Left errors -> liftEffect $ Exception.throwException $ Exception.error $ show errors
+              Right object -> pure object
+            signDelta $ writeJSON $
+              Object.insert "historyCheckpoint"
+                (write { beforeValues: ([] :: Array Value), winner: signed })
+                (Object.insert "deltaFormatVersion" (write 3) payload)
+        lift $ for_ [ filling, outgoing ] storeDeltaFromSignedDelta
+        records <- lift $ getDeltasForResource (unwrap Binding.visibleId <> "#" <> unwrap Binding.visibleProperty)
+        AA.modify $ over Transaction \t -> t { deltas = [] }
+        let recipients = [ Binding.newRemotePeer ]
+        case mode of
+          "stored export" -> addStoredDeltas recipients records
+          "initial visibility" -> for_ records $ addStoredDeltaForInitialVisibility recipients
+          "checkpoint" -> for_ records $ addStoredDeltaForInitialVisibility recipients
+          _ -> shipPropertyDelta recipients (Right outgoing)
+        Transaction { deltas } <- AA.get
+        let
+          sent = map (_.delta <<< unwrap) deltas
+          expected =
+            [ outgoing
+            , filling
+            , Binding.contextDelta
+            , Binding.externalLinkDelta
+            , Binding.roleDelta Binding.externalId
+            , Binding.roleDelta Binding.userId
+            , Binding.membershipDelta Binding.userId
+            , Binding.roleDelta Binding.localPeer
+            , Binding.membershipDelta Binding.localPeer
+            , Binding.roleDelta Binding.visibleId
+            , Binding.membershipDelta Binding.visibleId
+            ]
+        liftAff do
+          for_ expected \delta -> assert ("Missing authority record for " <> mode) $ elem delta sent
+          assert "The property delta must retain its signature" $ isJust (unwrap outgoing).signature
+          for_ deltas \(DeltaInTransaction delta) -> equal recipients delta.users
+          assert "Unrelated private roles must not be disclosed" $ not $ elem (Binding.roleDelta Binding.hiddenId) sent
+
+  test "fails stored export explicitly when the signed provenance evidence is missing" $
+    withSigningFixture true \_ -> do
+      signed <- signPropertyWithProvenance (RoleInstance "def:#missing-subject")
+      lift $ storeDeltaFromSignedDelta signed
+      records <- lift $ getDeltasForResource (unwrap Binding.visibleId <> "#" <> unwrap Binding.visibleProperty)
+      result <- try $ addStoredDeltas [ Binding.newRemotePeer ] records
+      liftAff $ assert "Missing subject history must not silently produce an incomplete export" $ isLeft result
+
   test "combines aliases while preserving public lookup, distinct identities and signed evidence" do
     let
       first = Binding.visiblePropertyDelta
@@ -336,6 +405,26 @@ transaction deltas publicKeys = currentTransactionForPeer
 
 signAs :: PerspectivesUser -> MonadPerspectivesTransaction SignedDelta
 signAs = signAsWith identity
+
+signPropertyWithProvenance :: RoleInstance -> MonadPerspectivesTransaction SignedDelta
+signPropertyWithProvenance actor = signVersionedDelta $ stripResourceSchemes $ RolePropertyDelta
+  { id: Binding.visibleId
+  , roleType: Binding.visibleType
+  , property: Binding.visibleProperty
+  , deltaType: SetProperty
+  , values: [ Value "updated" ]
+  , subject: ENR Binding.userType
+  , resourceKey: unwrap Binding.visibleId <> "#" <> unwrap Binding.visibleProperty
+  , resourceVersion: 2
+  , provenance: Just
+      { subjectInstance: actor
+      , subjectInstanceType: Binding.userType
+      , evaluationContext: Binding.contextId
+      , evaluationContextType: Binding.contextType
+      , objectInstance: Binding.visibleId
+      , objectInstanceType: Binding.visibleType
+      }
+  }
 
 -- | Sign the standard property delta after rewriting its JSON text (to construct wire-format variants).
 signAsWith :: (String -> String) -> PerspectivesUser -> MonadPerspectivesTransaction SignedDelta

@@ -41,9 +41,9 @@ import Control.Monad.AvarMonadAsk (get, gets, modify)
 import Control.Monad.Error.Class (catchError, throwError, try)
 import Control.Monad.State (StateT, evalStateT, put, get) as ST
 import Control.Monad.Trans.Class (lift)
-import Data.Array (concat, difference, elem, elemIndex, filter, filterA, foldMap, nub, nubByEq, null, snoc)
+import Data.Array (concat, difference, elemIndex, filter, filterA, foldMap, nub, null, snoc)
 import Data.Array (head) as ARR
-import Data.Either (Either(..), either)
+import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.Maybe (Maybe(..), fromMaybe, isJust, isNothing, maybe)
 import Data.MediaType (MediaType(..))
@@ -62,14 +62,14 @@ import Perspectives.Checking.PropertyProvenance (findPropertyProvenance, verbsFo
 import Perspectives.CollectAffectedContexts (aisInPropertyDelta, usersWithPerspectiveOnRoleInstance)
 import Perspectives.ContextAndRole (addRol_property, changeContext_me, changeContext_preferredUserRoleType, context_pspType, context_rolInContext, deleteRol_property, modifyContext_rolInContext, popContext_state, popRol_state, pushContext_state, pushRol_state, removeRol_property, rol_context, rol_pspType, setRol_property)
 import Perspectives.CoreTypes (class Persistent, InformedAssumption(..), LogLevel(..), LogTopic(..), MonadPerspectives, MonadPerspectivesTransaction, Updater, (###=), (##=), (##>), (##>>))
-import Perspectives.Deltas (addCorrelationIdentifiersToTransactie, addDelta, addStoredDeltas)
+import Perspectives.Deltas (addCorrelationIdentifiersToTransactie, addDelta)
 import Perspectives.DependencyTracking.Array.Trans (runArrayT)
 import Perspectives.DependencyTracking.Dependency (findContextStateRequests, findMeRequests, findPropertyRequests, findRoleRequests, findRoleStateRequests)
 import Perspectives.Error.Boundaries (handlePerspectContextError, handlePerspectRolError)
 import Perspectives.Error.Pretty (humanizePerspectivesWarning)
 import Perspectives.Identifiers (startsWithSegments, typeUri2LocalName_, typeUri2couchdbFilename)
 import Perspectives.InstanceRepresentation (PerspectContext, PerspectRol(..))
-import Perspectives.Instances.ObjectGetters (binding_, contextType, getProperty, roleType, roleType_)
+import Perspectives.Instances.ObjectGetters (contextType, getProperty, roleType, roleType_)
 import Perspectives.Instances.Values (parsePerspectivesFile, writePerspectivesFile)
 import Perspectives.Logging (debugResource, logWhen, traceDelta, warnAuth, warnResource)
 import Perspectives.Persistence.API (toFile)
@@ -89,12 +89,11 @@ import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.StrippedDelta (stripResourceSchemes)
 import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
 import Perspectives.Sync.ConstructionBaseline (selectRoleConstruction)
-import Perspectives.Sync.ConstructionHistory (getContextConstructionHistory, getRoleConstructionHistory)
 import Perspectives.Sync.SignedDelta (SignedDelta)
 import Perspectives.Sync.VersionedDelta (signVersionedDelta)
 import Perspectives.Sync.Transaction (Transaction(..))
 import Perspectives.Types.ObjectGetters (getRoleAspectSpecialisations, hasPerspectiveOnRole, isUnlinked_)
-import Perspectives.TypesForDeltas (ContextDelta(..), ContextDeltaType(..), PropertyProvenance, RolePropertyDelta(..), RolePropertyDeltaType(..))
+import Perspectives.TypesForDeltas (ContextDelta(..), ContextDeltaType(..), RolePropertyDelta(..), RolePropertyDeltaType(..))
 import Perspectives.Warning (PerspectivesWarning(..))
 import Simple.JSON (class WriteForeign)
 
@@ -585,8 +584,7 @@ saveFile r property arrayBuf mimeType fileName = do
 -----------------------------------------------------------
 -- | Add a property delta to the transaction. A delta received from a peer (Right) is forwarded as is.
 -- | A locally created delta (Left) is signed first; if it will be shipped to peers, it carries the
--- | instance-level provenance of the write and is accompanied by the evidence the receiver needs to
--- | check that provenance (delta-ordering.md §6.5, Stage 1).
+-- | instance-level provenance of the write. The shared outgoing-delta path adds its authority bundle.
 shipPropertyDelta :: Array RoleInstance -> Either RolePropertyDelta SignedDelta -> MonadPerspectivesTransaction Unit
 shipPropertyDelta users (Right signedDelta) = addDelta (DeltaInTransaction { users, delta: signedDelta })
 shipPropertyDelta users (Left (RolePropertyDelta r)) = do
@@ -603,33 +601,6 @@ shipPropertyDelta users (Left (RolePropertyDelta r)) = do
       pure mprovenance
   signedDelta <- signVersionedDelta (stripResourceSchemes (RolePropertyDelta r { provenance = provenance }))
   addDelta (DeltaInTransaction { users, delta: signedDelta })
-  for_ provenance (addPropertyAuthorityBundle users r.id)
-
--- | The authority bundle: the construction and filler history of the subject instance's filler chain
--- | (up to the author), of the object instance's filler chain up to the property-bearing instance, and of
--- | the evaluation context. Peer delivery knowledge suppresses what a peer has already been sent.
-addPropertyAuthorityBundle :: Array RoleInstance -> RoleInstance -> PropertyProvenance -> MonadPerspectivesTransaction Unit
-addPropertyAuthorityBundle users storage provenance = do
-  records <- lift do
-    subjectChain <- fillerChain (const false) provenance.subjectInstance
-    objectChain <- fillerChain (_ == storage) provenance.objectInstance
-    roleRecords <- for (nub $ subjectChain <> objectChain) \role -> do
-      construction <- either (const []) identity <$> try (getRoleConstructionHistory role)
-      filling <- getDeltasForResource (unwrap role <> "#binding")
-      pure $ construction <> filling
-    contextRecords <- either (const []) identity <$> try (getContextConstructionHistory provenance.evaluationContext)
-    pure $ nubByEq (\(DeltaStoreRecord a) (DeltaStoreRecord b) -> a._id == b._id) (concat roleRecords <> contextRecords)
-  unless (null records) (addStoredDeltas users records)
-  where
-  fillerChain :: (RoleInstance -> Boolean) -> RoleInstance -> MonadPerspectives (Array RoleInstance)
-  fillerChain stop = go []
-    where
-    go visited role =
-      if elem role visited then pure visited
-      else if stop role then pure (snoc visited role)
-      else binding_ role >>= case _ of
-        Nothing -> pure (snoc visited role)
-        Just filler -> go (snoc visited role) filler
 
 -----------------------------------------------------------
 -- CACHEANDSAVE
