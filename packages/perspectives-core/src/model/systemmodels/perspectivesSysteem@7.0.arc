@@ -40,12 +40,6 @@ domain model://perspectives.domains#System@7.0
         -- Add the perspectives.domains repository as BaseRepository:
         -- bind publicrole pub:https://perspectives.domains/cw_servers_and_repositories/#perspectives_domains$External to BaseRepository in sys:MySystem
 
-  state FirstInstallation = (callExternal util:SystemParameter( "IsFirstInstallation" ) returns Boolean) and (exists sys:MySocialEnvironment)
-    on entry
-      do for sys:PerspectivesSystem$Installer
-        -- SocialEnvironment was created by the PDR in initSystem; just bind it into PerspectivesSystem.
-        bind sys:MySocialEnvironment >> extern to SocialEnvironment in sys:MySystem
-
   -- PDRDEPENDENCY
   aspect user sys:PerspectivesSystem$Installer
 
@@ -646,6 +640,9 @@ domain model://perspectives.domains#System@7.0
         only (CreateAndFill)
       perspective on SocialEnvironment
         only (CreateAndFill, Fill)
+      perspective on ModelsInUse
+        props (ModelToRemove) verbs (SetPropertyValue, Consult)
+
 
     user WWWUser = me
       perspective on User
