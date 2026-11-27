@@ -80,6 +80,10 @@ data LogTopic
 | `RESOURCE`    | Context and role creation |
 | `OTHER`       | Anything that does not fit another topic |
 
+Property-provenance `AUTH` warnings render property and subject role types with
+their readable ARC names via `toReadable`. Resource instance identifiers remain
+unchanged so the affected instance can still be identified.
+
 ### 2.3 `LogConfig`
 
 ```purescript

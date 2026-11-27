@@ -36,7 +36,7 @@ import Effect (Effect)
 import Effect.Aff.Class (liftAff)
 import Foreign.Object as Object
 import Partial.Unsafe (unsafePartial)
-import Perspectives.Checking.Authorization (authorizePropertyDelta, roleHasPerspectiveOnPropertyWithVerb)
+import Perspectives.Checking.Authorization (authorizePropertyDelta, hasInstancePropertyPermission, roleHasPerspectiveOnPropertyWithVerb)
 import Perspectives.Checking.PropertyProvenance (checkPropertyProvenance, findPropertyProvenance, refutedPropertyProvenance)
 import Perspectives.ContextAndRole (defaultRolRecord)
 import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction, (##=))
@@ -360,6 +360,28 @@ theSuite = suite "Instance-aware inherited property authorization" do
       liftAff do
         equal [ Value "updated" ] retried
         equal 1 retriedVersion
+
+  test "instance authorization diagnostics use readable property names and retain instance identifiers" $
+    Binding.withFixture Binding.localPeer [] [] do
+      let readableProperty = EnumeratedPropertyType $ Binding.model <> "$Context$Visible$ReadableValue"
+      lift do
+        EnumeratedProperty property <- getEnumeratedProperty Binding.visibleProperty
+        cacheInDomeinFile Binding.visibleProperty $ EnumeratedProperty property { readableName = readableProperty }
+      result <- lift $ hasInstancePropertyPermission (PerspectivesUser "unknown-author")
+        (ENR Binding.otherUserType)
+        Binding.visibleId
+        Binding.visibleProperty
+        SetPropertyValue
+      case result of
+        Right _ -> liftAff $ assert "An unknown author must not be authorized" false
+        Left message -> liftAff do
+          assert "The AUTH diagnostic must use the readable property name" $
+            contains (Pattern $ unwrap readableProperty) message
+          assert "The stable property name must not appear in the AUTH diagnostic"
+            $ not
+            $ contains (Pattern $ unwrap Binding.visibleProperty <> " ") message
+          assert "The resource instance must remain identifiable" $
+            contains (Pattern $ unwrap Binding.visibleId) message
 
   test "reports both authorization failures and absent author evidence together" $
     Binding.withFixture Binding.localPeer [] [] do

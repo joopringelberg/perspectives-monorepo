@@ -33,10 +33,10 @@ import Data.Monoid.Disj (Disj(..))
 import Data.Newtype (ala, unwrap)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.Checking.PropertyProvenance (checkPropertyProvenance, findWitness, witnessSearchDiagnostics)
-import Perspectives.CoreTypes (MonadPerspectives, (###=), (##>>))
+import Perspectives.CoreTypes (LogLevel(..), LogTopic(..), MonadPerspectives, (###=), (##>>))
 import Perspectives.Error.Pretty (humanizePerspectivesError, renderPerspectivesError)
 import Perspectives.Instances.ObjectGetters (roleType)
-import Perspectives.Logging (warnAuth)
+import Perspectives.Logging (logWhen, warnAuth)
 import Perspectives.Parsing.Arc.Position (ArcPosition)
 import Perspectives.Parsing.Messages (PerspectivesError(..))
 import Perspectives.Representation.Class.Role (adtOfRole, getRole)
@@ -99,10 +99,11 @@ hasInstancePropertyPermission author subject storage property verb = do
     Just _ -> pure $ Right unit
     Nothing -> do
       diagnostics <- witnessSearchDiagnostics author
+      readableProperty <- toReadable property
       let
         message = "Instance property authorization failed for author " <> unwrap author
           <> " writing "
-          <> unwrap property
+          <> unwrap readableProperty
           <> " on "
           <> unwrap storage
           <> ": no author-linked subject role and permitted perspective object could be witnessed resolving to this exact property-bearing instance and property. "
@@ -118,7 +119,9 @@ hasInstancePropertyPermission author subject storage property verb = do
 authorizePropertyDelta :: PerspectivesUser -> RoleType -> RoleInstance -> EnumeratedPropertyType -> Maybe PropertyProvenance -> PropertyVerb -> MonadPerspectives (Either PerspectivesError Boolean)
 authorizePropertyDelta author subject storage property mprovenance verb = case mprovenance of
   Nothing -> do
-    warnAuth $ "Property delta without provenance by " <> unwrap author <> " on " <> unwrap storage <> " for " <> unwrap property <> "; using the type-level check."
+    logWhen Warn AUTH do
+      readableProperty <- toReadable property
+      pure $ "Property delta without provenance by " <> unwrap author <> " on " <> unwrap storage <> " for " <> unwrap readableProperty <> "; using the type-level check."
     roleHasPerspectiveOnPropertyWithVerb author subject storage property verb
   Just provenance -> checkPropertyProvenance author subject storage property verb provenance >>= case _ of
     Right _ -> pure $ Right true

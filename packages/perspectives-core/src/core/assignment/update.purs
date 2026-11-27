@@ -597,7 +597,10 @@ shipPropertyDelta users (Left (RolePropertyDelta r)) = do
         \e -> do
           warnAuth $ "Could not compute property provenance: " <> show e
           pure Nothing
-      when (isNothing mprovenance) $ warnAuth $ "No property provenance found for " <> show r.deltaType <> " of " <> unwrap r.property <> " on " <> unwrap r.id <> " by subject " <> show r.subject <> "; receivers fall back to the type-level check."
+      when (isNothing mprovenance) $ logWhen Warn AUTH do
+        readableProperty <- toReadable r.property
+        readableSubject <- toReadable r.subject
+        pure $ "No property provenance found for " <> show r.deltaType <> " of " <> unwrap readableProperty <> " on " <> unwrap r.id <> " by subject " <> show readableSubject <> "; receivers fall back to the type-level check."
       pure mprovenance
   signedDelta <- signVersionedDelta (stripResourceSchemes (RolePropertyDelta r { provenance = provenance }))
   addDelta (DeltaInTransaction { users, delta: signedDelta })
