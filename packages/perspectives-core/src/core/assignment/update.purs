@@ -73,7 +73,7 @@ import Perspectives.Instances.ObjectGetters (contextType, getProperty, roleType,
 import Perspectives.Instances.Values (parsePerspectivesFile, writePerspectivesFile)
 import Perspectives.Logging (debugResource, infoResource, logWhen, traceDelta, warnAuth, warnResource)
 import Perspectives.Persistence.API (toFile)
-import Perspectives.Persistence.DeltaStore (getDeltasForResourceByDeltaType) 
+import Perspectives.Persistence.DeltaStore (getDeltasForResourceByDeltaType)
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
 import Perspectives.Persistence.PropertyHistoryStore (storeLocalDeltaWithHistory)
 import Perspectives.Persistence.ResourceVersionStore (incrementResourceVersion)
@@ -465,7 +465,7 @@ setProperty rids propertyName mdelta values = do
   setProperty' :: Array RoleInstance -> MonadPerspectivesTransaction Unit
   setProperty' rids' = case ARR.head rids' of
     Nothing -> case ARR.head rids of
-      Just rid -> lift ((show <$> humanizePerspectivesWarning (RoleInstanceAlreadyHasPropertyValue rid propertyName values)) >>= warnResource)
+      Just rid -> lift ((show <$> humanizePerspectivesWarning (RoleInstanceAlreadyHasPropertyValue rid propertyName values)) >>= infoResource)
       Nothing -> pure unit
     Just _ -> do
       subject <- getSubject
