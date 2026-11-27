@@ -23,42 +23,65 @@
 
 module Test.Layer3ScaffoldTests
   ( scaffoldTests
+  , installerBootstrapTests
   ) where
 
 import Prelude
 
 import Data.Array (length, null)
+import Data.Either (Either(..))
+import Data.Foldable (for_)
 import Data.Maybe (Maybe(..))
+import Data.Newtype (unwrap)
 import Data.Time.Duration (Milliseconds(..))
+import Data.Traversable (for)
+import Effect.Aff (Aff)
+import Effect.Class (liftEffect)
+import Perspectives.Cuid2 (cuid2)
+import Perspectives.Checking.PropertyProvenance (findPropertyProvenance)
 import Perspectives.CoreTypes (LogLevel(..), LogTopic(..), (##=))
+import Perspectives.Identifiers (modelUri2ManifestUrl)
+import Perspectives.InstanceRepresentation (PerspectContext(..))
 import Perspectives.Instances.ObjectGetters (binding_, getUnlinkedRoleInstances)
 import Perspectives.Logging (ansiMagenta, ansiRed, infoTest)
 import Perspectives.ModelDependencies (mySocialEnvironment, socialEnvironmentPersons, sysMe)
-import Perspectives.Names (lookupIndexedContext, lookupIndexedRole)
+import Perspectives.ModelDependencies as DEP
+import Perspectives.Names (getMySystem, getUserIdentifier, lookupIndexedContext, lookupIndexedRole)
+import Perspectives.Persistence.DeltaStore (getDeltasForResource)
+import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
 import Perspectives.Persistence.State (getSystemIdentifier)
-import Perspectives.Persistent (tryGetPerspectRol)
-import Perspectives.PerspectivesState (defaultRuntimeOptions, setTopicLogLevel)
-import Perspectives.Representation.TypeIdentifiers (EnumeratedRoleType(..))
+import Perspectives.Persistent (getPerspectContext, tryGetPerspectRol)
+import Perspectives.PerspectivesState (defaultRuntimeOptions, getPerspectivesUser, setTopicLogLevel)
+import Perspectives.Query.UnsafeCompiler (getRoleInstances)
+import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), RoleInstance(..), perspectivesUser2RoleInstance)
+import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType(..), EnumeratedRoleType(..), RoleType(..))
+import Perspectives.Representation.Verbs (PropertyVerb(..))
+import Perspectives.ResourceIdentifiers (createDefaultIdentifier, stripNonPublicIdentifiers)
+import Perspectives.Sync.VersionedDelta (DeltaEnvelope(..), parseIncomingDelta)
+import Perspectives.TypesForDeltas (RolePropertyDelta(..))
+import Partial.Unsafe (unsafePartial)
 import Test.PDRInstance (connectPDRs, noBus, pollUntil, testPouchdbUser, withPDR, withTwoPDRs)
 import Test.PDRInstance.Types (runInPDR)
 import Test.Unit (TestSuite, suite, test, testOnly, testSkip)
-import Test.Unit.Assert (assert)
+import Test.Unit.Assert (assert, equal)
 
 scaffoldTests :: TestSuite
 scaffoldTests = suite "PDRInstance scaffold" do
+  installerBootstrapTests
 
   testSkip "start a single PDR instance and read its system identifier" do
     let user = testPouchdbUser "alice"
     withPDR user defaultRuntimeOptions (Just ansiRed) noBus \pdr -> do
       sysId <- runInPDR pdr getSystemIdentifier
       assert "system identifier should equal alice_macbook" (sysId == "alice_macbook")
-  
+
   test "Start a single PDR instance and count the number of Person instances that are created" do
     let user = testPouchdbUser "alice"
     withPDR user defaultRuntimeOptions (Just ansiRed) noBus \pdr -> do
       runInPDR pdr $ setTopicLogLevel TEST Info
-      instancesOfMe <- pollUntil 100 (Milliseconds 100.0)
-        "Polling for Person instances..." $ do
+      instancesOfMe <-
+        pollUntil 100 (Milliseconds 100.0)
+          "Polling for Person instances..." $ do
           runInPDR pdr $ do
             -- Replace the following line with the actual code to count Person instances
             -- Get the indexed context sys:MySocialEnvironment
@@ -73,7 +96,7 @@ scaffoldTests = suite "PDRInstance scaffold" do
               Nothing -> do
                 infoTest "No MySocialEnvironment found"
                 pure Nothing
-      assert "Person count should be 2 initially (one local and one public)" ( length instancesOfMe == 2)
+      assert "Person count should be 2 initially (one local and one public)" (length instancesOfMe == 2)
 
   testSkip "start two PDR instances with distinct identifiers" do
     withTwoPDRs
@@ -131,3 +154,66 @@ scaffoldTests = suite "PDRInstance scaffold" do
               Just _, Nothing -> assert "Bobs' Person instance should be visible for Alice, too" false
               _, _ -> assert "Both PDRs should have each others' Person instance" false
           _, _ -> assert "Both PDRs should have a `me` instance" false
+
+installerBootstrapTests :: TestSuite
+installerBootstrapTests = suite "Installer bootstrap authority" do
+  test "keeps model-root Installers and witnesses installation writes with the System Installer" do
+    name <- liftEffect $ cuid2 "installer-bootstrap"
+    withPDR (testPouchdbUser name) defaultRuntimeOptions Nothing noBus \pdr -> do
+      system <- ContextInstance <$> runInPDR pdr getMySystem
+      let installerType = ENR $ EnumeratedRoleType DEP.installer
+      installers <- runInPDR pdr (system ##= getRoleInstances installerType)
+      case installers of
+        [ installer ] -> do
+          author <- runInPDR pdr getPerspectivesUser
+          filler <- runInPDR pdr $ binding_ installer
+          equal (Just $ perspectivesUser2RoleInstance author) filler
+          user <- RoleInstance <$> runInPDR pdr getUserIdentifier
+          PerspectContext context <- runInPDR pdr $ getPerspectContext system
+          equal (Just user) context.me
+          let
+            root = ContextInstance $ createDefaultIdentifier $
+              (unsafePartial modelUri2ManifestUrl DEP.systemModelName).manifestName <> "_modelRootContext"
+          modelInstallers <- runInPDR pdr (root ##= getRoleInstances installerType)
+          assert "The model-root Installer must remain separate from the System Installer" $
+            length modelInstallers == 1 && modelInstallers /= installers
+          let
+            assertWitness role property = do
+              witness <- runInPDR pdr $
+                findPropertyProvenance author installerType role property [ SetPropertyValue ]
+              case witness of
+                Nothing -> assert "The System Installer must witness this property write" false
+                Just provenance -> do
+                  equal installer provenance.subjectInstance
+                  equal system provenance.evaluationContext
+          starts <- runInPDR pdr (system ##= getRoleInstances (ENR $ EnumeratedRoleType DEP.startContexts))
+          nameDeltas <- join <$> for starts \start -> do
+            external <- runInPDR pdr $ binding_ start
+            case external of
+              Nothing -> assert "An installed StartContext must have its context filler" false *> pure []
+              Just role -> do
+                assertWitness role (EnumeratedPropertyType DEP.rootName)
+                runInPDR pdr $ getDeltasForResource (unwrap role <> "#" <> DEP.rootName)
+          assert "Initial app names must have property deltas" $ not $ null nameDeltas
+          assertInstallerProvenance system installer nameDeltas
+          models <- runInPDR pdr (system ##= getRoleInstances (ENR $ EnumeratedRoleType DEP.modelsInUse))
+          modelDeltas <- join <$> for models \model -> do
+            assertWitness model (EnumeratedPropertyType DEP.modelToRemove)
+            runInPDR pdr $ getDeltasForResource (unwrap model <> "#" <> DEP.modelToRemove)
+          assert "Installed dependencies must have ModelToRemove deltas" $ not $ null modelDeltas
+          assertInstallerProvenance system installer modelDeltas
+        _ -> assert "A fresh System must contain exactly one Installer" false
+
+assertInstallerProvenance :: ContextInstance -> RoleInstance -> Array DeltaStoreRecord -> Aff Unit
+assertInstallerProvenance system installer records =
+  for_ records \(DeltaStoreRecord record) ->
+    case parseIncomingDelta (unwrap record.signedDelta).encryptedDelta of
+      Left err -> assert ("The stored property delta must decode: " <> err) false
+      Right (RolePropertyEnvelope (RolePropertyDelta delta)) -> do
+        equal (ENR $ EnumeratedRoleType DEP.installer) delta.subject
+        case delta.provenance of
+          Nothing -> pure unit
+          Just provenance -> do
+            equal (stripNonPublicIdentifiers $ unwrap installer) (unwrap provenance.subjectInstance)
+            equal (stripNonPublicIdentifiers $ unwrap system) (unwrap provenance.evaluationContext)
+      Right _ -> assert "The property history must contain property deltas" false

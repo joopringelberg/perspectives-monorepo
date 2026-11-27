@@ -619,6 +619,14 @@ initial instances. Their provenance checks can therefore resolve readable
 subject types against that model without requesting a nested just-in-time load
 under its readable name.
 
+Bootstrap also creates an author-linked `PerspectivesSystem$Installer` in
+`MySystem` before creating the System User. Each model keeps its model-root
+Installer for entry actions; the System Installer supplies the concrete witness
+for their perspectives on `StartContexts` and `ModelsInUse`. The PDR attributes
+`ModelToRemove` initialization to Installer, rather than the outer bootstrap
+transaction's Initializer. Other installed-version metadata retains its existing
+attribution and permissions.
+
 With every shipped property delta the shared outgoing-delta path also adds an
 **authority bundle** (`addPropertyAuthorityBundle` in `Perspectives.Deltas`) to
 the transaction for the same peers. This applies to newly created writes,

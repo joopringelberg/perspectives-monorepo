@@ -59,7 +59,7 @@ import LRUCache (rvalues)
 import Partial.Unsafe (unsafePartial)
 import Perspectives.ApiTypes (ContextSerialization(..), PropertySerialization(..), RolSerialization(..))
 import Perspectives.Assignment.StateCache (clearModelStates)
-import Perspectives.Assignment.Update (withAuthoringRole)
+import Perspectives.Assignment.Update (setProperty, withAuthoringRole)
 import Perspectives.Authenticate (getMyPublicKey, getMyTransportPublicKey)
 import Perspectives.ContextAndRole (changeRol_isMe, context_id, rol_binding, rol_context, rol_id, rol_pspType)
 import Perspectives.CoreTypes (type (~~>), ArrayWithoutDoubles(..), InformedAssumption(..), MonadPerspectives, MonadPerspectivesTransaction, mkLibEffect1, mkLibEffect2, mkLibEffect3, mkLibFunc2, (##=), (##>), (##>>))
@@ -527,19 +527,21 @@ createInitialInstances unversionedModelname versionedModelName patch build versi
     -- Create a role instance filled with the VersionedModelManifest.
     -- Add the versionedModelName as the value of the property ModelToRemove.
     -- Set the property InstalledPatch.
-    void $ createAndAddRoleInstance (EnumeratedRoleType DEP.modelsInUse) mySystem
+    mModelInUse <- createAndAddRoleInstance (EnumeratedRoleType DEP.modelsInUse) mySystem
       ( RolSerialization
           { id: Nothing
           , properties: PropertySerialization
               ( fromFoldable
-                  [ Tuple DEP.modelToRemove [ versionedModelName ]
-                  , Tuple DEP.installedPatch [ patch ]
+                  [ Tuple DEP.installedPatch [ patch ]
                   , Tuple DEP.installedBuild [ build ]
                   ]
               )
           , binding: unwrap <$> versionedModelManifest
           }
       )
+    for_ mModelInUse \modelInUse ->
+      withAuthoringRole (ENR $ EnumeratedRoleType DEP.installer) $
+        setProperty [ modelInUse ] (EnumeratedPropertyType DEP.modelToRemove) Nothing [ Value versionedModelName ]
 
 createVersionedModelManifestDependency :: ContextInstance -> ModelDependency -> MonadPerspectivesTransaction Unit
 createVersionedModelManifestDependency manifestContext dependency =
@@ -835,9 +837,21 @@ initSystem = do
           Nothing -> pure unit
       Nothing -> pure unit
 
+  sysId <- lift getMySystem
+  author <- lift getPerspectivesUser
+  -- Model-root Installers trigger entry actions; this one witnesses their System perspectives.
+  withAuthoringRole (ENR $ EnumeratedRoleType DEP.installer)
+    $ void
+    $ createAndAddRoleInstance (EnumeratedRoleType DEP.installer) sysId
+        ( RolSerialization
+            { id: Nothing
+            , properties: PropertySerialization empty
+            , binding: Just $ unwrap author
+            }
+        )
+
   -- Now add the System User role instance.
   withAuthoringRole (ENR $ EnumeratedRoleType DEP.sysUser) createSystemUser
-  sysId <- lift getMySystem
 
   -- Finally add the base repository to system:
   void $ createAndAddRoleInstance (EnumeratedRoleType DEP.baseRepository) sysId
