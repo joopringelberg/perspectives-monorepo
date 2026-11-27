@@ -71,15 +71,15 @@ import Perspectives.Identifiers (startsWithSegments, typeUri2LocalName_, typeUri
 import Perspectives.InstanceRepresentation (PerspectContext, PerspectRol(..))
 import Perspectives.Instances.ObjectGetters (contextType, getProperty, roleType, roleType_)
 import Perspectives.Instances.Values (parsePerspectivesFile, writePerspectivesFile)
-import Perspectives.Logging (debugResource, logWhen, traceDelta, warnAuth, warnResource)
+import Perspectives.Logging (debugResource, infoResource, logWhen, traceDelta, warnAuth, warnResource)
 import Perspectives.Persistence.API (toFile)
-import Perspectives.PerspectivesState (getPerspectivesUser)
-import Perspectives.Persistence.DeltaStore (getDeltasForResource, getDeltasForResourceByDeltaType)
+import Perspectives.Persistence.DeltaStore (getDeltasForResourceByDeltaType) 
 import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
 import Perspectives.Persistence.PropertyHistoryStore (storeLocalDeltaWithHistory)
 import Perspectives.Persistence.ResourceVersionStore (incrementResourceVersion)
 import Perspectives.Persistent (addAttachment, getPerspectContext, getPerspectRol, saveEntiteit_)
 import Perspectives.Persistent (saveEntiteit) as Instances
+import Perspectives.PerspectivesState (getPerspectivesUser)
 import Perspectives.Query.UnsafeCompiler (getPropertyFromTelescope)
 import Perspectives.Representation.Class.Cacheable (EnumeratedPropertyType, EnumeratedRoleType(..), cacheEntity)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance, Value(..))
@@ -87,11 +87,11 @@ import Perspectives.Representation.TypeIdentifiers (RoleType, StateIdentifier(..
 import Perspectives.ResourceIdentifiers (databaseLocation, resourceIdentifier2DocLocator)
 import Perspectives.Sidecar.ToReadable (toReadable)
 import Perspectives.StrippedDelta (stripResourceSchemes)
-import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
 import Perspectives.Sync.ConstructionBaseline (selectRoleConstruction)
+import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
 import Perspectives.Sync.SignedDelta (SignedDelta)
-import Perspectives.Sync.VersionedDelta (signVersionedDelta)
 import Perspectives.Sync.Transaction (Transaction(..))
+import Perspectives.Sync.VersionedDelta (signVersionedDelta)
 import Perspectives.Types.ObjectGetters (getRoleAspectSpecialisations, hasPerspectiveOnRole, isUnlinked_)
 import Perspectives.TypesForDeltas (ContextDelta(..), ContextDeltaType(..), RolePropertyDelta(..), RolePropertyDeltaType(..))
 import Perspectives.Warning (PerspectivesWarning(..))
@@ -474,7 +474,7 @@ setProperty rids propertyName mdelta values = do
         case mrid of
           Nothing -> do
             readablePropertyName <- lift $ toReadable propertyName
-            lift $ warnResource ("setProperty: property " <> unwrap readablePropertyName <> " not found on role instance " <> unwrap rid')
+            lift $ infoResource ("setProperty: property " <> unwrap readablePropertyName <> " not found on role instance " <> unwrap rid')
             pure unit
           Just (RoleProp rid replacementProperty) -> (lift $ try $ getPerspectRol rid) >>=
             handlePerspectRolError
