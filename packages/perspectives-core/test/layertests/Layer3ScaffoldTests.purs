@@ -73,7 +73,7 @@ scaffoldTests = suite "PDRInstance scaffold" do
               Nothing -> do
                 infoTest "No MySocialEnvironment found"
                 pure Nothing
-      assert "Person count should be 1 initially" ( length instancesOfMe == 1)
+      assert "Person count should be 2 initially (one local and one public)" ( length instancesOfMe == 2)
 
   testSkip "start two PDR instances with distinct identifiers" do
     withTwoPDRs
