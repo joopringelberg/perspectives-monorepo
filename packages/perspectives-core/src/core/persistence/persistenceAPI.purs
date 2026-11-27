@@ -186,50 +186,45 @@ withDatabase
    . DatabaseName
   -> (PouchdbDatabase -> MonadPouchdb f a)
   -> MonadPouchdb f a
-withDatabase dbName fun = do
+withDatabase dbName fun = withDatabaseConnector dbName \db -> do
+  ensureDatabaseExists dbName
+  fun db
+
+-- | Open a connector under authentication without creating a remote database.
+withDatabaseConnector
+  :: forall f a
+   . DatabaseName
+  -> (PouchdbDatabase -> MonadPouchdb f a)
+  -> MonadPouchdb f a
+withDatabaseConnector dbName fun = do
   if startsWithDatabaseEndpoint dbName then ensureAuthentication (Url dbName)
     ( \_ -> do
-        db <- ensureDatabase
+        db <- connector
         fun db
     )
   else do
     mprefix <- getCouchdbBaseURL
     case mprefix of
       Nothing -> do
-        db <- ensureDatabase
+        db <- connector
         fun db
       Just prefix -> ensureAuthentication (Authority prefix)
         ( \_ -> do
-            db <- ensureDatabase
+            db <- connector
             fun db
         )
 
   where
 
-  -- | Creates the database if it does not exist.
-  -- | Makes a default request, so databases are actually created remotely and authentication is triggered.
-  -- Only used in withDatabase.
-  ensureDatabase :: MonadPouchdb f PouchdbDatabase
-  ensureDatabase = do
+  connector :: MonadPouchdb f PouchdbDatabase
+  connector = do
     mdb <- gets \{ databases } -> lookup dbName databases
     case mdb of
       Nothing -> do
-        -- Always create a connector first (no auth, no network guarantee).
         createDatabaseConnector dbName
-        -- If this is a remote endpoint, ensure it actually exists under authentication.
-        if startsWithDatabaseEndpoint dbName then
-          ensureAuthentication (Url dbName) (\_ -> ensureDatabaseExists dbName)
-        else do
-          mprefix <- getCouchdbBaseURL
-          case mprefix of
-            Nothing -> pure unit
-            Just prefix -> ensureAuthentication (Authority prefix) (\_ -> ensureDatabaseExists dbName)
         db <- gets \{ databases } -> unsafePartial $ fromJust $ lookup dbName databases
         pure db
-      Just db -> do
-        -- Another connector may have deleted this database since it was cached.
-        ensureDatabaseExists dbName
-        pure db
+      Just db -> pure db
 
 -- | Ensure that a remote database exists. For local/IndexedDB, this is a no-op.
 ensureDatabaseExists :: forall f. DatabaseName -> MonadPouchdb f Unit
@@ -702,14 +697,9 @@ foreign import addAttachmentImpl
 -- GETATTACHMENT
 -----------------------------------------------------------
 getAttachment :: forall f. DatabaseName -> DocumentName -> AttachmentName -> MonadPouchdb f (Maybe Foreign)
-getAttachment dbName docName attachmentName = withDatabase dbName
+getAttachment dbName docName attachmentName = withDatabaseConnector dbName
   \db -> catchError
     (liftAff $ Just <$> (fromEffectFnAff $ runEffectFnAff3 getAttachmentImpl db docName attachmentName))
-    -- do
-    -- f <- liftAff $ fromEffectFnAff $ runEffectFnAff3 getAttachmentImpl db docName attachmentName
-    -- case runExcept $ decode f of
-    --   Left e -> throwError $ error ("addAttachment : error in decoding result: " <> show e)
-    --   Right d -> pure $ Just d
     (handleNotFound "getAttachment" docName)
 
 foreign import getAttachmentImpl

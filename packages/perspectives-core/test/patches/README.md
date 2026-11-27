@@ -78,6 +78,11 @@ All eight are explicitly listed in `extraModels`.
 
 RebootUniverse@2.0 and RepositoryTools@1.0 are commented out in the builder and
 are compiled separately during reboot from `src/model/testmodels`.
+Their optional repository-side stable-ID mapping lookups are read-only: an
+absent database or attachment means no repository mapping, not a request to
+create a database. This allows compilation after a previous reboot run's
+cleanup removed the repositories. Authentication failures still propagate;
+they are not treated as missing mappings.
 TestModelDependencies@1.0 is also
 commented out. BrokerServiceSignupTests@1.0 changed after the baseline but is
 not installed by this builder or present in the existing snapshot, so it is

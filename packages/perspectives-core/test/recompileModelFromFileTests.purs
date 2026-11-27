@@ -9,7 +9,7 @@ import Prelude
 import Control.Promise (Promise, toAffE)
 import Data.Either (Either(..))
 import Data.Array (length)
-import Data.Maybe (Maybe(..), isJust)
+import Data.Maybe (Maybe(..), isJust, isNothing)
 import Effect (Effect)
 import Effect.Aff (Aff, attempt, bracket)
 import Effect.Class (liftEffect)
@@ -17,6 +17,9 @@ import Foreign (Foreign)
 import Foreign.Object (Object, fromFoldable, lookup, keys)
 import Data.Tuple (Tuple(..))
 import Perspectives.DomeinFile (DomeinFile(..), defaultDomeinFileRecord)
+import Perspectives.Persistence.API (getAttachment)
+import Perspectives.Persistence.Types (runMonadPouchdb)
+import Perspectives.Representation.InstanceIdentifiers (PerspectivesUser(..))
 import Perspectives.Sidecar.StableIdMapping (ModelUri(..), emptyStableIdMapping)
 import Simple.JSON (readJSON, write, writeJSON)
 import Test.Unit (suite, test)
@@ -130,6 +133,22 @@ main = runTest $ suite "Local model repository recompilation" do
     withRepositoryMock 404 \mock -> do
       result <- attempt $ probeRepository Nothing mock.url
       assert "Missing repository must fail" $ case result of
+        Left _ -> true
+        Right _ -> false
+      calls <- liftEffect mock.requests
+      equal [ "GET" ] $ _.method <$> calls
+  test "Optional sidecar lookup in a missing repository does not create the database" do
+    withRepositoryMock 404 \mock -> do
+      attachment <- runMonadPouchdb "test-user" "test-password" (PerspectivesUser "test-user") "test-system" Nothing $
+        getAttachment mock.url "model.json" "stableIdMapping.json"
+      assert "Missing database must mean no optional sidecar" $ isNothing attachment
+      calls <- liftEffect mock.requests
+      equal [ "GET" ] $ _.method <$> calls
+  test "Optional sidecar lookup propagates authentication failures without creating the database" do
+    withRepositoryMock 401 \mock -> do
+      result <- attempt $ runMonadPouchdb "test-user" "test-password" (PerspectivesUser "test-user") "test-system" Nothing $
+        getAttachment mock.url "model.json" "stableIdMapping.json"
+      assert "Unauthorized access must not be treated as a missing sidecar" $ case result of
         Left _ -> true
         Right _ -> false
       calls <- liftEffect mock.requests
