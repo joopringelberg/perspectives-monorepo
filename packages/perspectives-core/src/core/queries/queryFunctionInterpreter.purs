@@ -357,7 +357,7 @@ interpretBQDOtherFunctions (BQD _ (BinaryCombinator fun) f1 f2 ran _ _) a = case
     fr2 <- runArrayT (interpret f2 a)
     case head fr1, head fr2 of
       Just fr1h, Just fr2h -> do
-        result <- compareRangeValues (range f1) g (unwrap $ dependencyToValue fr1h.head) (unwrap $ dependencyToValue fr2h.head)
+        result <- compareRangeValues (range f1) g (toString fr1h) (toString fr2h)
         pure
           [ { head: V "" (bool2Value result)
             , mainPath: Nothing

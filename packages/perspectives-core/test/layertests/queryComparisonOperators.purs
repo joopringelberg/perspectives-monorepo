@@ -14,13 +14,15 @@ import Effect (Effect)
 import Perspectives.DependencyTracking.Array.Trans (runArrayT)
 import Perspectives.Query.Interpreter (interpret, toString)
 import Perspectives.Query.Interpreter.Dependencies (Dependency(..), singletonPath)
-import Perspectives.Query.QueryTypes (Domain(..), QueryFunctionDescription(..))
+import Perspectives.Query.QueryTypes (Domain(..), QueryFunctionDescription(..), RoleInContext(..))
 import Perspectives.Query.UnsafeCompiler (compareRangeValues, compileFunction, compileSequenceFunction)
+import Perspectives.Representation.ADT (ADT(..))
 import Perspectives.Representation.InstanceIdentifiers (Value(..))
 import Perspectives.Representation.QueryFunction (FunctionName(..), QueryFunction(..))
 import Perspectives.Representation.Range (Duration_(..), Range(..))
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
 import Test.Perspectives.Utils (runP)
+import Test.BindingReplacement as Binding
 import Test.Unit (TestF, suite, suiteOnly, test)
 import Test.Unit.Assert (assert, equal)
 import Test.Unit.Main (runTest)
@@ -30,6 +32,24 @@ main = runTest theSuite
 
 theSuite :: Free TestF Unit
 theSuite = suite "Query comparison operators" do
+  for_
+    [ { name: "role", domain: RDOM $ ST $ RoleInContext { context: Binding.contextType, role: Binding.visibleType }, source: R Binding.visibleId }
+    , { name: "context", domain: CDOM $ ST Binding.contextType, source: C Binding.contextId }
+    ]
+    \{ name, domain, source } ->
+      for_ [ EqualsF, NotEqualsF ] \operator ->
+        test ("interpreted " <> name <> " identity comparison: " <> show operator) do
+          result <- runP do
+            let
+              operand = SQD domain (DataTypeGetter IdentityF) domain True True
+              query = BQD domain (BinaryCombinator operator) operand operand (VDOM PBool Nothing) True True
+            compiled <- compileFunction query
+            actual <- fst <$> runWriterT (runArrayT $ compiled (toString $ singletonPath source))
+            paths <- fst <$> runWriterT (runArrayT $ interpret query (singletonPath source))
+            pure { actual, interpreted: toString <$> paths }
+          equal [ if operator == EqualsF then "true" else "false" ] result.actual
+          equal result.actual result.interpreted
+
   for_
     [ { name: "overlap", left: [ "a", "b", "c" ], right: [ "b", "d" ], expected: [ "a", "c" ] }
     , { name: "reversed operands", left: [ "b", "d" ], right: [ "a", "b", "c" ], expected: [ "d" ] }
