@@ -517,6 +517,12 @@ for a concrete witness:
    storage instance and property must match the incoming operation. This also
    respects aspect-property replacements and properties shadowing a filler.
 
+For calculated subjects, context compatibility uses the context where the role
+is declared, not the contexts of its query results. For example, `WWWUser = me`
+in `PerspectivesSystem` may select a Person from `SocialEnvironment`, while its
+perspective on `User` is evaluated in `PerspectivesSystem`. Both witness search
+and provenance refutation use this declaring context.
+
 This permits a write through, for example, `Participant -> Persons ->
 NonPerspectivesUsers` even when `Persons` admits several alternative filler
 types. It does not weaken `isPerspectiveOnRoleFilledWithRoleType` from type
@@ -606,6 +612,12 @@ instance. The sender computes it with `findPropertyProvenance`
 same witness search the receiver uses (`findWitness`). When no witness is found
 (for example a property set by `sys:Me` or on an own role), the delta is sent
 without provenance and an `AUTH` warning is logged.
+
+During model installation, the readable-to-stable model URI mapping is
+registered as soon as the normalized DomeinFile is cached, before creating
+initial instances. Their provenance checks can therefore resolve readable
+subject types against that model without requesting a nested just-in-time load
+under its readable name.
 
 With every shipped property delta the shared outgoing-delta path also adds an
 **authority bundle** (`addPropertyAuthorityBundle` in `Perspectives.Deltas`) to

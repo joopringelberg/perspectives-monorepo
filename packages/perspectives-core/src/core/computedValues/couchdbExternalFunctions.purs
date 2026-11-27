@@ -434,6 +434,8 @@ installModelLocally (Tuple dfrecord@{ id, namespace, referredModels, invertedQue
   -- Save it with the revision of the local version that we have, if any (do not use the repository version).
   { documentName: unversionedDocumentName } <- lift $ resourceIdentifier2WriteDocLocator unversionedModelname
   lift $ void $ cacheEntity id (DomeinFile dfrecord { _rev = Nothing, _id = unversionedDocumentName, _attachments = Nothing })
+  -- Initial-instance provenance may look up readable types in this cached model.
+  lift $ setModelUri namespace id
   -- saveCachedDomeinFile takes care of revisions.
   void $ lift $ saveCachedDomeinFile id
 
@@ -471,8 +473,6 @@ installModelLocally (Tuple dfrecord@{ id, namespace, referredModels, invertedQue
   lift $ forceSaveDomeinFile id
   (DomeinFile { _rev }) <- lift $ getDomeinFile id
   void $ lift $ execStateT (addAttachments dbName unversionedDocumentName attachmentFiles) _rev
-  -- Add an entry to the map of Readable to Stable model URIs.
-  lift $ setModelUri namespace id
   -- Now uncache the DomeinFile, as it no longer holds the right revision, neither has the attachments.
   lift $ decache id
   lift $ for_ (values dfrecord.enumeratedRoles) \(EnumeratedRole role) ->

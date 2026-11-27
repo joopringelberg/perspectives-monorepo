@@ -15,6 +15,8 @@ For a received property change, type-level permission is established when a pers
 
 When the declared types alone cannot establish permission for a received property change, the runtime checks the original signed author's concrete subject role, the perspective's selected object instances, and the exact property-bearing instance reached by the write. In this fallback, a compatible type or an unrelated instance is not sufficient; perspective filters and property replacements are checked. Historical changes are checked against permissions declared in any state, rather than requiring the editing state to remain active when the change arrives.
 
+For a calculated user role, the subject and perspective queries are evaluated in the context where that role is declared, even when the subject query returns a role from another context. For example, `WWWUser = me` declared in `PerspectivesSystem` can select a Person from `SocialEnvironment`, while its perspective on `User` is evaluated in `PerspectivesSystem`. Property provenance records that evaluation context; the selected Person's containing context does not replace it.
+
 [[perspectives-aspects]]
 === Perspectives inherited from aspects
 

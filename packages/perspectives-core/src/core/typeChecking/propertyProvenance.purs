@@ -62,7 +62,7 @@ import Perspectives.PerspectivesState (addBinding, withFrame)
 import Perspectives.Persistent (entityExists)
 import Perspectives.Query.UnsafeCompiler (compileFunction, getRoleInstances, withQueryAuthor)
 import Perspectives.Representation.ADT (ADT(..))
-import Perspectives.Representation.Class.Role (contextOfRoleType)
+import Perspectives.Representation.Class.Role (contextOfRepresentationOfRole)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, PerspectivesUser(..), RoleInstance(..), perspectivesUser2RoleInstance, roleInstance2PerspectivesUser)
 import Perspectives.Representation.Perspective (Perspective(..))
 import Perspectives.Representation.TypeIdentifiers (EnumeratedPropertyType, PropertyType(..), RoleType)
@@ -120,7 +120,7 @@ searchWitness
   -> (Witness -> Boolean)
   -> MonadPerspectives (Maybe Witness)
 searchWitness queryAuthor subject storage property verb contexts isAuthorRole acceptWitness = do
-  subjectContexts <- contextOfRoleType subject
+  subjectContexts <- contextOfRepresentationOfRole subject
   compatibleContexts <- filterA
     ( \ctx -> (try $ contextType_ ctx) >>= case _ of
         Left _ -> pure false
@@ -260,7 +260,7 @@ checkPropertyProvenance author subject storage property verb prov = do
 -- | by its own provenance.
 refutedPropertyProvenance :: RoleType -> PropertyProvenance -> MonadPerspectives Boolean
 refutedPropertyProvenance subject prov = do
-  subjectContexts <- contextOfRoleType subject
+  subjectContexts <- contextOfRepresentationOfRole subject
   not <$> equalsOrGeneralisesContextADT subjectContexts (ST prov.evaluationContextType)
 
 -- Returns true iff the object's filler chain contains the storage instance for the given property.

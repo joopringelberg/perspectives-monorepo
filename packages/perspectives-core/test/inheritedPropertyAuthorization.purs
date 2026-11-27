@@ -38,7 +38,7 @@ import Foreign.Object as Object
 import Partial.Unsafe (unsafePartial)
 import Perspectives.Checking.Authorization (authorizePropertyDelta, hasInstancePropertyPermission, roleHasPerspectiveOnPropertyWithVerb)
 import Perspectives.Checking.PropertyProvenance (checkPropertyProvenance, findPropertyProvenance, refutedPropertyProvenance)
-import Perspectives.ContextAndRole (defaultRolRecord)
+import Perspectives.ContextAndRole (defaultContextRecord, defaultRolRecord)
 import Perspectives.CoreTypes (MonadPerspectives, MonadPerspectivesTransaction, (##=))
 import Perspectives.Error.Pretty (renderPerspectivesError)
 import Perspectives.Data.EncodableMap as EM
@@ -54,7 +54,7 @@ import Perspectives.Persistent (getPerspectContext, getPerspectRol)
 import Perspectives.PerspectivesState (getPerspectivesUser)
 import Perspectives.Parsing.Messages (PerspectivesError)
 import Perspectives.Representation.QueryFunction (FunctionName(ComposeF, MeF), QueryFunction(BinaryCombinator, Constant, DataTypeGetter, FilterF, RolGetter))
-import Perspectives.Query.QueryTypes (Domain(..), QueryFunctionDescription(..), RoleInContext(..), range)
+import Perspectives.Query.QueryTypes (Calculation(..), Domain(..), QueryFunctionDescription(..), RoleInContext(..), range)
 import Perspectives.Query.UnsafeCompiler (compileFunction, withQueryAuthor)
 import Perspectives.Representation.ADT (ADT(..))
 import Perspectives.Representation.Class.Cacheable (cacheEntity)
@@ -65,7 +65,7 @@ import Perspectives.Representation.Context (Context(..))
 import Perspectives.Representation.EnumeratedRole (EnumeratedRole(..))
 import Perspectives.Representation.EnumeratedProperty (EnumeratedProperty(..))
 import Perspectives.Representation.ExplicitSet (ExplicitSet(..))
-import Perspectives.Representation.InstanceIdentifiers (PerspectivesUser(..), RoleInstance(..), Value(..), perspectivesUser2RoleInstance)
+import Perspectives.Representation.InstanceIdentifiers (ContextInstance(..), PerspectivesUser(..), RoleInstance(..), Value(..), perspectivesUser2RoleInstance)
 import Perspectives.Representation.Perspective (Perspective(..), PropertyVerbs(..), StateSpec(..))
 import Perspectives.Representation.Range (Range(..))
 import Perspectives.Representation.ThreeValuedLogic (ThreeValuedLogic(..))
@@ -273,6 +273,57 @@ theSuite = suite "Instance-aware inherited property authorization" do
         assert "This fixture must use distinct author and receiver identities" $ author /= receiver
         equal [ unwrap authorPerson ] relative
         equal [ unwrap receiverPerson ] local
+
+  test "witnesses a calculated subject in its declaring context, not its result's context" $
+    Binding.withFixture Binding.localPeer [] [] do
+      let
+        actor = RoleInstance "def:#cross-context-person"
+        actorContext = ContextInstance "def:#cross-context-social-environment"
+        actorContextType = ContextType DEP.socialEnvironment
+        actorType = EnumeratedRoleType DEP.socialEnvironmentPersons
+        subject = CR Binding.calculatedUserType
+      lift do
+        installInheritance
+        Context context <- getContext Binding.contextType
+        cacheInDomeinFile actorContextType $ Context context
+          { id = actorContextType
+          , readableName = actorContextType
+          , contextAspects = []
+          , gebruikerRol = [ ENR actorType ]
+          }
+        EnumeratedRole role <- getEnumeratedRole Binding.userType
+        cacheInDomeinFile actorType $ EnumeratedRole role
+          { id = actorType, readableName = actorType, context = actorContextType, perspectives = [] }
+        void $ cacheEntity actorContext $ PerspectContext defaultContextRecord
+          { id = actorContext
+          , pspType = actorContextType
+          , rolInContext = Object.singleton (unwrap actorType) [ actor ]
+          }
+        void $ cacheEntity actor $ PerspectRol defaultRolRecord
+          { id = actor, pspType = actorType, context = actorContext, binding = Just Binding.localPeer }
+        fillerPointsTo Binding.localPeer actor
+        CalculatedRole calculated <- getCalculatedRole Binding.calculatedUserType
+        cacheInDomeinFile Binding.calculatedUserType $ CalculatedRole calculated
+          { perspectives = role.perspectives
+          , calculation = Q $ SQD (CDOM $ ST Binding.contextType) (DataTypeGetter MeF)
+              (RDOM $ ST $ RoleInContext { context: actorContextType, role: actorType })
+              False
+              False
+          }
+      mprov <- lift $ findPropertyProvenance Verification.localAuthor subject Binding.visibleId Binding.visibleProperty [ SetPropertyValue ]
+      case mprov of
+        Nothing -> liftAff $ assert "A calculated subject may return an actor from another context" false
+        Just prov -> do
+          checked <- lift $ checkPropertyProvenance Verification.localAuthor subject Binding.visibleId Binding.visibleProperty SetPropertyValue prov
+          refuted <- lift $ refutedPropertyProvenance subject prov
+          wrongContext <- lift $ refutedPropertyProvenance subject prov { evaluationContextType = actorContextType }
+          liftAff do
+            equal actor prov.subjectInstance
+            equal Binding.contextId prov.evaluationContext
+            equal Binding.hiddenId prov.objectInstance
+            assert "The receiver must confirm the cross-context witness" $ checked == Right unit
+            assert "The declaring context must not refute the witness" $ not refuted
+            assert "The actor's context cannot replace the declaring evaluation context" wrongContext
 
   test "a subject that cannot write any property is quarantined, not retried" $
     Verification.withSigningFixture true \key -> do
