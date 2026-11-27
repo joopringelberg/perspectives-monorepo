@@ -154,6 +154,44 @@ selectContextConstruction baseline history =
         && unschemePerspectivesUser (unwrap signed).author == unschemePerspectivesUser (unwrap baseline.construction).author
     _ -> false
 
+-- | Bootstrap containers have equivalent, independent constructions at each installation.
+-- | Select one complete compatible triple for publication, not a lifecycle winner.
+selectBootstrapContextConstruction
+  :: ContextInstance
+  -> RoleInstance
+  -> EnumeratedRoleType
+  -> Array SignedDelta
+  -> Array SignedDelta
+  -> Either String (Maybe (Array SignedDelta))
+selectBootstrapContextConstruction context external roleType contextHistory roleHistory = do
+  candidates <- traverse
+    ( \construction -> traverse
+        ( \membership -> do
+            selected <- selectRoleBaseline external roleType context [ construction, membership ]
+            case selected of
+              Nothing -> pure Nothing
+              Just baseline -> do
+                constructor <- selectContextConstruction baseline contextHistory
+                pure $ constructor <#> \signed -> [ signed, baseline.construction, baseline.membership ]
+        )
+        memberships
+    )
+    constructions
+  pure $ head $ sortBy compare (catMaybes $ join candidates)
+  where
+  constructions = filter
+    ( \signed -> case parseIncomingDelta (unwrap signed).encryptedDelta of
+        Right (UniverseRoleEnvelope (UniverseRoleDelta { deltaType: ConstructExternalRole })) -> true
+        _ -> false
+    )
+    roleHistory
+  memberships = filter
+    ( \signed -> case parseIncomingDelta (unwrap signed).encryptedDelta of
+        Right (ContextEnvelope (ContextDelta { deltaType: AddExternalRole })) -> true
+        _ -> false
+    )
+    roleHistory
+
 inferConstructionBaselines :: Array SignedDelta -> Either String (Array ConstructionBaseline)
 inferConstructionBaselines history = do
   let

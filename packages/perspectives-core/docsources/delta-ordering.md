@@ -792,6 +792,18 @@ dependency serialisation, first-binding filler disclosure,
 perspective-assumption disclosure, calculated-user initialisation and author
 verification bundles. Callers keep their own recipient and delivery policies.
 
+Private `TheWorld` and `TheSocialEnvironment` are bootstrap containers, not
+ordinary recreated contexts: independent installations contribute equivalent
+construction scaffolding under the same identifiers. For these containers,
+history collection deterministically selects one complete compatible context
+constructor, external-role constructor and external membership, using the same
+type, author, subject and causal compatibility checks. It fails explicitly if
+no complete compatible triple exists; ordinary lifecycle ambiguity checks are
+unchanged. This scaffolding is needed to construct public copies in an empty
+database. Only peer delivery and identity exports remove it with
+`withoutPredefinedContextScaffolding`, because private peer receivers already
+have their own containers. Public-destination transactions retain it.
+
 On reception, construction permissions are validated before a stamped, complete
 baseline's membership version becomes the gap-check floor **for that role key
 only**. A missing context additionally requires its external baseline and a

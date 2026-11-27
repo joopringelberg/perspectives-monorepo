@@ -12,7 +12,7 @@ import Control.Monad.AvarMonadAsk as AA
 import Control.Monad.Error.Class (throwError, try)
 import Control.Monad.Reader (runReaderT)
 import Control.Monad.Trans.Class (lift)
-import Data.Array (any, elem, find, head, length, mapMaybe, null, sort, (..))
+import Data.Array (any, elem, find, head, length, mapMaybe, null, reverse, sort, (..))
 import Data.List.NonEmpty as NonEmptyList
 import Data.Either (Either(..), isLeft)
 import Data.Foldable (for_)
@@ -81,7 +81,8 @@ import Perspectives.ScheduledAssignment (ScheduledAssignment(..))
 import Perspectives.SideCar.PhantomTypedNewtypes (ModelUri(..))
 import Perspectives.StrippedDelta (stripResourceSchemes)
 import Perspectives.Sync.Causal (CausalStamp, Clock, currentCausalEpoch, readCausalStamp, validateCausalDelta)
-import Perspectives.Sync.ConstructionBaseline (sameResource, selectRoleBaseline)
+import Perspectives.Sync.ConstructionBaseline (sameResource, selectBootstrapContextConstruction, selectRoleBaseline)
+import Perspectives.Sync.ConstructionHistory (getRoleConstructionHistory)
 import Perspectives.Query.Interpreter.Dependencies (Dependency(..))
 import Perspectives.Sync.DeltaInTransaction (DeltaInTransaction(..))
 import Perspectives.Sync.HandleTransaction (Delta(..), TransactionOutcome(..), executeDeltas, executeTransaction, executeTransactionWithOutcome, executeUniverseRoleDelta)
@@ -89,7 +90,7 @@ import Perspectives.Sync.PropertyHistory (conflictPrecedence)
 import Perspectives.Sync.PendingTransactions (DrainMode(..), drainPendingTransactions, settleIncomingTransaction)
 import Perspectives.Sync.SignedDelta (SignedDelta(..))
 import Perspectives.Sync.Transaction (Transaction(..), createTransaction)
-import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..), currentTransactionForPeer)
+import Perspectives.Sync.TransactionForPeer (TransactionForPeer(..), currentTransactionForPeer, withoutPredefinedContextScaffolding)
 import Perspectives.Sync.VersionedDelta (currentUniverseEpoch, DeltaEnvelope(..), parseIncomingDelta, signVersionedDelta)
 import Perspectives.TypesForDeltas (ContextDelta(..), RoleBindingDelta(..), RoleBindingDeltaType(..), RolePropertyDelta(..), RolePropertyDeltaType(..), UniverseContextDelta(..), UniverseRoleDelta(..), UniverseRoleDeltaType(..))
 import Simple.JSON (class WriteForeign, writeJSON)
@@ -107,6 +108,105 @@ main = runTest theSuite
 
 theSuite :: TestSuite
 theSuite = suite "Causal role deletion and coordinated cutover" do
+  for_ [ "TheSocialEnvironment", "TheWorld" ] \name ->
+    test ("publication retains compatible bootstrap scaffolding for " <> name) $
+      withSigningFixture true \key -> do
+        prepare key
+        let
+          context = ContextInstance $ "def:#" <> name
+          external = RoleInstance $ unwrap context <> "$External"
+          database = "https://bootstrap.invalid/cw_bootstrap/"
+          publicContext = ContextInstance $ "pub:" <> database <> "#" <> name
+          publicExternal = RoleInstance $ unwrap publicContext <> "$External"
+          publicRole = RoleInstance $ "pub:" <> database <> "#visible"
+        histories <- map join $ for [ "local", "remote-old" ] \author -> do
+          constructor <- signPayload author
+            { deltaFormatVersion: 5
+            , universeEpoch: currentUniverseEpoch
+            , resourceKey: name
+            , resourceVersion: 0
+            , deltaType: "ConstructEmptyContext"
+            , deltaFamily: "UniverseContextDelta"
+            , id: name
+            , contextType: unwrap Binding.contextType
+            , subject: unwrap Binding.userType
+            , subjectKind: "ENR"
+            }
+          for [ "first", "second" ] \installation -> do
+            let actor = author <> "-" <> installation
+            creation <- constructionFor external true author (stamp actor 1 [])
+            membership <- membershipFor external true author 1 (stamp actor 2 [ dot actor 1 ])
+            pure { constructor, creation, membership }
+        lift do
+          void $ cacheEntity context $ PerspectContext defaultContextRecord
+            { id = context, buitenRol = external, pspType = Binding.contextType }
+          void $ cacheEntity external $ PerspectRol defaultRolRecord
+            { id = external, context = context, pspType = Binding.externalType }
+          for_ histories \h ->
+            for_ [ h.constructor, h.creation, h.membership ] storeDeltaFromSignedDelta
+        records <- lift $ getRoleConstructionHistory external
+        let selected = map (\(DeltaStoreRecord r) -> r.signedDelta) records
+        liftAff do
+          equal 3 (length selected)
+          assert "The triple must come from one compatible construction" $
+            any (\h -> sort selected == sort [ h.constructor, h.creation, h.membership ]) histories
+          equal
+            ( selectBootstrapContextConstruction context external Binding.externalType
+                (map _.constructor histories)
+                (histories >>= \h -> [ h.creation, h.membership ])
+            )
+            ( selectBootstrapContextConstruction context external Binding.externalType
+                (reverse $ map _.constructor histories)
+                (reverse $ histories >>= \h -> [ h.creation, h.membership ])
+            )
+          equal (Right Nothing) $
+            selectBootstrapContextConstruction context external Binding.externalType
+              []
+              (histories >>= \h -> [ h.creation, h.membership ])
+          for_ (head histories) \h -> do
+            let
+              incompatible = SignedDelta $ (unwrap h.constructor) { author = PerspectivesUser "unrelated" }
+            equal (Right Nothing) $
+              selectBootstrapContextConstruction context external Binding.externalType
+                [ incompatible ]
+                [ h.creation, h.membership ]
+        peerPacket <- packet selected
+        liftAff $ equal [] (unwrap $ withoutPredefinedContextScaffolding peerPacket).deltas
+        creation <- constructionFor Binding.visibleId false "local" (stamp "local" 1 [])
+        membership <- membershipFor Binding.visibleId false "local" 1 (stamp "local" 2 [ dot "local" 1 ])
+        let
+          publication = mapMaybe
+            ( \signed -> case parseIncomingDelta (unwrap signed).encryptedDelta of
+                Right (UniverseContextEnvelope (UniverseContextDelta d)) ->
+                  Just $ UCD signed $ UniverseContextDelta d { id = publicContext }
+                Right (UniverseRoleEnvelope (UniverseRoleDelta d)) ->
+                  Just $ URD signed $ UniverseRoleDelta d
+                    { id = publicContext
+                    , roleInstance = if d.deltaType == ConstructExternalRole then publicExternal else publicRole
+                    }
+                Right (ContextEnvelope (ContextDelta d)) ->
+                  Just $ CDD signed $ ContextDelta d
+                    { contextInstance = publicContext
+                    , roleInstance = if sameResource (unwrap d.roleInstance) (unwrap external) then publicExternal else publicRole
+                    }
+                _ -> Nothing
+            )
+            ( map (\(DeltaInTransaction d) -> d.delta) $ sortTransactionDeltas $
+                map (\delta -> DeltaInTransaction { users: [], delta }) (selected <> [ creation, membership ])
+            )
+        lift $ withDatabase "cw_bootstrap" \db ->
+          AA.modify \state -> state { databases = Object.insert database db state.databases }
+        executeDeltas publication
+        executeDeltas publication
+        lift do
+          forceSaveContext publicContext
+          forceSaveRole publicExternal
+          forceSaveRole publicRole
+        PerspectContext published <- lift $ getDocument database name
+        liftAff $ assert "The public context must contain the newly published role" $
+          elem publicRole (join $ Object.values published.rolInContext)
+        lift $ deleteDatabase "cw_bootstrap"
+
   test "construction serialisation excludes obsolete lifecycle removals and memberships" $
     withSigningFixture true \key -> do
       prepare key

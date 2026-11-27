@@ -10,7 +10,7 @@ module Perspectives.Sync.ConstructionHistory
 import Prelude
 
 import Control.Monad.Error.Class (throwError)
-import Data.Array (filter)
+import Data.Array (elem, filter)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
@@ -22,7 +22,7 @@ import Perspectives.Persistence.DeltaStoreTypes (DeltaStoreRecord(..))
 import Perspectives.Persistent (getPerspectContext, getPerspectRol)
 import Perspectives.Representation.InstanceIdentifiers (ContextInstance, RoleInstance)
 import Perspectives.ResourceIdentifiers (isInPublicScheme)
-import Perspectives.Sync.ConstructionBaseline (ConstructionBaseline, selectContextConstruction, selectRoleBaseline)
+import Perspectives.Sync.ConstructionBaseline (ConstructionBaseline, selectBootstrapContextConstruction, selectContextConstruction, selectRoleBaseline)
 import Perspectives.Sync.SignedDelta (SignedDelta)
 import Perspectives.Sync.VersionedDelta (isPredefinedContext)
 
@@ -34,25 +34,26 @@ getRoleBaselineHistory role = do
     (\(DeltaStoreRecord record) -> record.signedDelta == baseline.construction || record.signedDelta == baseline.membership)
     records
 
--- | TheWorld and TheSocialEnvironment (and their external roles) exist at every receiver, constructed
--- | locally on installation. Their construction history is never shipped (see
--- | `withoutPredefinedContextScaffolding`), and the local DeltaStore may hold several constructions
--- | of them (one per installation), so no unique baseline can be selected. Return no history.
+-- | Public copies need bootstrap scaffolding too. Only peer delivery filters it out.
 getContextConstructionHistory :: ContextInstance -> MonadPerspectives (Array DeltaStoreRecord)
-getContextConstructionHistory context | isPredefinedContext (unwrap context) = pure []
 getContextConstructionHistory context = do
   PerspectContext { buitenRol } <- getPerspectContext context
   externalRecords <- getDeltasForResource (unwrap buitenRol)
-  baseline <- requireRoleBaseline buitenRol externalRecords
   contextRecords <- getDeltasForResource (unwrap context)
-  constructor <- requireSelection $ selectContextConstruction baseline (signedRecords contextRecords)
-  case constructor of
+  selected <-
+    if isPredefinedContext (unwrap context) then do
+      PerspectRol { pspType } <- getPerspectRol buitenRol
+      requireSelection $ selectBootstrapContextConstruction context buitenRol pspType
+        (signedRecords contextRecords)
+        (signedRecords externalRecords)
+    else do
+      baseline <- requireRoleBaseline buitenRol externalRecords
+      constructor <- requireSelection $ selectContextConstruction baseline (signedRecords contextRecords)
+      pure $ constructor <#> \signed -> [ signed, baseline.construction, baseline.membership ]
+  case selected of
     Nothing -> throwError $ error $ "No compatible context construction for " <> show context
-    Just signed -> pure $
-      filter (\(DeltaStoreRecord record) -> record.signedDelta == signed) contextRecords <>
-        filter
-          (\(DeltaStoreRecord record) -> record.signedDelta == baseline.construction || record.signedDelta == baseline.membership)
-          externalRecords
+    Just history -> pure $ filter (\(DeltaStoreRecord record) -> elem record.signedDelta history)
+      (contextRecords <> externalRecords)
 
 getRoleConstructionHistory :: RoleInstance -> MonadPerspectives (Array DeltaStoreRecord)
 getRoleConstructionHistory role = do
